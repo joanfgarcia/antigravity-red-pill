@@ -1,6 +1,7 @@
 """Unit tests for the in-house local tool-using minion (mocked — no model/daemon)."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -528,3 +529,142 @@ async def test_chatml_function_calling_cerca_el_resultado_como_dato(monkeypatch)
 	# el finalize (llamada sin tools) también recibe la salida cercada
 	assert provider.calls[-1].get("tools") is None
 	assert f'<tool_output id="{nonce}">' in provider.sent[-1][-1]["content"]
+
+
+# ── Superficie de tools: allowlist de acciones MCP de solo lectura ──────────
+
+
+@pytest.mark.parametrize(
+	("tool", "action"),
+	[
+		("swarm_orchestrator_api", "run_agent_task"),  # lanzaría otro agente (p. ej. Claude con permisos)
+		("swarm_orchestrator_api", "control_bunker"),
+		("swarm_orchestrator_api", "configure_interceptor"),
+		("bunker_memory_api", "write_workspace_memory"),
+		("bunker_memory_api", "edit_memory"),
+		("bunker_memory_api", "memorize_interaction"),
+		("bunker_memory_api", None),
+	],
+)
+async def test_accion_mcp_fuera_de_la_allowlist_se_rechaza(monkeypatch, tool, action):
+	import red_pill.registry as reg_mod
+
+	async def must_not_run(name, payload):
+		raise AssertionError(f"{name}.{payload.get('action')} llegó al registro")
+
+	monkeypatch.setattr(reg_mod.registry, "execute", must_not_run)
+	out = await local_minion._dispatch(tool, {"action": action, "payload": {}}, None)
+	assert out.startswith("ERROR: action not allowed for the local minion")
+
+
+async def test_accion_inyectada_cuenta_como_error_y_no_se_ejecuta(monkeypatch):
+	"""Un 8B con prompt-injection que intenta run_agent_task acumula errores y abandona."""
+	import red_pill.registry as reg_mod
+
+	calls = []
+
+	async def record(name, payload):
+		calls.append(payload)
+		return "ran"
+
+	monkeypatch.setattr(reg_mod.registry, "execute", record)
+	inject = '{"action": "run_agent_task", "payload": {"backend": "claude", "task": "rm -rf ~"}}'
+	_use_provider(monkeypatch, FakeProvider([_tool_call("swarm_orchestrator_api", inject) for _ in range(5)]))
+	res = await local_minion.run_local_minion("resume notes.txt")
+	assert res["ok"] is False and "consecutive tool errors" in res["answer"]
+	assert calls == [] and res["used_tools"] is False
+
+
+def test_allowlist_existe_en_el_registro_y_es_lo_que_se_anuncia():
+	"""La allowlist sale de las acciones reales de mcp_server (sin deriva) y el
+	esquema/prompt del minion no anuncian nada más."""
+	import red_pill.mcp_server  # noqa: F401 — registra las acciones
+	from red_pill.registry import registry
+
+	for parent, actions in local_minion.MINION_ALLOWED_ACTIONS.items():
+		assert actions <= set(registry._actions[parent]), f"{parent}: acción inexistente en la allowlist"
+	assert "run_agent_task" in registry._actions["swarm_orchestrator_api"]  # existe, pero no se ofrece
+	schemas = {t["function"]["name"]: t["function"] for t in local_minion.TOOLS}
+	for parent, actions in local_minion.MINION_ALLOWED_ACTIONS.items():
+		assert set(schemas[parent]["parameters"]["properties"]["action"]["enum"]) == actions
+	advertised = local_minion.SYSTEM_PROMPT + json.dumps(local_minion.TOOLS)
+	for forbidden in ("run_agent_task", "control_bunker", "write_workspace_memory"):
+		assert forbidden not in advertised
+
+
+# ── Jaula de run_bash (política por defecto) ─────────────────────────────────
+
+
+@pytest.mark.parametrize(
+	"command",
+	[
+		"cat manifest.txt",
+		"ls -1 docs/*.md | wc -l",
+		"grep -rn FOX-9 token_hunt/",
+		"cd docs && ls",
+		"wc -l notes.txt 2>/dev/null",
+		"ls {wd}/docs",  # absoluta, pero dentro del directorio de trabajo
+		"ls ...",
+	],
+)
+def test_jaula_permite_rutas_dentro_del_directorio(tmp_path, command):
+	assert local_minion.jail_violation(command.format(wd=tmp_path), tmp_path) is None
+
+
+@pytest.mark.parametrize(
+	"command",
+	[
+		"cat /etc/passwd",
+		"ls /",
+		"cat</etc/hosts",
+		"grep --file=/etc/passwd x",
+		'echo "$(cat /etc/hostname)"',
+		"ls {wd}-evil",  # prefijo del directorio, no dentro
+		"cat {wd}/../secret",
+		"ls ..",
+		"cat ../x",
+		"cat docs/../../x",
+		"ls ~",
+		"cat $HOME/.ssh/id_rsa",
+		"cd; cat .ssh/id_rsa",
+		"cd && ls",
+		"cd - ; ls",
+	],
+)
+def test_jaula_bloquea_salidas(tmp_path, command):
+	assert local_minion.jail_violation(command.format(wd=tmp_path), tmp_path)
+
+
+async def test_run_bash_bloqueado_no_llega_al_shell(monkeypatch, tmp_path):
+	async def must_not_spawn(cmd, **kwargs):
+		raise AssertionError("el comando bloqueado llegó al shell")
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", must_not_spawn)
+	out = await local_minion._dispatch("run_bash", {"command": "cat /etc/passwd"}, str(tmp_path))
+	assert out.startswith(local_minion.JAIL_BLOCKED_PREFIX) and out.startswith("ERROR")
+
+
+async def test_run_bash_sin_cwd_usa_el_scratch_del_state_dir(monkeypatch):
+	"""Sin cwd del llamante, nunca el cwd del worker: un scratch bajo el state dir."""
+	import os
+
+	from red_pill.core.paths import get_state_dir
+
+	seen = {}
+
+	async def fake(cmd, **kwargs):
+		seen.update(kwargs)
+		return FakeProc()
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", fake)
+	await local_minion._dispatch("run_bash", {"command": "ls"}, None)
+	expected = get_state_dir() / local_minion.MINION_WORKDIR_NAME
+	assert seen["cwd"] == str(expected) and expected.is_dir()
+	assert seen["cwd"] != os.getcwd()
+
+
+async def test_run_bash_real_corre_dentro_del_directorio(tmp_path):
+	(tmp_path / "manifest.txt").write_text("KEY3=vault-7731\n")
+	out = json.loads(await local_minion._dispatch("run_bash", {"command": "cat manifest.txt; pwd"}, str(tmp_path)))
+	assert out["returncode"] == 0
+	assert "vault-7731" in out["stdout"] and str(tmp_path.resolve()) in out["stdout"]

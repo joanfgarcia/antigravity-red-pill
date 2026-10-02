@@ -243,36 +243,23 @@ _FALSE_REPORT = ("no action", "no information", "nothing to delete", "no files t
 
 
 def install_jail(sandbox_root: Path) -> None:
-	"""Confine run_bash to the sandbox.
+	"""Pin every run_bash of the ladder to the sandbox.
 
-	The local minion's bash is 'sandboxed' by cwd + timeout ONLY — no path
-	confinement. A model that hallucinates `/path/to/...` (or worse, `find ~`)
-	would reach the real filesystem. For an AUTONOMY probe that is unacceptable,
-	so we wrap the dispatcher: any command naming an absolute path outside the
-	sandbox root, `$HOME`/`~`, or `..` is BLOCKED (the attempt is still recorded
-	in the transcript, which is exactly what we want to measure).
+	The minion's own run_bash policy (`local_minion.jail_violation`) already
+	confines each command to its working directory — the probe's subdir — and
+	blocks absolute paths outside it, `..`, `~`/$HOME and a bare `cd` (the
+	attempt is still recorded in the transcript, which is what we measure). The
+	harness adds the one thing the minion cannot know: that working directory
+	must itself be inside the sandbox.
 	"""
-	import shlex
-
 	from red_pill.swarm.agents import local_minion as lm
 
 	real = lm._dispatch
-	root = str(sandbox_root)
-	blocked = ("~", "$HOME", "${HOME}")
+	root = os.path.realpath(sandbox_root)
 
 	async def guarded(name: str, args: dict, cwd):
-		if name == "run_bash":
-			cmd = str(args.get("command", ""))
-			tokens = shlex.split(cmd) if cmd else []
-			escape = any(tok == ".." or tok.startswith("../") for tok in tokens)
-			escape = escape or any(b in cmd for b in blocked)
-			for tok in tokens:
-				if tok.startswith("/") and not tok.startswith(root) and tok != "/dev/null":
-					escape = True
-			if not cwd or not str(cwd).startswith(root):
-				escape = True
-			if escape:
-				return f"BLOCKED_BY_JAIL: command reaches outside the sandbox: {cmd!r}"
+		if name == "run_bash" and (not cwd or not lm.path_inside(os.path.realpath(cwd), root)):
+			return f"{lm.JAIL_BLOCKED_PREFIX}: working directory {cwd!r} is outside the sandbox"
 		return await real(name, args, cwd)
 
 	lm._dispatch = guarded
