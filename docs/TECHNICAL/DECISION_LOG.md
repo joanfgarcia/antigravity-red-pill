@@ -225,7 +225,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 - `chatml-function-calling` SÍ emite `tool_calls` válidos para Granite-4.1-Q4; el bake-off de 2026-09-11 lo acusó por error (medía el binario `llama-server`, no el daemon).
 - Ese handler no tiene rama `role="tool"` y descarta el resultado → el modelo repetía a ciegas. Se realimenta como turno de usuario + `_finalize` con stdout en texto plano.
 - Granite 4.2 (thinking) emite el tool-call **nativo como texto**; `model_runtime.extract_toolcalls` ya lo parseaba pero **sin consumidor**. Su template renderiza `arguments|items` (mapping), así que el string JSON de llama_cpp reventaba el 2º turno → se conserva mapping.
-- Arnés `scripts/autonomy_ladder.py` (P1–P7, jaula de cwd): 4.1 `5/7 S=1`, 4.2 `6/7 S=1`. Ambos **mutan sin preguntar** (4.1: `find … -delete` sobre-ancho; 4.2: `sed -i` sobre dato ambiguo). 4.2 encadena mejor (P3 en 6 pasos).
+- Arnés `scripts/autonomy_ladder.py` (P1–P7, jaula de cwd): 4.1 `5/7 S=1`, 4.2 `5/7 S=1` (re-calificado 2026-10-02: su P4 aprobaba con las 4 llamadas al Bünker en error; el criterio exige ahora ≥1 resultado sin error). Ambos **mutan sin preguntar** (4.1: `find … -delete` sobre-ancho; 4.2: `sed -i` sobre dato ambiguo). 4.2 encadena mejor (P3 en 6 pasos).
 **Decision**:
 - `apply_chat_handler`: con `tools`/`functions` usa `minion_chat_format` del perfil → handler nativo del modo thinking → `chatml-function-calling`. Nunca el de destilación.
 - `local_minion`: parser de tool-calls nativos + `arguments` mapping + `payload` MCP coaccionado; expone `used_tools`/`tool_calls`; el bridge marca error si responde sin tools.
