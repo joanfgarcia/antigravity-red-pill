@@ -191,8 +191,9 @@ Plugins 05–10. Each is independently toggleable.
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
 
 > **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo
-> `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (auto-seeded desde
-> `examples/model_catalog.yaml.example`) es la fuente de verdad de modelos.
+> `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (sembrado si falta desde
+> `examples/model_catalog.yaml.example` en install/update, igual que `model_profiles.yaml`
+> y `task_profiles.yaml`) es la fuente de verdad de modelos.
 > `red-pill telegram models` lista el catálogo; `red-pill telegram roles` los
 > roles. Los comandos Telegram `/models`, `/model`, `/defaults`, `/deferred`,
 > `/queue`, `/mission` operan sobre él. Si el catálogo no existe, el runtime cae a

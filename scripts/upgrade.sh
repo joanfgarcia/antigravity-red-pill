@@ -204,6 +204,16 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$CONFIG_DIR/workspace
 	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml). Edítalo o usa 'red-pill workspace enable'.${NC}"
 fi
 
+# Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
+# Misma lista que bunker_lifecycle.CONFIG_EXAMPLE_SEEDS (`red-pill bunker install|update`).
+for seed in model_profiles model_catalog task_profiles; do
+	if [ -f "$REPO_ROOT/examples/$seed.yaml.example" ] && [ ! -e "$CONFIG_DIR/$seed.yaml" ]; then
+		mkdir -p "$CONFIG_DIR"
+		cp "$REPO_ROOT/examples/$seed.yaml.example" "$CONFIG_DIR/$seed.yaml"
+		echo -e "${GREEN}✓ $seed.yaml sembrado desde examples/.${NC}"
+	fi
+done
+
 # 4. Dependency & Migration ignition
 if command -v uv &> /dev/null; then
 	echo -e "${BLUE}Igniciando migración de datos y timers...${NC}"

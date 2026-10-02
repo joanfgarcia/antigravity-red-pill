@@ -1,7 +1,7 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import psutil
 import yaml
@@ -72,6 +72,42 @@ def update_services_manifest(project_root: Path) -> None:
 		else:
 			shutil.copy2(template_manifest, runtime_manifest)
 			print("   [OK] services.yaml bootstrapped to user config.")
+
+
+# Config curada que se siembra desde examples/ si falta (copy-if-absent: la copia
+# del operador SIEMPRE gana). Mismo contrato que workspaces.yaml en install_neo.sh /
+# upgrade.sh, que replican esta lista en shell.
+CONFIG_EXAMPLE_SEEDS = (
+	("model_profiles.yaml.example", "model_profiles.yaml"),
+	("model_catalog.yaml.example", "model_catalog.yaml"),
+	("task_profiles.yaml.example", "task_profiles.yaml"),
+)
+
+
+def seed_config_examples(project_root: Path) -> List[str]:
+	"""Copia a `${CONFIG_DIR}` las plantillas de `examples/` que falten.
+
+	Nunca sobreescribe (lo curado por el operador gana). Sin `task_profiles.yaml`
+	una instalación limpia no tiene contratos de tarea (p.ej. `validate`) y sin
+	`model_catalog.yaml` el enrutado no tiene modelos. Devuelve lo sembrado.
+	"""
+	import shutil
+
+	config_dir = get_config_dir()
+	seeded: List[str] = []
+	for example, target in CONFIG_EXAMPLE_SEEDS:
+		src = project_root / "examples" / example
+		dst = config_dir / target
+		if not src.is_file() or dst.exists() or dst.is_symlink():
+			continue
+		try:
+			config_dir.mkdir(parents=True, exist_ok=True)
+			shutil.copy2(src, dst)
+			seeded.append(target)
+			print(f"   [OK] {target} sembrado desde examples/{example}.")
+		except OSError as e:
+			print(f"   [WARN] No se pudo sembrar {target}: {e}")
+	return seeded
 
 
 def profile_hardware() -> None:
@@ -390,7 +426,8 @@ def bunker_uninstall() -> None:
 def bunker_install() -> None:
 	"""
 	bunker install:
-	1. Check if .env exists in the config directory; copy the template from the project if missing.
+	1. Check if .env exists in the config directory; copy the template from the project if missing
+	(+ services.yaml and the curated model/task config, copy-if-absent).
 	2. Bootstrap Qdrant collections (schemas, indices, and version engrams).
 	3. Execute schedule_pulse.py to register systemd units and timers.
 	4. Trigger download of default GGUF models.
@@ -423,6 +460,8 @@ def bunker_install() -> None:
 
 	print("1.5 Bootstrapping services.yaml manifest...")
 	update_services_manifest(project_root)
+	print("1.6 Seeding curated model/task config (copy-if-absent)...")
+	seed_config_examples(project_root)
 
 	print("2. Bootstrapping Qdrant schemas and collections...")
 	try:
@@ -550,7 +589,8 @@ def bunker_update() -> None:
 	bunker update:
 	1. Run git pull on the sharing repository.
 	2. Run uv sync --frozen to align virtual environment dependencies.
-	2.5/2.6. Refresh the services manifest, IDE anchors and MCP config.
+	2.5/2.6. Refresh the services manifest (+ seed missing curated config:
+	model_profiles / model_catalog / task_profiles), IDE anchors and MCP config.
 	2.7. Regenerate the background LLM daemon (setup_background_model.sh) and restart it.
 	2.8. Redeploy skills to the agent skills dir.
 	3. Run any pending database migrations.
@@ -600,8 +640,9 @@ def bunker_update() -> None:
 		except FileNotFoundError:
 			print("   [FAIL] 'uv' binary not found. Skipping dependency alignment.")
 
-	print("2.5 Updating services.yaml manifest...")
+	print("2.5 Updating services.yaml manifest + seeding missing curated config...")
 	update_services_manifest(project_root)
+	seed_config_examples(project_root)
 	print("2.6 Refreshing IDE anchors + MCP config (auto-detect all IDEs)...")
 	try:
 		import sys as _sys

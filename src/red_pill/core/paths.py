@@ -414,7 +414,8 @@ def get_task_profiles_path() -> Path:
 
 	RFC-HARNESS-002 §4: conducta de tarea (prompt_file, temperature, max_tokens,
 	thinking) + candidatos de modelo (referencias a model_profiles.yaml). Se
-	relee por mtime en cada request cuando `hot_reload: true`.
+	relee por mtime en cada request cuando `hot_reload: true`. Se siembra
+	(copy-if-absent) desde examples/task_profiles.yaml.example en install/update.
 	"""
 	return get_config_dir() / "task_profiles.yaml"
 
@@ -433,7 +434,8 @@ def get_model_catalog_path() -> Path:
 	"""Ruta del catálogo curado de modelos ($XDG_CONFIG_HOME/red-pill/model_catalog.yaml).
 
 	Fuente de verdad de qué modelos existen y se pueden usar (RFC_TELEGRAM_RESILIENCE
-	§2A/D6). Auto-seeded desde examples/model_catalog.yaml.example por el CLI si falta.
+	§2A/D6). Se siembra (copy-if-absent) desde examples/model_catalog.yaml.example en
+	install/update (`bunker_lifecycle.seed_config_examples`, install_neo.sh, upgrade.sh).
 	"""
 	return get_config_dir() / "model_catalog.yaml"
 
