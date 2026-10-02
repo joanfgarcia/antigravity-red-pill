@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Red Pill Turn Start — Claude Code UserPromptSubmit hook (SESSION LIVENESS).
+"""Red Pill Turn Start — Claude Code session heartbeat hook (SESSION LIVENESS).
 
 Marks the START of a turn (RFC-DESPERTAR-001, P4): touches an empty file
 ``${STATE_DIR}/sessions/live/claude_code__<session_id>.start`` whose mtime is the
@@ -7,8 +7,17 @@ signal. Symmetric to the ``.end`` touch in ``redpill_scribe.py`` (Stop hook).
 No content; the pair (start, end) tells "alguien está tocando" vs "alguien ha
 tocado" (ver ``red_pill.core.session_liveness``).
 
-Fires when the Operator submits the prompt — before tools/thinking — so the
-`start` is a clean turn boundary.
+Registered on ``UserPromptSubmit`` (fires when the Operator submits the prompt —
+before tools/thinking — so the `start` is a clean turn boundary) and on the
+events that close a turn WITHOUT ``Stop``, which mark ``.end`` instead
+(``hook_event_name``, verified in Claude Code 2.1.217):
+
+- ``StopFailure``: the turn ended on an API error (rate limit, auth, overload…);
+it fires *instead of* ``Stop``.
+- ``SessionEnd``: the session is closing (exit, /clear…), maybe mid-turn.
+
+An Esc interrupt fires no hook at all: that `.start` stays "in flight" until the
+next turn or ``SESSION_ACTIVE_MIN``.
 
 Non-fatal by contract: any error (unreadable or non-object payload included) is
 swallowed and we exit 0 — the hook never blocks the IDE turn.
@@ -20,6 +29,8 @@ import sys
 from pathlib import Path
 
 PROVIDER = "claude_code"
+# Eventos que cierran el turno sin `Stop` → `.end` (el resto marca `.start`).
+END_EVENTS = frozenset({"StopFailure", "SessionEnd"})
 
 
 def _live_dir() -> Path:
@@ -31,6 +42,10 @@ def _live_dir() -> Path:
 
 def _safe(token: str) -> str:
 	return token.strip().replace("/", "_").replace("__", "_")
+
+
+def _phase(payload: dict) -> str:
+	return "end" if payload.get("hook_event_name") in END_EVENTS else "start"
 
 
 def _run() -> None:
@@ -45,7 +60,7 @@ def _run() -> None:
 		return
 	live = _live_dir()
 	live.mkdir(parents=True, exist_ok=True)
-	(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.start").touch(exist_ok=True)
+	(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.{_phase(payload)}").touch(exist_ok=True)
 
 
 def main() -> int:

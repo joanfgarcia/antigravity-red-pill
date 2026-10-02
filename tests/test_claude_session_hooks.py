@@ -66,3 +66,20 @@ def test_scribe_marks_end_without_transcript(tmp_path):
 	res = _run_hook("redpill_scribe.py", json.dumps({"session_id": "uuid-2"}), tmp_path)
 	assert res.returncode == 0, res.stderr
 	assert sorted(p.name for p in _live(tmp_path).iterdir()) == ["claude_code__uuid-2.end"]
+
+
+@pytest.mark.parametrize("event", ["StopFailure", "SessionEnd"])
+def test_turn_closing_events_mark_end(event, tmp_path):
+	"""StopFailure (salta en lugar de Stop) y SessionEnd cierran el turno: `.end`, no `.start`."""
+	res = _run_hook("redpill_turn_start.py", json.dumps({"session_id": "uuid-3", "hook_event_name": event, "error": "rate_limit"}), tmp_path)
+	assert res.returncode == 0, res.stderr
+	assert sorted(p.name for p in _live(tmp_path).iterdir()) == ["claude_code__uuid-3.end"]
+
+
+def test_seed_registers_heartbeat_events():
+	"""El fragmento registra el latido en todos los eventos que abren/cierran turno."""
+	seed = json.loads((REPO_ROOT / "seeds" / "settings" / "claude-code.json").read_text(encoding="utf-8"))
+	commands = {event: [h["command"] for block in blocks for h in block["hooks"]] for event, blocks in seed["hooks"].items()}
+	for event in ("UserPromptSubmit", "StopFailure", "SessionEnd"):
+		assert any(c.endswith("/.claude/hooks/redpill_turn_start.py") for c in commands[event]), event
+	assert any(c.endswith("/.claude/hooks/redpill_scribe.py") for c in commands["Stop"])
