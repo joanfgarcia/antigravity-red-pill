@@ -229,8 +229,9 @@ print(f'Total hoy: {len(rows)} | productivos (consumen tope): {productive}/8')
 
 # Límite diario: 8 AWAKENINGs *productivos* (MAX_AWAKENINGS_PER_DAY en
 # src/red_pill/core/agent_worker.py). Los que ejercen el Derecho al Silencio
-# (respuesta corta que EMPIEZA por la frase canónica) quedan con counted=0 y no
-# consumen tope (AWAKENING_SILENCE_COUNTS=true revierte esto). Un despertar
+# (la respuesta TERMINA con la frase canónica, o EMPIEZA por ella y es corta)
+# quedan con counted=0 y no consumen tope (AWAKENING_SILENCE_COUNTS=true
+# revierte esto). Un despertar
 # fallido cuenta y se reintenta con la política D24 (timeout: 1 reintento;
 # transitorio: 3 intentos) antes de quedar DEAD en dead_letters.
 ```

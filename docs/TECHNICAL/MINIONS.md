@@ -113,8 +113,19 @@ as *ungrounded* (`error` set), so an invented or failing tool never passes as ve
     0.15 MB/token, trained at 131k); **no compaction in v1**, so keep tool outputs
     concise. The loop cap keeps context bounded in practice.
   - **Tools are curated & small** (bash + 2 MCP parents). It is not a general agent.
-  - **Bash sandbox = cwd + 60 s timeout only** — a real shell driven by an 8B. Assign
-    read-only/inspection tasks by default; only allow mutations deliberately.
+    The MCP parents expose a **read-only allowlist** (`MINION_ALLOWED_ACTIONS`):
+    Bünker search/read (`search_memory_research`, `search_memento`, `traverse_thread`,
+    `read_core_directives`, `get_emotional_sync`, workspace-memory list/read) and swarm
+    status (`check_minion_inbox`, `session_board`). Anything else — `run_agent_task`,
+    `control_bunker`, memory writes, swarm tuning — returns
+    `ERROR: action not allowed for the local minion` and counts as a tool error.
+  - **Bash jail = working directory + 60 s timeout** — a real shell driven by an 8B.
+    Commands run in the caller's `cwd`, or in `<state dir>/minion_workdir` when there
+    is none (never the worker's own cwd). A command naming an absolute path outside
+    it, a `..` component, `~`/`$HOME` or a bare `cd` is blocked before it runs
+    (`ERROR: BLOCKED_BY_JAIL`). It is a guard rail, not a sandbox (shell indirection
+    can still escape it): assign read-only/inspection tasks by default; only allow
+    mutations deliberately.
   - Gives up after **3 consecutive tool errors**. A malformed or truncated tool call
     (e.g. cut by `max_tokens`) is fed back as an error ("re-emit it complete") and
     counts toward that cap — tool-call markup is never returned as the answer.
@@ -129,7 +140,11 @@ as *ungrounded* (`error` set), so an invented or failing tool never passes as ve
     tasks read-only.
   - **Conduct comes from the profiles:** `temperature`, `max_tokens` and `tool_format`
     are resolved in-process for the task `minion_tool` (candidate > task > model
-    profile, fallback 0.3 / 1024 / `auto`); the daemon does not apply them itself. A
+    profile, fallback 0.3 / 1024 / `auto`; a defined `0` counts); the daemon does not
+    apply them itself. `max_tokens` is the exception: candidate > task > 1024, never
+    the model profile (there it is model_runtime's n_ctx fallback, a context knob),
+    clamped to ¼ of the smallest context the profile can be served with (2048 if it
+    declares none) so a rambling turn cannot fill the context. A
     daemon rejection (e.g. a `model` that is not a `minion_tool` candidate → K1, 400)
     surfaces as a readable `SipInferenceError`.
   - **Tool-calling routing (HARNESS-003/004, 2026-09-30):** the daemon MUST pick a

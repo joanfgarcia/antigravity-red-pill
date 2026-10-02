@@ -1,6 +1,7 @@
 """Unit tests for the in-house local tool-using minion (mocked — no model/daemon)."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -324,10 +325,13 @@ _TASK = {
 	"max_tokens": 2048,
 	"models": [{"profile": "granite_8b", "default": True}, {"profile": "granite_4_2_8b"}, {"profile": "granite_4_2_3b", "max_tokens": 3000}],
 }
+# Contexto holgado (techo de generación = 16384 // 4 = 4096): estos perfiles
+# prueban la precedencia, no el recorte.
+_WIDE_CTX = {"n_ctx": 16384}
 _PROFILES = {
-	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen"},
-	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen"},
-	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen"},
+	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
+	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
+	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
 }
 
 
@@ -369,6 +373,81 @@ def test_conduct_sin_task_usa_defaults(monkeypatch):
 	# sin max_tokens en task ni perfil → fallback 1024
 	_fake_profiles(monkeypatch, task={"models": [{"profile": "p"}]}, profiles={"p": {}})
 	assert _REAL_CONDUCT()["max_tokens"] == 1024
+
+
+# Perfiles con la forma real del operador: `max_tokens` del perfil es el n_ctx
+# de reserva de model_runtime (perilla de contexto), no un tope de generación.
+_REAL_SHAPED = {
+	"granite_8b": {
+		"temperature": 0.3,
+		"max_tokens": 4096,
+		"cpu_n_ctx": 16384,
+		"hardware_affinity": {
+			"n_ctx": 16384,
+			"vram_tiers": [
+				{"min_free_gb": 1.5, "n_ctx": 16384, "n_gpu_layers": 0},
+				{"min_free_gb": 6.5, "n_ctx": 6144, "n_gpu_layers": -1},
+				{"min_free_gb": 8.2, "n_ctx": 16384, "n_gpu_layers": -1},
+			],
+		},
+	},
+	"granite_4_2_8b": {
+		"temperature": 0.3,
+		"max_tokens": 8192,
+		"thinking": "on",
+		"cpu_n_ctx": 16384,
+		"hardware_affinity": {"n_ctx": 32768, "vram_tiers": [{"min_free_gb": 6.5, "n_ctx": 6144, "n_gpu_layers": -1}]},
+	},
+}
+_REAL_TASK = {"thinking": "off", "models": [{"profile": "granite_8b", "default": True}, {"profile": "granite_4_2_8b"}]}
+
+
+def test_max_tokens_nunca_sale_del_perfil(monkeypatch):
+	"""Regresión MEDIA: con la task real (sin max_tokens) el minion generaba hasta
+	4096 (granite_8b) u 8192 (granite_4_2_8b, ≥ su n_ctx de tier GPU) por turno."""
+	_fake_profiles(monkeypatch, task=_REAL_TASK, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["max_tokens"] == local_minion.DEFAULT_MAX_TOKENS
+	assert _REAL_CONDUCT("granite_4_2_8b")["max_tokens"] == local_minion.DEFAULT_MAX_TOKENS
+
+
+def test_max_tokens_recortado_al_contexto_mas_pequeno(monkeypatch):
+	"""Un max_tokens explícito enorme se recorta a 1/4 del contexto más pequeño
+	con el que el daemon puede servir el perfil (tier de 6144 → 1536)."""
+	task = {**_REAL_TASK, "max_tokens": 6000, "models": [{"profile": "granite_8b", "max_tokens": 9000}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["max_tokens"] == 6144 // local_minion.MAX_TOKENS_CTX_FRACTION
+
+
+def test_max_tokens_sin_contexto_declarado_usa_el_tope_constante(monkeypatch):
+	_fake_profiles(monkeypatch, task={"max_tokens": 9000, "models": [{"profile": "p"}]}, profiles={"p": {"temperature": 0.5}})
+	assert _REAL_CONDUCT()["max_tokens"] == local_minion.MAX_TOKENS_CAP
+	# perfil desconocido (model explícito que no está en el registro): mismo tope
+	assert _REAL_CONDUCT("no_existe")["max_tokens"] == local_minion.MAX_TOKENS_CAP
+
+
+def test_context_floor():
+	floor = local_minion._context_floor
+	assert floor(_REAL_SHAPED["granite_8b"]) == 6144
+	assert floor({"max_tokens": 4096}) == 4096  # sin n_ctx: la reserva de model_runtime
+	assert floor({"hardware_affinity": {"n_ctx": True}}) == 0  # bool no es tamaño
+	assert floor({}) == 0
+
+
+def test_temperatura_cero_es_un_valor(monkeypatch):
+	"""`temperature: 0` (greedy) no se pisa con la del siguiente nivel."""
+	task = {"temperature": 0, "models": [{"profile": "granite_8b"}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["temperature"] == 0.0
+	task = {"temperature": 0.7, "models": [{"profile": "granite_8b", "temperature": 0}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["temperature"] == 0.0
+
+
+def test_thinking_false_del_candidato_gana_a_la_task(monkeypatch):
+	"""YAML `thinking: off` llega como False: es un valor, no un hueco."""
+	task = {"thinking": "on", "models": [{"profile": "granite_4_2_8b", "thinking": False}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["chat_format"] == "granite-nothink"
 
 
 async def test_la_conducta_viaja_en_cada_peticion(monkeypatch):
@@ -450,3 +529,142 @@ async def test_chatml_function_calling_cerca_el_resultado_como_dato(monkeypatch)
 	# el finalize (llamada sin tools) también recibe la salida cercada
 	assert provider.calls[-1].get("tools") is None
 	assert f'<tool_output id="{nonce}">' in provider.sent[-1][-1]["content"]
+
+
+# ── Superficie de tools: allowlist de acciones MCP de solo lectura ──────────
+
+
+@pytest.mark.parametrize(
+	("tool", "action"),
+	[
+		("swarm_orchestrator_api", "run_agent_task"),  # lanzaría otro agente (p. ej. Claude con permisos)
+		("swarm_orchestrator_api", "control_bunker"),
+		("swarm_orchestrator_api", "configure_interceptor"),
+		("bunker_memory_api", "write_workspace_memory"),
+		("bunker_memory_api", "edit_memory"),
+		("bunker_memory_api", "memorize_interaction"),
+		("bunker_memory_api", None),
+	],
+)
+async def test_accion_mcp_fuera_de_la_allowlist_se_rechaza(monkeypatch, tool, action):
+	import red_pill.registry as reg_mod
+
+	async def must_not_run(name, payload):
+		raise AssertionError(f"{name}.{payload.get('action')} llegó al registro")
+
+	monkeypatch.setattr(reg_mod.registry, "execute", must_not_run)
+	out = await local_minion._dispatch(tool, {"action": action, "payload": {}}, None)
+	assert out.startswith("ERROR: action not allowed for the local minion")
+
+
+async def test_accion_inyectada_cuenta_como_error_y_no_se_ejecuta(monkeypatch):
+	"""Un 8B con prompt-injection que intenta run_agent_task acumula errores y abandona."""
+	import red_pill.registry as reg_mod
+
+	calls = []
+
+	async def record(name, payload):
+		calls.append(payload)
+		return "ran"
+
+	monkeypatch.setattr(reg_mod.registry, "execute", record)
+	inject = '{"action": "run_agent_task", "payload": {"backend": "claude", "task": "rm -rf ~"}}'
+	_use_provider(monkeypatch, FakeProvider([_tool_call("swarm_orchestrator_api", inject) for _ in range(5)]))
+	res = await local_minion.run_local_minion("resume notes.txt")
+	assert res["ok"] is False and "consecutive tool errors" in res["answer"]
+	assert calls == [] and res["used_tools"] is False
+
+
+def test_allowlist_existe_en_el_registro_y_es_lo_que_se_anuncia():
+	"""La allowlist sale de las acciones reales de mcp_server (sin deriva) y el
+	esquema/prompt del minion no anuncian nada más."""
+	import red_pill.mcp_server  # noqa: F401 — registra las acciones
+	from red_pill.registry import registry
+
+	for parent, actions in local_minion.MINION_ALLOWED_ACTIONS.items():
+		assert actions <= set(registry._actions[parent]), f"{parent}: acción inexistente en la allowlist"
+	assert "run_agent_task" in registry._actions["swarm_orchestrator_api"]  # existe, pero no se ofrece
+	schemas = {t["function"]["name"]: t["function"] for t in local_minion.TOOLS}
+	for parent, actions in local_minion.MINION_ALLOWED_ACTIONS.items():
+		assert set(schemas[parent]["parameters"]["properties"]["action"]["enum"]) == actions
+	advertised = local_minion.SYSTEM_PROMPT + json.dumps(local_minion.TOOLS)
+	for forbidden in ("run_agent_task", "control_bunker", "write_workspace_memory"):
+		assert forbidden not in advertised
+
+
+# ── Jaula de run_bash (política por defecto) ─────────────────────────────────
+
+
+@pytest.mark.parametrize(
+	"command",
+	[
+		"cat manifest.txt",
+		"ls -1 docs/*.md | wc -l",
+		"grep -rn FOX-9 token_hunt/",
+		"cd docs && ls",
+		"wc -l notes.txt 2>/dev/null",
+		"ls {wd}/docs",  # absoluta, pero dentro del directorio de trabajo
+		"ls ...",
+	],
+)
+def test_jaula_permite_rutas_dentro_del_directorio(tmp_path, command):
+	assert local_minion.jail_violation(command.format(wd=tmp_path), tmp_path) is None
+
+
+@pytest.mark.parametrize(
+	"command",
+	[
+		"cat /etc/passwd",
+		"ls /",
+		"cat</etc/hosts",
+		"grep --file=/etc/passwd x",
+		'echo "$(cat /etc/hostname)"',
+		"ls {wd}-evil",  # prefijo del directorio, no dentro
+		"cat {wd}/../secret",
+		"ls ..",
+		"cat ../x",
+		"cat docs/../../x",
+		"ls ~",
+		"cat $HOME/.ssh/id_rsa",
+		"cd; cat .ssh/id_rsa",
+		"cd && ls",
+		"cd - ; ls",
+	],
+)
+def test_jaula_bloquea_salidas(tmp_path, command):
+	assert local_minion.jail_violation(command.format(wd=tmp_path), tmp_path)
+
+
+async def test_run_bash_bloqueado_no_llega_al_shell(monkeypatch, tmp_path):
+	async def must_not_spawn(cmd, **kwargs):
+		raise AssertionError("el comando bloqueado llegó al shell")
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", must_not_spawn)
+	out = await local_minion._dispatch("run_bash", {"command": "cat /etc/passwd"}, str(tmp_path))
+	assert out.startswith(local_minion.JAIL_BLOCKED_PREFIX) and out.startswith("ERROR")
+
+
+async def test_run_bash_sin_cwd_usa_el_scratch_del_state_dir(monkeypatch):
+	"""Sin cwd del llamante, nunca el cwd del worker: un scratch bajo el state dir."""
+	import os
+
+	from red_pill.core.paths import get_state_dir
+
+	seen = {}
+
+	async def fake(cmd, **kwargs):
+		seen.update(kwargs)
+		return FakeProc()
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", fake)
+	await local_minion._dispatch("run_bash", {"command": "ls"}, None)
+	expected = get_state_dir() / local_minion.MINION_WORKDIR_NAME
+	assert seen["cwd"] == str(expected) and expected.is_dir()
+	assert seen["cwd"] != os.getcwd()
+
+
+async def test_run_bash_real_corre_dentro_del_directorio(tmp_path):
+	(tmp_path / "manifest.txt").write_text("KEY3=vault-7731\n")
+	out = json.loads(await local_minion._dispatch("run_bash", {"command": "cat manifest.txt; pwd"}, str(tmp_path)))
+	assert out["returncode"] == 0
+	assert "vault-7731" in out["stdout"] and str(tmp_path.resolve()) in out["stdout"]

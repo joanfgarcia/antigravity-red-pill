@@ -2,9 +2,11 @@ import contextlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -49,14 +51,28 @@ AWAKENING_MAX_TOOL_CALLS = 40
 
 # Derecho al Silencio (AWAKEN-002): la directiva del despertar pide responder
 # ÚNICAMENTE con la frase canónica ("Ejercicio consciente del Derecho al
-# Silencio. Estado del Búnker: calma.", ~71 caracteres).
+# Silencio. Estado del Búnker: calma.", 71 caracteres).
 SILENCE_PHRASE = "Ejercicio consciente del Derecho al Silencio"
-# Techo de longitud de una respuesta de silencio. Los silencios reales miden ~71
-# caracteres; los despertares productivos son informes largos (y duran 130-407 s
-# frente a 42-74 s, pero la duración no hace falta: la longitud ya separa). 200
-# deja margen a variaciones menores del estado sin admitir un informe que cite
-# la frase o termine con ella.
-SILENCE_MAX_CHARS = 200
+# Medido sobre los datos reales del operador (163 despertares de opencode
+# recuperados cruzando `execution_ledger` con opencode.db): 61 silencios de
+# 71-1017 caracteres y 30-167 s; 102 productivos de 369-2123 caracteres que
+# NUNCA citan la frase. Los silencios llegan con tres formas:
+#   - la frase sola (71 car.);
+#   - narración intermedia + la frase como bloque final: el bridge de opencode
+#     concatena con "".join todas las partes de texto del asistente, así que
+#     «…lo registro y ejerzo silencio.» y la frase llegan pegadas;
+#   - la frase + una nota de estado breve (247-369 car.).
+# De ahí las dos vías de `is_silence_response`: la respuesta TERMINA con la frase
+# (más la cola opcional "Estado del Búnker: <estado>"), o EMPIEZA por ella y mide
+# menos de SILENCE_MAX_CHARS. Un informe que solo la cita a mitad de texto no
+# cumple ninguna de las dos.
+SILENCE_MAX_CHARS = 400
+# Cola admitida tras la frase: puntuación, la coletilla de estado del Búnker (el
+# modelo escribe Búnker/Bünker/Bunker) y cierres de cita/énfasis markdown.
+_SILENCE_TAIL_RE = re.compile(
+	r"[\s.,;:!¡]*(?:estado\s+del\s+b[uúü]nker\s*:\s*[^\n.!?]{1,30}?)?[\s.,;:!'\"`*_»”’)]*",
+)
+_SILENCE_LEAD_CHARS = "'\"`*_>«“‘( "
 
 # Zonas del desk que un despertar puede tocar. "planner" = ideas/research/design/
 # pending/in_progress; "awakening" = solo logs de despertar; "none" = nada.
@@ -71,14 +87,27 @@ _PLANNER_ZONES = {
 
 
 def is_silence_response(text: str) -> bool:
-	"""True si la respuesta ejerce el Derecho al Silencio: EMPIEZA por la frase
-	canónica (tolerando comillas/énfasis markdown) y es corta. Un informe que la
-	cita, la entrecomilla a mitad o termina con ella NO es silencio: se entrega y
-	consume tope como cualquier despertar productivo."""
-	body = (text or "").strip()
-	if not body or len(body) >= SILENCE_MAX_CHARS:
+	"""True si la respuesta ejerce el Derecho al Silencio (AWAKEN-002).
+
+	Dos vías (ver el comentario de SILENCE_PHRASE para las medidas reales):
+	a) TERMINA con la frase canónica, tolerando la cola "Estado del Búnker:
+	<estado>", puntuación final, comillas y énfasis markdown — cubre la
+	narración intermedia que el bridge pega delante de la frase;
+	b) EMPIEZA por la frase y mide menos de SILENCE_MAX_CHARS — la frase más una
+	nota de estado breve.
+	Un informe productivo que solo CITA la frase a mitad de texto no es silencio:
+	se entrega y consume tope como cualquier despertar productivo. Fuente única
+	para el despertar, la respuesta de Telegram y el pulse del plugin."""
+	body = unicodedata.normalize("NFC", text or "").strip().casefold()
+	if not body:
 		return False
-	return body.lstrip("'\"`*_> ").casefold().startswith(SILENCE_PHRASE.casefold())
+	phrase = SILENCE_PHRASE.casefold()
+	cut = body.rfind(phrase)
+	if cut < 0:
+		return False
+	if _SILENCE_TAIL_RE.fullmatch(body[cut + len(phrase) :]):
+		return True
+	return len(body) < SILENCE_MAX_CHARS and body.lstrip(_SILENCE_LEAD_CHARS).startswith(phrase)
 
 
 def _handshake_step(user_prompt: str, mode: str) -> str:
