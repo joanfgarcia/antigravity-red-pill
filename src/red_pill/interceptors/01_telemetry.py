@@ -29,12 +29,24 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 			return ""
 		return f"- Tienes {n} decisión(es) pendiente(s) de despertares (notas `para: {operator}`). (Lee `${{AGENT_CORE_DIR}}/awakening/notes/`)"
 
+	def _board_line(self) -> str:
+		"""P1a (RFC-DESPERTAR-001): presencia de OTRAS sesiones vivas. Barato y
+		determinista; SILENT salvo que haya más de una (ver `session_index`)."""
+		try:
+			from red_pill.core.session_index import board_line
+
+			return board_line()
+		except Exception:
+			return ""
+
 	async def execute(self, prompt: str) -> str:
 		notes_line = self._notes_line()
+		board_line = self._board_line()
+		prefix = "\n".join(x for x in (board_line, notes_line) if x)
 		runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
 		bunker_state = runtime_dir / "bunker_state.json"
 		if not bunker_state.exists():
-			return notes_line
+			return prefix
 
 		try:
 			with open(bunker_state, "r") as f:
@@ -43,7 +55,7 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 			age = time.time() - state.get("timestamp", 0)
 			if age > 300:
 				alert = "[SYSTEM ALERT: Bünker Daemon is STALE/OFFLINE. Telemetry age > 5 mins]"
-				return f"{alert}\n{notes_line}" if notes_line else alert
+				return "\n".join(x for x in (alert, prefix) if x)
 
 			lines = ["[ESTADO BIOLÓGICO Y COLAS]"]
 
@@ -62,11 +74,13 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 			if state.get("swarm", {}).get("messages", 0) > 0:
 				lines.append(f"- Tienes {state['swarm']['messages']} mensajes del Swarm. (Ejecuta swarm_check_mailbox)")
 
+			if board_line:
+				lines.append(board_line)
 			if notes_line:
 				lines.append(notes_line)
 
 			if len(lines) > 1:
 				return "\n".join(lines)
-			return ""
+			return prefix
 		except Exception:
-			return notes_line
+			return prefix

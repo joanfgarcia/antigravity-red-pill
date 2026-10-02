@@ -47,6 +47,19 @@ def _data_dir() -> Path:
 
 DB_PATH = _data_dir() / "queue" / "bunker_queue.db"
 STATE_DIR = _data_dir() / "scribe-state"
+LIVE_DIR = _data_dir() / "state" / "sessions" / "live"
+
+
+def _touch_liveness(session_id: str, phase: str) -> None:
+	"""Marca el latido de sesión (RFC-DESPERTAR-001, P4). Fichero vacío, non-fatal."""
+	if not session_id:
+		return
+	try:
+		safe = session_id.strip().replace("/", "_").replace("__", "_")
+		LIVE_DIR.mkdir(parents=True, exist_ok=True)
+		(LIVE_DIR / f"{ORIGINATOR}__{safe}.{phase}").touch(exist_ok=True)
+	except Exception:
+		pass
 
 
 def _text_from_content(content) -> str:
@@ -195,6 +208,9 @@ def main() -> int:
 
 	transcript_path = payload.get("transcript_path")
 	session_id = payload.get("session_id", "")
+	# P4: el fin de turno se marca SIEMPRE (aunque el parseo del transcript falle
+	# o Stop venga de clear/resume/compact → un `.end` extra es inocuo).
+	_touch_liveness(session_id, "end")
 	if not transcript_path or not os.path.isfile(transcript_path):
 		return 0
 

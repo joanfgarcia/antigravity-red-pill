@@ -100,7 +100,7 @@ from inject_anchor import remove_block, splice_block  # noqa: E402
 BLOCK_VERSION = {
 	"sovereign_handshake": 1,
 	"agent_core": 2,
-	"knowledge_access": 2,
+	"knowledge_access": 3,
 	"frontmatter_docs": 3,
 	"job_dag_execution": 1,
 }

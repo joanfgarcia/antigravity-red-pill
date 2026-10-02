@@ -65,9 +65,26 @@
  * Runtime: Bun — uses bun:sqlite.
  */
 
+import { mkdirSync, writeFileSync } from "node:fs";
+
 const QUEUE_DB = "${QUEUE_DB}";
+const STATE_DIR = "${STATE_DIR}";
 const ORIGINATOR = "opencode";
 const DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
+
+// ── SESSION LIVENESS (RFC-DESPERTAR-001, P4) ────────────────────────────────
+// Touch de un fichero vacío por turno: `.start` al recibir el prompt, `.end` al
+// terminar el turno. mtime = señal; el par detecta "en vuelo". Best-effort:
+// nunca rompe el turno. Ver red_pill/core/session_liveness.py.
+function touchLiveness(sessionId, phase) {
+  if (!sessionId || !STATE_DIR || STATE_DIR.includes("${")) return;
+  try {
+    const safe = String(sessionId).replace(/\//g, "_").replace(/__/g, "_");
+    const dir = `${STATE_DIR}/sessions/live`;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${dir}/${ORIGINATOR}__${safe}.${phase}`, "");
+  } catch (_) {}
+}
 
 function hasQueue(db) {
   const row = db
@@ -177,6 +194,7 @@ async function handleV2Event(event) {
   }
 
   if (type === "session.execution.succeeded" || type === "session.execution.failed") {
+    touchLiveness(sessionId, "end");
     await flushSession(sessionId);
   }
 }
@@ -194,6 +212,7 @@ export default {
     await ctx.session.hook("prompt", (event) => {
       const sessionId = event?.sessionID;
       const text = event?.prompt?.text;
+      if (sessionId) touchLiveness(sessionId, "start");
       if (sessionId && text) {
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
@@ -239,6 +258,7 @@ export default {
 
       "chat.message": async (input, output) => {
         const { sessionID } = input;
+        if (sessionID) touchLiveness(sessionID, "start");
         const parts = output.parts || [];
         const textParts = parts
           .filter((p) => p.type === "text")
@@ -294,7 +314,10 @@ export default {
           (event.type === "session.status" && event.properties?.status?.type === "idle")
         ) {
           const sessionId = event.properties?.sessionID;
-          if (sessionId) await flushSession(sessionId);
+          if (sessionId) {
+            touchLiveness(sessionId, "end");
+            await flushSession(sessionId);
+          }
         }
       },
     };

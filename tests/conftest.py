@@ -13,6 +13,15 @@ os.environ["QDRANT_HOST"] = ":memory:"
 os.environ["QDRANT_PORT"] = "0"
 os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
+# TEST ISOLATION (module level, BEFORE any red_pill import in collection):
+# redirect XDG data/cache to a tmp dir AND arm the production-write guard, so
+# that even module-import-time calls to paths.py cannot touch the operator's
+# real storage. The fixture below re-applies per-test dirs on top of this.
+_TEST_ISOLATION_DIR = tempfile.mkdtemp(prefix="redpill_test_iso_")
+os.environ["XDG_DATA_HOME"] = os.path.join(_TEST_ISOLATION_DIR, "data")
+os.environ["XDG_CACHE_HOME"] = os.path.join(_TEST_ISOLATION_DIR, "cache")
+os.environ["REDPILL_TESTING"] = "1"
+
 
 _SW_FLAGS = (
 	"SW_AFFINITY_ENABLED",
@@ -67,6 +76,9 @@ def bunker_isolation(monkeypatch):
 	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
 	monkeypatch.setenv("XDG_DATA_HOME", os.path.join(test_dir, "data"))
 	monkeypatch.setenv("XDG_CACHE_HOME", os.path.join(test_dir, "cache"))
+	# Explicit isolation flag: paths.py aborts if a test resolves to the real
+	# production data dir (defence in depth beyond the env redirect above).
+	monkeypatch.setenv("REDPILL_TESTING", "1")
 
 	# 3. Force Qdrant into memory mode via env variables for Pydantic to capture
 	monkeypatch.setenv("QDRANT_HOST", ":memory:")

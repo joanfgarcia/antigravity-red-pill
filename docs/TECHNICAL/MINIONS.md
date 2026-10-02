@@ -111,6 +111,18 @@ result = await run_local_minion("…", cwd="/path/to/dir")
   - **Bash sandbox = cwd + 60 s timeout only** — a real shell driven by an 8B. Assign
     read-only/inspection tasks by default; only allow mutations deliberately.
   - Gives up after **3 consecutive tool errors**.
+  - **Tool-calling routing (HARNESS-003/004, 2026-09-30):** the daemon MUST pick a
+    tool-capable `chat_format` (`minion_chat_format`, e.g. `chatml-function-calling`)
+    when the request carries tools — the distiller `chat_format` silently drops them
+    (the model then answers in prose, or invents a tool and fabricates its output).
+    Granite **4.2** uses its **native** template and emits the tool-call as *text*
+    (`<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`);
+    the loop parses it (`model_runtime.extract_toolcalls`) and keeps `arguments` as a
+    mapping. 4.2-**3B** works but needs ~1200 tokens of budget for its `think`.
+  - **Autonomy (measured by `scripts/autonomy_ladder.py`):** Granite 4.1 and 4.2 both
+    **mutate the filesystem without asking** under ambiguous / "clean up" prompts →
+    grant **read-only inspection** autonomy only; keep mutations human-gated. 4.2
+    chains better than 4.1 (multi-step) but is heavier.
 - **Best for:** headless, unattended, well-scoped tasks — "count/inspect X", "read
   file Y and extract Z", "search the Bünker for W and summarize". Bit/frankenswarm-style
   chores of a few turns.

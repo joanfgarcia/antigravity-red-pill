@@ -33,6 +33,7 @@ def test_compute_sw_health():
 			("c3", {"node_type": "memento_engram", "origin": "memento"}),
 			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
 			("m1", {"node_type": "memento_engram", "origin": "memento", "hubbed": True}),
+			("m2", {"node_type": "memento_engram", "origin": "memento", "hubbed": True}),
 		],
 		"situation_memories": [("s1", {"updated_at": now - 3600})],
 		"interaction_memories": [
@@ -41,8 +42,12 @@ def test_compute_sw_health():
 		],
 	}
 	h = compute_sw_health(FakeMM(FakeClient(data)))
-	assert h["collections"]["work_memories"]["hubs"] == 1
-	assert h["collections"]["work_memories"]["content"] == 4  # incluye el miembro hubbed
-	assert h["collections"]["work_memories"]["hubbed_members"] == 1
+	wm = h["collections"]["work_memories"]
+	assert wm["hubs"] == 1
+	assert wm["content"] == 5  # incluye los miembros hubbed
+	assert wm["hubbed_members"] == 2
+	# Cobertura real (hubbed/content) ≠ densidad de hubs (hubs/content).
+	assert wm["hub_coverage_pct"] == 40.0
+	assert wm["hub_ratio_pct"] == 20.0
 	assert h["solera_age_h"] == 1.0
 	assert h["affinity_coverage"] == 0.5

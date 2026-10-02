@@ -215,18 +215,21 @@ systemctl --user restart redpill-bunker
 cd ~/Documents/IA/sharing
 .venv/bin/python -c "
 import sqlite3, os
-db = os.path.expanduser('~/.local/share/red-pill/events.db')
+db = os.path.expanduser('~/.local/share/neon-link/events.db')
 conn = sqlite3.connect(db)
 rows = conn.execute(\"\"\"
-  SELECT started_at, status, duration_s 
-  FROM execution_ledger 
-  WHERE exec_type='awakening' AND date(started_at)=date('now','localtime')
+  SELECT started_at, status, duration_s, counted
+  FROM execution_ledger
+  WHERE exec_type='awakening' AND date(started_at,'localtime')=date('now','localtime')
 \"\"\").fetchall()
 for r in rows: print(r)
-print(f'Total hoy: {len(rows)}/8')
+productive = sum(1 for r in rows if r[3])
+print(f'Total hoy: {len(rows)} | productivos (consumen tope): {productive}/8')
 "
 
-# Límite diario: 8 AWAKENINGs (configurable en worker.py MAX_AWAKENINGS_PER_DAY)
+# Límite diario: 8 AWAKENINGs *productivos* (configurable en worker.py
+# MAX_AWAKENINGS_PER_DAY). Los que ejercen el Derecho al Silencio quedan con
+# counted=0 y no consumen tope (AWAKENING_SILENCE_COUNTS=true revierte esto).
 ```
 
 ---

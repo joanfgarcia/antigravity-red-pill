@@ -394,6 +394,22 @@ class RedPillConfig(BaseSettings):
 	# herede el latido (heartbeat D21): sin latido, un techo alto deja colgado al
 	# agente comiéndose la cuota. El despertar auto-empaqueta lo largo en dag_job.
 	AWAKENING_TIMEOUT: int = int(os.getenv("AWAKENING_TIMEOUT", "600"))
+	# AWAKENING_SILENCE_COUNTS: si False (default), un despertar que ejerce el
+	# Derecho al Silencio NO consume el tope diario (`MAX_AWAKENINGS_PER_DAY`);
+	# solo cuentan los despertares productivos (con trabajo real) y los errores.
+	# El tope existe para proteger la cuota del LLM frente a runs de 110+ pasos;
+	# un silencio es barato. Como el silencio solo se conoce *después* de que el
+	# agente responde, el turno se ejecuta siempre y se marca `counted=0` en el
+	# ledger al clasificarlo (AWAKEN-002). Ponlo a True para el cómputo antiguo
+	# (todo despertar, silencioso o no, consume tope).
+	AWAKENING_SILENCE_COUNTS: bool = False
+	# SESSION_ACTIVE_MIN: umbral del latido de sesión (RFC-DESPERTAR-001 P4).
+	# Un `.start` más nuevo que su `.end` y dentro de esta ventana = "alguien
+	# está tocando" (turno en vuelo). El `.end` reciente = "alguien ha tocado".
+	SESSION_ACTIVE_MIN: int = 10
+	# SESSION_LIVENESS_TTL_H: retención de los ficheros de latido para limpieza
+	# por mtime (distinta del umbral de "activo ahora"). Janitor `session_liveness`.
+	SESSION_LIVENESS_TTL_H: int = 48
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

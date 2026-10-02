@@ -101,6 +101,12 @@ planner/
   fase gruesa; el status el estado fino). `tools/panel.py` avisa de desajustes.
 - `priority: High | Medium | Low` y `depends_on:` (rutas relativas) son campos
   opcionales del frontmatter — ver `../FRONTMATTER_TEMPLATE.md`.
+- **Desk-first para planes/RFCs** (regla dura): un RFC **nace y vive aquí**
+  (`design/<familia>/`). Al hablar de planes/diseños/RFCs, mirar **este árbol
+  primero** — antes de buscar en el repo. El proyecto **nunca** aloja el RFC del
+  desk ni lo referencia: solo su esencia implementada (AD-NNN, docs del repo).
+  Ciclo de vida: `draft → ratified → implemented → closed → archived`
+  (`design/governance/RFC_FLUJO_RFCS.md`).
 
 ## Panel
 

@@ -1,6 +1,6 @@
 {
   "_comment": "red-pill settings fragment for Claude Code. Merged (not overwritten) into settings.json by scripts/inject_settings.py. Grants the agent access to its transversal dirs OUTSIDE the workspace. NO defaultMode here on purpose: autonomous bypass is a per-launch CLI flag, never a shared-session default.",
-  "_comment_hooks": "Stop hook = RAW CAPTURE LAYER for Claude Code, symmetric to the opencode scribe plugin. Deterministically writes each turn's prompt+response into bunker.db interactions, so capture no longer depends on the agent invoking the handshake relay. Script deployed to ~/.claude/hooks/ by inject_settings.py from seeds/settings/hooks/.",
+  "_comment_hooks": "Stop hook = RAW CAPTURE LAYER for Claude Code, symmetric to the opencode scribe plugin. Deterministically writes each turn's prompt+response into bunker.db interactions, so capture no longer depends on the agent invoking the handshake relay. UserPromptSubmit + Stop also mark the session liveness heartbeat (RFC-DESPERTAR-001 P4: empty .start/.end files under ${STATE_DIR}/sessions/live/, mtime = signal). Scripts deployed to ~/.claude/hooks/ by inject_settings.py from seeds/settings/hooks/.",
   "permissions": {
     "additionalDirectories": [
       "${AGENT_CORE_DIR}",
@@ -10,6 +10,18 @@
     ]
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_turn_start.py",
+            "timeout": 5,
+            "statusMessage": "Red Pill: latido de sesión (inicio)"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

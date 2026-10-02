@@ -36,13 +36,30 @@ class SwObservabilityPlugin(JanitorPlugin):
 
 		try:
 			if getattr(cfg, "SW_HUBS_ENABLED", False):
+				# Heartbeat de estado (INFO, no WARNING: por defecto criticality
+				# es "WARNING" y el lector lo pintaba como alarma). El dato de salud
+				# es hub_coverage_pct (hubbed/content); hub_ratio_pct es densidad.
 				mem.inject_signal(
 					name="sw_hub_coverage",
 					intensity=2.0,
 					signal_type="status",
 					source="Janitor",
+					criticality="INFO",
 					message=json.dumps(health.get("collections", {}), ensure_ascii=False),
 				)
+				# Alerta REAL: solo si el contenido queda sin jerarquizar.
+				low = {
+					c: m for c, m in health.get("collections", {}).items()
+					if m.get("hub_coverage_pct", 100.0) < 50.0
+				}
+				if low:
+					mem.inject_signal(
+						name="sw_hub_coverage_low",
+						intensity=4.0,
+						signal_type="pain",
+						source="Janitor",
+						message=json.dumps(low, ensure_ascii=False),
+					)
 			age = health.get("solera_age_h")
 			if age is not None and age > 168:
 				mem.inject_signal(

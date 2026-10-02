@@ -334,20 +334,31 @@ CREATE TABLE execution_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     exec_type TEXT NOT NULL,           -- 'awakening'
     conversation_id TEXT,
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,   -- UTC
     duration_s REAL,
     response_len INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'started'      -- started | completed | error
+    status TEXT DEFAULT 'started',     -- started | completed | error
+    counted INTEGER DEFAULT 1          -- 1 = consumes budget; 0 = silence (free)
 );
 ```
 
-Before each AWAKENING, the worker checks:
+Before each AWAKENING, the worker checks (day boundary in **local time**):
 
 ```
-today_count = SELECT COUNT(*) WHERE exec_type='awakening' AND date=today
+today_count = SELECT COUNT(*) WHERE exec_type='awakening'
+              AND date(started_at,'localtime') = date('now','localtime')
+              AND counted = 1
 if today_count >= MAX_AWAKENINGS_PER_DAY (8):
     → Discard + log "budget exhausted"
 ```
+
+**Silence is free (AWAKEN-002):** the gate runs *before* the agent, so whether a
+turn is silence is only known *after* it responds. Every turn therefore runs and
+is classified on completion: if it exercised the Right to Silence,
+`counted` is set to `0` and it does **not** consume the daily limit. Only
+productive turns and errors (which spent resources) count. `MAX_AWAKENINGS_PER_DAY`
+thus means *productive awakenings per day*, not total. Set
+`AWAKENING_SILENCE_COUNTS=true` to restore the old behaviour (all turns count).
 
 Additionally:
 - **Timeout**: 600s hard cap per AWAKENING (configurable via `AWAKENING_TIMEOUT`)

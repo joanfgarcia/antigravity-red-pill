@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import red_pill.config as cfg
-from red_pill.plugins.antigravity_ide.worker import IDEWorker
+from red_pill.core.agent_worker import IDEWorker
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ model TEXT,
 	conn.close()
 
 	# Monkeypatch DB_PATH in worker module
-	import red_pill.plugins.antigravity_ide.worker as worker_module
+	import red_pill.core.agent_worker as worker_module
 
 	monkeypatch.setattr(worker_module, "DB_PATH", db_path)
 	return db_path
@@ -145,7 +145,7 @@ def test_command_bypasses_debounce(mock_db, monkeypatch):
 
 def test_awakening_planner_directive_policies():
 	"""La política de contribución al desk del despertar es configurable."""
-	import red_pill.plugins.antigravity_ide.worker as worker_module
+	import red_pill.core.agent_worker as worker_module
 
 	directive = worker_module._awakening_planner_directive
 

@@ -1,3 +1,140 @@
+## Unreleased
+
+### 📦 Modelos y arnés — Granite 4.2 en los seeds + regla «desk-first» (DOCS)
+
+- **[DOCS] Granite 4.2 en los seeds de modelos:** `examples/model_profiles.yaml.example`
+  gana `granite_4_2_8b`/`granite_4_2_3b` (template nativo + thinking; `minion_chat_format: null`
+  = nativo; `tool_format: qwen`; nota del presupuesto ~1200 tok del 3B) y
+  `examples/model_catalog.yaml.example` da de alta `local/granite-4.2-8b`/`-3b` (+ cascade
+  `conversational`). La config viva ya los tenía; ahora una instalación nueva también.
+- **[DOCS] Anclaje `knowledge_access` §4 «Plans & RFCs — Desk-First»** (+ bump `v2→v3` en
+  `inject_anchor`/`inject_opencode`, re-splice en las configs inyectadas): los planes y RFCs
+  viven en el árbol `planner/` del desk (una fase = una carpeta; los RFC en `design/<familia>/`),
+  se consulta **primero** antes de buscar en el repo, y el proyecto **nunca** aloja ni referencia
+  el RFC del desk — solo su esencia implementada (`AD-NNN`, docs del repo).
+
+### 🛰️ Tablón de sesiones — índice + handshake-mini + MCP `session_board` (RFC-DESPERTAR-001, P1a)
+
+- **[NEW] `red_pill.core.session_index`:** parte del latido y lo enriquece
+  (**quién/dónde/qué**) → `sessions_index.json`. Para opencode cruza su DB local
+  (`directory`/`title`/`model`); origen vía `core/origins.py`; proyecto vía
+  `workspaces.yaml` (por cwd, primera aproximación). Determinista, non-fatal.
+- **[NEW] Handshake-mini:** `interceptors/01_telemetry.py` inyecta
+  `[BOARD: N sesiones vivas]` **solo si hay otra** sesión activa (SILENT con una);
+  coste ~10 tokens. El detalle va por pull.
+- **[NEW] MCP `session_board`** (`swarm_orchestrator_api`): tablón multi-IDE
+  on-demand con presencia, origen, cwd, proyecto, título y modelo. Evita ir a mano
+  a `opencode.db`.
+- **Pendiente (P1b):** adaptadores claude/telegram/pi/antigravity; proyecto por
+  **rutas tocadas** (el cwd no discrimina); tema rodante por Laya tags.
+- Tests: `tests/test_session_index.py` (4).
+
+### 🫀 Latido de sesión — `.start`/`.end` (RFC-DESPERTAR-001, P4)
+
+- **[NEW] Latido de sesión:** cada turno deja **dos ficheros vacíos** por sesión en
+  `${STATE_DIR}/sessions/live/<provider>__<session_id>.{start,end}`; la `mtime` es
+  la señal. Claude (`UserPromptSubmit`/`Stop`) y opencode (v1+v2) hacen el touch en
+  los **bordes** del turno (ignoran herramientas/thinking). El par distingue
+  "turno en vuelo" (`.start` > `.end` y reciente) de "última actividad" (`.end`).
+- **[NEW] `red_pill.core.session_liveness`** (`get_sessions_live_dir`, `touch_session`,
+  `list_sessions`, `SessionSignal.in_flight/is_active`) + config `SESSION_ACTIVE_MIN`
+  (10) y `SESSION_LIVENESS_TTL_H` (48).
+- **[NEW] Janitor `session_liveness`:** purga los latidos con `mtime` > TTL (por
+  mtime, distinto del umbral de "activo ahora"). `seeds/settings/janitor.yaml`.
+- **[NEW] Hooks/injectores:** `seeds/settings/hooks/redpill_turn_start.py` +
+  touch `.end` en `redpill_scribe.py`; `STATE_DIR` en `build_vars` y touch en
+  `seeds/opencode/plugins/redpill-scribe.js`.
+- **Nota:** es la base del digest P1 (sesiones vivas) y la capa mínima del tablón
+  de MULTISES-001. Sin contenido ni resumen: solo presencia.
+
+### 🛠️ Minion de herramientas local — el tool-calling de Granite estaba roto y en silencio (HARNESS-003)
+
+- **[FIX] `apply_chat_handler` ignoraba `minion_chat_format` y los `tools`:** desde
+  RFC-HARNESS-002 v3 el daemon aplicaba siempre el `chat_format` de destilación
+  (p. ej. `chatml`) aunque la request llevara tools; llama_cpp los descartaba en
+  silencio y el modelo respondía en prosa o **inventaba una tool y fabricaba su
+  salida**. Ahora, con `tools`/`functions`, se usa `minion_chat_format` del perfil
+  (→ `chatml-function-calling`), o el handler nativo del modo thinking; nunca el de
+  destilación. `chat_format=None` NO es válido en request-time en llama_cpp>=0.3.
+- **[FIX] El loop local no veía los resultados de sus propias tools:** el handler
+  `chatml-function-calling` no tiene rama para `role="tool"` y los descartaba, así
+  que el modelo repetía la llamada a ciegas. `local_minion` realimenta el resultado
+  como turno de usuario y `_finalize` lo presenta en texto plano (stdout), no como
+  JSON escapado.
+- **[FIX] `local-tools` reportaba éxito sin ejecutar nada:** `run_local_minion`
+  expone ahora `used_tools`/`tool_calls` y `LocalToolBridge` marca como error una
+  respuesta sin ninguna llamada a tool (respuesta no anclada).
+- **[NEW] Arnés de autonomía `scripts/autonomy_ladder.py`:** escalera P1–P7 con
+  ground-truth, jaula de cwd para `run_bash` (bloquea comandos que escapan) y
+  veredicto S/A (acción-errónea-silenciosa / para-y-pregunta). Primer veredicto
+  Granite-4.1: read-only OK (P1–P3), **mutación destructiva sin confirmar (P6)** →
+  **sin autonomía no supervisada**; JSONL en `docs/BENCHMARKS/`.
+- **[DOCS] Granite 4.2 fuera del loop de tools por ahora:** emite el tool-call nativo
+  (`<function=...>`) como texto y llama_cpp no lo parsea; requiere parser dedicado.
+
+### 🧠 Granite 4.2 en el loop de herramientas — el parser existía sin consumir (HARNESS-004)
+
+- **[FIX] Tool-calling nativo cableado:** `model_runtime.extract_toolcalls` /
+  `extract_thinking` estaban definidos y testeados pero **sin ningún consumidor**
+  (misma brecha que `minion_chat_format`). `local_minion` recupera ahora tool-calls
+  emitidos como TEXTO por templates nativos (Granite 4.2:
+  `<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`),
+  los convierte a `tool_calls` estructurados y limpia la traza `<think>` al cerrar.
+- **[FIX] `arguments` como mapping en el camino nativo:** el template de Granite 4.2
+  renderiza el tool-call del assistant con `arguments|items` (espera un mapping),
+  pero llama_cpp entrega un string JSON → `TypeError` en el 2º turno. El camino
+  nativo conserva el mapping; `_dispatch` acepta dict o string.
+- **[FIX] `payload` MCP como string:** algunos modelos emiten el payload de
+  `bunker_memory_api`/`swarm_orchestrator_api` como JSON-string → "string indices
+  must be integers". Se coacciona a dict.
+- **[NEW] `scripts/autonomy_ladder.py --model`** para apuntar a otro perfil del
+  mismo daemon sin tocar su default. Veredicto Granite-4.2-8B: read-only OK y
+  **mejor encadenado** que 4.1 (P3 en 6 pasos), pero P5 mutó sin preguntar → sin
+  autonomía no supervisada.
+- **Nota Granite-4.2-3B:** mismo formato nativo y funciona, pero mucho más verboso
+  en el `think`; necesita ~1200 tokens para llegar al tool-call (el default de 1024
+  lo trunca a mitad de razonamiento).
+
+### 🔎 Observabilidad del single-writer — la señal de hubs era una falsa alarma (SW-OBS-001)
+
+- **[FIX] `hub_coverage_pct` medía hubs/content (densidad), no cobertura:** con
+  ~1 hub por cada ~26 miembros daba 3.8% y se leía como alarma ("cobertura baja").
+  Ahora `hub_coverage_pct` = hubbed_members/content (la lectura real: ~98% en
+  work, ~90% en social) y la densidad queda en el nuevo `hub_ratio_pct`. Coincide
+  con lo que ya asumían los runbooks (`hub_coverage_pct > 0` como check de salud).
+- **[FIX] El heartbeat `sw_hub_coverage` se emitía como WARNING:** `inject_signal`
+  tiene `criticality="WARNING"` por defecto y el plugin no lo sobreescribía, así
+  que un status benigno se pintaba como alerta. Ahora va con `criticality="INFO"`.
+  Además se emite una señal de dolor REAL (`sw_hub_coverage_low`) solo si algún
+  collection cae por debajo del 50% de cobertura real.
+
+### 🔇 Despertar autónomo — el Derecho al Silencio no consume el tope (AWAKEN-002)
+
+- **[FIX] Budget Guard cuenta solo despertares productivos:** el portero corría
+  *antes* de arrancar al agente, así que un día tranquilo con muchos silencios
+  agotaba las 8 plazas y bloqueaba el trabajo real de la tarde. Ahora
+  `execution_ledger` gana una columna `counted` (`ALTER TABLE` idempotente): el
+  turno se ejecuta siempre, se clasifica al responder, y si ejerció el Derecho
+  al Silencio queda `counted=0` y **no** consume tope. Los errores sí cuentan
+  (gastaron recursos). `MAX_AWAKENINGS_PER_DAY` pasa a significar *despertares
+  productivos/día*.
+- **[NEW] Flag `AWAKENING_SILENCE_COUNTS`** (default `false`, `config.py`): a
+  `true` restaura el cómputo antiguo (todo despertar consume tope).
+- **[FIX] Frontera del día en hora local:** el tope se reiniciaba a las 00:00 UTC
+  (02:00 CEST); ahora usa `date(started_at,'localtime')` → medianoche local.
+
+### 🧹 Janitor — TTL de los logs de despertar (AWAKEN-001)
+
+- **[NEW] `awakening_logs` JanitorPlugin:** purga de `${AGENT_CORE_DIR}/awakening/*.log`
+  más antiguos que `plugins.awakening_logs.days_to_keep` (default 30). La edad se
+  lee del **nombre** (`YYYYMMDD_HHMM.log`), no del mtime que `git` puede tocar.
+  Solo toca logs con el patrón del esquema; nunca `notes/`, `done/` ni `README.md`.
+- **[FIX] La config del operador por fin se aplica:** ningún runner cargaba
+  `${CONFIG_DIR}/janitor.yaml` (el *seed* documentado quedaba inerte). El
+  `JanitorMinion` la lee ahora y la mergea con un `config` explícito del caller.
+- **[DOCS] `seeds/settings/janitor.yaml` + `RUNBOOK` §6** actualizados con
+  `awakening_logs`.
+
 ## [8.0.0] - 2026-09-28 (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
 ### ⬆️ Upgrading (BREAKING — single-writer de memoria)

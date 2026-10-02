@@ -92,6 +92,48 @@ catalog:
         # Memento agentic-pass distiller/curator (bake-off 2026-09-14):
         # long-context (32K) European variant for RFC-002 distill/refine.
         # ⛔ CC-BY-NC-4.0 — bloqueado en contexto comercial por el compliance gate.
+        # Granite 4.2 8B — thinking + tool-calling NATIVO (HARNESS-004, 2026-09-30).
+        # Más capaz que el 4.1 (razona y encadena; P3 del arnés en 6 pasos), pero
+        # más pesado (5.35 GB → n_ctx reducido para caber en 8 GB). Con tools
+        # emite el tool-call nativo como texto y el bridge `local-tools` lo parsea.
+        # ⚠️ Sin autonomía no supervisada: muta sin confirmar ante instrucciones
+        # ambiguas.
+        - id: "local/granite-4.2-8b"
+          backend: "local"
+          tier: "local"
+          priority: 8
+          roles: ["conversational"]
+          capabilities: ["reasoning", "logic", "tool_calling", "conversational"]
+          not_capable_for: ["coder", "planning", "scout"]
+          license:
+            id: "apache-2.0"
+            commercial_ok: true
+            redistribution_ok: true
+            attribution_required: false
+            share_alike: false
+            source: "https://huggingface.co/ibm-granite/granite-4.2-8b"
+          timeout: 300
+        # Granite 4.2 3B — mismo formato de tool-calling nativo y funciona, pero
+        # mucho más verboso en el `think`: ~1200 tokens de presupuesto para llegar
+        # al tool-call. Cabe 100% en GPU (2.24 GB).
+        - id: "local/granite-4.2-3b"
+          backend: "local"
+          tier: "local"
+          priority: 11
+          roles: ["conversational"]
+          capabilities: ["reasoning", "logic", "tool_calling", "conversational"]
+          not_capable_for: ["coder", "planning", "scout"]
+          license:
+            id: "apache-2.0"
+            commercial_ok: true
+            redistribution_ok: true
+            attribution_required: false
+            share_alike: false
+            source: "https://huggingface.co/ibm-granite/granite-4.2-3b"
+          timeout: 300
+        # Memento agentic-pass distiller/curator (bake-off 2026-09-14):
+        # long-context (32K) European variant for RFC-002 distill/refine.
+        # ⛔ CC-BY-NC-4.0 — bloqueado en contexto comercial por el compliance gate.
         - id: "local/tiny-aya-water"
           backend: "local"
           tier: "local"
@@ -123,4 +165,5 @@ roles:
   conversational:
     - "opencode-go/deepseek-v4-pro"
     - "opencode/deepseek-v4-flash-free"
+    - "local/granite-4.2-8b"
     - "local/granite-8b"

@@ -11,6 +11,20 @@ def test_extract_toolcalls_qwen():
 	assert calls[0]["function"]["arguments"] == {"q": "hola"}
 
 
+def test_extract_toolcalls_granite_native():
+	# Salida nativa real de Granite 4.2 (template Jinja, no handler estructurado):
+	# <tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>
+	text = (
+		"<think>Debo leer el fichero.</think>\n"
+		"<tool_call>\n<function=run_bash>\n<parameter=command>\n"
+		"cat manifest.txt\n</parameter>\n</function>\n</tool_call>"
+	)
+	calls = extract_toolcalls(text, tool_format="qwen")
+	assert len(calls) == 1
+	assert calls[0]["function"]["name"] == "run_bash"
+	assert calls[0]["function"]["arguments"] == {"command": "cat manifest.txt"}
+
+
 def test_extract_toolcalls_vacio():
 	assert extract_toolcalls("sin tool call", tool_format="qwen") == []
 	assert extract_toolcalls("", tool_format="auto") == []

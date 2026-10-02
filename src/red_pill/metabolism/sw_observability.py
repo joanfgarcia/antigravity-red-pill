@@ -47,7 +47,12 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 				"content": content,
 				"hubs": hubs,
 				"hubbed_members": hubbed,
-				"hub_coverage_pct": round(100 * hubs / max(1, content), 1),
+				# Cobertura real: % de engrams de contenido agrupados en un hub.
+				# El nombre dice la verdad (antes medía hubs/content = densidad, no
+				# cobertura; con 1 hub por ~26 miembros daba 3.8% y parecía alarma).
+				"hub_coverage_pct": round(100 * hubbed / max(1, content), 1),
+				# Densidad de hubs (hubs por 100 engrams). Contexto, no salud.
+				"hub_ratio_pct": round(100 * hubs / max(1, content), 1),
 			}
 		except Exception as e:
 			logger.warning(f"[SW-OBS] {c}: {e}")
