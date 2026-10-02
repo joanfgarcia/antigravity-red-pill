@@ -41,11 +41,12 @@ def test_board_line_with_others(monkeypatch):
 	assert si.board_line().startswith("[BOARD: 2 sesiones vivas]")
 
 
-def test_build_board_enriched(monkeypatch):
+def test_build_board_enriched(tmp_path, monkeypatch):
 	now = time.time()
+	workdir = str(tmp_path / "sharing")
 	monkeypatch.setattr(si, "_active_seconds", lambda: 600)
 	monkeypatch.setattr(si, "list_sessions", lambda: [SessionSignal("opencode", "ses_x", now - 1, None)])
-	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": "/home/joan/Documents/IA/sharing", "title": "T", "model": "m"})
+	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": workdir, "title": "T", "model": "m"})
 	monkeypatch.setattr(si, "_origin_for", lambda p, s: "awakening")
 	monkeypatch.setattr(si, "_owning_workspace", lambda d: "sharing")
 
@@ -55,6 +56,7 @@ def test_build_board_enriched(monkeypatch):
 	assert b["provider"] == "opencode"
 	assert b["origin"] == "awakening"
 	assert b["project"] == "sharing"
+	assert b["directory"] == workdir
 	assert b["title"] == "T"
 	assert b["model"] == "m"
 	assert b["in_flight"] is True
