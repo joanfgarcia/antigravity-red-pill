@@ -234,7 +234,7 @@ def pi_sessions(tmp_path):
 	slug_dir.mkdir(parents=True)
 	session = slug_dir / "2026-09-10T10-00-00-000Z_01J3SESSION.jsonl"
 	records = [
-		{"type": "session", "version": 3, "id": "sess-1", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/home/joan/Workspace"},
+		{"type": "session", "version": 3, "id": "sess-1", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/home/user/Workspace"},
 		# Ruido de harness: no message, se ignora
 		{"type": "compaction", "id": "aaaa1111", "parentId": None, "timestamp": "2026-09-10T10:00:05.000Z", "summary": "…", "tokensBefore": 50000},
 		{

@@ -2068,7 +2068,7 @@ Elimina las comprobaciones de red a Hugging Face en embeddings, externaliza los 
 - **[FEAT] CLI del Laboratorio**: Añadidos subcomandos `chunk` (evaluación visual del fraccionamiento) y `telegram` (pruebas sobre archivos JSON de Telegram), más flags de override (`--config-yaml`, `--prompt-file`, `--temp`, `--model`).
 
 ### 📊 Telemetría de Fases de Sueño
-- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `/home/joan/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
+- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `~/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
 
 ### ✅ Tests
 - `tests/test_chunker.py`: Cobertura de la segmentación por diálogo y absorción de fragmentos pequeños.
@@ -2146,8 +2146,8 @@ Antigravity (Gemini), Claude Code, Claude Desktop, **OpenCode** (new), Cline, Ro
 ## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
 
 ### 🩺 Somatic Pain & Vitals Optimization
-- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) and [vitals.py](file:///home/joan/Documents/IA/sharing/src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
-- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](file:///home/joan/Documents/IA/sharing/src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
+- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](src/red_pill/config.py) and [vitals.py](src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
+- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
 
 ## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
 
@@ -2279,7 +2279,7 @@ read side, and adds the first utility metric.
 - **[FIX] Seed Path Correction (`model_profiles.yaml.example`)**: Updated seed file comment to reference `~/.config/red-pill/model_profiles.yaml` (XDG) instead of deprecated `~/.agent/model_profiles.yaml`.
 
 ### 🩹 Fable-5 Fixes — knowledge_access Anchor & Neon-Link Gate
-- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/joan/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
+- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/<user>/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
 - **[FIX] Neon-Link False Positive Gate (`config.py`, `check_neon_link.py`, `swarm_monitor.py`, `rituals.py`)**: Gated Neon-Link HTTP probes behind `NEON_LINK_HTTP_API` flag (default `False`). neon-link ≤0.5.1 ships FastAPI routes but never binds uvicorn, causing permanent `neon_hung` severity-10 false positives and heal restarts of healthy Telegram bridges.
 - **[TEST] Neon-Link Gate Regression Suite (`test_check_neon_link_gate.py`)**: 4 tests covering disabled/enabled probe behavior, error reporting, and config default validation.
 
@@ -2374,7 +2374,7 @@ read side, and adds the first utility metric.
 - **[FIX] 3-State Liveness Model (`drive_evaluator.py`, `samantha_on_demand.py`)**: Resolved false `local_llm_offline` warnings and VRAM/RAM memory spikes by introducing a 3-state liveness probe (`ready` | `busy` | `down`). Probes distinguish a dead hypervisor (`down` / `ECONNREFUSED` -> triggers pain alerts) from a saturated one (`busy` / timeout -> suppresses pain and returns `True` to reuse the active hypervisor, preventing the spawning of duplicate ~8 GiB ephemeral model servers).
 
 ### 🧬 TUI Dashboard & Configuration Manager (B.2)
-- **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `/home/joan/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
+- **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `~/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
 - **[FEAT] CLI Integration (`cli.py`)**: Added the `config` group and `tui` subcommand (`red-pill config tui`) with interactive TTY verification.
 - **[TEST] TUI Test Coverage (`tests/test_config_tui.py`)**: Implemented tests for atomic save, comment preservation, telemetry scraping, validation error raising, and HSplit layout constructors.
 
@@ -2488,18 +2488,18 @@ read side, and adds the first utility metric.
 
 ### 🎭 Identity Depth System & AWAKENING Hardening
 - **[FEAT] Three-Tier Identity Loading (`full`/`medium`/`low`)**: Parameterized the `interceptor_rp` → `refresh_session_context` → `wake_up_v6.py` pipeline with a `--mode` flag. `full` (~10K chars) loads everything for IDE sessions; `medium` (~6K) loads persona, bonds, and active skin for Telegram; `low` (~2K) loads only operational core rules for AWAKENINGs. Reduces token overhead by up to 90% in headless contexts.
-- **[FEAT] Configurable Identity Depth per Channel**: Added `IDENTITY_DEPTH_IDE`, `IDENTITY_DEPTH_NEON_LINK`, and `IDENTITY_DEPTH_HEADLESS` to [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) with Pydantic validation. Each accepts `full`/`medium`/`low` and can be overridden via `.env` — acts as a token budget emergency lever.
-- **[FEAT] AWAKENING Isolation (System Channel)**: AWAKENINGs now route through `channel='system'` in [autonomous_cron.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/autonomous_cron.py), preventing contamination of Telegram session history. New `_process_awakening()` in [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) runs each AWAKENING in a fresh `agy` conversation with no accumulated history.
+- **[FEAT] Configurable Identity Depth per Channel**: Added `IDENTITY_DEPTH_IDE`, `IDENTITY_DEPTH_NEON_LINK`, and `IDENTITY_DEPTH_HEADLESS` to [config.py](src/red_pill/config.py) with Pydantic validation. Each accepts `full`/`medium`/`low` and can be overridden via `.env` — acts as a token budget emergency lever.
+- **[FEAT] AWAKENING Isolation (System Channel)**: AWAKENINGs now route through `channel='system'` in [autonomous_cron.py](src/red_pill/swarm/autonomous_cron.py), preventing contamination of Telegram session history. New `_process_awakening()` in [worker.py](src/red_pill/plugins/antigravity_ide/worker.py) runs each AWAKENING in a fresh `agy` conversation with no accumulated history.
 - **[FEAT] Budget Guard (Execution Ledger)**: Created `execution_ledger` table in SQLite tracking all autonomous executions with status, duration, and response length. Daily cap of 8 AWAKENINGs (`MAX_AWAKENINGS_PER_DAY`), 600s hard timeout, and 40 tool-call prompt limit prevent quota exhaustion.
 - **[FEAT] Prompt Restructure (`<current_message>` Separation)**: Restructured the Telegram bridge prompt to clearly separate `<conversation_history>` from `<current_message>`, preventing the agent from misinterpreting old AWAKENING directives as new instructions.
-- **[FIX] Session Hygiene**: Added deduplication of consecutive identical USER messages, filtering of empty ASSISTANT responses, and size-based compaction threshold (4000 chars) in [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py).
+- **[FIX] Session Hygiene**: Added deduplication of consecutive identical USER messages, filtering of empty ASSISTANT responses, and size-based compaction threshold (4000 chars) in [telegram_session.py](src/red_pill/plugins/antigravity_ide/telegram_session.py).
 - **[FEAT] Identity via MCP Pipeline**: Removed hardcoded `IDENTITY ANCHOR` from worker prompts. Identity now flows exclusively through the `interceptor_rp` MCP tool with `mode` parameter — the Bünker (Qdrant) is the single source of truth.
-- **[DOCS] Architecture Update**: Documented Identity Depth, AWAKENING Isolation, and Budget Guard in [ARCHITECTURE.md](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md) (sections 11-13).
+- **[DOCS] Architecture Update**: Documented Identity Depth, AWAKENING Isolation, and Budget Guard in [ARCHITECTURE.md](src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md) (sections 11-13).
 
 ### 😴 Sleep Consolidation (Phase Delta) & Test Isolation
-- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
+- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
 - **[FEAT] Category Heuristics in Sleep Cycles**: Refactored category detection in `perform_sleep_cycle` using `detect_category_heuristics` to prevent categorizing all raw engrams as "social" by default.
-- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](file:///home/joan/Documents/IA/sharing/tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
+- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
 
 ### 🛡️ Syntax Guard — Real-Time Syntax Integrity Shield
 - **[INCIDENT] Agent-Induced Syntax Corruption (2026-05-26)**: During a high-volume refactoring session (session `ab66007b`), the agent corrupted indentation in 6 critical Python files via `replace_file_content` tool calls that stripped leading tabs. This caused a cascading failure across all `systemd --user` services for ~10 hours (7 wake cycles lost). Root cause: the LLM model generated `ReplacementContent` without preserving tab indentation on deeply nested lines.
@@ -2515,11 +2515,11 @@ read side, and adds the first utility metric.
 
 
 ### 🧠 Sovereign Drive desatendido y Sesiones de Telegram desacopladas
-- **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
-- **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.
+- **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
+- **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.
 - **[FEAT] Compactación e Ingesta**: Diseñado el mecanismo de compactación local en `TelegramSessionManager` para rotar conversaciones al superar los 16 pasos: genera un resumen del contexto y crea una nueva sesión activa, moviendo el historial viejo a la cola de ingesta de `sleep.py` (`$XDG_CACHE_HOME/red-pill/staging/`).
 - **[FEAT] Barrido del Janitor verificado por Qdrant**: Implementado el método `run_janitor_sweep()` en `TelegramSessionManager` para verificar mediante `scroll()` en Qdrant (filtro en `metadata.source_buffer_id`) que una sesión marcada como `pending_purge` ha sido completamente ingerida antes de eliminar físicamente su JSON del disco.
-- **[FEAT] Entropía dinámica y Boost de Silencio**: Refactorizado `evaluate_pulse()` en [drive_evaluator.py](file:///home/joan/Documents/IA/sharing/src/red_pill/cognitive/drive_evaluator.py) para computar la entropía del sistema en tiempo real a partir del backlog de `TODO.md`, modificaciones locales en git, tiempo offline del usuario y un acumulador de silencio (`silence_boost`). El umbral de curiosidad de los perfiles (`balanced`, `visionary`, `sentinel`) se reduce de forma dinámica basándose en la entropía del entorno.
+- **[FEAT] Entropía dinámica y Boost de Silencio**: Refactorizado `evaluate_pulse()` en [drive_evaluator.py](src/red_pill/cognitive/drive_evaluator.py) para computar la entropía del sistema en tiempo real a partir del backlog de `TODO.md`, modificaciones locales en git, tiempo offline del usuario y un acumulador de silencio (`silence_boost`). El umbral de curiosidad de los perfiles (`balanced`, `visionary`, `sentinel`) se reduce de forma dinámica basándose en la entropía del entorno.
 - **[TEST] Pruebas de integración de Telegram y Curiosidad**: Creado `tests/test_telegram_session.py` para verificar de forma aislada el ciclo de vida de las sesiones y la ejecución de comandos del worker. Corregidas las pruebas de actividad y stat en `tests/test_curiosity_will.py` tras la alineación XDG del archivo `last_user_activity.txt`.
 
 
@@ -2582,8 +2582,8 @@ read side, and adds the first utility metric.
 - **[FEAT] Graceful Sandboxing in Pulse Manager**: Patched `schedule_pulse.py` to check D-Bus and systemctl availability using dynamic probes, preventing crashes inside containerized sandboxes lacking systemd.
 - **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
 - **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
-- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh).
-- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh) script.
+- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](scripts/upgrade.sh).
+- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](scripts/upgrade.sh) script.
 
 ### 🔌 Antigravity Python SDK Connection Audit
 - **[AUDIT] Viability Assessment of google-antigravity**: Conducted a comprehensive audit of the `LocalConnectionStrategy` inside the Google Antigravity SDK (`google-antigravity` package).
@@ -2693,7 +2693,7 @@ read side, and adds the first utility metric.
 - **[HEAL] XDG Smith Filter**: Added an autonomous static-analysis unit test (`test_xdg_compliance.py`) and a strict `CONVENTIONS.md` manifesto rule to instantly fail any PR attempting to reintroduce localized `storage/` patterns.
 - **[HEAL] Database Path Collision Resolution**: Resolved critical `sqlite3.OperationalError` collision logic inside `worker.py` ensuring it queries `cognitive_tasks` directly from the XDG-compliant `bunker_queue.db` without cross-polluting `events.db`.
 - **[FIX] XDG Pulse & Background Pathing**: Patched `schedule_pulse.py` to correctly register `bunker_telemetry.py` timers. Fixed `setup_background_model.sh` to construct the local LLM daemon with strict XDG cache paths (`~/.local/share/red-pill/models/`) instead of relative dirs.
-- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/joan/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
+- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/<user>/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
 
 ### 🧠 Sovereign Chronicle & Archival Pipeline
 - **[HEAL] Chronicle LS Fallback Reversion**: Disabled the AES GCM decryption path due to Protobuf binary parsing incompatibilities with legacy keys. The extraction pipeline now defaults securely and exclusively to the native LanguageServer (`aghistory export`), yielding 100% data coherence.
@@ -3225,7 +3225,7 @@ read side, and adds the first utility metric.
   - New `_write_calendar_timer()` helper for `OnCalendar`-style timers
   - `_write_systemd_unit()` now accepts optional `Nice=` parameter
 - **[FIX] `scripts/chronicle_refine.py`**: Fixed `ValidationError` — truncated `raw_content` and `refined_content` in fragment payloads to 1024 characters (schema limit).
-- **[FIX] `.env`**: Fixed `FASTEMBED_CACHE_PATH` — replaced literal `~` with absolute path `/home/joan/Documents/IA/storage/models`. Dotenv loaders do not expand tilde, causing `ONNXRuntimeError: NO_SUCH_FILE` on fastembed model load.
+- **[FIX] `.env`**: Fixed `FASTEMBED_CACHE_PATH` — replaced literal `~` with absolute path `/home/<user>/Documents/IA/storage/models`. Dotenv loaders do not expand tilde, causing `ONNXRuntimeError: NO_SUCH_FILE` on fastembed model load.
 
 
 ### 🧠 Bünker Stabilization: Offline Decryption & The Atomized Chronicle

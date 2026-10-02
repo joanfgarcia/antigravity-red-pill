@@ -81,14 +81,14 @@ async def test_bash_then_finalize(monkeypatch):
 	# step0: call run_bash → step1: empty content (handler quirk) → finalize returns "51"
 	provider = FakeProvider(
 		[
-			_tool_call("run_bash", '{"command": "ls -1 /home/joan/tmp | wc -l"}'),
+			_tool_call("run_bash", '{"command": "ls -1 /home/user/tmp | wc -l"}'),
 			{"role": "assistant", "content": "", "tool_calls": None},
 			{"role": "assistant", "content": "51"},
 		]
 	)
 	_use_provider(monkeypatch, provider)
 	_fake_shell(monkeypatch, FakeProc(rc=0, out=b"51\n"))
-	res = await local_minion.run_local_minion("count entries", cwd="/home/joan/tmp")
+	res = await local_minion.run_local_minion("count entries", cwd="/home/user/tmp")
 	assert res["ok"] is True
 	assert res["answer"] == "51"
 	# last chat() call is the finalize pass → no tools forwarded
