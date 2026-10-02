@@ -2,8 +2,9 @@
 
 Ejercita `_process_awakening` con el `get_connection` REAL sobre un events.db
 temporal (así la migración de `execution_ledger.counted` corre de verdad):
-- el silencio se clasifica por la frase canónica AL PRINCIPIO de una respuesta
-  corta, no por substring;
+- el silencio se clasifica por la frase canónica AL FINAL de la respuesta (con
+  narración previa pegada por el bridge) o AL PRINCIPIO de una respuesta corta;
+  un informe que solo la cita a mitad no es silencio;
 - AWAKENING_SILENCE_COUNTS=True restaura el cómputo antiguo;
 - los silencios no bloquean el siguiente despertar productivo;
 - la frontera del día es la hora local;
@@ -27,6 +28,21 @@ from red_pill.core.agent_worker import MAX_AWAKENINGS_PER_DAY, IDEWorker, is_sil
 
 CANONICAL_SILENCE = "Ejercicio consciente del Derecho al Silencio. Estado del Búnker: calma."
 REPORT = "Revisé el planner y dejé dos notas. " * 20
+# Narración intermedia que el bridge de opencode pega (con "".join) delante del
+# bloque final con la frase — la forma de 18 silencios reales que la regla
+# "empieza por la frase" dejaba escapar a Telegram.
+NARRATION = (
+	"Reviso el inbox de minions: nada urgente. Los jobs frustrados son los mismos de "
+	"la última vuelta, sin delta. No hay nada que proponer al planner, así que lo "
+	"registro en el log del despertar y ejerzo silencio."
+)
+# Nota de estado breve tras la frase (~300 caracteres en total): forma de los
+# 3 silencios reales de 247-369 caracteres.
+STATUS_NOTE = (
+	" Sin delta respecto a la vuelta anterior: `jobs_frustrated` sigue en los mismos "
+	"valores, el inbox no trae nada nuevo y el log del despertar queda registrado en "
+	"el desk. Nada que escalar al operador; vuelvo a mirar en la próxima ventana."
+)
 
 
 def _seed_events_db(db_path: Path) -> None:
@@ -125,18 +141,37 @@ def _fill_ledger(db_path: Path, n: int, *, counted: int, started_at: str | None 
 		f"**{CANONICAL_SILENCE}**",
 		f"'{CANONICAL_SILENCE}'",
 		"Ejercicio consciente del Derecho al Silencio.",
+		"Ejercicio consciente del Derecho al Silencio. Estado del Bünker: calma.",
+		f"{NARRATION}{CANONICAL_SILENCE}",  # narración + frase, pegadas por el bridge
+		f"{NARRATION}\n\n**{CANONICAL_SILENCE}**\n",
+		f"{REPORT}\nCierro con: {CANONICAL_SILENCE}",  # la respuesta TERMINA con la frase
+		f"{CANONICAL_SILENCE}{STATUS_NOTE}",  # frase + nota breve
 	],
 )
 def test_canonical_silence_is_silence(text):
 	assert is_silence_response(text)
 
 
+def test_status_note_fixture_is_in_the_measured_range():
+	"""La nota breve de la vía (b) cae en el rango real (247-369 car.)."""
+	assert 250 <= len(f"{CANONICAL_SILENCE}{STATUS_NOTE}") < aw.SILENCE_MAX_CHARS
+
+
+def test_silence_survives_decomposed_unicode():
+	"""NFD (ú = u + acento combinante) no rompe la cola "Estado del Búnker"."""
+	import unicodedata
+
+	assert is_silence_response(unicodedata.normalize("NFD", f"{NARRATION}{CANONICAL_SILENCE}"))
+
+
 @pytest.mark.parametrize(
 	"text",
 	[
-		f"{REPORT}\nCierro con: {CANONICAL_SILENCE}",  # termina con la frase
-		f"Hoy no ejercí el «{CANONICAL_SILENCE}»: arreglé el janitor. {REPORT}",  # la cita
+		f"Hoy no ejercí el «{CANONICAL_SILENCE}»: arreglé el janitor. {REPORT}",  # la cita a mitad
+		f"{REPORT} Ayer cerré con '{CANONICAL_SILENCE}', hoy no. {REPORT}",
 		f"{CANONICAL_SILENCE} {REPORT}",  # empieza con ella pero es un informe largo
+		f"{CANONICAL_SILENCE}{STATUS_NOTE}{STATUS_NOTE}",  # frase + nota que ya es informe
+		f"{REPORT}Mañana sigo con el janitor.",  # informe que termina con otra frase
 		"",
 		"Nada que reportar.",
 	],
@@ -146,11 +181,19 @@ def test_report_quoting_the_phrase_is_not_silence(text):
 
 
 def test_long_report_quoting_silence_is_delivered_and_counted(awaken):
-	"""Regresión MEDIA: un despertar productivo que cita la frase ya no queda
-	counted=0 ni se pierde por el camino a Telegram."""
-	run = awaken(response=f"{REPORT}\n{CANONICAL_SILENCE}")
+	"""Regresión MEDIA: un despertar productivo que cita la frase a mitad de texto
+	no queda counted=0 ni se pierde por el camino a Telegram."""
+	run = awaken(response=f"Hoy no toca el «{CANONICAL_SILENCE}»: {REPORT}")
 	assert run.ledger["counted"] == 1
 	assert len(run.outbox) == 1 and REPORT.strip() in run.outbox[0]
+
+
+def test_narrated_silence_not_counted_nor_delivered(awaken):
+	"""Regresión ALTA: narración + frase final (lo que entrega el bridge de opencode)
+	es silencio — ni va a Telegram ni consume el tope diario."""
+	run = awaken(response=f"{NARRATION}{CANONICAL_SILENCE}")
+	assert run.ledger["counted"] == 0
+	assert run.outbox == []
 
 
 def test_silence_not_counted_nor_delivered(awaken):
