@@ -1,7 +1,7 @@
 """Recall híbrido sobre Memento + diversidad MMR (feedback de recall 2026-09-25).
 
 El recall semántico falla cuando la nota perdió la entidad que la ancla (la nota
-del anexo de Hotetec no dice "Hotetec"), pero el árbol Memento conserva el texto
+de una revisión contractual no nombra a la empresa), pero el árbol Memento conserva el texto
 literal de la sesión, donde la entidad sí está. Este módulo recupera engramas por
 **palabras clave sobre el árbol** y los devuelve como ids de Qdrant, para fusionar
 con el ranking semántico (RRF). Y ofrece **MMR** para que tres paráfrasis del mismo
@@ -52,7 +52,7 @@ def salient_terms(query: str, max_terms: int = 4) -> List[str]:
 	"""Términos distintivos de la consulta: identificadores y nombres propios primero.
 
 	Prioridad: con dígito o `-_.` (BIT-003, tree_hash, v7.22.0) > con mayúscula
-	(Hotetec) > longitud. Sin stopwords ni palabras de < 4 letras.
+	(Initech) > longitud. Sin stopwords ni palabras de < 4 letras.
 	"""
 	seen: Dict[str, str] = {}
 	for raw in _TOKEN_RE.findall(query or ""):

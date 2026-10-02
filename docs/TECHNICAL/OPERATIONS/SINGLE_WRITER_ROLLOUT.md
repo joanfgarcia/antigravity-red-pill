@@ -173,7 +173,7 @@ final del pase). El paso `memento-reinforce` del sueño también refuerza/ascien
 anotaciones (`weave_memento_reinforcement` escanea `refine/` **y** `annotate/`).
 
 **Estado 2026-09-22** (cata preliminar): work 0.6 / social 0.5. La banda social
-0.50-0.60 contiene **memoria personal de alto valor** (infancia, Carmen) mientras
+0.50-0.60 contiene **memoria personal de alto valor** (biográfica y familiar) mientras
 el tramo work 0.60-0.65 es mayormente operativo → **antes de subir social hay que
 calibrar el clasificador** (MEM-008, desk): hay contenido técnico cayendo en
 `social` (umbral más bajo) y eso distorsiona la decisión. La estática sigue en

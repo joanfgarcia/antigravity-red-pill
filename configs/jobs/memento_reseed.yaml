@@ -9,7 +9,6 @@ priority: 5
 title: Resiembra Memento (backup → drop → ascenso, Fase 4)
 mission_id: memento-reseed
 step_command: uv run python scripts/memento_reseed.py --apply
-cwd: /home/joan/Documents/IA/sharing
 progress:
   mode: single
 control:

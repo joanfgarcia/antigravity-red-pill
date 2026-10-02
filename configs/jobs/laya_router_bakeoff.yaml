@@ -10,8 +10,9 @@ source: script_job
 priority: 3
 title: Bake-off F1 router System One (Laya-multilingual CPU, 120 notas)
 mission_id: laya-router-bakeoff
-step_command: /home/joan/.local/share/red-pill/laya-venv/bin/python scripts/laya_router_bakeoff.py --n 120 --seed 7
-cwd: /home/joan/Documents/IA/sharing
+# sh -c explícito (el driver no expande `~`/`$HOME`); mismo venv que el sidecar
+# (`LAYA_VENV`, ver scripts/install_laya_tag_service.sh). cwd = raíz del repo.
+step_command: ["sh", "-c", 'exec "${LAYA_VENV:-$HOME/.local/share/red-pill/laya-venv}/bin/python" scripts/laya_router_bakeoff.py --n 120 --seed 7']
 progress:
   mode: single
 control:

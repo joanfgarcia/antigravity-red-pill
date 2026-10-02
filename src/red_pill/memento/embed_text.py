@@ -4,8 +4,8 @@ El vector de un engrama se calculaba sobre el cuerpo de la nota tal cual. Medido
 tras la resiembra:
 
 - Solo el 28,8% de las notas nombra el proyecto/herramienta: la entidad que ancla
-la idea vive en el contexto de la sesión, no en la nota (la nota del anexo de
-Hotetec no dice "Hotetec" ni "teletrabajo" → coseno 0,17 contra su consulta).
+la idea vive en el contexto de la sesión, no en la nota (la nota de una revisión
+contractual no nombra a la empresa ni el asunto → coseno 0,17 contra su consulta).
 - El 50,2% abre con la muletilla "Joan me dijo/explicó/pidió…": el embedder trunca
 a 128 tokens y pondera el arranque, así que media colección comparte los primeros
 tokens y los vectores se parecen más de lo que deberían.

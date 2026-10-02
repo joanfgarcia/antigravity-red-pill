@@ -9,10 +9,12 @@ StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
+# Plantilla: %h = HOME del usuario. scripts/install_laya_tag_service.sh la reescribe
+# con la raíz real del repo y el venv de Laya ($LAYA_VENV).
 Type=simple
-WorkingDirectory=/home/joan/Documents/IA/sharing
-ExecStart=/home/joan/.local/share/red-pill/laya-venv/bin/python /home/joan/Documents/IA/sharing/scripts/laya_tag_server.py
-Environment=PYTHONPATH=/home/joan/Documents/IA/sharing/src
+WorkingDirectory=%h/Documents/IA/sharing
+ExecStart=%h/.local/share/red-pill/laya-venv/bin/python %h/Documents/IA/sharing/scripts/laya_tag_server.py
+Environment=PYTHONPATH=%h/Documents/IA/sharing/src
 Restart=always
 RestartSec=10
 Nice=19

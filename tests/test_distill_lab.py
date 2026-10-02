@@ -30,7 +30,7 @@ def test_distill_lab_chunk_cmd():
 def test_distill_lab_telegram_cmd(tmp_path):
 	telegram_file = tmp_path / "test_chat.json"
 	telegram_file.write_text(
-		json.dumps([{"text": "USER: Estaba en Porto Pi comprando un Emilio Moro Reserva para Carmen."}]),
+		json.dumps([{"text": "USER: Estaba en el centro comercial Vela Azul comprando un Emilio Moro Reserva para Teresa."}]),
 		encoding="utf-8",
 	)
 

@@ -11,8 +11,8 @@ from red_pill.utils.chronicle_render import (
 
 def test_tool_use_compacted_with_hint(monkeypatch):
 	monkeypatch.setattr(cfg, "CHRONICLE_STRIP_TOOL_PAYLOADS", True)
-	text = _render_tool_use("Edit", {"file_path": "/home/joan/x.py", "old_string": "A" * 5000, "new_string": "B" * 5000})
-	assert text == "[TOOL: Edit file_path=/home/joan/x.py]"
+	text = _render_tool_use("Edit", {"file_path": "/home/user/x.py", "old_string": "A" * 5000, "new_string": "B" * 5000})
+	assert text == "[TOOL: Edit file_path=/home/user/x.py]"
 	assert len(text) < 120
 
 

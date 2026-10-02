@@ -28,7 +28,6 @@ priority: 3
 title: Memento redestilar sesiones truncadas (reanudable por sesión)
 mission_id: memento-redistill
 step_command: uv run python scripts/memento_agentic.py --force --only-long 9000 --redistill-round 2026-09-14T16:58:00Z --limit 1
-cwd: /home/joan/Documents/IA/sharing
 checkpoint_file: state/memento_redistill_progress.json
 defer_exit_code: 77
 # RFC-HARNESS-002 §7: task refine + fallup (el pase pide granite_8b default).

@@ -32,7 +32,7 @@ def test_chunk_text_dialogue_boundaries():
 def test_is_template_echo():
 	assert _is_template_echo("synthesize these memory chunks into a summary") is True
 	assert _is_template_echo("") is True
-	assert _is_template_echo("Compramos un Emilio Moro Reserva en Porto Pi.") is False
+	assert _is_template_echo("Compramos un Emilio Moro Reserva en Vela Azul.") is False
 
 
 def test_sanitize_llm_json():

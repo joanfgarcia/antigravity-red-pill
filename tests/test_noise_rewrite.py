@@ -14,7 +14,7 @@ NOW = time.time() - 86400  # ayer: verificamos que created_at se preserva
 
 DIALOG_1 = "USER: revisa el weaver y dime si la puerta 0.5 teje bien los pares de la misma sesión."
 DIALOG_2 = "ASSISTANT: La puerta 0.5 teje los pares correctos; el ruido queda por debajo de 0.41."
-NOISE_LINE = 'ASSISTANT: [TOOL USE: Edit({"file_path": "/home/joan/axons.py", "old_string": "' + "A" * 600 + '"})]'
+NOISE_LINE = 'ASSISTANT: [TOOL USE: Edit({"file_path": "/home/user/axons.py", "old_string": "' + "A" * 600 + '"})]'
 RESULT_BLOCK = "USER: [TOOL RESULT: id=t9 output=8 passed in 1.52s\n" + "ruido de log " * 200 + "]"
 MIXED = f"{DIALOG_1}\n{NOISE_LINE}\n{RESULT_BLOCK}\n{DIALOG_2}\n"
 
@@ -27,7 +27,7 @@ def test_compact_preserves_dialog_byte_exact():
 
 def test_compact_markers_are_self_evocative():
 	compacted = compact_tool_noise(MIXED)
-	assert "[TOOL: Edit file_path=/home/joan/axons.py]" in compacted  # qué y sobre qué
+	assert "[TOOL: Edit file_path=/home/user/axons.py]" in compacted  # qué y sobre qué
 	assert "8 passed in 1.52s" in compacted  # la cabeza del resultado (el veredicto)
 	assert "ruido de log" * 3 not in compacted
 
@@ -38,7 +38,7 @@ def test_compact_noop_on_pure_dialog():
 
 
 def test_murky_pointer_detection():
-	assert _is_murky_pointer("file:///home/joan/.gemini/antigravity/brain/94f46277/scratch/x.py") is True
+	assert _is_murky_pointer("file:///home/user/.gemini/antigravity/brain/94f46277/scratch/x.py") is True
 	assert _is_murky_pointer("claude_code_5f421027-fea6-4779-b745-ba7eef01ba34") is True
 	assert _is_murky_pointer("Taller de destilación: el guion vive en scratch/distill_workshop.py y prueba prompts V3") is False
 	assert _is_murky_pointer(DIALOG_1) is False

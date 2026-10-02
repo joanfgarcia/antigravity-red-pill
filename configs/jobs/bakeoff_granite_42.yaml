@@ -12,8 +12,8 @@ source: script_job
 priority: 5
 title: Bake-off Granite 4.2 vs 4.1 (thinking on, 12K KV cuantizada)
 mission_id: bakeoff-granite-42
-step_command: env PYTHONPATH=/home/joan/Documents/IA/sharing/src /home/joan/.local/share/red-pill/llmtools-venv/bin/python scripts/bakeoff_granite_42.py
-cwd: /home/joan/Documents/IA/sharing
+# sh -c explícito (el driver no expande `~`/`$HOME`); cwd = raíz del repo (load_recipe).
+step_command: ["sh", "-c", 'exec env PYTHONPATH=src "$HOME/.local/share/red-pill/llmtools-venv/bin/python" scripts/bakeoff_granite_42.py']
 progress:
   mode: single
 control:
