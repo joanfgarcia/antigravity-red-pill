@@ -156,7 +156,7 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `AUDITOR_RUN_TESTS` | `False` | The hourly `redpill-auditor` also runs the live checkout's pytest suite (unit only: `-m "not integration"`, `--ignore=tests/integration`). Off by default: tests belong to CI, and inside the unit's 120 s budget the suite never finished. Lint (ruff) and types (mypy) are always audited. |
+| `AUDITOR_RUN_TESTS` | `False` | The hourly `redpill-auditor` also runs the live checkout's pytest suite (unit only: `-m "not integration"`, `--ignore=tests/integration`). Off by default: tests belong to CI, and inside the unit's 120 s budget the suite never finished. Lint (ruff) and types (mypy) are always audited. Every step re-runs only when the code changed since that step last completed (git fingerprint: HEAD + tracked diff + untracked non-ignored files), so an idle repo costs nothing per hour. |
 
 ### 🔧 Operator Profile & Pre-Heating
 
