@@ -70,6 +70,8 @@ def cmd_list(_args) -> None:
 		mark = "✓ acceso" if w.access else "·  sin acceso"
 		gone = "" if w.root.exists() else "   [ruta inexistente]"
 		print(f"  {mark:14} {w.name:12} {w.root}{gone}")
+		if w.worktrees:
+			print(f"  {'':14} {'':12} worktrees → {w.worktrees}")
 
 
 def cmd_enable(args) -> None:
