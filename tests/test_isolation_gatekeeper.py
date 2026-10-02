@@ -30,3 +30,79 @@ def test_config_isolation(bunker_isolation):
 	# Validate isolation from host production paths
 	prod_path = os.path.expanduser("~/Documents/IA/sharing")
 	assert singleton_dir != prod_path
+
+
+# ── Guardas de aislamiento ampliadas (config, state, desk, bunker root) ──────
+
+
+def test_suite_never_resolves_operator_locations():
+	"""conftest redirige TODAS las ubicaciones del operador antes de importar
+	red_pill: config (.env real), state (logs), desk y bunker root."""
+	from pathlib import Path
+
+	from red_pill.core import paths
+
+	home = Path.home()
+	real = {
+		"config": home / ".config" / "red-pill",
+		"neon_config": home / ".config" / "neon-link",
+		"state": home / ".local" / "state" / "red-pill",
+	}
+	assert not str(paths.get_config_dir()).startswith(str(real["config"]))
+	assert not str(paths.get_neon_link_config_dir()).startswith(str(real["neon_config"]))
+	assert not str(paths.get_log_dir()).startswith(str(real["state"]))
+	assert not str(paths.get_agent_core_root()).startswith(str(home / "Documents"))
+	assert not str(paths.get_bunker_root()).startswith(str(home / "Documents"))
+	assert "NEON_LINK_DB_PATH" not in os.environ
+
+
+def test_worker_does_not_load_operator_env():
+	"""Importar el worker cargaba ~/.config/red-pill/.env (AGENT_CORE_DIR al desk
+	real, NEON_LINK_DB_PATH al events.db real)."""
+	from pathlib import Path
+
+	import red_pill.core.agent_worker as aw
+
+	assert not str(aw.DB_PATH).startswith(str(Path.home() / ".local" / "share" / "neon-link"))
+
+
+def test_guard_rejects_real_config_state_and_desk(monkeypatch, tmp_path):
+	"""Sin la redirección, cada getter aborta en vez de tocar al operador."""
+	from pathlib import Path
+
+	import pytest
+
+	from red_pill.core import paths
+
+	home = Path.home()
+	for name in ("XDG_CONFIG_HOME", "XDG_STATE_HOME"):
+		monkeypatch.delenv(name, raising=False)
+	with pytest.raises(RuntimeError, match="TEST ISOLATION"):
+		paths.get_config_dir()
+	with pytest.raises(RuntimeError, match="TEST ISOLATION"):
+		paths.get_neon_link_config_dir()
+	with pytest.raises(RuntimeError, match="TEST ISOLATION"):
+		paths.get_log_dir()
+
+	monkeypatch.setenv("AGENT_CORE_DIR", str(home / "Documents" / "IA" / "SomeDesk"))
+	with pytest.raises(RuntimeError, match="TEST ISOLATION"):
+		paths.get_agent_core_root()
+
+	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path / "desk"))
+	assert paths.get_agent_core_root() == tmp_path / "desk"
+
+
+def test_legacy_migration_skips_operator_dirs_under_tests(monkeypatch, tmp_path):
+	"""La migración legacy de import (~/.config/red_pill con vault.seed) no copia
+	secretos del operador al tmp de los tests; con un HOME falso en tmp sí migra."""
+	from pathlib import Path
+
+	from red_pill.core import paths
+
+	assert paths._legacy_source_allowed(Path.home() / ".config" / "red_pill") is False
+	fake_home = tmp_path / "home"
+	(fake_home / ".config" / "red_pill").mkdir(parents=True)
+	(fake_home / ".config" / "red_pill" / "vault.seed").write_text("seed")
+	monkeypatch.setattr(Path, "home", lambda: fake_home)
+	paths.migrate_legacy_xdg_config()
+	assert (paths.get_config_dir() / "vault.seed").read_text() == "seed"
