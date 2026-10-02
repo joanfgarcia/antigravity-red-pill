@@ -3,6 +3,12 @@ from unittest.mock import MagicMock, patch
 from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synthesize_hub
 
 
+def _synthesis_services_down():
+	"""Las fases de síntesis (OperatorProfile/RecentActivity) hablan HTTP con Qdrant y
+	el LLM local: en test, ambos caídos (nunca el Bünker ni el daemon reales)."""
+	return patch("red_pill.metabolism.phases.synthesis_common.urllib.request.urlopen", side_effect=OSError("offline (test)"))
+
+
 def test_distill_engram_markdown_cleaning():
 	"""Test cleaning of markdown fences from LLM response."""
 	mock_provider = MagicMock()
@@ -43,7 +49,8 @@ def test_synthesize_hub_error_path():
 def test_perform_sleep_cycle_collection_missing(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = False
-	result = perform_sleep_cycle(mock_mgr)
+	with _synthesis_services_down():
+		result = perform_sleep_cycle(mock_mgr)
 	assert result == 0
 
 
@@ -52,5 +59,6 @@ def test_perform_sleep_cycle_scroll_error(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = True
 	mock_mgr.client.scroll.side_effect = Exception("Qdrant error")
-	result = perform_sleep_cycle(mock_mgr)
+	with _synthesis_services_down():
+		result = perform_sleep_cycle(mock_mgr)
 	assert result == 0

@@ -25,9 +25,13 @@ class BitTrainingDriver(ResumableJobDriver):
 		import time
 		import urllib.request
 
-		# Solicitar vaciado de VRAM al proxy dual-bind en lugar de pararlo
+		import red_pill.config as cfg
+
+		# Solicitar vaciado de VRAM al proxy dual-bind en lugar de pararlo. La URL sale
+		# de config (DUAL_BIND_PROXY_URL), como en ScriptJobDriver: nunca a fuego.
+		unload_url = f"{str(cfg.DUAL_BIND_PROXY_URL).rstrip('/')}/v1/unload"
 		try:
-			req = urllib.request.Request("http://127.0.0.1:8760/v1/unload", method="POST")
+			req = urllib.request.Request(unload_url, method="POST")
 			with urllib.request.urlopen(req, timeout=5) as response:
 				if response.status == 200:
 					logger.info("[BIT TRAINING DRIVER] VRAM liberada en el proxy dual-bind (redpill-llm.service).")

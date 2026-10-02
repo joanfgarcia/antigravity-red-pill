@@ -8,18 +8,15 @@ and atomically publish an .md artifact that the wake-up ritual injects.
 
 import json
 import logging
-import os
 import time
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
+import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
 
-QDRANT_URL = "http://localhost:6333"
-LLM_URL = "http://127.0.0.1:8760/v1/chat/completions"
 LLM_TIMEOUT_S = 150  # Granite on shared VRAM needs 50-65s warm; 30s starved every call
 
 # Consolidation by-products and hub fragments must never feed a synthesis prompt
@@ -31,10 +28,22 @@ NON_CANONICAL_FILTER: Dict[str, Any] = {
 }
 
 
+def _qdrant_url() -> str:
+	"""Qdrant del Bünker según config (QDRANT_HOST/PORT/SCHEME): nunca a fuego."""
+	return str(cfg.QDRANT_URL)
+
+
+def _llm_url() -> str:
+	"""Endpoint chat-completions del LLM local según config (MLX_LM_URL)."""
+	return str(cfg.MLX_LM_URL)
+
+
 def _qdrant_headers() -> Dict[str, str]:
-	load_dotenv(Path.home() / ".config/red-pill/.env")
+	# La API key sale de config (que ya lee el .env de get_config_dir()), no de un
+	# load_dotenv del home real: eso saltaba la redirección XDG y volcaba el .env
+	# del operador en os.environ.
 	headers = {"Content-Type": "application/json"}
-	api_key = os.getenv("QDRANT_API_KEY", "")
+	api_key = cfg.QDRANT_API_KEY or ""
 	if api_key:
 		headers["api-key"] = api_key
 	return headers
@@ -48,7 +57,12 @@ def scroll_contents(collection: str, limit: int, flt: Optional[dict] = None, new
 	if newest_first:
 		payload_dict["order_by"] = {"key": "created_at", "direction": "desc"}
 
-	url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
+	base = _qdrant_url()
+	if not base.startswith(("http://", "https://")):
+		# p.ej. ":memory:" (tests / modo embebido): no hay servidor al que hacer scroll
+		logger.debug(f"[{tag}] Qdrant sin endpoint HTTP ({base}); sin contexto para {collection}.")
+		return []
+	url = f"{base.rstrip('/')}/collections/{collection}/points/scroll"
 	req = urllib.request.Request(url, data=json.dumps(payload_dict).encode("utf-8"), headers=_qdrant_headers(), method="POST")
 	try:
 		with urllib.request.urlopen(req, timeout=10) as resp:
@@ -92,7 +106,7 @@ def chat(system: str, user: str, max_tokens: int, tag: str = "SYNTH") -> str:
 		}
 	).encode("utf-8")
 
-	req = urllib.request.Request(LLM_URL, data=payload, headers={"Content-Type": "application/json"})
+	req = urllib.request.Request(_llm_url(), data=payload, headers={"Content-Type": "application/json"})
 	try:
 		with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_S) as resp:
 			return str(json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip())
