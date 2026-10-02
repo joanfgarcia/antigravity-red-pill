@@ -316,3 +316,75 @@ def test_incoming_sync_rejected_from_unknown_originator(qdrant_clients, temp_dbs
 	)
 
 	assert engine_tgt.process_incoming_syncs() == 0
+
+
+# ── Identidad local: misma resolución de seed que el IdentityManager de neon-link ──
+
+
+class TestLocalPublicKey:
+	@pytest.fixture
+	def neon(self, tmp_path, monkeypatch):
+		"""XDG de neon-link en tmp y sin variables de identidad heredadas."""
+		import red_pill.core.paths as paths
+
+		data, conf = tmp_path / "data" / "neon-link", tmp_path / "config" / "neon-link"
+		conf.mkdir(parents=True)
+		monkeypatch.setattr(paths, "get_neon_link_data_dir", lambda: data)
+		monkeypatch.setattr(paths, "get_neon_link_config_dir", lambda: conf)
+		monkeypatch.delenv("NEON_LINK_SEED_PATHS", raising=False)
+		monkeypatch.delenv("NEON_LINK_VAULT_DIR", raising=False)
+		return tmp_path, data, conf
+
+	@staticmethod
+	def _seed(path: Path, fill: int) -> str:
+		from pure_mls.keys import SignatureKey
+
+		seed = bytes([fill]) * 32
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_bytes(seed)
+		return SignatureKey.from_private_bytes(seed).public_bytes().hex()
+
+	def test_xdg_vault_wins_over_legacy_locations(self, neon):
+		from red_pill.core.p2p_sync import get_local_public_key
+
+		_tmp, data, conf = neon
+		live = self._seed(data / "keys" / "neon_link.seed", 1)
+		self._seed(conf / "neon_link.seed", 2)  # ubicación pre-XDG: identidad vieja
+		self._seed(data / "neon_link.seed", 3)  # tampoco la lee neon-link
+		assert get_local_public_key() == live
+
+	def test_vault_dir_env(self, neon, monkeypatch):
+		from red_pill.core.p2p_sync import get_local_public_key
+
+		tmp, data, _conf = neon
+		self._seed(data / "keys" / "neon_link.seed", 1)
+		expected = self._seed(tmp / "vault" / "neon_link.seed", 4)
+		monkeypatch.setenv("NEON_LINK_VAULT_DIR", str(tmp / "vault"))
+		assert get_local_public_key() == expected
+
+	def test_seed_paths_env_wins_and_falls_back_to_vault(self, neon, monkeypatch):
+		from red_pill.core.p2p_sync import get_local_public_key
+
+		tmp, data, _conf = neon
+		vault = self._seed(data / "keys" / "neon_link.seed", 1)
+		injected = self._seed(tmp / "ids" / "ops.seed", 5)
+		monkeypatch.setenv("NEON_LINK_SEED_PATHS", f"{tmp / 'missing.seed'}, {tmp / 'ids' / 'ops.seed'}")
+		assert get_local_public_key() == injected
+		# ninguna de las inyectadas carga → bóveda (el fallback del IdentityManager)
+		monkeypatch.setenv("NEON_LINK_SEED_PATHS", str(tmp / "missing.seed"))
+		assert get_local_public_key() == vault
+
+	def test_settings_read_from_neon_link_env_file(self, neon):
+		from red_pill.core.p2p_sync import get_local_public_key
+
+		tmp, _data, conf = neon
+		expected = self._seed(tmp / "vault2" / "neon_link.seed", 6)
+		(conf / ".env").write_text(f'NEON_LINK_AGENT_ID="x"\nNEON_LINK_VAULT_DIR="{tmp / "vault2"}"\n', encoding="utf-8")
+		assert get_local_public_key() == expected
+
+	def test_no_seed_is_unknown(self, neon):
+		from red_pill.core.p2p_sync import get_local_public_key, neon_link_seed_candidates
+
+		_tmp, data, _conf = neon
+		assert neon_link_seed_candidates() == [data / "keys" / "neon_link.seed"]
+		assert get_local_public_key() == "UNKNOWN (seed file not found)"

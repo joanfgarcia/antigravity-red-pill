@@ -37,7 +37,6 @@ from red_pill.core.paths import (
 	get_model_validation_path,
 	get_task_profiles_path,
 )
-from red_pill.core.vram_probe import VramProbe
 
 logger = logging.getLogger(__name__)
 
@@ -733,66 +732,6 @@ def mark_load_verified(path: str) -> None:
 	entry["load_verified"] = True
 	reg[key] = entry
 	_write_validation_registry(reg)
-
-
-# ── Seed hardware-aware de task_profiles (RFC §10) ─────────────────────────
-
-
-def seed_task_profiles() -> dict:
-	"""Genera el seed de task_profiles.yaml según el hardware detectado.
-
-	NUNCA sobreescribe un fichero existente (el curado manual gana). Verifica
-	que cada perfil referenciado exista en model_profiles (ausente → omitido).
-	"""
-	path = get_task_profiles_path()
-	if path.exists():
-		return _task_profiles()
-
-	free_gb = VramProbe.get_free_mb() / 1024.0
-	all_profiles = set(ModelRegistry.get_all_profiles().keys())
-
-	def pick(candidates):
-		# [("id", default: bool)] → lista de perfiles existentes, primero el default.
-		existing = [c for c in candidates if c[0] in all_profiles]
-		by_default = sorted(existing, key=lambda c: 0 if c[1] else 1)
-		return [{"profile": c[0], "default": True} if c[1] else {"profile": c[0]} for c in by_default]
-
-	if free_gb >= 6.5:
-		distill = pick([("granite_8b", True), ("tiny_aya_water", False), ("granite_3b", False)])
-		refine = pick([("granite_8b", True), ("tiny_aya_water", False)])
-		conv = pick([("granite_8b", True)])
-		tool = pick([("granite_8b", True)])
-		hub = pick([("granite_8b", True)])
-	elif free_gb >= 3.5:
-		distill = pick([("granite_3b", True), ("llama_32", False)])
-		refine = pick([("granite_3b", True), ("llama_32", False)])
-		conv = pick([("granite_3b", True)])
-		tool = pick([("granite_3b", True)])
-		hub = pick([("granite_3b", True)])
-	else:
-		distill = pick([("llama_32", True), ("granite_3b", False)])
-		refine = pick([("llama_32", True), ("granite_3b", False)])
-		conv = pick([("llama_32", True)])
-		tool = pick([("llama_32", True)])
-		hub = pick([("llama_32", True)])
-
-	seed = {
-		"tasks": {
-			"distill": {"temperature": 0.3, "max_tokens": 512, "thinking": "off", "models": distill},
-			"refine": {"temperature": 0.1, "max_tokens": 1024, "thinking": "off", "models": refine},
-			"conversation": {"thinking": "low", "models": conv},
-			"minion_tool": {"thinking": "off", "models": tool},
-			"hub": {"temperature": 0.1, "thinking": "on", "models": hub},
-		}
-	}
-	try:
-		path.parent.mkdir(parents=True, exist_ok=True)
-		with open(path, "w", encoding="utf-8") as f:
-			yaml.safe_dump(seed, f, allow_unicode=True, sort_keys=False)
-		logger.info(f"[MODEL_RUNTIME] task_profiles.yaml sembrado (hardware-aware, {free_gb:.1f} GB libres)")
-	except OSError as e:
-		logger.error(f"[MODEL_RUNTIME] no se pudo escribir task_profiles.yaml: {e}")
-	return seed
 
 
 def task_conduct(task_id: str) -> dict:

@@ -732,6 +732,16 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$RP_CONFIG_DIR/worksp
 	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml).${NC}"
 fi
 
+# Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
+# Misma lista que bunker_lifecycle.CONFIG_EXAMPLE_SEEDS (`red-pill bunker install|update`).
+for seed in model_profiles model_catalog task_profiles; do
+	if [ -f "$REPO_ROOT/examples/$seed.yaml.example" ] && [ ! -e "$RP_CONFIG_DIR/$seed.yaml" ]; then
+		mkdir -p "$RP_CONFIG_DIR"
+		cp "$REPO_ROOT/examples/$seed.yaml.example" "$RP_CONFIG_DIR/$seed.yaml"
+		echo -e "${GREEN}✓ $seed.yaml sembrado desde examples/.${NC}"
+	fi
+done
+
 # IDE injection (plugin architecture: auto-detects all present IDEs)
 if [ -f "$SCRIPT_DIR/inject_cli.py" ] && command -v uv &> /dev/null; then
 	echo -e "${BLUE}--- Fase: Inyección IDE ---${NC}"

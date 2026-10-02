@@ -98,6 +98,92 @@ def test_awakening_logs_purges_older_than_ttl(temp_dir, monkeypatch):
 	assert (notes / "hola.md").exists()
 
 
+def test_awakening_logs_cutoff_compares_dates(temp_dir, monkeypatch):
+	"""TTL por FECHA: con 30 días se conserva el log de hace 30 días y cae el de hace 31
+	(antes la medianoche del nombre vs `now - 30d` borraba logs de 29-30 días)."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda create=True: temp_dir)
+	today = datetime.now().date()
+	keep = temp_dir / f"{(today - timedelta(days=30)).strftime('%Y%m%d')}_0000.log"
+	drop = temp_dir / f"{(today - timedelta(days=31)).strftime('%Y%m%d')}_2359.log"
+	keep.write_text("k")
+	drop.write_text("d")
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	res = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, {"plugins": {"awakening_logs": {"days_to_keep": 30}}}))
+
+	assert res["awakening_logs_purged"] == 1
+	assert keep.exists() and not drop.exists()
+
+
+def _git(repo, *args):
+	import subprocess
+
+	return subprocess.run(
+		["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+		capture_output=True,
+		text=True,
+		check=True,
+	).stdout
+
+
+def test_awakening_logs_stages_deletions_in_desk_repo(tmp_path, monkeypatch):
+	"""El desk es un repo git: la baja de los logs purgados queda PREPARADA (`D `),
+	no como `D` sin preparar; un log nunca commiteado se borra sin error."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	desk = tmp_path / "desk"
+	awk = desk / "awakening"
+	awk.mkdir(parents=True)
+	_git(desk, "init", "-q")
+	old_day = (datetime.now() - timedelta(days=60)).strftime("%Y%m%d")
+	tracked = awk / f"{old_day}_0300.log"
+	tracked.write_text("t")
+	fresh = awk / f"{datetime.now().strftime('%Y%m%d')}_0300.log"
+	fresh.write_text("f")
+	_git(desk, "add", "-A")
+	_git(desk, "commit", "-q", "-m", "logs")
+	untracked = awk / f"{old_day}_0400.log"
+	untracked.write_text("u")
+	other = desk / "notes.md"  # cambio ajeno sin preparar: no se toca
+	other.write_text("x")
+
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda create=True: awk)
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	res = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, {}))
+
+	assert res["awakening_logs_purged"] == 2
+	assert not tracked.exists() and not untracked.exists() and fresh.exists()
+	status = _git(desk, "status", "--porcelain").splitlines()
+	assert f"D  awakening/{tracked.name}" in status
+	assert "?? notes.md" in status
+	assert not any(untracked.name in line for line in status)
+
+
+def test_awakening_logs_git_failure_never_raises(temp_dir, monkeypatch):
+	"""Si git falla (o no existe), el borrado se mantiene y el plugin no lanza."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda create=True: temp_dir)
+
+	def _boom(*a, **k):
+		raise FileNotFoundError("git")
+
+	monkeypatch.setattr(mod.subprocess, "run", _boom)
+	old = temp_dir / f"{(datetime.now() - timedelta(days=90)).strftime('%Y%m%d')}_0000.log"
+	old.write_text("x")
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	res = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, {}))
+	assert res["awakening_logs_purged"] == 1
+	assert not old.exists()
+
+
 def test_awakening_logs_missing_dir_is_safe(tmp_path, monkeypatch):
 	"""Sin directorio de awakening, el plugin no falla ni borra nada."""
 	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod

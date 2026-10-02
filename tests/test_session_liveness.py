@@ -65,3 +65,19 @@ def test_janitor_purges_old_keeps_fresh(live_dir):
 	assert res["session_liveness_purged"] == 1
 	assert not old.exists()
 	assert fresh.exists()
+
+
+def test_readers_do_not_create_the_live_dir(live_dir):
+	"""Lector y limpiador no crean `sessions/live` (AD-043): sin latidos → vacío."""
+	from red_pill.swarm.agents.janitor import JanitorMinion
+	from red_pill.swarm.agents.janitor_plugins.session_liveness import SessionLivenessPlugin
+
+	assert sl.list_sessions() == []
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+	res = asyncio.run(SessionLivenessPlugin().execute(janitor, {"plugins": {}}))
+	assert res["session_liveness_purged"] == 0
+	assert not live_dir.exists()
+	# el escritor sí lo crea
+	assert sl.touch_session("opencode", "s", "start") is not None
+	assert live_dir.is_dir()

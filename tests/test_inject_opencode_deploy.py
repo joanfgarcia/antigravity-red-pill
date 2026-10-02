@@ -127,3 +127,41 @@ def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
 	before = open(pkg_path, encoding="utf-8").read()
 	adapter.inject(args)
 	assert open(pkg_path, encoding="utf-8").read() == before, "no idempotente"
+
+
+def _block_version() -> dict:
+	"""BLOCK_VERSION de scripts/inject_anchor.py (la fuente única de versiones de bloque)."""
+	path = os.path.join(REPO_ROOT, "scripts", "inject_anchor.py")
+	spec = importlib.util.spec_from_file_location("inject_anchor_versions_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["inject_anchor_versions_under_test"] = mod  # @dataclass lo busca en sys.modules
+	spec.loader.exec_module(mod)
+	return dict(mod.BLOCK_VERSION)
+
+
+def test_red_pill_md_lleva_las_versiones_de_inject_anchor(adapter, tmp_path) -> None:
+	"""Regresión: el adapter (camino de `bunker update`) tenía su propia tabla de
+	versiones y escribía `knowledge_access v=2` / `sovereign_handshake v=1`."""
+	import argparse
+	import re
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
+
+	text = open(os.path.join(tmp, "RED_PILL.md"), encoding="utf-8").read()
+	found = {name: int(v) for name, v in re.findall(r"<!-- REDPILL:BEGIN (\w+) v=(\d+) -->", text)}
+	expected = _block_version()
+	assert found == {name: expected[name] for name in found}
+	assert {"sovereign_handshake", "knowledge_access"} <= set(found)
+
+
+def test_inject_opencode_standalone_usa_la_misma_tabla() -> None:
+	"""scripts/inject_opencode.py tampoco mantiene una copia propia de las versiones."""
+	path = os.path.join(REPO_ROOT, "scripts", "inject_opencode.py")
+	spec = importlib.util.spec_from_file_location("inject_opencode_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["inject_opencode_under_test"] = mod
+	spec.loader.exec_module(mod)
+	assert dict(mod.BLOCK_VERSION) == _block_version()
+	assert "BLOCK_VERSION = {" not in open(path, encoding="utf-8").read()

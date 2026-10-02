@@ -40,6 +40,11 @@ class Workspace(BaseModel):
 	access: bool = False  # operator opt-in: grant FS access (additionalDirectories) to this workspace
 	memory: Union[bool, Path] = False  # memory serving: true/false or custom path (e.g. true => root/.red-pill/memory/)
 	track: bool = False  # include in Pre-Heating PROJECT_STATUS (operator opt-in per workspace)
+	# Carpeta cuyo subárbol (los `git worktree` de este proyecto, p.ej. los de los
+	# despertares) pertenece a este workspace aunque viva fuera de `root`. Explícita
+	# porque la detección por el fichero `.git` solo funciona mientras el worktree
+	# exista, y los de los despertares se borran tras el merge.
+	worktrees: Optional[Path] = None
 
 	@field_validator("name")
 	@classmethod
@@ -48,10 +53,10 @@ class Workspace(BaseModel):
 			raise ValueError("workspace name must be non-empty")
 		return v
 
-	@field_validator("root", "atlas", mode="before")
+	@field_validator("root", "atlas", "worktrees", mode="before")
 	@classmethod
 	def _expand_paths(cls, v):
-		# Empty/None atlas → None; otherwise ~-expand. A missing `root` then fails
+		# Empty/None atlas/worktrees → None; otherwise ~-expand. A missing `root` then fails
 		# validation (required), which is the point — malformed entries are rejected.
 		if v in (None, ""):
 			return None
@@ -208,6 +213,10 @@ _REGISTRY_HEADER = """\
 #   access   : operator opt-in — grant the agent filesystem access (additionalDirectories).
 #              false = in AUTONOMOUS mode the agent CANNOT operate in this workspace.
 #   memory   : true/false or custom memory path (e.g. true => root/.red-pill/memory/)
+#   track    : include this workspace in Pre-Heating PROJECT_STATUS (operator opt-in).
+#   worktrees: optional dir whose subtree belongs to this workspace (its `git worktree`s,
+#              e.g. ~/worktrees/<project>), so session paths there are attributed to it
+#              even after the worktree is deleted. Omitted = live `.git` detection only.
 """
 
 
@@ -234,10 +243,11 @@ def serialize_registry(registry: WorkspaceRegistry) -> str:
 				memory_val = f'"{_to_tilde(w.memory)}"'
 			else:
 				memory_val = "false"
+			worktrees = f', worktrees: "{_to_tilde(w.worktrees)}"' if w.worktrees else ""
 			lines.append(
 				f'  - {{ name: {w.name}, root: "{_to_tilde(w.root)}", atlas: {atlas}, '
 				f"graphify: {str(w.graphify).lower()}, access: {str(w.access).lower()}, "
-				f"memory: {memory_val} }}"
+				f"memory: {memory_val}, track: {str(w.track).lower()}{worktrees} }}"
 			)
 	return "\n".join(lines) + "\n"
 
@@ -350,13 +360,19 @@ def _git_worktree_main_root(path: Path) -> Optional[tuple]:
 
 
 def _resolved_roots() -> List[tuple]:
-	"""(root resuelto, nombre) de cada workspace registrado; una sola carga del registro."""
+	"""(raíz resuelta, nombre) de cada workspace registrado; una sola carga del registro.
+
+	Cada workspace aporta su `root` y, si la declara, su carpeta de `worktrees`
+	como raíz extra (compite por especificidad como cualquier otra)."""
 	roots: List[tuple] = []
 	for ws in list_workspaces():
-		try:
-			roots.append((ws.root.resolve(), ws.name))
-		except Exception:
-			continue
+		for root in (ws.root, ws.worktrees):
+			if root is None:
+				continue
+			try:
+				roots.append((root.resolve(), ws.name))
+			except Exception:
+				continue
 	return roots
 
 
@@ -382,8 +398,9 @@ def _owner_of(roots: List[tuple], path: Union[str, Path]) -> Optional[str]:
 		pass
 	owner = _owner_in(roots, target)
 	if owner is None:
-		# El trabajo autónomo vive en worktrees fuera de toda raíz registrada:
-		# se atribuye al repo principal del que cuelgan.
+		# Worktree fuera de toda raíz registrada (ni `root` ni `worktrees`): se
+		# atribuye al repo principal del que cuelga. Fallback: solo funciona
+		# mientras el worktree exista (lee su fichero `.git`).
 		linked = _git_worktree_main_root(target)
 		if linked:
 			worktree_root, main_root = linked
@@ -394,10 +411,10 @@ def _owner_of(roots: List[tuple], path: Union[str, Path]) -> Optional[str]:
 def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
 	"""Nombre del workspace registrado que contiene `path` (archivo o carpeta).
 
-	Devuelve el más específico (root más largo que sea ancestro de `path`).
-	Un archivo resuelve contra su carpeta padre; un `git worktree` enlazado,
-	contra su repo principal. None si no resuelve o está fuera de todo
-	workspace. Es la fuente única de verdad para "¿de qué proyecto es este
+	Devuelve el más específico (raíz más larga que sea ancestro de `path`;
+	cuentan `root` y la carpeta `worktrees` declarada). Un archivo resuelve
+	contra su carpeta padre; un `git worktree` vivo fuera de toda raíz, contra
+	su repo principal. None si no resuelve o está fuera de todo workspace. Es la fuente única de verdad para "¿de qué proyecto es este
 	path?" (RFC-DESPERTAR-001 §8.2).
 	"""
 	if path is None:
@@ -409,6 +426,31 @@ def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
 	return _owner_of(roots, path)
 
 
+def workspace_owners(paths: Iterable[Optional[Union[str, Path]]]) -> List[Optional[str]]:
+	"""Dueño (`owning_workspace`) de cada path, alineado con la entrada.
+
+	Una sola carga del registro por llamada y una sola resolución por path
+	distinto (las repeticiones salen de memoria). None para los que no
+	resuelven (None, vacío, fuera de todo workspace).
+	"""
+	items = list(paths)
+	try:
+		roots = _resolved_roots()
+	except Exception:
+		return [None] * len(items)
+	memo: dict = {}
+	out: List[Optional[str]] = []
+	for p in items:
+		if not p:
+			out.append(None)
+			continue
+		key = str(p)
+		if key not in memo:
+			memo[key] = _owner_of(roots, p)
+		out.append(memo[key])
+	return out
+
+
 def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
 	"""`rutas tocadas` → nombres de workspace, en orden de primera aparición.
 
@@ -418,16 +460,9 @@ def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
 	en sesiones de ~900 rutas). Materializa el P1b de RFC-DESPERTAR-001 §8.2: el cwd no
 	discrimina, el **proyecto se infiere por los ficheros tocados**.
 	"""
-	try:
-		roots = _resolved_roots()
-	except Exception:
-		return []
 	out: List[str] = []
 	seen: set = set()
-	for p in paths:
-		if not p:
-			continue
-		name = _owner_of(roots, p)
+	for name in workspace_owners(paths):
 		if name and name not in seen:
 			seen.add(name)
 			out.append(name)
