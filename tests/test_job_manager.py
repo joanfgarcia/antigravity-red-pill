@@ -330,13 +330,22 @@ def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monke
 
 
 def test_bit_training_driver_preflight_and_step(tmp_path, monkeypatch):
+	import red_pill.config as cfg
 	from red_pill.jobs.drivers.bit_training import BitTrainingDriver
 
 	driver = BitTrainingDriver()
 
-	# Preflight check without systemd error
+	# Preflight: el unload va al proxy de config, nunca al daemon real (mockeado)
+	unloads = []
+
+	def fake_urlopen(req, timeout=None):
+		unloads.append((req.full_url, req.get_method()))
+		raise OSError("proxy caído (test)")
+
+	monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 	monkeypatch.setattr("red_pill.core.vram_probe.VramProbe.get_free_mb", lambda: 8000)
 	driver.preflight({"min_vram_mb": 1000})
+	assert unloads == [(f"{str(cfg.DUAL_BIND_PROXY_URL).rstrip('/')}/v1/unload", "POST")]
 
 	# Test step with mock checkpoint file
 	fake_fs = tmp_path / "frankenswarm"

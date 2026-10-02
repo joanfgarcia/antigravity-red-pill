@@ -5,13 +5,26 @@ import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import _isolation_guards as _guards  # vive junto a este conftest
 import pytest
+
+# GUARDAS DE AISLAMIENTO (antes que nada): sandbox temporal propio de la sesión,
+# red sin servicios reales del operador y comandos de host emulados. Detalle y
+# opt-out (`@pytest.mark.allow_local_services`) en tests/_isolation_guards.py.
+_SANDBOX, _SANDBOX_OWNED = _guards.setup_sandbox()
+_guards.install()
+
+# Nada de red ni GPU por la puerta de atrás: modelos de HF solo desde caché y
+# CUDA invisible (la suite no necesita ni una cosa ni la otra).
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 # v6.3.7: Secure Isolation Gatekeeper
 # Force :memory: location for all unit tests to prevent production leakage.
 os.environ["QDRANT_HOST"] = ":memory:"
 os.environ["QDRANT_PORT"] = "0"
-os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
+os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to the sandbox
 
 # TEST ISOLATION (module level, BEFORE any red_pill import in collection):
 # redirect every operator location to a tmp dir AND arm the production-write
@@ -22,6 +35,8 @@ os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 # - XDG_STATE_HOME: get_log_dir().
 # - AGENT_CORE_DIR: the operator's desk (awakening notes and logs).
 # - IA_DIR: the bunker root (bunker_export wrote kits into the live repo).
+# - XDG_RUNTIME_DIR: /run/user/<uid> (gpu_reservations.json of a live GPU job,
+#   bunker_state.json). It must EXIST: RUNTIME_DIR falls back past a missing one.
 _TEST_ISOLATION_DIR = tempfile.mkdtemp(prefix="redpill_test_iso_")
 
 
@@ -31,15 +46,41 @@ def _isolated_locations(base: str) -> dict:
 		"XDG_CACHE_HOME": os.path.join(base, "cache"),
 		"XDG_CONFIG_HOME": os.path.join(base, "config"),
 		"XDG_STATE_HOME": os.path.join(base, "state"),
+		"XDG_RUNTIME_DIR": os.path.join(base, "runtime"),
 		"AGENT_CORE_DIR": os.path.join(base, "desk"),
 		"IA_DIR": os.path.join(base, "ia", "sharing"),
 	}
 
 
-os.environ.update(_isolated_locations(_TEST_ISOLATION_DIR))
+def _make_runtime_dir(locations: dict) -> None:
+	os.makedirs(locations["XDG_RUNTIME_DIR"], mode=0o700, exist_ok=True)
+
+
+_SESSION_LOCATIONS = _isolated_locations(_TEST_ISOLATION_DIR)
+_make_runtime_dir(_SESSION_LOCATIONS)
+os.environ.update(_SESSION_LOCATIONS)
 # An operator shell that exported its .env must not aim the worker at the real events.db.
 os.environ.pop("NEON_LINK_DB_PATH", None)
 os.environ["REDPILL_TESTING"] = "1"
+
+
+@pytest.fixture(autouse=True)
+def _isolation_guards(request):
+	"""Falla el test si ha intentado tocar un servicio vivo del operador (red o
+	systemctl/podman mutante), aunque el código se tragase el error. Opt-out:
+	`@pytest.mark.allow_local_services`; los `integration` solo con
+	ALLOW_PRODUCTION_TESTING=true (si no, ya se saltan)."""
+	allowed = request.node.get_closest_marker("allow_local_services") is not None
+	if "integration" in request.node.keywords and os.getenv("ALLOW_PRODUCTION_TESTING") == "true":
+		allowed = True
+	with _guards.bypass(allowed):
+		yield
+	violations = _guards.take_violations()
+	if violations:
+		pytest.fail(
+			"[TEST ISOLATION] el test intentó tocar servicios reales del operador (bloqueado):\n  " + "\n  ".join(violations),
+			pytrace=False,
+		)
 
 
 _SW_FLAGS = (
@@ -89,11 +130,14 @@ def bunker_isolation(monkeypatch):
 	ProviderRegistry.register_inference_provider("sip", mock_inference, default=True)
 	ProviderRegistry.register_telemetry_provider(MagicMock(spec=BaseTelemetryProvider))
 
-	# 2. Force isolated testing paths via environment
+	# 2. Force isolated testing paths via environment (inside the session sandbox,
+	# which the owning process removes at the end: no more bunker_test_* in /tmp)
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
 	monkeypatch.setenv("APP_ROOT", test_dir)
 	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
-	for name, value in _isolated_locations(test_dir).items():
+	locations = _isolated_locations(test_dir)
+	_make_runtime_dir(locations)
+	for name, value in locations.items():
 		monkeypatch.setenv(name, value)
 	monkeypatch.delenv("NEON_LINK_DB_PATH", raising=False)
 	# Explicit isolation flag: paths.py aborts if a test resolves to the real
@@ -111,6 +155,17 @@ def bunker_isolation(monkeypatch):
 
 	# 4. Clean cache after test finishes
 	get_config.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_live_engine_probe(monkeypatch):
+	"""memento.agentic.engine_id() pregunta al daemon REAL (GET :8760/v1/models) y
+	cachea por proceso: el primer test de cada worker que destilaba lo tocaba. La
+	suite arranca con la caché ya puesta al modelo por defecto (el test del probe
+	la vacía él mismo y mockea urlopen)."""
+	import red_pill.memento.agentic.runtime as engine_runtime
+
+	monkeypatch.setattr(engine_runtime, "_ENGINE_CACHE", engine_runtime.EDGE_MODEL)
 
 
 @pytest.fixture
@@ -179,12 +234,20 @@ def pytest_collection_modifyitems(items):
 		pass
 
 
-def check_qdrant_running(port=6333):
-	import socket
+def pytest_configure(config):
+	config.addinivalue_line(
+		"markers",
+		"allow_local_services: desactiva las guardas de red/comandos de host para un test que habla A PROPÓSITO con un servicio local",
+	)
+	# Un --basetemp explícito fuera del sandbox también es terreno de los tests.
+	if config.option.basetemp:
+		_guards.allow_unix_root(str(config.option.basetemp))
 
-	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-		s.settimeout(0.5)
-		return s.connect_ex(("localhost", port)) == 0
+
+def pytest_unconfigure(config):
+	# Solo el proceso que creó el sandbox lo borra (los workers de xdist lo heredan).
+	if _SANDBOX_OWNED:
+		_guards.remove_sandbox(_SANDBOX)
 
 
 def pytest_runtest_setup(item):

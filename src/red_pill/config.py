@@ -20,13 +20,14 @@ import shutil
 import tempfile
 import warnings
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+from red_pill.core.paths import _assert_not_production_runtime, get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
 
 migrate_legacy_xdg_config()
 
@@ -130,19 +131,20 @@ class RedPillConfig(BaseSettings):
 
 	@property
 	def RUNTIME_DIR(self) -> str:
-		"""OS-safe runtime directory for volatile state (LEDs, interaction timestamps)."""
+		"""OS-safe runtime directory for volatile state (LEDs, interaction timestamps).
+
+		Under tests, never the operator's real /run/user/<uid> (the guard raises):
+		that is where bunker_state.json and the live GPU reservations are."""
 		xdg = os.getenv("XDG_RUNTIME_DIR")
+		uid_dir = f"/run/user/{os.getuid()}" if os.name == "posix" else ""
 		if xdg and os.path.exists(xdg):
-			return xdg
-
-		# Fallback 1: Linux user runtime dir
-		if os.name == "posix":
-			uid_dir = f"/run/user/{os.getuid()}"
-			if os.path.exists(uid_dir):
-				return uid_dir
-
-		# Fallback 2: System temp
-		return tempfile.gettempdir()
+			runtime = xdg
+		elif uid_dir and os.path.exists(uid_dir):
+			runtime = uid_dir  # Fallback 1: Linux user runtime dir
+		else:
+			runtime = tempfile.gettempdir()  # Fallback 2: System temp
+		_assert_not_production_runtime(Path(runtime), "RUNTIME_DIR")
+		return runtime
 
 	# -----------------------------------------------------------------------
 	# LLM INFERENCE

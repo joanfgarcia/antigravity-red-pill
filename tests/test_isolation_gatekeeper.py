@@ -66,6 +66,11 @@ def test_worker_does_not_load_operator_env():
 	assert not str(aw.DB_PATH).startswith(str(Path.home() / ".local" / "share" / "neon-link"))
 
 
+# HOME de operador ficticio FUERA de tmp: los tests de la guarda no pueden depender
+# del HOME real (bajo un HOME sandbox en /tmp el desk "del operador" parecía tmp).
+_FAKE_OPERATOR_HOME = "/nonexistent-redpill-operator/home"
+
+
 def test_guard_rejects_real_config_state_and_desk(monkeypatch, tmp_path):
 	"""Sin la redirección, cada getter aborta en vez de tocar al operador."""
 	from pathlib import Path
@@ -74,7 +79,9 @@ def test_guard_rejects_real_config_state_and_desk(monkeypatch, tmp_path):
 
 	from red_pill.core import paths
 
+	monkeypatch.setenv("HOME", _FAKE_OPERATOR_HOME)
 	home = Path.home()
+	assert str(home) == _FAKE_OPERATOR_HOME
 	for name in ("XDG_CONFIG_HOME", "XDG_STATE_HOME"):
 		monkeypatch.delenv(name, raising=False)
 	with pytest.raises(RuntimeError, match="TEST ISOLATION"):
@@ -99,7 +106,7 @@ def test_legacy_migration_skips_operator_dirs_under_tests(monkeypatch, tmp_path)
 
 	from red_pill.core import paths
 
-	assert paths._legacy_source_allowed(Path.home() / ".config" / "red_pill") is False
+	assert paths._legacy_source_allowed(Path(_FAKE_OPERATOR_HOME) / ".config" / "red_pill") is False
 	fake_home = tmp_path / "home"
 	(fake_home / ".config" / "red_pill").mkdir(parents=True)
 	(fake_home / ".config" / "red_pill" / "vault.seed").write_text("seed")

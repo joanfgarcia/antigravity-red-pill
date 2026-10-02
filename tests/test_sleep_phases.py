@@ -115,6 +115,8 @@ def test_runner_clears_vram_busy_on_real_cycle():
 		patch(f"{MAINT}.run_rhizodb_washout_and_pruning"),
 		patch(f"{EVO}.IdentityEvaluator.evaluate_set_point"),
 		patch("red_pill.core.notifier.SovereignNotifier.clear_bunker_signal") as clear,
+		# Fases de síntesis: Qdrant y LLM local caídos (nunca los reales)
+		patch("red_pill.metabolism.phases.synthesis_common.urllib.request.urlopen", side_effect=OSError("offline (test)")),
 	):
 		perform_sleep_cycle(mgr)
 		hubs.assert_called_once()
