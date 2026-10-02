@@ -1,5 +1,71 @@
 ## Unreleased
 
+### 🩺 Remediación de la auditoría del lote DeepSeek (2026-10-02)
+
+Revisión a fondo de lo entrado en #103 y en la rama P1b. El refactor conservaba
+el comportamiento; lo que se escapó a los paneles vivía en las fronteras
+(entorno de systemd, datos reales, orden de tests, venv compartido en worktrees).
+Varias entradas de más abajo quedan **matizadas** por esta sección.
+
+**Privacidad y datos**
+- **[FIX] El arnés de autonomía ya no persiste memoria viva:** `autonomy_ladder.py` redacta
+  los resultados de tools del kernel (`*_api`) y la respuesta de las sondas live (P4), y
+  escribe por defecto en `scratch/benchmarks/` (git-ignored; `--out-dir` para publicar). Los
+  `AUTONOMY_*.jsonl` ya commiteados, redactados. P4 exige ≥1 resultado del Bünker sin error:
+  el 4.2 pasa de `6/7` a `5/7` (DECISION_LOG AD-041).
+- **[FIX] La suite de tests ya no toca producción:** `conftest` redirige `XDG_CONFIG_HOME`,
+  `XDG_STATE_HOME`, `AGENT_CORE_DIR` e `IA_DIR`, y la guardia cubre config, state y desk.
+  `test_bunker_restore_stub` restauraba un kit sobre los `.env` reales y `test_bunker_export_stub`
+  dejaba un kit por ejecución en `backups/export/` del checkout vivo.
+
+**Minion `local-tools` y Granite 4.2** (AD-042)
+- **[FIX] `extract_thinking`** partía la prosa por la palabra «response» (`"No responses found"` →
+  `"s found"`): solo corta por `</think>`/`<think>`/`[Start thinking]` (marcadores verificados en el GGUF).
+- **[FIX]** Un `<tool_call>` dentro del razonamiento ya no se ejecuta; uno truncado o malformado
+  vuelve al modelo como error en vez de salir como respuesta; se ejecutan todas las llamadas del
+  turno con tope real de 8; `used_tools` solo cuenta resultados válidos.
+- **[SEC]** Los resultados de tools vuelven como **dato**: rol `tool` con el template nativo de
+  4.2; con `chatml-function-calling`, bloque cercado (nonce) marcado como no fiable.
+- **[FIX]** El minion toma `temperature`/`max_tokens`/`tool_format` de task/perfil (antes fijo
+  0.3/1024); un rechazo del daemon (K1) llega como `SipInferenceError` legible, no `KeyError`.
+  El daemon ya no rompe con perfiles sin `chat_format` ni thinking (usa el template del GGUF).
+- **[DOCS]** Seeds: `minion_tool` admite `granite_4_2_8b`/`3b` (`max_tokens: 2048`);
+  `granite_4_2_8b` a temperatura 1.0 (receta IBM, AD-033); comentarios del catálogo veraces.
+
+**Worker y despertar** (AD-044 — el «ARCH-001» de #103; el ID ya era de los backups topológicos)
+- **[FIX]** El housekeeping genérico (janitor de sesiones Telegram, señal a Samantha) vuelve al
+  core; la estrategia de Antigravity solo se carga si un puente la necesita. Descubrimiento de
+  estrategias una vez por proceso e importando solo paquetes con `pulse.py` (+907 → +7 módulos
+  por oneshot); un `pulse.py` roto da error + señal `pulse_strategy_fallback_<plugin>`.
+- **[FIX]** Fallback de puentes agnóstico (`IDE_BACKEND` puente a puente, respeta D5, sin gRPC por
+  defecto); la cascada degradada emite `worker_bridge_cascade_degraded`.
+- **[FIX] AWAKEN-002:** silencio = respuesta < 200 caracteres que **empieza** por la frase canónica
+  (antes: subcadena en cualquier punto); migración de `counted` sin carrera; tope comprobado y
+  anotado bajo `BEGIN IMMEDIATE`; un despertar fallido sigue D24 y acaba en `dead_letters`
+  (antes reintentaba sin límite y quemaba el tope).
+- **[FIX]** Prompts de despertar y Telegram sin nombres de cliente: `sovereign_handshake`, shell no
+  interactivo acotado al worktree/desk (la WORKTREE RULE contradecía «no uses run_command») y
+  tests desde la raíz del worktree.
+- **[FIX] pytest importa el `src` del checkout** (`pythonpath`): en un worktree, el venv compartido
+  hacía que los tests validaran main.
+
+**Janitor, tablón y latido** (AD-043)
+- **[FIX] `awakening_logs` limpiaba un desk fantasma:** el servicio no exporta `AGENT_CORE_DIR` y se
+  creaba `~/Documents/IA/Agent_Core/`. El desk se resuelve por `workspaces.yaml:agent_core`, los
+  limpiadores no crean directorios y un `*.log` fuera del esquema no se toca.
+- **[FIX] `events_db_purge`** buscaba un `DEAD` que neon-link no escribe: ahora purga el outbox
+  `FAILED` y `dead_letters` a 30 d (`dead_letters_days_to_keep`) y usa `get_neon_link_db_path()`.
+- **[FIX]** `janitor.yaml` con tipos inválidos se ignora con warning en vez de tumbar el barrido.
+- **[FIX]** Tablón: las sub-sesiones de opencode (`parent_id`) no cuentan como vivas; `session_board`
+  separa vivas de recientes y pinta `provider/model`; `write_index` atómico.
+- **[FIX]** Latido: independiente de `REDPILL_SCRIBE_DISABLE` (los runs de Telegram ya laten);
+  `StopFailure` y `SessionEnd` cierran el turno en Claude Code; los hooks nunca salen con error.
+- **[FIX]** `sw_observability`: una colección vacía no da 0 % ni dolor falso; numerador y
+  denominador con el mismo predicado de contenido que la síntesis de hubs.
+- **[FIX]** `inject_settings` reemplaza los bloques de hook de red-pill (`redpill_*.py`) cuando
+  cambian, en vez de duplicarlos. Ancla `knowledge_access` → v4 sin punteros a un RFC que la
+  semilla del desk no trae.
+
 ### 📦 Modelos y arnés — Granite 4.2 en los seeds + regla «desk-first» (DOCS)
 
 - **[DOCS] Granite 4.2 en los seeds de modelos:** `examples/model_profiles.yaml.example`
