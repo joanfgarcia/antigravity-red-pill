@@ -81,6 +81,17 @@ def is_silence_response(text: str) -> bool:
 	return body.lstrip("'\"`*_> ").casefold().startswith(SILENCE_PHRASE.casefold())
 
 
+def _handshake_step(user_prompt: str, mode: str) -> str:
+	"""Identity-loading step, named by the RedPill-Kernel MCP tool itself (each
+	client may prefix MCP tool names its own way; the core never spells a
+	client-specific name). `sovereign_handshake` with is_new_session=true loads
+	the identity from the Bünker and runs the interceptor pipeline in one call."""
+	return (
+		f"Call the RedPill-Kernel MCP tool `sovereign_handshake` with user_prompt={user_prompt}, "
+		f'is_new_session=true and mode="{mode}" — it loads your identity from the Bünker.'
+	)
+
+
 def _awakening_planner_directive(policy: str) -> str:
 	"""Construye el bloque de política de contribución al desk para el despertar.
 
@@ -1199,9 +1210,8 @@ class IDEWorker:
 			f'<constraint critical="true" level="0" name="telegram_session">\n'
 			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
 			f"MANDATORY FIRST STEPS:\n"
-			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<the current_message text> and mode="{cfg.get_config().IDENTITY_DEPTH_NEON_LINK}".\n'
-			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_NEON_LINK}" to load your identity from the Bünker.\n'
-			f"3. Then respond to the user's message.\n"
+			f"1. {_handshake_step('<the current_message text>', cfg.get_config().IDENTITY_DEPTH_NEON_LINK)}\n"
+			f"2. Then respond to the user's message.\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"
@@ -1386,19 +1396,25 @@ class IDEWorker:
 		ledger_id = cursor.lastrowid
 		start_time = time.time()
 
-		# ── Build prompt: agent loads identity via interceptor_rp(mode=headless) ──
+		# ── Build prompt: agent loads identity via the kernel handshake (mode=headless) ──
+		# Provider-agnostic: no client-specific tool names; each bridge adapts the
+		# RedPill-Kernel tool names to its own client.
 		prompt = (
 			f"<user_rules>\n"
 			f"<RULE[user_global]>\n"
 			f'<constraint critical="true" level="0" name="headless_awakening">\n'
-			f"CRITICAL: You are running HEADLESS in an autonomous background session.\n"
+			f"CRITICAL: You are running HEADLESS in an autonomous background session — nobody is there to approve anything.\n"
 			f"BUDGET: You have a HARD LIMIT of {AWAKENING_MAX_TOOL_CALLS} tool calls for this session. "
 			f"Plan your work efficiently. If the task requires more, stop and leave a summary for the next awakening.\n"
-			f"DO NOT use `run_command` or any tool that requires user approval.\n"
-			f"PERMITTED: File tools (write_to_file, replace_file_content) and MCP RedPill-Kernel tools.\n"
+			f"TOOLS: NEVER use a tool or command that waits for user approval or input (it hangs until the timeout). "
+			f"PERMITTED: file read/edit tools, the RedPill-Kernel MCP tools, and non-interactive shell commands "
+			f"scoped to your worktree (including the `git worktree add` that creates it) or to the desk "
+			f"(${{AGENT_CORE_DIR}}).\n"
 			f"WORKTREE RULE (HARD): any work that writes to a PROJECT/kernel repo is created and done in a "
 			f"`git worktree` on its own branch (`awaken/<ts>` or the designated feature branch) — NEVER in the live "
 			f"tree, never change the live branch's HEAD. The DESK (${{AGENT_CORE_DIR}}) is exempt (commit to `main`+push allowed).\n"
+			f"TESTS: run them from the worktree root (pytest imports that worktree's own `src`); a green run in the "
+			f"live checkout does not validate your branch.\n"
 			f"RESUME-FIRST: at the start, before new work, read the last awakening logs "
 			f"(`${{AGENT_CORE_DIR}}/awakening/`) and any RFC/note they point to; if a previous awakening left work "
 			f"in progress (worktree/branch/commit), RESUME it there instead of starting fresh.\n"
@@ -1408,7 +1424,8 @@ class IDEWorker:
 			f"WORK OVERLAP GUARD: BEFORE submitting any `job_manager_api job_submit` (especially a dag_job), "
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
-			f"and scanning for other issues (fetch_signal_memories, check_minion_inbox, keymaker health). "
+			f"and scanning for other issues (`metabolism_health_api fetch_signal_memories`, "
+			f"`swarm_orchestrator_api check_minion_inbox`, `metabolism_health_api check_system_health`). "
 			f"If `fetch_signal_memories` shows an active `memory_bank_bloat_<ws>` pain signal, read that workspace's "
 			f"`bank_health.json` (via `bunker_memory_api read_workspace_memory`) and include a one-line summary "
 			f"(biggest file, orphans, broken refs) in your report, offering the operator on-demand semantic compaction — "
@@ -1416,16 +1433,15 @@ class IDEWorker:
 			f'If you DO launch a DAG while none is in flight, include `"origin": "awakening"` in its payload so its '
 			f"minion sessions are not mistaken for operator activity by the next awakening.\n"
 			f"MANDATORY FIRST STEPS:\n"
-			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
-			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'
-			f"3. RESUME CHECK: read the last awakening logs `${{AGENT_CORE_DIR}}/awakening/` and any RFC/note they "
+			f"1. {_handshake_step('<your awakening directive>', cfg.get_config().IDENTITY_DEPTH_HEADLESS)}\n"
+			f"2. RESUME CHECK: read the last awakening logs `${{AGENT_CORE_DIR}}/awakening/` and any RFC/note they "
 			f"point to; if a prior awakening left work in a worktree (branch + path + commit), note it and resume "
 			f"THERE before starting anything new.\n"
-			f"4. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
+			f"3. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
 			f"call `bunker_memory_api read_workspace_memory` for `MEMORY.md` of the workspace owning your CWD, "
 			f"plus its `bank_health.json`; if `thresholds_tripped` is non-empty, include it in your report — "
 			f"semantic compaction is operator on-demand, never auto-compact.\n"
-			f"5. Then proceed with your autonomous work.\n"
+			f"4. Then proceed with your autonomous work.\n"
 			f"{_awakening_planner_directive(cfg.get_config().AWAKENING_PLANNER_ACCESS)}\n"
 			f"{_awakening_channel_directive()}\n"
 			f"</constraint>\n"

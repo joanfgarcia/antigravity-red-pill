@@ -137,6 +137,29 @@ def test_core_worker_is_backend_agnostic():
 	assert not offenders, f"core/agent_worker no debe importar módulos de backend concreto: {offenders}"
 
 
+def test_core_worker_strings_name_no_client_specific_tools():
+	"""Los literales de texto del core (prompts incluidos) no nombran
+	herramientas ni proveedores de un cliente concreto: el despertar corre en
+	opencode pero el prompt hablaba de `run_command`/`write_to_file` y de
+	`mcp_RedPill-Kernel_*` (nomenclatura de Antigravity)."""
+	import ast
+	import inspect
+	import re
+
+	from red_pill.core import agent_worker as aw
+
+	forbidden = re.compile(
+		r"run_command|write_to_file|replace_file_content|mcp_RedPill-Kernel_|mcp__|\b(antigravity|agy|grpc|opencode|claude)\b",
+		re.IGNORECASE,
+	)
+	offenders = [
+		node.value[:80]
+		for node in ast.walk(ast.parse(inspect.getsource(aw)))
+		if isinstance(node, ast.Constant) and isinstance(node.value, str) and forbidden.search(node.value)
+	]
+	assert not offenders, f"literales del core con nombres de cliente concreto: {offenders}"
+
+
 def test_core_worker_has_no_transport_default():
 	"""Hallazgo BAJA: el core no asume un transporte concreto (antes `_caps`
 	nacía como gRPC). Ninguna referencia a BackendType en el worker neutro."""

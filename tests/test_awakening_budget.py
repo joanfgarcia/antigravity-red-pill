@@ -404,3 +404,34 @@ def test_missing_bridge_is_capped_too(events_db, monkeypatch):
 	state = _retry_same_awakening(events_db, monkeypatch, None, attempts=3)
 	assert state.inbox["status"] == "DEAD"
 	assert state.dead and state.dead[0]["error_reason"] == "no bridge available"
+
+
+# ── Prompt del despertar: agnóstico y coherente ──────────────────────────────
+
+
+def test_awakening_prompt_is_provider_agnostic(events_db, monkeypatch):
+	"""El prompt nombraba herramientas de Antigravity y se contradecía: exigía
+	`git worktree add` y a la vez prohibía `run_command`."""
+	monkeypatch.setattr(aw, "_awakening_channel_directive", lambda operator=None: "CANAL")
+	prompts: list = []
+
+	class _Capture(_Bridge):
+		def prompt(self, text, timeout=None, **kw):
+			prompts.append(text)
+			return super().prompt(text, timeout=timeout, **kw)
+
+	worker = IDEWorker.__new__(IDEWorker)
+	worker._touch_lease = lambda: None
+	worker._bridge_awakening = _Capture(response=REPORT)
+	conn = aw.get_connection()
+	conn.execute("INSERT INTO inbox (channel, channel_user_id, payload) VALUES ('system', 'autonomous_awakening', '{}')")
+	conn.commit()
+	worker._process_awakening("despierta", [1], conn.cursor(), conn)
+	conn.close()
+
+	(prompt,) = prompts
+	assert "`sovereign_handshake`" in prompt and "is_new_session=true" in prompt
+	assert "git worktree add" in prompt and "non-interactive shell commands" in prompt
+	assert "run them from the worktree root" in prompt
+	for stale in ("run_command", "write_to_file", "replace_file_content", "mcp_RedPill-Kernel_"):
+		assert stale not in prompt
