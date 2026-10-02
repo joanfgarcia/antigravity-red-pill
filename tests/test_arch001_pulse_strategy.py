@@ -4,17 +4,22 @@ Fija el contrato de la separación:
 - `IDEWorker` (core, neutro) ya NO expone los métodos Antigravity.
 - `AntigravityPulseStrategy` (plugin) los expone todos.
 - `NullPulseStrategy` satisface el protocolo `PulseStrategy`.
-- `_build_strategy` devuelve la estrategia Antigravity (el import es el único
-  punto que puede degradar a no-op).
+- `_build_strategy` devuelve la estrategia Antigravity solo cuando algún puente
+  la necesita (gRPC legacy o AUTONOMOUS_AGY_ENABLED); si no, la fábrica declina.
+- El housekeeping genérico (janitor de sesiones Telegram + señal a Samantha)
+  vive en el core y sobrevive a la ausencia del plugin.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
 
 from red_pill.core.agent_worker import IDEWorker
-from red_pill.core.pulse_strategy import NullPulseStrategy, PulseStrategy
-from red_pill.plugins.antigravity_ide.pulse import AntigravityPulseStrategy
+from red_pill.core.pulse_strategy import NullPulseStrategy, PulseContext, PulseStrategy, build_pulse_strategy
+from red_pill.plugins.antigravity_ide.pulse import AntigravityPulseStrategy, build_antigravity_pulse_strategy
 from red_pill.swarm.bridges import BackendType, BridgeCapabilities
 
 _ANTIGRAVITY_METHODS = [
@@ -26,6 +31,25 @@ _ANTIGRAVITY_METHODS = [
 	"get_trajectory_data",
 	"get_all_trajectories",
 ]
+
+
+def _patch_cfg(monkeypatch, *, cascade_on=False, agy_on=False):
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(
+		cfg,
+		"get_config",
+		lambda: SimpleNamespace(
+			TELEGRAM_BRIDGE_CASCADE=[SimpleNamespace(backend="opencode")] if cascade_on else [],
+			AUTONOMOUS_AGY_ENABLED=agy_on,
+		),
+	)
+
+
+@pytest.fixture
+def no_ide_client(monkeypatch):
+	"""The strategy builds its own IDE client (language-server discovery): stub it."""
+	monkeypatch.setattr("red_pill.plugins.antigravity_ide.pulse.AntigravityIDEClient", MagicMock)
 
 
 def test_worker_no_longer_exposes_antigravity_methods():
@@ -42,18 +66,47 @@ def test_null_strategy_satisfies_protocol():
 	assert isinstance(NullPulseStrategy(), PulseStrategy)
 
 
-def test_antigravity_strategy_satisfies_protocol():
+def test_antigravity_strategy_satisfies_protocol(no_ide_client):
 	assert isinstance(AntigravityPulseStrategy(None), PulseStrategy)
 
 
-def test_build_strategy_resolves_registered_backend():
+def test_build_strategy_resolves_registered_backend(monkeypatch, no_ide_client):
 	"""El core resuelve la estrategia por el registro (auto-descubrimiento del
-	plugin), NO por un import directo. Con el plugin antigravity disponible, la
-	estrategia resultante es la suya — evidencia de que el registro funciona."""
+	plugin), NO por un import directo. Con un puente gRPC legacy, la estrategia
+	resultante es la del plugin — evidencia de que el registro funciona."""
+	_patch_cfg(monkeypatch)
 	worker = IDEWorker.__new__(IDEWorker)
 	worker._bridge_minion = None
+	worker._caps = BridgeCapabilities(backend=BackendType.GRPC)
 	strategy = worker._build_strategy()
 	assert isinstance(strategy, AntigravityPulseStrategy)
+
+
+def test_build_strategy_declines_when_no_bridge_needs_antigravity(monkeypatch, no_ide_client):
+	"""Config real de producción (opencode, AUTONOMOUS_AGY_ENABLED=False): la
+	fábrica del plugin declina y el core usa el no-op — sin construir el cliente IDE."""
+	_patch_cfg(monkeypatch, cascade_on=True, agy_on=False)
+	worker = IDEWorker.__new__(IDEWorker)
+	worker._bridge_minion = None
+	worker._caps = BridgeCapabilities(backend=BackendType.OPENCODE, auto_approve=True)
+	assert isinstance(worker._build_strategy(), NullPulseStrategy)
+
+
+@pytest.mark.parametrize(
+	("backend", "cascade_on", "agy_on", "applies"),
+	[
+		(BackendType.GRPC, False, False, True),  # legacy IDE polling
+		(BackendType.GRPC, True, False, False),  # cascada degradada: nunca resucitar el polling
+		(BackendType.OPENCODE, True, True, True),  # operaciones agy autónomas (opt-in)
+		(BackendType.OPENCODE, True, False, False),  # producción: nada que hacer
+		(None, False, False, False),  # sin puente construido
+	],
+)
+def test_antigravity_factory_declines_unless_a_bridge_needs_it(monkeypatch, no_ide_client, backend, cascade_on, agy_on, applies):
+	_patch_cfg(monkeypatch, cascade_on=cascade_on, agy_on=agy_on)
+	caps = BridgeCapabilities(backend=backend) if backend else None
+	strategy = build_antigravity_pulse_strategy(PulseContext(bridge_minion=None, capabilities=caps))
+	assert isinstance(strategy, AntigravityPulseStrategy) is applies
 
 
 def test_core_worker_is_backend_agnostic():
@@ -84,22 +137,32 @@ def test_core_worker_is_backend_agnostic():
 	assert not offenders, f"core/agent_worker no debe importar módulos de backend concreto: {offenders}"
 
 
-def test_pulse_strategy_registry_discovers_plugins():
+def test_core_worker_has_no_transport_default():
+	"""Hallazgo BAJA: el core no asume un transporte concreto (antes `_caps`
+	nacía como gRPC). Ninguna referencia a BackendType en el worker neutro."""
+	import inspect
+
+	from red_pill.core import agent_worker as aw
+
+	assert "BackendType" not in inspect.getsource(aw)
+
+
+def test_pulse_strategy_registry_discovers_plugins(monkeypatch, no_ide_client):
 	"""El registro descubre estrategias de plugins vía pkgutil, sin que el core
 	los nombre. `build_pulse_strategy` devuelve la estrategia del plugin real."""
-	from red_pill.core.pulse_strategy import build_pulse_strategy
-
-	strategy = build_pulse_strategy(None)
+	_patch_cfg(monkeypatch)
+	strategy = build_pulse_strategy(PulseContext(capabilities=BridgeCapabilities(backend=BackendType.GRPC)))
 	assert type(strategy).__name__ != "NullPulseStrategy", "el registro debe descubrir la estrategia del plugin"
 
 
 # ── Behavioral parity (BLOCKER del panel adversarial, 2026-10-01) ────────────
 # El original tenía janitor + signal_samantha DENTRO del else (rama no-legacy).
-# El refactor los había sacado a run_once (se ejecutaban siempre). Estos tests
-# fijan la paridad: legacy gRPC = sin janitor/samantha; agy = con ellos.
+# Ahora viven en el core (run_once) para sobrevivir sin plugin, y la rama legacy
+# los declina explícitamente (`allows_core_housekeeping` → False). Estos tests
+# recorren run_once real y fijan el orden: estrategia → janitor → samantha.
 
 
-def _instrumented_strategy(backend, monkeypatch, *, cascade_on, agy_on):
+def _instrumented_worker(backend, monkeypatch, *, cascade_on, agy_on, strategy=None):
 	calls: list[str] = []
 
 	class _FakeTSM:
@@ -107,46 +170,43 @@ def _instrumented_strategy(backend, monkeypatch, *, cascade_on, agy_on):
 			calls.append("janitor")
 			return 0
 
-	import red_pill.config as cfg
 	import red_pill.telegram.session as tsm_mod
 
-	monkeypatch.setattr(
-		cfg,
-		"get_config",
-		lambda: SimpleNamespace(
-			TELEGRAM_BRIDGE_CASCADE=[1] if cascade_on else [],
-			AUTONOMOUS_AGY_ENABLED=agy_on,
-		),
-	)
+	_patch_cfg(monkeypatch, cascade_on=cascade_on, agy_on=agy_on)
 	monkeypatch.setattr(tsm_mod, "TelegramSessionManager", _FakeTSM)
 
 	worker = IDEWorker.__new__(IDEWorker)
 	worker._caps = BridgeCapabilities(backend=backend)
 	worker._touch_lease = lambda: None
+	worker.process_inbox = lambda: None
+	worker._check_telegram_jobs = lambda: None
+	worker._watchdog_samantha = lambda: None
+	worker.update_heartbeat = lambda: None
 	worker._signal_samantha_worker = lambda: calls.append("samantha")
 
-	strategy = AntigravityPulseStrategy(object(), client=SimpleNamespace())
-	for name in (
-		"check_for_replies",
-		"check_minion_inbox_auto_inject",
-		"process_cognitive_queue",
-		"check_minion_inbox_auto_inject_agy",
-		"process_cognitive_queue_agy",
-	):
-		monkeypatch.setattr(strategy, name, (lambda n: lambda *a, **k: calls.append(n))(name))
-	return strategy, worker, calls
+	if strategy is None:
+		strategy = AntigravityPulseStrategy(object(), client=SimpleNamespace())
+		for name in (
+			"check_for_replies",
+			"check_minion_inbox_auto_inject",
+			"process_cognitive_queue",
+			"check_minion_inbox_auto_inject_agy",
+			"process_cognitive_queue_agy",
+		):
+			monkeypatch.setattr(strategy, name, (lambda n: lambda *a, **k: calls.append(n))(name))
+	worker._strategy = strategy
+	return worker, calls
 
 
 def test_parity_legacy_grpc_skips_janitor_and_samantha(monkeypatch):
-	strategy, worker, calls = _instrumented_strategy(BackendType.GRPC, monkeypatch, cascade_on=False, agy_on=True)
-	strategy.pulse(worker)
+	worker, calls = _instrumented_worker(BackendType.GRPC, monkeypatch, cascade_on=False, agy_on=True)
+	worker.run_once()
 	assert calls == ["check_for_replies", "check_minion_inbox_auto_inject", "process_cognitive_queue"]
-	assert "janitor" not in calls and "samantha" not in calls
 
 
 def test_parity_agy_runs_janitor_and_samantha(monkeypatch):
-	strategy, worker, calls = _instrumented_strategy(BackendType.OPENCODE, monkeypatch, cascade_on=False, agy_on=True)
-	strategy.pulse(worker)
+	worker, calls = _instrumented_worker(BackendType.OPENCODE, monkeypatch, cascade_on=False, agy_on=True)
+	worker.run_once()
 	assert calls == [
 		"check_minion_inbox_auto_inject_agy",
 		"process_cognitive_queue_agy",
@@ -156,16 +216,34 @@ def test_parity_agy_runs_janitor_and_samantha(monkeypatch):
 
 
 def test_parity_degraded_cascade_falls_to_agy_branch(monkeypatch):
-	# legacy gRPC + TELEGRAM_BRIDGE_CASCADE configurada (cascade degradada) → el
+	# legacy gRPC + TELEGRAM_BRIDGE_CASCADE configurada (cascada degradada) → el
 	# original ponía legacy_grpc=False y caía al else: janitor + samantha SÍ.
-	strategy, worker, calls = _instrumented_strategy(BackendType.GRPC, monkeypatch, cascade_on=True, agy_on=True)
-	strategy.pulse(worker)
+	worker, calls = _instrumented_worker(BackendType.GRPC, monkeypatch, cascade_on=True, agy_on=True)
+	worker.run_once()
 	assert calls == [
 		"check_minion_inbox_auto_inject_agy",
 		"process_cognitive_queue_agy",
 		"janitor",
 		"samantha",
 	]
+
+
+def test_housekeeping_survives_without_backend_plugin(monkeypatch):
+	"""Regresión MEDIA: sin plugin (o con su import roto) la estrategia es la
+	no-op, y el janitor de sesiones + la señal a Samantha SIGUEN corriendo."""
+	worker, calls = _instrumented_worker(BackendType.OPENCODE, monkeypatch, cascade_on=True, agy_on=False, strategy=NullPulseStrategy())
+	worker.run_once()
+	assert calls == ["janitor", "samantha"]
+
+
+def test_housekeeping_runs_if_strategy_flag_raises(monkeypatch):
+	class _BrokenFlag(NullPulseStrategy):
+		def allows_core_housekeeping(self, worker):
+			raise RuntimeError("boom")
+
+	worker, calls = _instrumented_worker(BackendType.OPENCODE, monkeypatch, cascade_on=True, agy_on=False, strategy=_BrokenFlag())
+	worker.run_once()
+	assert calls == ["janitor", "samantha"]
 
 
 def test_check_for_replies_behavioral(monkeypatch, tmp_path):
@@ -221,6 +299,8 @@ def test_run_once_executes_with_null_strategy(monkeypatch):
 	worker._touch_lease = lambda: None
 	worker.process_inbox = lambda: None
 	worker._check_telegram_jobs = lambda: None
+	worker._sweep_telegram_sessions = lambda: None
+	worker._signal_samantha_worker = lambda: None
 	worker._watchdog_samantha = lambda: None
 	worker.update_heartbeat = lambda: None
 	worker._strategy = NullPulseStrategy()

@@ -26,11 +26,10 @@ if red_pill_config.exists():
 load_dotenv()  # Override local si existiera
 
 import red_pill.config as cfg  # noqa: E402
-from red_pill.core.pulse_strategy import NullPulseStrategy, PulseStrategy, build_pulse_strategy  # noqa: E402
+from red_pill.core.pulse_strategy import NullPulseStrategy, PulseContext, PulseStrategy, build_pulse_strategy  # noqa: E402
 from red_pill.swarm.bridges import (  # noqa: E402
 	AgentBridge,  # noqa: E402
 	AllModelsExhausted,
-	BackendType,
 	BridgeCapabilities,
 	NoModelsConfigured,
 	create_cascade_bridge,
@@ -185,28 +184,37 @@ def _is_bridge_timeout(exc: Exception) -> bool:
 	return isinstance(exc, RuntimeError) and ("timed out" in text or "timeout" in text)
 
 
-def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
-	"""D24 req. operador: if a timeout is NOT classified as such (and thus retried
-	with cap 3 instead of cap 1), emit a typed pain signal so someone investigates.
-	Dedup via has_signal to avoid spamming every pulse."""
+def _emit_pain_signal_once(name: str, *, source: str, originator: str, message: str) -> None:
+	"""Inject a WARNING pain signal unless one with the same name is already
+	active (dedup via has_signal: the oneshot worker runs every minute). Never raises."""
 	try:
 		from red_pill.memory import MemoryManager
 
 		mm = MemoryManager()
-		name = "telegram_timeout_cap1_not_applied"
 		if mm.has_signal(name):
 			return
 		mm.inject_signal(
 			name=name,
 			intensity=6.0,
 			signal_type="pain",
-			source="TelegramWorker",
-			originator="worker._process_via_bridge",
+			source=source,
+			originator=originator,
 			criticality="WARNING",
-			message=f"Timeout del bridge clasificado como transitorio (cap 3 en vez de cap 1). msgs={msg_ids}. error={error_text[:300]}",
+			message=message,
 		)
 	except Exception as e:
-		logger.warning(f"[D24] Failed to emit pain signal: {e}")
+		logger.warning(f"[IDEWorker] Failed to emit pain signal {name}: {e}")
+
+
+def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
+	"""D24 req. operador: if a timeout is NOT classified as such (and thus retried
+	with cap 3 instead of cap 1), emit a typed pain signal so someone investigates."""
+	_emit_pain_signal_once(
+		"telegram_timeout_cap1_not_applied",
+		source="TelegramWorker",
+		originator="worker._process_via_bridge",
+		message=f"Timeout del bridge clasificado como transitorio (cap 3 en vez de cap 1). msgs={msg_ids}. error={error_text[:300]}",
+	)
 
 
 def _detect_routing_keyword(text: str) -> Optional[str]:
@@ -236,45 +244,59 @@ def _detect_escalate_marker(response: str, window: int = 64) -> bool:
 	return "[ESCALATE]" in head
 
 
+def _without_local_unless_allowed(cascade: list, local_allowed: bool) -> list:
+	"""D5 (Fase 1 guard): local is not capable of heavy work — filter it out of
+	the conversational cascade unless explicitly allowed."""
+	if local_allowed or not cascade:
+		return cascade
+	filtered = [t for t in cascade if t.backend != "local"]
+	if len(filtered) != len(cascade):
+		logger.info("[IDEWorker] D5 guard: filtered local target(s) from TELEGRAM_BRIDGE_CASCADE")
+	return filtered
+
+
+def _cascade_degradation(cascade: list, caps: Optional[BridgeCapabilities]) -> Optional[str]:
+	"""Backend-agnostic degraded-cascade check: a configured cascade is served by
+	one of its own targets. If the effective bridge is none of them, every target
+	failed to construct and the cascade fell back to something the operator did
+	not configure. Returns the reason, or None if the cascade is healthy/absent."""
+	configured = sorted({t.backend for t in cascade})
+	if not configured:
+		return None
+	served_by = caps.backend.value if caps else None
+	if served_by in configured:
+		return None
+	return f"TELEGRAM_BRIDGE_CASCADE {configured} could not build any target"
+
+
 class IDEWorker:
 	def __init__(self):
 		self.running = True
 		self._bridge_telegram: AgentBridge | None = None
 		self._bridge_awakening: AgentBridge | None = None
 		self._bridge_minion: AgentBridge | None = None
-		self._caps: BridgeCapabilities = BridgeCapabilities(backend=BackendType.GRPC)
+		# Capabilities of the conversational bridge; None until one is built (the
+		# core assumes no transport by default).
+		self._caps: BridgeCapabilities | None = None
 		self._samantha_worker = None
 		# AgentBridge: create execution bridges based on config
 		try:
 			cfg_inst = cfg.get_config()
-			telegram_cascade = cfg_inst.TELEGRAM_BRIDGE_CASCADE
-			# D5 (Fase 1 guard): local is not capable of heavy work — filter it
-			# out of the conversational cascade unless explicitly allowed.
-			if not cfg_inst.LOCAL_ALLOWED_FOR_HEAVY and telegram_cascade:
-				filtered = [t for t in telegram_cascade if t.backend != "local"]
-				if len(filtered) != len(telegram_cascade):
-					logger.info("[IDEWorker] D5 guard: filtered local target(s) from TELEGRAM_BRIDGE_CASCADE")
-				telegram_cascade = filtered
+			telegram_cascade = _without_local_unless_allowed(cfg_inst.TELEGRAM_BRIDGE_CASCADE, cfg_inst.LOCAL_ALLOWED_FOR_HEAVY)
 			self._bridge_telegram = create_cascade_bridge(telegram_cascade, name="TELEGRAM_BRIDGE_CASCADE", origin="telegram")
 			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE", origin="awakening")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
 
-			# Fallback for capabilities / legacy checks
 			self._caps = self._bridge_telegram.get_capabilities()
-			logger.info(f"[IDEWorker] Telegram Bridge: {self._bridge_telegram.get_capabilities().backend.value.upper()}")
+			logger.info(f"[IDEWorker] Telegram Bridge: {self._caps.backend.value.upper()}")
 			logger.info(f"[IDEWorker] Awakening Bridge: {self._bridge_awakening.get_capabilities().backend.value.upper()}")
 			logger.info(f"[IDEWorker] Minion Bridge: {self._bridge_minion.get_capabilities().backend.value.upper()}")
+			degraded_reason = _cascade_degradation(telegram_cascade, self._caps)
 		except Exception as e:
-			# Fallback is backend-agnostic: retry with a single default backend
-			# (the configured IDE_BACKEND), never a hardcoded transport name.
-			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to default backend: {e}")
-			from red_pill.swarm.bridges.factory import create_bridge
-
-			default_backend = cfg.get_config().IDE_BACKEND
-			self._bridge_telegram = create_bridge(default_backend)
-			self._bridge_awakening = create_bridge(default_backend)
-			self._bridge_minion = create_bridge(default_backend)
-			self._caps = self._bridge_telegram.get_capabilities()
+			degraded_reason = f"bridge construction failed: {e}"
+			self._fall_back_to_default_backend()
+		if degraded_reason:
+			self._report_degraded_bridges(degraded_reason)
 		# SamanthaWorker: background thread for local LLM tasks (non-blocking)
 		try:
 			from red_pill.inference.samantha_worker import SamanthaWorker
@@ -305,19 +327,63 @@ class IDEWorker:
 		# concrete backend.
 		self._strategy: PulseStrategy = self._build_strategy()
 
+	def _fall_back_to_default_backend(self) -> None:
+		"""Bridge construction failed: degrade to the single configured IDE_BACKEND
+		bridge, never to a hardcoded transport. Each bridge is built on its own so
+		one failure leaves just that bridge unset (handled downstream) instead of
+		killing the worker (and with it the heartbeat). D5 still applies: a local
+		backend never serves the conversational path unless explicitly allowed."""
+		from red_pill.swarm.bridges.factory import create_bridge
+
+		def _build(backend: str) -> AgentBridge | None:
+			try:
+				return create_bridge(backend)
+			except Exception as e:
+				logger.error(f"[IDEWorker] fallback bridge '{backend}' could not be built: {e}")
+				return None
+
+		try:
+			cfg_inst = cfg.get_config()
+		except Exception as e:
+			logger.error(f"[IDEWorker] config unreadable — no fallback bridge can be chosen: {e}")
+			return
+		default_backend = cfg_inst.IDE_BACKEND
+		if default_backend == "local" and not cfg_inst.LOCAL_ALLOWED_FOR_HEAVY:
+			logger.error("[IDEWorker] D5 guard: IDE_BACKEND=local cannot serve Telegram; conversational bridge left unset")
+			self._bridge_telegram = None
+		else:
+			self._bridge_telegram = _build(default_backend)
+		self._bridge_awakening = _build(default_backend)
+		self._bridge_minion = _build(default_backend)
+		self._caps = self._bridge_telegram.get_capabilities() if self._bridge_telegram else None
+
+	def _report_degraded_bridges(self, reason: str) -> None:
+		"""Agnostic degraded-cascade report: the operator configured bridges the
+		worker could not build. Logged once per process (the worker is a oneshot
+		per minute) plus a deduplicated pain signal."""
+		served_by = self._caps.backend.value if self._caps else "none"
+		logger.error(f"[IDEWorker] Degraded bridges ({reason}); conversational bridge in use: {served_by}")
+		_emit_pain_signal_once(
+			"worker_bridge_cascade_degraded",
+			source="IDEWorker",
+			originator="core.agent_worker.IDEWorker.__init__",
+			message=f"El worker no pudo construir los puentes configurados ({reason[:300]}); puente conversacional efectivo: {served_by}.",
+		)
+
 	def _build_strategy(self) -> PulseStrategy:
 		"""Resolve the backend-specific pulse strategy via the core registry.
 
 		The core does NOT name any backend: `build_pulse_strategy` returns the
-		first strategy registered/discovered by a plugin (or NullPulseStrategy if
-		none applies). This keeps `red_pill.core` provider-agnostic.
+		first strategy a plugin's factory accepts for these bridges (or
+		NullPulseStrategy if none applies). This keeps `red_pill.core`
+		provider-agnostic.
 		"""
-		strategy = build_pulse_strategy(self._bridge_minion)
+		strategy = build_pulse_strategy(PulseContext(bridge_minion=self._bridge_minion, capabilities=self._caps))
 		if isinstance(strategy, NullPulseStrategy):
-			# No backend strategy applied: this is legitimate for neutral
-			# backends, but worth a debug breadcrumb (not a pain signal — that is
-			# the job of a plugin that FAILED to register, handled inside).
-			logger.debug("[IDEWorker] no pulse strategy registered; using no-op")
+			# No backend strategy applied: legitimate for backends without
+			# backend-specific pulse work. A plugin that FAILED to load is
+			# reported by the registry itself.
+			logger.debug("[IDEWorker] no pulse strategy applies; using no-op")
 		return strategy
 
 	def _get_connection(self):
@@ -407,9 +473,34 @@ class IDEWorker:
 			self._strategy.pulse(self)
 		except Exception:
 			logger.exception("[IDEWorker] backend pulse failed — pulse continues")
+		# Generic housekeeping lives in the core so it survives a missing or
+		# broken backend plugin. Only a strategy whose path owns the whole tick
+		# (legacy IDE polling) declines it.
+		if self._core_housekeeping_allowed():
+			self._sweep_telegram_sessions()
+			# Samantha Queue: signal worker if there are pending tasks (NON-BLOCKING)
+			self._signal_samantha_worker()
 		# Watchdog: verify SamanthaWorker thread health
 		self._watchdog_samantha()
 		self.update_heartbeat()
+
+	def _core_housekeeping_allowed(self) -> bool:
+		try:
+			return bool(self._strategy.allows_core_housekeeping(self))
+		except Exception:
+			logger.exception("[IDEWorker] strategy housekeeping flag failed — running core housekeeping")
+			return True
+
+	def _sweep_telegram_sessions(self):
+		"""Janitor sweep for local Telegram sessions (archived conversations)."""
+		try:
+			from red_pill.telegram.session import TelegramSessionManager
+
+			purged = TelegramSessionManager().run_janitor_sweep()
+			if purged > 0:
+				logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
+		except Exception as e:
+			logger.error(f"Janitor sweep failed: {e}")
 
 	def update_heartbeat(self):
 		conn = get_connection()
@@ -970,7 +1061,8 @@ class IDEWorker:
 
 		from red_pill.telegram.session import TelegramSessionManager
 
-		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (Local Session Context)")
+		backend_label = self._caps.backend.value.upper() if self._caps else "UNBUILT"
+		logger.info(f"[{msg_ids}] Processing via {backend_label} bridge (Local Session Context)")
 
 		# D2/D10 (Fase 1, signal-only): detect an explicit routing keyword at the
 		# start of the message. We strip it from the PROMPT (it is routing, not
