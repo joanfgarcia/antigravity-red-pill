@@ -35,6 +35,8 @@ workspaces:
 | `atlas`    | optional explicit standards path (`null` = auto-discover via `.agent`). **Not** the map of inner projects — that lives in manifests (see below). |
 | `graphify` | whether the AST-refresh timer indexes this workspace. |
 | `access`   | **the switch** — grant the agent filesystem access to this workspace. |
+| `track`    | include this workspace in Pre-Heating `PROJECT_STATUS` (opt-in, default `false`). |
+| `worktrees`| optional dir whose subtree belongs to this workspace — where its `git worktree`s live (e.g. `~/worktrees/next-app`). Paths touched there are attributed to this project (session board, `infer_workspaces`) even after the worktree is deleted; without it only a *live* worktree (its `.git` file) resolves to its main repo. |
 
 ### Monorepo pattern: one peer entry per architecture
 

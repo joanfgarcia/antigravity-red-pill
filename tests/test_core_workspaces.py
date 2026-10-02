@@ -95,6 +95,21 @@ class TestSerializeRoundTrip:
 		w2 = Workspace.model_validate(raw["workspaces"][1])
 		assert w2.memory == Path.home() / "custom_mem"
 
+	def test_roundtrip_keeps_track_and_worktrees(self):
+		reg = WorkspaceRegistry(
+			agent_core="~/Agent_Core",
+			workspaces=[
+				Workspace(name="p", root="~/code/p", track=True, worktrees="~/worktrees/p"),
+				Workspace(name="q", root="~/code/q"),
+			],
+		)
+		raw = yaml.safe_load(serialize_registry(reg))
+		p = Workspace.model_validate(raw["workspaces"][0])
+		q = Workspace.model_validate(raw["workspaces"][1])
+		assert p.track is True and p.worktrees == Path.home() / "worktrees" / "p"
+		assert q.track is False and q.worktrees is None
+		assert "worktrees" not in raw["workspaces"][1]
+
 	def test_empty_workspaces_serialize(self):
 		reg = WorkspaceRegistry(agent_core="~/Agent_Core")
 		assert "workspaces: []" in serialize_registry(reg)
@@ -181,3 +196,121 @@ class TestStandardsResolution:
 		sub = tmp_path / "a" / "b"
 		sub.mkdir(parents=True)
 		assert ws.find_closest_agent(sub) == (tmp_path / ".agent").resolve()
+
+
+class TestPathOwnershipInference:
+	"""`owning_workspace` / `infer_workspaces` — RFC-DESPERTAR-001 P1b: el
+	proyecto se infiere por las rutas tocadas, no por el cwd."""
+
+	def _registry(self, monkeypatch, tmp_path):
+		ws_list = [
+			Workspace(name="a", root=str(tmp_path / "a")),
+			Workspace(name="ab", root=str(tmp_path / "a" / "b")),
+			Workspace(name="z", root=str(tmp_path / "z")),
+		]
+		monkeypatch.setattr(ws, "list_workspaces", lambda: ws_list)
+		return tmp_path
+
+	def test_most_specific_wins(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		(base / "a" / "b" / "c").mkdir(parents=True)
+		assert ws.owning_workspace(base / "a" / "b" / "c") == "ab"
+		assert ws.owning_workspace(base / "a" / "c") == "a"
+
+	def test_linked_worktree_resolves_to_main_repo(self, tmp_path, monkeypatch):
+		"""Un `git worktree` fuera de toda raíz se atribuye a su repo principal."""
+		base = self._registry(monkeypatch, tmp_path)
+		main = base / "z"
+		(main / ".git" / "worktrees" / "feat").mkdir(parents=True)
+		wt = tmp_path / "worktrees" / "z" / "feat"
+		(wt / "src").mkdir(parents=True)
+		(wt / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'feat'}\n", encoding="utf-8")
+		(wt / "src" / "m.py").write_text("x", encoding="utf-8")
+		assert ws.owning_workspace(wt / "src" / "m.py") == "z"
+		assert ws.infer_workspaces([str(wt / "src" / "m.py")]) == ["z"]
+
+	def test_declared_worktrees_dir_survives_deleted_worktree(self, tmp_path, monkeypatch):
+		"""`worktrees:` atribuye rutas de worktrees ya borrados (sin `.git`) al workspace."""
+		ws_list = [
+			Workspace(name="z", root=str(tmp_path / "z"), worktrees=str(tmp_path / "worktrees" / "z")),
+			Workspace(name="ia", root=str(tmp_path)),
+		]
+		monkeypatch.setattr(ws, "list_workspaces", lambda: ws_list)
+		gone = tmp_path / "worktrees" / "z" / "awaken-1" / "src" / "m.py"  # nunca existió en disco
+		assert ws.owning_workspace(gone) == "z"
+		assert ws.infer_workspaces([str(gone), str(tmp_path / "other")]) == ["z", "ia"]
+
+	def test_declared_worktrees_most_specific_wins(self, tmp_path, monkeypatch):
+		"""Un workspace registrado DENTRO de la carpeta de worktrees de otro gana por especificidad."""
+		ws_list = [
+			Workspace(name="z", root=str(tmp_path / "z"), worktrees=str(tmp_path / "wt")),
+			Workspace(name="inner", root=str(tmp_path / "wt" / "inner")),
+		]
+		monkeypatch.setattr(ws, "list_workspaces", lambda: ws_list)
+		assert ws.owning_workspace(tmp_path / "wt" / "inner" / "f.py") == "inner"
+		assert ws.owning_workspace(tmp_path / "wt" / "feat" / "f.py") == "z"
+
+	def test_plain_repo_is_not_a_worktree(self, tmp_path, monkeypatch):
+		self._registry(monkeypatch, tmp_path)
+		other = tmp_path / "other"
+		(other / ".git").mkdir(parents=True)
+		assert ws.owning_workspace(other) is None
+
+	def test_infer_loads_registry_once(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		calls = {"n": 0}
+		real = ws.list_workspaces
+
+		def _counting():
+			calls["n"] += 1
+			return real()
+
+		monkeypatch.setattr(ws, "list_workspaces", _counting)
+		ws.infer_workspaces([str(base / "a" / f"f{i}.py") for i in range(200)])
+		assert calls["n"] == 1
+
+	def test_file_resolves_against_parent(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		(base / "a" / "b").mkdir(parents=True)
+		(base / "a" / "b" / "f.txt").write_text("x", encoding="utf-8")
+		assert ws.owning_workspace(base / "a" / "b" / "f.txt") == "ab"
+
+	def test_outside_registry_is_none(self, tmp_path, monkeypatch):
+		self._registry(monkeypatch, tmp_path)
+		assert ws.owning_workspace(tmp_path / "other") is None
+
+	def test_none_input_is_none(self, tmp_path, monkeypatch):
+		self._registry(monkeypatch, tmp_path)
+		assert ws.owning_workspace(None) is None
+
+	def test_infer_workspaces_order_and_dedup(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		(base / "a" / "b").mkdir(parents=True)
+		(base / "z").mkdir(parents=True)
+		paths = [
+			base / "a" / "b" / "f",
+			base / "z" / "g",
+			base / "a" / "b" / "h",
+			None,
+			base / "outside",
+		]
+		assert ws.infer_workspaces(paths) == ["ab", "z"]
+
+	def test_workspace_owners_aligned_and_memoized(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		calls = {"n": 0}
+		real = ws._owner_of
+
+		def _counting(roots, path):
+			calls["n"] += 1
+			return real(roots, path)
+
+		monkeypatch.setattr(ws, "_owner_of", _counting)
+		f = str(base / "a" / "b" / "f")
+		out = ws.workspace_owners([f, None, str(base / "z" / "g"), f, "", str(base / "outside"), f])
+		assert out == ["ab", None, "z", "ab", None, None, "ab"]
+		assert calls["n"] == 3  # una resolución por ruta distinta
+
+	def test_infer_workspaces_empty(self, tmp_path, monkeypatch):
+		self._registry(monkeypatch, tmp_path)
+		assert ws.infer_workspaces([]) == []

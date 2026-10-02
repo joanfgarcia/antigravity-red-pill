@@ -17,6 +17,10 @@
 #                             operate in this workspace.
 #                `track`    : include this workspace in Pre-Heating PROJECT_STATUS (operator opt-in).
 #                             DEFAULT false — only tracked workspaces inject project context.
+#                `worktrees`: optional dir whose subtree belongs to this workspace — where its
+#                             `git worktree`s live (e.g. ~/worktrees/example). Session paths there
+#                             are attributed to this project even after the worktree is deleted
+#                             (the live `.git` detection only works while it exists). Omit if unused.
 version: 1
 agent_core: ~/Agent_Core
 workspaces:

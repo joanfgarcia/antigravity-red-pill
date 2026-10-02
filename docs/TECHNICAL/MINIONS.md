@@ -73,8 +73,11 @@ It is also callable directly as a Python entry point (same loop):
 ```python
 from red_pill.swarm.agents.local_minion import run_local_minion
 result = await run_local_minion("…", cwd="/path/to/dir")
-# → {"ok": True, "answer": "51", "steps": 1, "messages": [...]}
+# → {"ok": True, "answer": "51", "steps": 1, "used_tools": True, "tool_calls": 1, "messages": [...]}
 ```
+`tool_calls` counts every executed call; `used_tools` is True only if at least one
+returned a non-`ERROR` result — the `local-tools` bridge flags an answer without one
+as *ungrounded* (`error` set), so an invented or failing tool never passes as verified.
 
 ---
 
@@ -99,7 +102,9 @@ result = await run_local_minion("…", cwd="/path/to/dir")
   redirection, globs) and the RedPill-Kernel MCP tools (`bunker_memory_api`,
   `swarm_orchestrator_api`) **in-process**, feeding results back until it answers.
 - **Limits (the model and the machine set these):**
-  - **≤ 8 tool calls** per run (hard cap; returns "mala tarde" if exceeded).
+  - **≤ 8 tool calls** per run — a budget enforced across turns, also when the model
+    emits several calls in one turn (returns "mala tarde" if exceeded). Every call of
+    a turn runs, in order.
   - **8B @ Q4 reasoning:** reliable for **short, concrete, mechanical** chains
     (2–4 steps). Degrades on ambiguous, long, or multi-objective tasks — it may pick
     the wrong tool, malform args, or fail to stop. Keep tasks **narrow and explicit**
@@ -108,9 +113,40 @@ result = await run_local_minion("…", cwd="/path/to/dir")
     0.15 MB/token, trained at 131k); **no compaction in v1**, so keep tool outputs
     concise. The loop cap keeps context bounded in practice.
   - **Tools are curated & small** (bash + 2 MCP parents). It is not a general agent.
-  - **Bash sandbox = cwd + 60 s timeout only** — a real shell driven by an 8B. Assign
-    read-only/inspection tasks by default; only allow mutations deliberately.
-  - Gives up after **3 consecutive tool errors**.
+    The MCP parents expose a **read-only allowlist** (`MINION_ALLOWED_ACTIONS`):
+    Bünker search/read (`search_memory_research`, `search_memento`, `traverse_thread`,
+    `read_core_directives`, `get_emotional_sync`, workspace-memory list/read) and swarm
+    status (`check_minion_inbox`, `session_board`). Anything else — `run_agent_task`,
+    `control_bunker`, memory writes, swarm tuning — returns
+    `ERROR: action not allowed for the local minion` and counts as a tool error.
+  - **Bash jail = working directory + 60 s timeout** — a real shell driven by an 8B.
+    Commands run in the caller's `cwd`, or in `<state dir>/minion_workdir` when there
+    is none (never the worker's own cwd). A command naming an absolute path outside
+    it, a `..` component, `~`/`$HOME` or a bare `cd` is blocked before it runs
+    (`ERROR: BLOCKED_BY_JAIL`). It is a guard rail, not a sandbox (shell indirection
+    can still escape it): assign read-only/inspection tasks by default; only allow
+    mutations deliberately.
+  - Gives up after **3 consecutive tool errors**. A malformed or truncated tool call
+    (e.g. cut by `max_tokens`) is fed back as an error ("re-emit it complete") and
+    counts toward that cap — tool-call markup is never returned as the answer.
+  - **Reasoning is not executed:** tool calls are parsed only from the *answer*; a
+    `<tool_call>` the model writes while musing inside `<think>…</think>` (or in an
+    unclosed `<think>`) is ignored.
+  - **Tool output is data, not instructions:** with a native template that has a
+    `tool` role (Granite 4.2 → `<tool_response>`) results go back as `role="tool"`;
+    with `chatml-function-calling` (no `tool` branch — it drops such messages) they go
+    in a user turn fenced as `<tool_output id=nonce>…` and labelled untrusted. This
+    blunts, but does not remove, prompt injection from files/Bünker content — keep
+    tasks read-only.
+  - **Conduct comes from the profiles:** `temperature`, `max_tokens` and `tool_format`
+    are resolved in-process for the task `minion_tool` (candidate > task > model
+    profile, fallback 0.3 / 1024 / `auto`; a defined `0` counts); the daemon does not
+    apply them itself. `max_tokens` is the exception: candidate > task > 1024, never
+    the model profile (there it is model_runtime's n_ctx fallback, a context knob),
+    clamped to ¼ of the smallest context the profile can be served with (2048 if it
+    declares none) so a rambling turn cannot fill the context. A
+    daemon rejection (e.g. a `model` that is not a `minion_tool` candidate → K1, 400)
+    surfaces as a readable `SipInferenceError`.
   - **Tool-calling routing (HARNESS-003/004, 2026-09-30):** the daemon MUST pick a
     tool-capable `chat_format` (`minion_chat_format`, e.g. `chatml-function-calling`)
     when the request carries tools — the distiller `chat_format` silently drops them
@@ -118,7 +154,8 @@ result = await run_local_minion("…", cwd="/path/to/dir")
     Granite **4.2** uses its **native** template and emits the tool-call as *text*
     (`<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`);
     the loop parses it (`model_runtime.extract_toolcalls`) and keeps `arguments` as a
-    mapping. 4.2-**3B** works but needs ~1200 tokens of budget for its `think`.
+    mapping. 4.2-**3B** works but needs ~1200 tokens of budget for its `think` — the
+    `minion_tool` task/candidate `max_tokens` must cover it (seed: 2048).
   - **Autonomy (measured by `scripts/autonomy_ladder.py`):** Granite 4.1 and 4.2 both
     **mutate the filesystem without asking** under ambiguous / "clean up" prompts →
     grant **read-only inspection** autonomy only; keep mutations human-gated. 4.2

@@ -5,7 +5,6 @@ priority: 4
 title: Adjudicación F1b router System One (juez LLM, 120 notas)
 mission_id: laya-router-bakeoff
 step_command: .venv/bin/python scripts/laya_adjudicate.py
-cwd: /home/joan/Documents/IA/sharing
 progress:
   mode: single
 control:

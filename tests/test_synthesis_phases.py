@@ -15,7 +15,11 @@ def _mock_scroll_response(contents):
 	return mock_response
 
 
-def test_recall_recent_orders_and_filters():
+QDRANT_TEST_URL = "http://qdrant.test:6333"
+
+
+def test_recall_recent_orders_and_filters(monkeypatch):
+	monkeypatch.setattr(common, "_qdrant_url", lambda: QDRANT_TEST_URL)
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		mock_urlopen.return_value.__enter__.return_value = _mock_scroll_response(["hub A", "engram B"])
 
@@ -29,7 +33,8 @@ def test_recall_recent_orders_and_filters():
 		assert any(c["key"] == "lazarus_phase" for c in must_not)
 
 
-def test_recall_recent_degrades_without_index():
+def test_recall_recent_degrades_without_index(monkeypatch):
+	monkeypatch.setattr(common, "_qdrant_url", lambda: QDRANT_TEST_URL)
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		# First (ordered) call fails as if created_at had no payload index; retry succeeds
 		ok = MagicMock()
@@ -39,6 +44,38 @@ def test_recall_recent_degrades_without_index():
 		assert common.recall_recent("work_memories", limit=5) == ["engram"]
 		retry_payload = json.loads(mock_urlopen.call_args[0][0].data.decode())
 		assert "order_by" not in retry_payload
+
+
+def test_endpoints_y_clave_salen_de_config_no_del_home():
+	"""Nada de localhost:6333/8760 a fuego ni load_dotenv del ~/.config real: URL,
+	clave y LLM salen de config (que respeta la redirección XDG)."""
+	import red_pill.config as cfg
+
+	# patch.object (no monkeypatch): al salir borra el atributo y vuelve a delegar
+	# en el __getattr__ del módulo en vez de congelar el valor calculado.
+	with (
+		patch.object(cfg, "QDRANT_URL", QDRANT_TEST_URL, create=True),
+		patch.object(cfg, "QDRANT_API_KEY", "k-test", create=True),
+		patch.object(cfg, "MLX_LM_URL", "http://llm.test:9999/v1/chat/completions", create=True),
+		patch("urllib.request.urlopen") as mock_urlopen,
+	):
+		mock_urlopen.return_value.__enter__.return_value = _mock_scroll_response(["x"])
+		assert common.scroll_contents("work_memories", 3) == ["x"]
+		req = mock_urlopen.call_args[0][0]
+		assert req.full_url == f"{QDRANT_TEST_URL}/collections/work_memories/points/scroll"
+		assert req.get_header("Api-key") == "k-test"
+
+		mock_urlopen.reset_mock()
+		mock_urlopen.return_value.__enter__.return_value.read.return_value = json.dumps({"choices": [{"message": {"content": " ok "}}]}).encode()
+		assert common.chat("sys", "user", 10) == "ok"
+		assert mock_urlopen.call_args[0][0].full_url == "http://llm.test:9999/v1/chat/completions"
+
+
+def test_qdrant_sin_endpoint_http_no_hace_peticiones():
+	"""En la suite QDRANT_URL es ':memory:': la síntesis se queda sin contexto, sin HTTP."""
+	with patch("urllib.request.urlopen") as mock_urlopen:
+		assert common.recall_recent("work_memories", limit=5) == []
+		mock_urlopen.assert_not_called()
 
 
 def test_is_fresh(tmp_path):
@@ -108,11 +145,11 @@ def test_operator_profile_publishes_valid(tmp_path, monkeypatch):
 	monkeypatch.setattr(opp, "recall_recent", lambda coll, limit, tag=None: ["work hub"])
 	monkeypatch.setattr(opp, "_fetch_social_immune", lambda limit=5: ["social"])
 	monkeypatch.setattr(opp, "_fetch_directive_immune", lambda limit=3: ["directive"])
-	monkeypatch.setattr(opp, "chat", lambda *a, **k: "Joan — Arquitecto IA en Hotetec; foco actual: release v7.14 de red-pill.")
+	monkeypatch.setattr(opp, "chat", lambda *a, **k: "Joan — Ingeniero de software; foco actual: release v7.14 de red-pill.")
 
 	opp.OperatorProfilePhase().execute(SleepContext(memory_manager=None))
 
-	assert "Arquitecto IA" in artifact.read_text()
+	assert "Ingeniero de software" in artifact.read_text()
 
 
 def test_validate_activity_rejects_short_and_nominal():

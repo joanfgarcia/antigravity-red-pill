@@ -90,7 +90,12 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 		sw.start()
 		self.assertTrue(sw.is_alive())
 		sw.stop()
-		time.sleep(0.5)
+		# Deterministic shutdown: join() waits on the thread's termination
+		# event. The old pattern (sleep + is_alive) raced with CPython's
+		# thread teardown and flaked under loaded CI (coverage + slow GIL
+		# handoff): run() had already logged "Thread stopped" yet is_alive()
+		# still returned True.
+		sw.join(timeout=5)
 		self.assertFalse(sw.is_alive())
 
 	def test_healthy_after_start(self):
@@ -101,7 +106,8 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 		sw.start()
 		self.assertTrue(sw.is_healthy())
 		sw.stop()
-		time.sleep(0.3)
+		sw.join(timeout=5)
+		self.assertFalse(sw.is_alive())
 
 	def test_empty_wake_survives(self):
 		"""Thread survives a wake signal with no pending tasks."""
@@ -113,7 +119,8 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 		time.sleep(0.5)
 		self.assertTrue(sw.is_alive())
 		sw.stop()
-		time.sleep(0.3)
+		sw.join(timeout=5)
+		self.assertFalse(sw.is_alive())
 
 	def test_stats_initial(self):
 		"""Initial stats are zeroed."""
@@ -335,7 +342,7 @@ class TestWorkerIntegration(unittest.TestCase):
 		sw = SamanthaWorker(idle_timeout=1)
 		sw.start()
 		sw.stop()
-		time.sleep(0.5)
+		sw.join(timeout=5)
 
 		# Thread is dead
 		self.assertFalse(sw.is_alive())

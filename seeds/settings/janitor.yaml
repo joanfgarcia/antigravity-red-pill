@@ -3,6 +3,7 @@ plugins:
   events_db_purge:
     enabled: true
     days_to_keep: 7
+    dead_letters_days_to_keep: 30  # FAILED del outbox + dead_letters (margen para `neon-link redrive`)
   scratch_purge:
     enabled: true
     days_to_keep: 7

@@ -6,11 +6,18 @@ digerido". Solo actúa si alguna pieza del single-writer está activa.
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
 
 logger = logging.getLogger(__name__)
+
+# Umbral de la señal de dolor `sw_hub_coverage_low` (% de contenido en hubs).
+HUB_COVERAGE_PAIN_PCT = 50.0
+
+
+def _below(pct: Optional[float], threshold: float) -> bool:
+	return pct is not None and pct < threshold
 
 
 class SwObservabilityPlugin(JanitorPlugin):
@@ -47,11 +54,9 @@ class SwObservabilityPlugin(JanitorPlugin):
 					criticality="INFO",
 					message=json.dumps(health.get("collections", {}), ensure_ascii=False),
 				)
-				# Alerta REAL: solo si el contenido queda sin jerarquizar.
-				low = {
-					c: m for c, m in health.get("collections", {}).items()
-					if m.get("hub_coverage_pct", 100.0) < 50.0
-				}
+				# Alerta REAL: solo si el contenido queda sin jerarquizar. Una
+				# colección sin contenido (cobertura None = "n/a") no duele.
+				low = {c: m for c, m in health.get("collections", {}).items() if _below(m.get("hub_coverage_pct"), HUB_COVERAGE_PAIN_PCT)}
 				if low:
 					mem.inject_signal(
 						name="sw_hub_coverage_low",

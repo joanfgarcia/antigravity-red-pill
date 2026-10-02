@@ -7,7 +7,7 @@ from red_pill.metabolism.categorizer import detect_category_heuristics
 
 def test_personal_reflection_with_stray_keyword():
 	text = (
-		"Hoy en el paseo con Mara hablamos de cómo le va el instituto y de la vida en general. "
+		"Hoy en el paseo con Lucía hablamos de cómo le va el instituto y de la vida en general. "
 		"Me quedé pensando que muchas ideas buenas surgen así, sin buscar nada. Fue un error no "
 		"salir antes de casa porque llovió, pero mereció la pena la conversación."
 	)

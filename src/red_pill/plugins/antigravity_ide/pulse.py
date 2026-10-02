@@ -8,10 +8,16 @@ neutral orchestrator.
 The strategy is constructed with the worker's bridges + client and is invoked
 once per pulse via ``pulse(worker)``. It mirrors the original branching:
 
-- **legacy gRPC** backend → ``check_for_replies`` + ``check_minion_inbox_auto_inject``
-+ ``process_cognitive_queue`` (guarded by ``TELEGRAM_BRIDGE_CASCADE``).
+- **legacy gRPC** backend → ``check_for_replies``, ``check_minion_inbox_auto_inject``
+and ``process_cognitive_queue`` (never when ``TELEGRAM_BRIDGE_CASCADE`` is set).
+This path owns the tick: it declines the core housekeeping
+(``allows_core_housekeeping`` → False), as the original worker did.
 - **non-gRPC** backend → ``agy`` autonomous operations, gated by
-+ ``AUTONOMOUS_AGY_ENABLED``, plus the janitor sweep and samantha signal.
+``AUTONOMOUS_AGY_ENABLED``. The Telegram session janitor and the Samantha
+signal are generic: the core runs them after this tick.
+
+The factory declines (returns None) when neither path applies, so a worker
+served by other backends never builds the Antigravity client.
 
 Trajectory helpers (``get_trajectory_data`` / ``get_all_trajectories``) are
 passed through here too because they read the Antigravity gRPC client.
@@ -24,7 +30,7 @@ import os
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import requests
 
@@ -34,6 +40,7 @@ from red_pill.swarm.bridges import BackendType, BridgeCapabilities
 
 if TYPE_CHECKING:
 	from red_pill.core.agent_worker import IDEWorker
+	from red_pill.core.pulse_strategy import PulseContext
 
 logger = logging.getLogger(__name__)
 
@@ -49,47 +56,42 @@ class AntigravityPulseStrategy:
 	def __init__(self, bridge_minion, client=None) -> None:
 		self._client = client if client is not None else AntigravityIDEClient()
 		self._bridge_minion = bridge_minion
-		self._cascade_degraded_logged = False
+
+	@classmethod
+	def applies(cls, capabilities: Optional[BridgeCapabilities]) -> bool:
+		"""True if this backend has work in the worker: legacy IDE polling, or the
+		autonomous agy operations (opt-in via AUTONOMOUS_AGY_ENABLED)."""
+		return cls._legacy_polling(capabilities) or cfg.get_config().AUTONOMOUS_AGY_ENABLED
 
 	def pulse(self, worker: "IDEWorker") -> None:
 		"""One backend-specific tick. Never raises (worker also guards it)."""
-		legacy_grpc = self._is_legacy_grpc(worker._caps)
-		if legacy_grpc and cfg.get_config().TELEGRAM_BRIDGE_CASCADE:
-			# Degraded capabilities with a configured cascade mean every bridge
-			# failed to construct (see cascade construction errors at boot). The
-			# IDE polling path is Antigravity-only — never resurrect it here.
-			# Log once, not on every 2s pulse.
-			if not self._cascade_degraded_logged:
-				self._cascade_degraded_logged = True
-				logger.error("[IDEWorker] TELEGRAM_BRIDGE_CASCADE set but no bridge could be built; skipping legacy IDE polling.")
-			legacy_grpc = False
-		if legacy_grpc:
+		if self._legacy_polling(worker._caps):
 			self.check_for_replies(worker)
 			self.check_minion_inbox_auto_inject(worker)
 			self.process_cognitive_queue(worker)
-		else:
+		elif cfg.get_config().AUTONOMOUS_AGY_ENABLED:
 			# Autonomous agy operations (minion auto-inject, cognitive queue)
 			# are gated behind AUTONOMOUS_AGY_ENABLED to prevent Flash quota
 			# drain. Telegram inbox processing is NOT affected.
-			if cfg.get_config().AUTONOMOUS_AGY_ENABLED:
-				self.check_minion_inbox_auto_inject_agy(worker)
-				self.process_cognitive_queue_agy(worker)
-			# Janitor sweep for local telegram sessions
-			try:
-				from red_pill.telegram.session import TelegramSessionManager
+			self.check_minion_inbox_auto_inject_agy(worker)
+			self.process_cognitive_queue_agy(worker)
 
-				tsm = TelegramSessionManager()
-				purged = tsm.run_janitor_sweep()
-				if purged > 0:
-					logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
-			except Exception as e:
-				logger.error(f"Janitor sweep failed: {e}")
-			# Samantha Queue: signal worker if there are pending tasks (NON-BLOCKING)
-			worker._signal_samantha_worker()
+	def allows_core_housekeeping(self, worker: "IDEWorker") -> bool:
+		"""The legacy IDE polling path owned the whole tick (no Telegram session
+		janitor, no Samantha signal); every other path leaves them to the core."""
+		return not self._legacy_polling(worker._caps)
 
 	@staticmethod
-	def _is_legacy_grpc(caps: BridgeCapabilities) -> bool:
-		return not caps or caps.backend == BackendType.GRPC
+	def _is_legacy_grpc(caps: Optional[BridgeCapabilities]) -> bool:
+		return caps is not None and caps.backend == BackendType.GRPC
+
+	@classmethod
+	def _legacy_polling(cls, caps: Optional[BridgeCapabilities]) -> bool:
+		"""Legacy IDE polling runs only on a gRPC bridge with no cascade configured.
+		gRPC capabilities WITH a configured TELEGRAM_BRIDGE_CASCADE mean the
+		cascade is degraded (no target could be built): the core reports that,
+		and the IDE polling path must never be resurrected on its behalf."""
+		return cls._is_legacy_grpc(caps) and not cfg.get_config().TELEGRAM_BRIDGE_CASCADE
 
 	# ── Trajectory helpers (Antigravity gRPC client) ─────────────────────────
 
@@ -178,8 +180,9 @@ class AntigravityPulseStrategy:
 					clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", content, flags=re.DOTALL).strip()
 
 					# Evitar enviar respuestas de Derecho al Silencio a Telegram
-					is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
-					if row["channel"] != "system" and clean_content and not is_silence:
+					from red_pill.core.agent_worker import is_silence_response
+
+					if row["channel"] != "system" and clean_content and not is_silence_response(clean_content):
 						cursor.execute(
 							"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 							(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": clean_content})),
@@ -423,15 +426,23 @@ class AntigravityPulseStrategy:
 			queue_manager.mark_failed(task["id"], result.error or "Empty response")
 
 
+def build_antigravity_pulse_strategy(context: "PulseContext") -> Optional[AntigravityPulseStrategy]:
+	"""Strategy factory: declines (None) when no bridge needs Antigravity, so a
+	worker served by other backends never builds the IDE client."""
+	if not AntigravityPulseStrategy.applies(context.capabilities):
+		return None
+	return AntigravityPulseStrategy(context.bridge_minion)
+
+
 def _register() -> None:
 	"""Self-register this backend's strategy with the core registry. Imported
 	by the core's discovery (`red_pill.core.pulse_strategy`), never hardcoded."""
 	from red_pill.core.pulse_strategy import register_pulse_strategy
 
-	register_pulse_strategy(lambda bridge_minion: AntigravityPulseStrategy(bridge_minion))
+	register_pulse_strategy(build_antigravity_pulse_strategy)
 
 
 _register()
 
 
-__all__ = ["AntigravityPulseStrategy"]
+__all__ = ["AntigravityPulseStrategy", "build_antigravity_pulse_strategy"]

@@ -3,6 +3,7 @@ Red Pill Sentinel Auditor (v6.6.0-alpha)
 The tactical 'Frontal Lobe' for sovereign infrastructure monitoring.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -27,6 +28,19 @@ class AuditReport:
 	intensity: float = 0.0
 
 
+def _git(repo_path: str, *args: str, timeout: float = 30) -> tuple:
+	"""(returncode, stdout bytes) of a read-only git query. Popen, not run():
+	the fingerprint must not consume the subprocess.run mocks of the checks."""
+	proc = subprocess.Popen(["git", "-C", repo_path, *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+	try:
+		out, _ = proc.communicate(timeout=timeout)
+	except subprocess.TimeoutExpired:
+		proc.kill()
+		proc.communicate()
+		raise
+	return proc.returncode, out
+
+
 class SentinelAuditor:
 	def __init__(self, target_repos: Optional[List[str]] = None, force: bool = False):
 		self.target_repos = target_repos or []
@@ -47,56 +61,89 @@ class SentinelAuditor:
 
 		self.memory_mgr = MemoryManager()
 
-	def _get_project_mtime(self, repo_path: str) -> float:
-		"""Calculates the maximum modification time (mtime) of all python source files."""
-		repo_dir = Path(repo_path)
-		if not repo_dir.exists():
-			return 0.0
+	# Directories that never hold auditable code (venvs, caches, vendored trees).
+	_FINGERPRINT_SKIP_DIRS = frozenset(
+		{
+			".git",
+			".venv",
+			"venv",
+			"node_modules",
+			"3rdparty",
+			"__pycache__",
+			".mypy_cache",
+			".ruff_cache",
+			".pytest_cache",
+			"scratch",
+			"build",
+			"dist",
+		}
+	)
 
-		max_mtime = 0.0
-		# Check all python files
-		for p in repo_dir.rglob("*.py"):
-			if p.is_file():
-				try:
-					max_mtime = max(max_mtime, p.stat().st_mtime)
-				except FileNotFoundError:
-					pass
+	def _project_fingerprint(self, repo_path: str) -> str:
+		"""Hash of the auditable code: what ruff/mypy/pytest would see.
 
-		# Check pyproject.toml as well
-		for p in repo_dir.rglob("pyproject.toml"):
-			if p.is_file():
-				try:
-					max_mtime = max(max_mtime, p.stat().st_mtime)
-				except FileNotFoundError:
-					pass
+		git repo: HEAD + the diff of tracked files + untracked-but-not-ignored files
+		(path, size, mtime). Noise outside the tree (venv reinstalls, caches,
+		ignored artefacts) does not change it. Not a git repo: (path, size, mtime)
+		of the *.py / pyproject.toml outside the skip dirs.
+		"""
+		h = hashlib.sha256()
+		try:
+			rc, head = _git(repo_path, "rev-parse", "HEAD")
+			if rc == 0:
+				h.update(head)
+				h.update(_git(repo_path, "diff", "HEAD", "--binary", timeout=60)[1])
+				others = _git(repo_path, "ls-files", "--others", "--exclude-standard", "-z")[1]
+				for rel in sorted(r for r in others.split(b"\0") if r):
+					parts = Path(rel.decode(errors="replace")).parts
+					if parts and parts[0] in self._FINGERPRINT_SKIP_DIRS:
+						continue
+					self._hash_stat(h, Path(repo_path) / rel.decode(errors="replace"), rel)
+				return h.hexdigest()
+		except Exception as e:
+			self.logger.debug(f"git fingerprint unavailable for {repo_path}: {e}")
+		for root, dirs, files in os.walk(repo_path):
+			dirs[:] = sorted(d for d in dirs if d not in self._FINGERPRINT_SKIP_DIRS)
+			for name in sorted(files):
+				if name.endswith(".py") or name == "pyproject.toml":
+					p = Path(root) / name
+					self._hash_stat(h, p, str(p.relative_to(repo_path)).encode())
+		return h.hexdigest()
 
-		return max_mtime
+	@staticmethod
+	def _hash_stat(h: Any, path: Path, rel: bytes) -> None:
+		try:
+			st = path.stat()
+		except OSError:
+			return
+		h.update(rel + f"|{st.st_size}|{st.st_mtime_ns}".encode())
 
-	def _get_cached_mtime(self, repo_path: str) -> float:
-		"""Retrieves the cached mtime for a given repository."""
-		if not self.cache_file.exists():
-			return 0.0
+	def _load_cache(self) -> Dict[str, Any]:
 		try:
 			with open(self.cache_file, "r") as f:
 				cache = json.load(f)
-			return float(cache.get(repo_path, 0.0))
+			return cache if isinstance(cache, dict) else {}
 		except Exception:
-			return 0.0
+			return {}
 
-	def _update_cached_mtime(self, repo_path: str, new_mtime: float):
-		"""Updates the cached mtime for a given repository."""
-		cache = {}
-		if self.cache_file.exists():
-			try:
-				with open(self.cache_file, "r") as f:
-					cache = json.load(f)
-			except Exception:
-				pass
+	def _step_is_current(self, repo_path: str, step: str, fingerprint: str) -> bool:
+		"""True if `step` already ran to completion on exactly this code."""
+		entry = self._load_cache().get(repo_path)
+		return isinstance(entry, dict) and entry.get(step) == fingerprint
 
-		cache[repo_path] = new_mtime
+	def _mark_step(self, repo_path: str, step: str, fingerprint: str) -> None:
+		"""Record that `step` finished on `fingerprint` — saved right away, so a run
+		killed later (unit timeout) does not redo the steps that did finish."""
+		cache = self._load_cache()
+		entry = cache.get(repo_path)
+		if not isinstance(entry, dict):
+			entry = {}  # legacy {repo: mtime} format
+		entry[step] = fingerprint
+		cache[repo_path] = entry
 		try:
-			with open(self.cache_file, "w") as f:
-				json.dump(cache, f, indent=4)
+			tmp = self.cache_file.with_suffix(".tmp")
+			tmp.write_text(json.dumps(cache, indent=4), encoding="utf-8")
+			os.replace(tmp, self.cache_file)
 		except Exception as e:
 			self.logger.warning(f"Failed to update auditor cache: {e}")
 
@@ -109,20 +156,49 @@ class SentinelAuditor:
 			report.findings.append(AuditFinding(type="infra", severity=10.0, message=f"Path not found: {repo_path}"))
 			return report
 
-		# --- Differential Audit Cache Check ---
-		current_mtime = self._get_project_mtime(repo_path)
-		cached_mtime = self._get_cached_mtime(repo_path)
+		# --- Differential audit: each step runs only if the code changed since it
+		# last completed (fingerprint of the tree, not mtimes of the whole disk).
+		# A skipped step keeps its previous verdict: its signal is neither
+		# re-injected nor evaporated.
+		fingerprint = self._project_fingerprint(repo_path)
 
-		if not self.force and current_mtime <= cached_mtime:
-			self.logger.info(f"Skipping audit for {repo_path} (No changes detected since last audit)")
-			return report  # Returns default green status with no findings
-		# --------------------------------------
+		def _due(step: str) -> bool:
+			if self.force or not self._step_is_current(repo_path, step, fingerprint):
+				return True
+			self.logger.info(f"Skipping {step} for {repo_path} (unchanged since its last run)")
+			return False
 
-		# 1. Formatting & Linting (Ruff)
-		# Always run when the audit body runs: the whole-audit mtime gate above
-		# already skips unchanged repos, so a per-check Fast-Fail on an existing
-		# signal only made signals un-clearable — a landed fix could never
-		# evaporate them (the stuck "N pain signals" the operator kept seeing).
+		# Each step runs only if the code changed since it last COMPLETED on this
+		# repo (a failing verdict included: re-running unchanged code only re-fires
+		# the same pain). A step that runs always clears its own signal on pass.
+		if _due("ruff"):
+			self._audit_ruff(repo_path, report)
+			self._mark_step(repo_path, "ruff", fingerprint)
+		if _due("mypy"):
+			self._audit_mypy(repo_path, report)
+			self._mark_step(repo_path, "mypy", fingerprint)
+
+		# Testing (Pytest) — opt-in (AUDITOR_RUN_TESTS): tests belong to CI.
+		import red_pill.config as cfg
+
+		if not cfg.get_config().AUDITOR_RUN_TESTS:
+			self.logger.info(f"Skipping tests for {repo_path} (AUDITOR_RUN_TESTS off)")
+			# A stale "suite timed out" pain from the old always-on step must not linger.
+			self.memory_mgr.evaporate_signals("signal_test_failure")
+		elif _due("tests"):
+			self._audit_tests(repo_path, report)
+			self._mark_step(repo_path, "tests", fingerprint)
+
+		# Calculate global intensity based on findings
+		report.intensity = sum(f.severity for f in report.findings)
+		if any(f.severity >= 8.0 for f in report.findings):
+			report.status = "red"
+		elif report.findings:
+			report.status = "yellow"
+
+		return report
+
+	def _audit_ruff(self, repo_path: str, report: AuditReport) -> None:
 		self.logger.info(f"Auditing formatting for {repo_path}")
 		try:
 			ruff = subprocess.run(
@@ -148,7 +224,7 @@ class SentinelAuditor:
 				)
 			)
 
-		# 2. Typing (Mypy)
+	def _audit_mypy(self, repo_path: str, report: AuditReport) -> None:
 		self.logger.info(f"Auditing types for {repo_path}")
 		mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
 		try:
@@ -190,12 +266,17 @@ class SentinelAuditor:
 				)
 			)
 
-		# 3. Testing (Pytest)
+	def _audit_tests(self, repo_path: str, report: AuditReport) -> None:
+		"""Pytest of the live checkout, unit tests only (integration excluded)."""
 		self.logger.info(f"Auditing tests for {repo_path}")
-		# Run standard tests (removed xdist to ensure universal compatibility)
 		try:
 			pytest = subprocess.run(
-				[self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120
+				[self.uv_path, "run", "pytest", "-q", "-p", "no:cacheprovider", "-m", "not integration", "--ignore=tests/integration"],
+				cwd=repo_path,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				text=True,
+				timeout=120,
 			)
 			if pytest.returncode != 0:
 				report.status = "yellow"
@@ -219,18 +300,6 @@ class SentinelAuditor:
 					metadata={"stdout": te.stdout.decode() if isinstance(te.stdout, bytes) else (te.stdout or "")},
 				)
 			)
-
-		# Calculate global intensity based on findings
-		report.intensity = sum(f.severity for f in report.findings)
-		if any(f.severity >= 8.0 for f in report.findings):
-			report.status = "red"
-		elif report.findings:
-			report.status = "yellow"
-
-		# Update Cache if audit ran
-		self._update_cached_mtime(repo_path, current_mtime)
-
-		return report
 
 	def _load_log_offsets(self) -> Dict[str, int]:
 		try:

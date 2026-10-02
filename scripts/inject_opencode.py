@@ -94,16 +94,10 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 
 # ── Instructions file (RED_PILL.md) ──────────────────────────────────────────
 # Reuse the anchor splice logic from inject_anchor.py for versioned blocks.
+# Block versions too: single source in inject_anchor.BLOCK_VERSION (a local copy
+# drifted and kept re-splicing RED_PILL.md with stale `v=` markers).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inject_anchor import remove_block, splice_block  # noqa: E402
-
-BLOCK_VERSION = {
-	"sovereign_handshake": 1,
-	"agent_core": 2,
-	"knowledge_access": 3,
-	"frontmatter_docs": 3,
-	"job_dag_execution": 1,
-}
+from inject_anchor import BLOCK_VERSION, remove_block, splice_block  # noqa: E402
 
 
 def _read_seed(seed_path: str) -> str:
@@ -317,9 +311,10 @@ def deploy_plugins(plugins_src_dir: str, plugins_dest_dir: str, variables: dict,
 	"""Deploy opencode plugins with resolved placeholders. Returns count deployed.
 
 	The scribe plugin is the capture surface for every opencode turn, so a seed
-	that never reaches the host is a month of lost memory. This step existed only
-	in the (uncalled) adapter under scripts/inject/opencode/, which is why edits
-	to the seed silently stayed in the repo.
+	that never reaches the host is a month of lost memory. The registry adapter
+	(scripts/inject/opencode/inject.py — the path `inject_cli.py` runs on install
+	and on `red-pill bunker update`) deploys plugins too; this standalone script
+	must do the same, or a manual re-inject leaves seed edits stuck in the repo.
 	"""
 	deployed = 0
 	if not os.path.isdir(plugins_src_dir):

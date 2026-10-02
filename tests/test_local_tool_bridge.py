@@ -73,3 +73,14 @@ def test_health_check(monkeypatch):
 
 	monkeypatch.setattr(providers_mod.ProviderRegistry, "get_inference_provider", _raise)
 	assert LocalToolBridge().health_check() is False
+
+
+def test_prompt_sin_tool_call_exitosa_es_error(monkeypatch):
+	async def fake_run(task, **kwargs):
+		return {"ok": True, "answer": "inventado", "steps": 1, "used_tools": False, "tool_calls": 1, "messages": []}
+
+	monkeypatch.setattr(lm, "run_local_minion", fake_run)
+	res = LocalToolBridge().prompt("lee X")
+	assert res.ok is False
+	assert "ungrounded" in (res.error or "")
+	assert res.response == "inventado"

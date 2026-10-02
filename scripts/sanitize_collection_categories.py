@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import logging
+import os
 import re
 from collections import Counter
 
@@ -103,9 +104,6 @@ SOCIAL_MARKERS = [
 	"narrative",
 	"lore",
 	"family",
-	"carmen",
-	"mara",
-	"neus",
 	"david",
 	"vinculo",
 	"soberano",
@@ -121,6 +119,9 @@ SOCIAL_MARKERS = [
 	"recuerdo",
 	"persona",
 ]
+# Nombres propios de la vida del operador: nunca en el código (el repo es público).
+# Se añaden por entorno, separados por comas: SANITIZE_SOCIAL_NAME_MARKERS="nombre1,nombre2".
+SOCIAL_MARKERS += [m.strip().lower() for m in os.environ.get("SANITIZE_SOCIAL_NAME_MARKERS", "").split(",") if m.strip()]
 
 
 def is_garbage(content: str) -> bool:

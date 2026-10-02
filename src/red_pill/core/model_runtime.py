@@ -37,7 +37,6 @@ from red_pill.core.paths import (
 	get_model_validation_path,
 	get_task_profiles_path,
 )
-from red_pill.core.vram_probe import VramProbe
 
 logger = logging.getLogger(__name__)
 
@@ -288,74 +287,105 @@ _TOOLCALL_RE = {
 }
 
 
+def _coerce_arguments(args: Any) -> dict:
+	"""`arguments` de un tool-call → mapping.
+
+	Llega como objeto o como string JSON (convención OpenAI); los templates
+	nativos renderizan `arguments|items`, así que el resultado es SIEMPRE un
+	dict (string ilegible / no-objeto → {}).
+	"""
+	if isinstance(args, str):
+		try:
+			args = json.loads(args) if args.strip() else {}
+		except ValueError:
+			return {}
+	return args if isinstance(args, dict) else {}
+
+
+def _parse_qwen_block(inner: str) -> Optional[dict]:
+	"""Un bloque `<tool_call>…</tool_call>`: JSON o `<function=NAME><parameter=k>v…`."""
+	try:
+		obj = json.loads(inner)
+	except ValueError:
+		obj = None
+	if isinstance(obj, dict):
+		name = obj.get("function", obj.get("name", ""))
+		args = obj.get("arguments", obj.get("parameters", {}))
+		return {"function": {"name": name, "arguments": _coerce_arguments(args)}}
+	# Formato "<function=NAME><parameter=k>v</parameter></function>" (Granite 4.2)
+	fn = re.search(r"<function=([^>]+)>", inner)
+	if fn:
+		params = re.findall(r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL)
+		return {"function": {"name": fn.group(1).strip(), "arguments": {k.strip(): v.strip() for k, v in params}}}
+	return None
+
+
 def extract_toolcalls(text: str, tool_format: str = "qwen") -> List[dict]:
-	"""Extrae tool-calls del texto según el formato nativo del modelo.
+	"""Extrae TODOS los tool-calls del texto según el formato nativo del modelo.
 
 	- `qwen`: `<tool_call>{json}</tool_call>` (Granite 3.x/4.x, Qwen).
 	- `gemma`: `<|tool_call|>call:NAME{args}`.
 	- `openai`: intenta parsear como JSON tool_calls estructurados.
 	- `auto`: prueba en orden qwen → gemma → openai.
-	Vacío → [] (el caller decide si es tool-call real o prosa).
+	Devuelve las llamadas del primer formato que case, en orden de aparición;
+	un bloque ilegible se omite (el caller compara con los bloques abiertos).
+	`arguments` siempre es un mapping. Vacío → [] (tool-call real o prosa: lo
+	decide el caller).
 	"""
 	formats = TOOL_FORMATS if tool_format == "auto" else [tool_format]
 	for fmt in formats:
+		calls: List[dict] = []
 		if fmt == "qwen":
-			m = _TOOLCALL_RE["qwen"].search(text)
-			if m:
-				inner = m.group(1).strip()
-				try:
-					obj = json.loads(inner)
-					name = obj.get("function", obj.get("name", ""))
-					args = obj.get("arguments", obj.get("parameters", {}))
-					return [{"function": {"name": name, "arguments": args if isinstance(args, dict) else {}}}]
-				except Exception:
-					# Formato "<function=NAME><parameter=k>v</parameter></function>"
-					fn = re.search(r"<function=([^>]+)>", inner)
-					if fn:
-						params = re.findall(r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL)
-						args = {k.strip(): v.strip() for k, v in params}
-						return [{"function": {"name": fn.group(1).strip(), "arguments": args}}]
+			for m in _TOOLCALL_RE["qwen"].finditer(text):
+				call = _parse_qwen_block(m.group(1).strip())
+				if call:
+					calls.append(call)
 		elif fmt == "gemma":
-			m = _TOOLCALL_RE["gemma"].search(text)
-			if m:
+			for m in _TOOLCALL_RE["gemma"].finditer(text):
 				try:
 					args = json.loads("{" + m.group(2) + "}") if m.group(2).strip() else {}
-				except Exception:
+				except ValueError:
 					args = {}
-				return [{"function": {"name": m.group(1).strip(), "arguments": args}}]
+				calls.append({"function": {"name": m.group(1).strip(), "arguments": _coerce_arguments(args)}})
 		elif fmt == "openai":
 			try:
 				obj = json.loads(text)
-				if isinstance(obj, list):
-					obj = obj[0] if obj else None
-				if isinstance(obj, dict) and obj.get("type") == "function":
-					fn = obj.get("function", {})
-					args = fn.get("arguments")
-					if isinstance(args, str):
-						try:
-							args = json.loads(args)
-						except Exception:
-							args = {}
-					return [{"function": {"name": fn.get("name", ""), "arguments": args}}]
-			except Exception:
-				pass
+			except ValueError:
+				obj = None
+			for item in obj if isinstance(obj, list) else [obj]:
+				fn = item.get("function") if isinstance(item, dict) and item.get("type") == "function" else None
+				if isinstance(fn, dict):
+					calls.append({"function": {"name": fn.get("name", ""), "arguments": _coerce_arguments(fn.get("arguments"))}})
+		if calls:
+			return calls
 	return []
 
 
-_THINKING_SPLIT = re.compile(r"(?:\s+response\s*|\s*</think>\s*|\s* response\s*)(.*)", re.DOTALL)
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+_CLI_THINKING = re.compile(r"\[Start thinking\](.*?)(?:\[End thinking\]|$)", re.DOTALL)
 
 
 def extract_thinking(text: str) -> Tuple[str, str]:
 	"""Separa la traza de razonamiento de la respuesta final.
 
-	Granite 4.2 cierra el razonamiento con ` response` (3B) o ` response`
-	(8B) antes de la respuesta; algunos GGUF usan `</think>`. Tolerante a los
-	tres. Devuelve (thinking, answer); sin marcador → ("", text).
+	Granite 4.2 (template nativo del GGUF) razona entre `<think>` y `</think>`
+	—tokens que el detokenizador emite literales—; el prompt de generación ya
+	abre `<think>`, así que la salida suele traer solo el cierre. llama-cli usa
+	`[Start thinking]…[End thinking]`. Solo se parte por esos marcadores
+	explícitos, nunca por palabras de la prosa. Un `<think>` sin cerrar
+	(presupuesto agotado razonando) → todo es razonamiento y la respuesta queda
+	vacía. Devuelve (thinking, answer); sin marcador → ("", text).
 	"""
-	m = _THINKING_SPLIT.search(text)
-	if m and m.group(1).strip():
-		thinking = text[: m.start()].strip()
-		return thinking, m.group(1).strip()
+	if _THINK_CLOSE in text:
+		thinking, _, answer = text.rpartition(_THINK_CLOSE)
+		return thinking.replace(_THINK_OPEN, "").strip(), answer.strip()
+	stripped = text.lstrip()
+	if stripped.startswith(_THINK_OPEN):
+		return stripped[len(_THINK_OPEN):].strip(), ""
+	m = _CLI_THINKING.search(text)
+	if m:
+		return m.group(1).strip(), (text[: m.start()] + text[m.end():]).strip()
 	return "", text.strip()
 
 
@@ -702,66 +732,6 @@ def mark_load_verified(path: str) -> None:
 	entry["load_verified"] = True
 	reg[key] = entry
 	_write_validation_registry(reg)
-
-
-# ── Seed hardware-aware de task_profiles (RFC §10) ─────────────────────────
-
-
-def seed_task_profiles() -> dict:
-	"""Genera el seed de task_profiles.yaml según el hardware detectado.
-
-	NUNCA sobreescribe un fichero existente (el curado manual gana). Verifica
-	que cada perfil referenciado exista en model_profiles (ausente → omitido).
-	"""
-	path = get_task_profiles_path()
-	if path.exists():
-		return _task_profiles()
-
-	free_gb = VramProbe.get_free_mb() / 1024.0
-	all_profiles = set(ModelRegistry.get_all_profiles().keys())
-
-	def pick(candidates):
-		# [("id", default: bool)] → lista de perfiles existentes, primero el default.
-		existing = [c for c in candidates if c[0] in all_profiles]
-		by_default = sorted(existing, key=lambda c: 0 if c[1] else 1)
-		return [{"profile": c[0], "default": True} if c[1] else {"profile": c[0]} for c in by_default]
-
-	if free_gb >= 6.5:
-		distill = pick([("granite_8b", True), ("tiny_aya_water", False), ("granite_3b", False)])
-		refine = pick([("granite_8b", True), ("tiny_aya_water", False)])
-		conv = pick([("granite_8b", True)])
-		tool = pick([("granite_8b", True)])
-		hub = pick([("granite_8b", True)])
-	elif free_gb >= 3.5:
-		distill = pick([("granite_3b", True), ("llama_32", False)])
-		refine = pick([("granite_3b", True), ("llama_32", False)])
-		conv = pick([("granite_3b", True)])
-		tool = pick([("granite_3b", True)])
-		hub = pick([("granite_3b", True)])
-	else:
-		distill = pick([("llama_32", True), ("granite_3b", False)])
-		refine = pick([("llama_32", True), ("granite_3b", False)])
-		conv = pick([("llama_32", True)])
-		tool = pick([("llama_32", True)])
-		hub = pick([("llama_32", True)])
-
-	seed = {
-		"tasks": {
-			"distill": {"temperature": 0.3, "max_tokens": 512, "thinking": "off", "models": distill},
-			"refine": {"temperature": 0.1, "max_tokens": 1024, "thinking": "off", "models": refine},
-			"conversation": {"thinking": "low", "models": conv},
-			"minion_tool": {"thinking": "off", "models": tool},
-			"hub": {"temperature": 0.1, "thinking": "on", "models": hub},
-		}
-	}
-	try:
-		path.parent.mkdir(parents=True, exist_ok=True)
-		with open(path, "w", encoding="utf-8") as f:
-			yaml.safe_dump(seed, f, allow_unicode=True, sort_keys=False)
-		logger.info(f"[MODEL_RUNTIME] task_profiles.yaml sembrado (hardware-aware, {free_gb:.1f} GB libres)")
-	except OSError as e:
-		logger.error(f"[MODEL_RUNTIME] no se pudo escribir task_profiles.yaml: {e}")
-	return seed
 
 
 def task_conduct(task_id: str) -> dict:

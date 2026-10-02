@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Optional, cast
 
 import red_pill.config as cfg
+from red_pill.core.paths import _assert_not_production_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,9 @@ def default_socket_path() -> str:
 	if explicit:
 		return explicit
 	base = os.getenv("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-	return str(Path(base) / "red-pill" / "laya_tag.sock")
+	path = Path(base) / "red-pill" / "laya_tag.sock"
+	_assert_not_production_runtime(path, "realtime_tag.default_socket_path()")
+	return str(path)
 
 
 def enabled() -> bool:

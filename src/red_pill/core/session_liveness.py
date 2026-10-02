@@ -13,9 +13,18 @@ Interpretación con el par:
 - `.end` reciente → *alguien ha tocado*; `end - start` = duración del turno.
 - solo `.start` viejo → sesión muerta a medio turno (huérfana).
 
-Los hooks que escriben (Claude `UserPromptSubmit`/`Stop`, opencode) son
-standalone y replican la resolución de `${STATE_DIR}`; este módulo es para el
-kernel (índice, janitor, tools) y los tests.
+Los hooks que escriben son standalone y replican la resolución de
+`${STATE_DIR}`; este módulo es para el kernel (índice, janitor, tools) y los tests:
+
+- Claude Code: `UserPromptSubmit` → `.start`; `Stop`, `SessionEnd` y
+`StopFailure` (error de API: salta *en lugar de* `Stop`) → `.end`.
+- opencode: `chat.message` → `.start`; `session.idle` (v1) o
+`session.execution.succeeded|failed` (v2) → `.end`. Las sub-sesiones
+(`parentID`) no laten.
+
+Limitación conocida: en Claude Code una interrupción con Esc no dispara ningún
+hook (verificado en 2.1.217), así que ese `.start` queda "en vuelo" hasta el
+siguiente turno o hasta `SESSION_ACTIVE_MIN` (`is_active`), que es la cota.
 """
 
 from __future__ import annotations
@@ -34,10 +43,12 @@ PHASES: Tuple[str, ...] = (PHASE_START, PHASE_END)
 _DELIM = "__"
 
 
-def get_sessions_live_dir() -> Path:
-	"""`${STATE_DIR}/sessions/live` (se crea si no existe)."""
+def get_sessions_live_dir(create: bool = True) -> Path:
+	"""`${STATE_DIR}/sessions/live`. Solo los escritores (`create=True`) lo crean;
+	lectores y limpiadores pasan `create=False` y toleran que no exista (AD-043)."""
 	path = get_state_dir() / LIVE_SUBDIR
-	path.mkdir(parents=True, exist_ok=True)
+	if create:
+		path.mkdir(parents=True, exist_ok=True)
 	return path
 
 
@@ -101,11 +112,17 @@ class SessionSignal:
 def list_sessions() -> List[SessionSignal]:
 	"""Lee el directorio de latidos y agrupa por `(provider, session_id)`.
 
-	Ordenado por última actividad descendente (más reciente primero).
+	Ordenado por última actividad descendente (más reciente primero). Lector
+	puro: si el directorio no existe (aún no ha latido nadie) devuelve [] sin
+	crearlo.
 	"""
-	live = get_sessions_live_dir()
+	live = get_sessions_live_dir(create=False)
+	try:
+		items = list(live.iterdir())
+	except (FileNotFoundError, NotADirectoryError):
+		return []
 	acc: dict = {}
-	for item in live.iterdir():
+	for item in items:
 		if not item.is_file():
 			continue
 		parsed = parse_filename(item.name)

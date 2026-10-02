@@ -448,8 +448,12 @@ def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 	mock_qm.return_value.kill_task.return_value = True
 	with patch("sys.argv", ["red-pill", "job", "resume", "abc"]):
 		main()
-	with patch("sys.argv", ["red-pill", "job", "kill", "abc"]):
+	# El kill abate el scope con systemctl: mockeado (nunca contra el systemd real)
+	with patch("sys.argv", ["red-pill", "job", "kill", "abc"]), patch("subprocess.run") as run:
+		run.return_value.returncode = 5  # unit no cargada
 		main()
+	run.assert_called_once()
+	assert run.call_args.args[0] == ["systemctl", "--user", "stop", "redpill-job-abc-123.scope"]
 	with patch("sys.argv", ["red-pill", "job", "purge", "--yes"]):
 		main()
 

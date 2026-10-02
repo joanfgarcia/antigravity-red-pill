@@ -20,7 +20,6 @@ priority: 1
 title: Memento re-destilado + re-refinado completo (granite)
 mission_id: memento-redistill-full
 step_command: uv run python scripts/memento_agentic.py --force --redistill-round 2026-09-15T15:13:00Z --limit 1
-cwd: /home/joan/Documents/IA/sharing
 checkpoint_file: state/memento_redistill_full_progress.json
 defer_exit_code: 77
 # RFC-HARNESS-002 §7: demanda de inferencia del job → env RP_LLM_* → el pase

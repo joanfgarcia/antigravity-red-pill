@@ -494,3 +494,28 @@ def test_unit_no_declara_runtimedirectory():
 	assert "Restart=always" in unit
 	assert "laya_tag_server.py" in unit
 	assert "StartLimitIntervalSec=300" in unit  # converge a failed, no bucle infinito
+
+
+def test_unit_es_plantilla_portable_y_el_instalador_la_reescribe(tmp_path):
+	"""Sin rutas de un usuario concreto: la plantilla usa %h y el instalador fija las rutas reales."""
+	root = Path(__file__).resolve().parents[1]
+	unit = (root / "systemd" / "redpill-laya-tag.service").read_text(encoding="utf-8")
+	assert "/home/" not in unit
+	assert "%h/" in unit
+
+	venv = tmp_path / "laya-venv"
+	(venv / "bin").mkdir(parents=True)
+	stub_bin = tmp_path / "stub-bin"
+	stub_bin.mkdir()
+	for exe in (venv / "bin" / "python", stub_bin / "systemctl"):
+		exe.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+		exe.chmod(0o755)
+	home = tmp_path / "home"
+	env = {**os.environ, "HOME": str(home), "LAYA_VENV": str(venv), "PATH": f"{stub_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
+	subprocess.run(["bash", str(root / "scripts" / "install_laya_tag_service.sh")], env=env, check=True, capture_output=True, text=True, timeout=30)
+
+	installed = (home / ".config" / "systemd" / "user" / "redpill-laya-tag.service").read_text(encoding="utf-8")
+	assert "%h/" not in installed
+	assert f"WorkingDirectory={root}\n" in installed
+	assert f"ExecStart={venv}/bin/python {root}/scripts/laya_tag_server.py\n" in installed
+	assert f"Environment=PYTHONPATH={root}/src\n" in installed

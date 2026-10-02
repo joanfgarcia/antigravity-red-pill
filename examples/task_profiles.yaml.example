@@ -51,9 +51,19 @@ tasks:
     models:
     - profile: granite_8b
   minion_tool:
+    # Bucle de tools de `local_minion` (backend local-tools). Su conducta
+    # (temperature, max_tokens) la aplica el cliente: candidato > task > perfil.
+    # 2048 = max_new_tokens de IBM para el 4.2 sin thinking (AD-033) y acota
+    # cada turno del bucle.
     thinking: 'off'
+    max_tokens: 2048
     models:
     - profile: granite_8b
+      default: true
+    # Granite 4.2: tool-call nativo como texto (AD-041); temperatura 1.0 desde
+    # su perfil (receta IBM). Candidatos para poder pedirlos con `model` (K1).
+    - profile: granite_4_2_8b
+    - profile: granite_4_2_3b
   hub:
     temperature: 0.1
     models:

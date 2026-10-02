@@ -4,6 +4,12 @@ from unittest.mock import MagicMock, patch
 from red_pill.metabolism.sleep import chunk_text, distill_engram, perform_sleep_cycle, synthesize_hub
 
 
+def _synthesis_services_down():
+	"""Las fases de síntesis (OperatorProfile/RecentActivity) hablan HTTP con Qdrant y
+	el LLM local: en test, ambos caídos (nunca el Bünker ni el daemon reales)."""
+	return patch("red_pill.metabolism.phases.synthesis_common.urllib.request.urlopen", side_effect=OSError("offline (test)"))
+
+
 def test_chunk_text():
 	text = "This is a long text. It has multiple sentences. We want to test chunking."
 	chunks = chunk_text(text, size=20)
@@ -56,7 +62,8 @@ def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = True
 	mock_mem_mgr.client.scroll.return_value = ([], None)
-	assert perform_sleep_cycle(mock_mem_mgr) == 0
+	with _synthesis_services_down():
+		assert perform_sleep_cycle(mock_mem_mgr) == 0
 
 
 def test_detect_category_heuristics_non_string():
@@ -131,7 +138,7 @@ def test_audit_engram_quality():
 
 		# Scenario 2: LLM deems memory clean 1st-person -> needs_redistillation = False
 		mock_provider.generate.return_value = '{"needs_redistillation": false, "reason": "Clean 1st-person voice"}'
-		assert audit_engram_quality("Me dijiste que en Barcelona estabas de visita...") is False
+		assert audit_engram_quality("Me dijiste que en Zaragoza estabas de visita...") is False
 
 
 def test_multi_hub_batching_partitioning():

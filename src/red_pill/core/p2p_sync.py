@@ -105,21 +105,62 @@ def add_peer_alias(alias: str, node_id: str) -> None:
 		json.dump(peers, f, indent=4)
 
 
-def get_local_public_key() -> str:
-	from red_pill.core.paths import get_neon_link_config_dir, get_neon_link_data_dir
+_NEON_LINK_SEED_NAME = "neon_link.seed"
 
+
+def _neon_link_setting(key: str) -> Optional[str]:
+	"""`key` tal como la ve el daemon de neon-link: el entorno del proceso y, si
+	no está, su `${XDG_CONFIG_HOME}/neon-link/.env` (que el daemon carga con
+	`load_dotenv`, sin pisar el entorno). None si no está o no se puede leer."""
+	value = os.environ.get(key)
+	if value:
+		return value
+	try:
+		from dotenv import dotenv_values
+
+		from red_pill.core.paths import get_neon_link_config_dir
+
+		env_file = get_neon_link_config_dir() / ".env"
+		if env_file.is_file():
+			return dotenv_values(env_file).get(key) or None
+	except Exception as e:
+		logger.debug(f"[P2P] neon-link .env unreadable for {key}: {e}")
+	return None
+
+
+def neon_link_seed_candidates() -> List[Path]:
+	"""Seeds de identidad de neon-link, en el orden de su `IdentityManager` (≥ 0.5.1).
+
+	1. `NEON_LINK_SEED_PATHS` (separadas por comas): las identidades inyectadas.
+	2. La bóveda: `NEON_LINK_VAULT_DIR` o `platformdirs.user_data_dir("neon-link")/keys`,
+	con su `neon_link.seed` autónomo (el fallback si ninguna de 1 carga).
+
+	Sin ubicaciones legacy (`~/.config/neon-link/`, `<repo>/storage/`): neon-link ya
+	no las lee, y una seed vieja allí hacía que red-pill anunciara una identidad
+	que el daemon no usa.
+	"""
+	from red_pill.core.paths import get_neon_link_data_dir
+
+	out: List[Path] = []
+	seeds = _neon_link_setting("NEON_LINK_SEED_PATHS")
+	if seeds:
+		out.extend(Path(os.path.expanduser(p.strip())) for p in seeds.split(",") if p.strip())
+	vault = _neon_link_setting("NEON_LINK_VAULT_DIR")
+	vault_dir = Path(os.path.expanduser(vault)) if vault else get_neon_link_data_dir() / "keys"
+	out.append(vault_dir / _NEON_LINK_SEED_NAME)
+	return out
+
+
+def get_local_public_key() -> str:
+	"""Clave pública (hex) de la identidad viva de neon-link: la primera seed que
+	carga en el orden de `neon_link_seed_candidates` (la que usa el daemon)."""
 	try:
 		from pure_mls.keys import SignatureKey
 	except ImportError:
 		return "UNKNOWN (pure-mls not available)"
 
-	paths_to_try = [
-		get_neon_link_config_dir() / "neon_link.seed",
-		get_neon_link_data_dir() / "neon_link.seed",
-		Path.home() / "Documents/IA/neon-link/storage/neon_link.seed",
-	]
-	for p in paths_to_try:
-		if p.exists():
+	for p in neon_link_seed_candidates():
+		if p.is_file():
 			try:
 				with open(p, "rb") as f:
 					seed = f.read(32)

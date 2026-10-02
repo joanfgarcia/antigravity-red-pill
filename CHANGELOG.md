@@ -1,5 +1,71 @@
 ## Unreleased
 
+### 🩺 Remediación de la auditoría del lote DeepSeek (2026-10-02)
+
+Revisión a fondo de lo entrado en #103 y en la rama P1b. El refactor conservaba
+el comportamiento; lo que se escapó a los paneles vivía en las fronteras
+(entorno de systemd, datos reales, orden de tests, venv compartido en worktrees).
+Varias entradas de más abajo quedan **matizadas** por esta sección.
+
+**Privacidad y datos**
+- **[FIX] El arnés de autonomía ya no persiste memoria viva:** `autonomy_ladder.py` redacta
+  los resultados de tools del kernel (`*_api`) y la respuesta de las sondas live (P4), y
+  escribe por defecto en `scratch/benchmarks/` (git-ignored; `--out-dir` para publicar). Los
+  `AUTONOMY_*.jsonl` ya commiteados, redactados. P4 exige ≥1 resultado del Bünker sin error:
+  el 4.2 pasa de `6/7` a `5/7` (DECISION_LOG AD-041).
+- **[FIX] La suite de tests es hermética** (completado en la segunda revisión, abajo): `conftest`
+  redirige `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `AGENT_CORE_DIR` e `IA_DIR`, y la
+  guardia cubre config, state, runtime y desk. `test_bunker_restore_stub` restauraba un kit sobre los
+  `.env` reales y `test_bunker_export_stub` dejaba un kit por ejecución en `backups/export/`.
+
+**Minion `local-tools` y Granite 4.2** (AD-042)
+- **[FIX] `extract_thinking`** partía la prosa por la palabra «response» (`"No responses found"` →
+  `"s found"`): solo corta por `</think>`/`<think>`/`[Start thinking]` (marcadores verificados en el GGUF).
+- **[FIX]** Un `<tool_call>` dentro del razonamiento ya no se ejecuta; uno truncado o malformado
+  vuelve al modelo como error en vez de salir como respuesta; se ejecutan todas las llamadas del
+  turno con tope real de 8; `used_tools` solo cuenta resultados válidos.
+- **[SEC]** Los resultados de tools vuelven como **dato**: rol `tool` con el template nativo de
+  4.2; con `chatml-function-calling`, bloque cercado (nonce) marcado como no fiable.
+- **[FIX]** El minion toma `temperature`/`max_tokens`/`tool_format` de task/perfil (antes fijo
+  0.3/1024); un rechazo del daemon (K1) llega como `SipInferenceError` legible, no `KeyError`.
+  El daemon ya no rompe con perfiles sin `chat_format` ni thinking (usa el template del GGUF).
+- **[DOCS]** Seeds: `minion_tool` admite `granite_4_2_8b`/`3b` (`max_tokens: 2048`);
+  `granite_4_2_8b` a temperatura 1.0 (receta IBM, AD-033); comentarios del catálogo veraces.
+
+**Worker y despertar** (AD-044 — el «ARCH-001» de #103; el ID ya era de los backups topológicos)
+- **[FIX]** El housekeeping genérico (janitor de sesiones Telegram, señal a Samantha) vuelve al
+  core; la estrategia de Antigravity solo se carga si un puente la necesita. Descubrimiento de
+  estrategias una vez por proceso e importando solo paquetes con `pulse.py` (+907 → +7 módulos
+  por oneshot); un `pulse.py` roto da error + señal `pulse_strategy_fallback_<plugin>`.
+- **[FIX]** Fallback de puentes agnóstico (`IDE_BACKEND` puente a puente, respeta D5, sin gRPC por
+  defecto); la cascada degradada emite `worker_bridge_cascade_degraded`.
+- **[FIX] AWAKEN-002:** silencio = respuesta < 200 caracteres que **empieza** por la frase canónica
+  (antes: subcadena en cualquier punto); migración de `counted` sin carrera; tope comprobado y
+  anotado bajo `BEGIN IMMEDIATE`; un despertar fallido sigue D24 y acaba en `dead_letters`
+  (antes reintentaba sin límite y quemaba el tope).
+- **[FIX]** Prompts de despertar y Telegram sin nombres de cliente: `sovereign_handshake`, shell no
+  interactivo acotado al worktree/desk (la WORKTREE RULE contradecía «no uses run_command») y
+  tests desde la raíz del worktree.
+- **[FIX] pytest importa el `src` del checkout** (`pythonpath`): en un worktree, el venv compartido
+  hacía que los tests validaran main.
+
+**Janitor, tablón y latido** (AD-043)
+- **[FIX] `awakening_logs` limpiaba un desk fantasma:** el servicio no exporta `AGENT_CORE_DIR` y se
+  creaba `~/Documents/IA/Agent_Core/`. El desk se resuelve por `workspaces.yaml:agent_core`, los
+  limpiadores no crean directorios y un `*.log` fuera del esquema no se toca.
+- **[FIX] `events_db_purge`** buscaba un `DEAD` que neon-link no escribe: ahora purga el outbox
+  `FAILED` y `dead_letters` a 30 d (`dead_letters_days_to_keep`) y usa `get_neon_link_db_path()`.
+- **[FIX]** `janitor.yaml` con tipos inválidos se ignora con warning en vez de tumbar el barrido.
+- **[FIX]** Tablón: las sub-sesiones de opencode (`parent_id`) no cuentan como vivas; `session_board`
+  separa vivas de recientes y pinta `provider/model`; `write_index` atómico.
+- **[FIX]** Latido: independiente de `REDPILL_SCRIBE_DISABLE` (los runs de Telegram ya laten);
+  `StopFailure` y `SessionEnd` cierran el turno en Claude Code; los hooks nunca salen con error.
+- **[FIX]** `sw_observability`: una colección vacía no da 0 % ni dolor falso; numerador y
+  denominador con el mismo predicado de contenido que la síntesis de hubs.
+- **[FIX]** `inject_settings` reemplaza los bloques de hook de red-pill (`redpill_*.py`) cuando
+  cambian, en vez de duplicarlos. Ancla `knowledge_access` → v4 sin punteros a un RFC que la
+  semilla del desk no trae.
+
 ### 📦 Modelos y arnés — Granite 4.2 en los seeds + regla «desk-first» (DOCS)
 
 - **[DOCS] Granite 4.2 en los seeds de modelos:** `examples/model_profiles.yaml.example`
@@ -12,6 +78,81 @@
   viven en el árbol `planner/` del desk (una fase = una carpeta; los RFC en `design/<familia>/`),
   se consulta **primero** antes de buscar en el repo, y el proyecto **nunca** aloja ni referencia
   el RFC del desk — solo su esencia implementada (`AD-NNN`, docs del repo).
+
+### 🔁 Segunda revisión de la remediación — colaterales (2026-10-02)
+
+Cinco revisores sobre la rama ya remediada (consumidores entre repos, ruta de actualización,
+datos reales en solo lectura, privacidad del repo público, neon-link). Lo encontrado y corregido:
+
+**Producción tocada desde los tests y el auditor** (AD-045)
+- **[FIX] `redpill-auditor` corría cada hora la suite completa del checkout vivo** en una unit
+  con 120 s de tope: nunca terminaba («falla por timeout» desde el 21-sep) y, a media pasada,
+  reescribía los `.env`, dejaba un kit en `backups/export` (de ahí los ~1170), vaciaba
+  `gpu_reservations.json`, descargaba el modelo (`/v1/unload`) y pedía inferencia `hub` con memorias
+  reales — con la GPU ocupada eso tiró a CPU y acabó en un OOM. La suite pasa a ser opt-in
+  (`AUDITOR_RUN_TESTS`, default `false`; solo unitarios) y cada paso (ruff, mypy, tests) se repite
+  **solo si el código cambió** desde que ese paso terminó (huella de git; la caché por mtime nunca
+  llegaba a guardarse porque la unit mataba la pasada).
+- **[FIX] Guarda de red y de host en la suite:** conexiones a Qdrant, al LLM local y a neon-link
+  (6333/6334/8760/8761/8770/8771), a sockets UNIX fuera del sandbox o a hosts remotos hacen fallar
+  el test aunque el código se trague el error (opt-out `@pytest.mark.allow_local_services`);
+  `systemctl`/`journalctl`/`podman`/`docker`/`systemd-run` emulados (lectura → `inactive`
+  determinista; verbos que mutan → fallo); `XDG_RUNTIME_DIR` redirigido; sandbox temporal por
+  sesión que se borra al acabar (cada pasada dejaba ~2.5k `bunker_test_*` en `/tmp`, tmpfs);
+  HF/CUDA offline.
+- **[FIX]** Las fases de síntesis del sueño y `BitTrainingDriver` resuelven Qdrant, clave, LLM y
+  unload desde config (llevaban `localhost:6333`/`127.0.0.1:8760` a fuego y cargaban el `.env` del home).
+
+**Despertar y minion**
+- **[FIX] Regresión del Derecho al Silencio introducida por la primera remediación:** la regla
+  «empieza por la frase y < 200 caracteres» perdía 21 de 61 silencios reales (el bridge pega la
+  narración intermedia delante de la frase). Ahora: termina con la frase, o empieza por ella y
+  mide < 400. Validado contra los 163 despertares reales: 61/61, 0 discrepancias.
+- **[FIX]** `max_tokens` del minion sale de candidato > task > 1024, nunca del `max_tokens` del
+  perfil (es un knob de contexto: llegaba a 4096/8192 por turno). `temperature: 0` ya se respeta.
+- **[SEC]** Minion local: allowlist de acciones de solo lectura por API MCP (fuera
+  `run_agent_task`/`control_bunker`) y jaula de `run_bash` por defecto en producción (directorio de
+  trabajo propio; rutas absolutas fuera, `..`, `~`/`$HOME` bloqueados). El arnés de autonomía
+  reutiliza esa política y ya no filtra el resumen del asistente de las sondas vivas.
+
+**Tablón, Janitor, instalación**
+- **[NEW] `workspaces.yaml: worktrees:`** por workspace: atribuye al proyecto las sesiones en
+  worktrees ya borrados (la detección por `.git` vivo queda de respaldo). `serialize_registry` ya
+  no pierde `track`.
+- **[FIX]** Proyecto de sesión = el más frecuente en las últimas 200 rutas (un `ls` suelto ya no lo
+  cambia); rutas embebidas en bash solo tras separador; un cliente Qdrant por proceso;
+  `list_sessions` no crea directorios al leer.
+- **[FIX]** `awakening_logs` prepara la baja en el git del desk (`git rm --cached`) y compara fechas.
+- **[FIX]** Cobertura de hubs sobre lo que la síntesis puede agrupar (contenido con `session_id`):
+  el legacy sin sesión hundía el denominador.
+- **[FIX]** `events_db_purge` no deja huérfana una dead letter viva (borra las cartas por su reloj y
+  la fila `FAILED` solo cuando ya no la referencia ninguna).
+- **[FIX]** `red-pill p2p advertise` anuncia la identidad viva de neon-link (bóveda XDG), no la
+  seed pre-XDG.
+- **[FIX]** `bunker install|update`, `install_neo.sh` y `upgrade.sh` siembran `task_profiles.yaml` y
+  `model_catalog.yaml` si faltan (una instalación nueva daba 400 en toda task); fuera el
+  `seed_task_profiles()` muerto.
+- **[FIX]** Cambiar el desk en `config_tui` actualiza también `workspaces.yaml:agent_core`.
+- **[FIX]** Versiones de bloque de opencode desde `inject_anchor.BLOCK_VERSION` (el adapter que usa
+  `bunker update` dejaba `knowledge_access v=2`); el ancla de Pi recupera el §4 Desk-First.
+
+**Privacidad del repo público**
+- **[PRIVACY]** Fixtures, tests, prompts distribuidos y docs sin datos personales del operador
+  (familiares, lugares, empresa, asuntos laborales): casos sintéticos que miden lo mismo.
+  Plantillas `systemd/` con `%h` y recetas de `configs/jobs/` portables (sin rutas de usuario).
+  La historia de git no se ha reescrito.
+
+### 🧭 Tablón de sesiones — proyecto por rutas tocadas + tema rodante (RFC-DESPERTAR-001, P1b)
+
+- **[NEW] Proyecto inferido por las rutas que la sesión toca**, no por su cwd
+  (`workspaces.owning_workspace`/`infer_workspaces`): `project` es el workspace de la ruta más
+  reciente y `projects` los demás, de más a menos reciente (últimas 200 rutas). Un `git worktree`
+  enlazado se atribuye a su repo principal. Rutas de opencode.db: keys estructuradas de los tools
+  + rutas de los comandos bash (`~/`, comillas, operadores pegados); las relativas, contra el
+  directorio de la sesión.
+- **[NEW] Tema rodante (Laya):** el `tag_theme` del turno etiquetado más reciente de la sesión
+  (paginando `interaction_memories`), solo si el etiquetado está activo. `session_board` muestra
+  `proyecto=… (+otros)` y `tema=…`.
 
 ### 🛰️ Tablón de sesiones — índice + handshake-mini + MCP `session_board` (RFC-DESPERTAR-001, P1a)
 
@@ -267,7 +408,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   contrario. `prompt_version` de refine: `85209a6c9e`.
 - **[FIX] Auditor de recalibración**: `audit-category` juzga solo work/social (el
   label `personal-history` contaba desacuerdos fantasma) y `audit-significance`
-  deja de equiparar "no operativo" con trivial (marcaba infancia/Carmen/salud como
+  deja de equiparar "no operativo" con trivial (marcaba recuerdos personales como
   trivial: 30% → **5%** en la banda 0.55-0.65, misma muestra).
 - **[REF] `memento/agentic/` (paquete)**: el monolito `agentic.py` (1.033 líneas) se
   parte en `prompts` / `runtime` / `fragments` / `distill` / `refine` / `runner` +
@@ -546,7 +687,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   solo lo piden oracle y el CLI, nunca los interceptores del handshake. Flags
   `MEMORY_HYBRID_RECALL_ENABLED`, `MEMORY_RECALL_MMR_ENABLED`,
   `MEMORY_RECALL_MMR_LAMBDA=0.85`. **Banco de 13 consultas: 9/13 → 12/13 hit@3**
-  (recupera Hotetec, DL-007 y la graduación de Bit, antes fuera del top-5).
+  (recupera la revisión contractual, DL-007 y la graduación de Bit, antes fuera del top-5).
 - **[FIX] `search_memento` caía siempre al escaneo python**: `rg` evalúa `-g`
   relativo al directorio de trabajo, no a la ruta buscada → desde otro cwd no
   casaba nada y el fallback daba 1 hit por fichero. Ahora `cwd=root` (0,03 s).
@@ -575,9 +716,9 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   SOCIAL salvo jurista). Fingerprint v2.1 `4ddeefe66a` (incluye scorer y alcance).
   Piloto (3 sesiones, árbol persistente): inglés 0%, "Joan me" 58/44% → 2/0%,
   entidad 32→27% y 18→36%, +29/+52% de notas; **pero** el sujeto sigue sin ser
-  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota del
-  anexo sigue enrutándose a work. El piloto v2 (sin .1) había dado inglés en 3ª
-  persona y 0 notas en Hotetec.
+  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota de
+  la revisión contractual sigue enrutándose a work. El piloto v2 (sin .1) había
+  dado inglés en 3ª persona y 0 notas sobre la empresa.
 - **[NEW] Vista del fragmento de annotate** (`MEMENTO_ANNOTATE_FRAGMENT_VIEW`:
   `raw` por defecto | `actors` | `pairs`; nombres en `MEMENTO_OPERATOR_LABEL` /
   `MEMENTO_AGENT_LABEL`): `actors` pone el actor en cada turno; `pairs` deja solo
@@ -1990,7 +2131,7 @@ Elimina las comprobaciones de red a Hugging Face en embeddings, externaliza los 
 - **[FEAT] CLI del Laboratorio**: Añadidos subcomandos `chunk` (evaluación visual del fraccionamiento) y `telegram` (pruebas sobre archivos JSON de Telegram), más flags de override (`--config-yaml`, `--prompt-file`, `--temp`, `--model`).
 
 ### 📊 Telemetría de Fases de Sueño
-- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `/home/joan/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
+- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `~/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
 
 ### ✅ Tests
 - `tests/test_chunker.py`: Cobertura de la segmentación por diálogo y absorción de fragmentos pequeños.
@@ -2068,8 +2209,8 @@ Antigravity (Gemini), Claude Code, Claude Desktop, **OpenCode** (new), Cline, Ro
 ## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
 
 ### 🩺 Somatic Pain & Vitals Optimization
-- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) and [vitals.py](file:///home/joan/Documents/IA/sharing/src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
-- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](file:///home/joan/Documents/IA/sharing/src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
+- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](src/red_pill/config.py) and [vitals.py](src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
+- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
 
 ## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
 
@@ -2201,7 +2342,7 @@ read side, and adds the first utility metric.
 - **[FIX] Seed Path Correction (`model_profiles.yaml.example`)**: Updated seed file comment to reference `~/.config/red-pill/model_profiles.yaml` (XDG) instead of deprecated `~/.agent/model_profiles.yaml`.
 
 ### 🩹 Fable-5 Fixes — knowledge_access Anchor & Neon-Link Gate
-- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/joan/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
+- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/<user>/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
 - **[FIX] Neon-Link False Positive Gate (`config.py`, `check_neon_link.py`, `swarm_monitor.py`, `rituals.py`)**: Gated Neon-Link HTTP probes behind `NEON_LINK_HTTP_API` flag (default `False`). neon-link ≤0.5.1 ships FastAPI routes but never binds uvicorn, causing permanent `neon_hung` severity-10 false positives and heal restarts of healthy Telegram bridges.
 - **[TEST] Neon-Link Gate Regression Suite (`test_check_neon_link_gate.py`)**: 4 tests covering disabled/enabled probe behavior, error reporting, and config default validation.
 
@@ -2296,7 +2437,7 @@ read side, and adds the first utility metric.
 - **[FIX] 3-State Liveness Model (`drive_evaluator.py`, `samantha_on_demand.py`)**: Resolved false `local_llm_offline` warnings and VRAM/RAM memory spikes by introducing a 3-state liveness probe (`ready` | `busy` | `down`). Probes distinguish a dead hypervisor (`down` / `ECONNREFUSED` -> triggers pain alerts) from a saturated one (`busy` / timeout -> suppresses pain and returns `True` to reuse the active hypervisor, preventing the spawning of duplicate ~8 GiB ephemeral model servers).
 
 ### 🧬 TUI Dashboard & Configuration Manager (B.2)
-- **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `/home/joan/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
+- **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `~/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
 - **[FEAT] CLI Integration (`cli.py`)**: Added the `config` group and `tui` subcommand (`red-pill config tui`) with interactive TTY verification.
 - **[TEST] TUI Test Coverage (`tests/test_config_tui.py`)**: Implemented tests for atomic save, comment preservation, telemetry scraping, validation error raising, and HSplit layout constructors.
 
@@ -2410,18 +2551,18 @@ read side, and adds the first utility metric.
 
 ### 🎭 Identity Depth System & AWAKENING Hardening
 - **[FEAT] Three-Tier Identity Loading (`full`/`medium`/`low`)**: Parameterized the `interceptor_rp` → `refresh_session_context` → `wake_up_v6.py` pipeline with a `--mode` flag. `full` (~10K chars) loads everything for IDE sessions; `medium` (~6K) loads persona, bonds, and active skin for Telegram; `low` (~2K) loads only operational core rules for AWAKENINGs. Reduces token overhead by up to 90% in headless contexts.
-- **[FEAT] Configurable Identity Depth per Channel**: Added `IDENTITY_DEPTH_IDE`, `IDENTITY_DEPTH_NEON_LINK`, and `IDENTITY_DEPTH_HEADLESS` to [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) with Pydantic validation. Each accepts `full`/`medium`/`low` and can be overridden via `.env` — acts as a token budget emergency lever.
-- **[FEAT] AWAKENING Isolation (System Channel)**: AWAKENINGs now route through `channel='system'` in [autonomous_cron.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/autonomous_cron.py), preventing contamination of Telegram session history. New `_process_awakening()` in [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) runs each AWAKENING in a fresh `agy` conversation with no accumulated history.
+- **[FEAT] Configurable Identity Depth per Channel**: Added `IDENTITY_DEPTH_IDE`, `IDENTITY_DEPTH_NEON_LINK`, and `IDENTITY_DEPTH_HEADLESS` to [config.py](src/red_pill/config.py) with Pydantic validation. Each accepts `full`/`medium`/`low` and can be overridden via `.env` — acts as a token budget emergency lever.
+- **[FEAT] AWAKENING Isolation (System Channel)**: AWAKENINGs now route through `channel='system'` in [autonomous_cron.py](src/red_pill/swarm/autonomous_cron.py), preventing contamination of Telegram session history. New `_process_awakening()` in [worker.py](src/red_pill/plugins/antigravity_ide/worker.py) runs each AWAKENING in a fresh `agy` conversation with no accumulated history.
 - **[FEAT] Budget Guard (Execution Ledger)**: Created `execution_ledger` table in SQLite tracking all autonomous executions with status, duration, and response length. Daily cap of 8 AWAKENINGs (`MAX_AWAKENINGS_PER_DAY`), 600s hard timeout, and 40 tool-call prompt limit prevent quota exhaustion.
 - **[FEAT] Prompt Restructure (`<current_message>` Separation)**: Restructured the Telegram bridge prompt to clearly separate `<conversation_history>` from `<current_message>`, preventing the agent from misinterpreting old AWAKENING directives as new instructions.
-- **[FIX] Session Hygiene**: Added deduplication of consecutive identical USER messages, filtering of empty ASSISTANT responses, and size-based compaction threshold (4000 chars) in [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py).
+- **[FIX] Session Hygiene**: Added deduplication of consecutive identical USER messages, filtering of empty ASSISTANT responses, and size-based compaction threshold (4000 chars) in [telegram_session.py](src/red_pill/plugins/antigravity_ide/telegram_session.py).
 - **[FEAT] Identity via MCP Pipeline**: Removed hardcoded `IDENTITY ANCHOR` from worker prompts. Identity now flows exclusively through the `interceptor_rp` MCP tool with `mode` parameter — the Bünker (Qdrant) is the single source of truth.
-- **[DOCS] Architecture Update**: Documented Identity Depth, AWAKENING Isolation, and Budget Guard in [ARCHITECTURE.md](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md) (sections 11-13).
+- **[DOCS] Architecture Update**: Documented Identity Depth, AWAKENING Isolation, and Budget Guard in [ARCHITECTURE.md](src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md) (sections 11-13).
 
 ### 😴 Sleep Consolidation (Phase Delta) & Test Isolation
-- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
+- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
 - **[FEAT] Category Heuristics in Sleep Cycles**: Refactored category detection in `perform_sleep_cycle` using `detect_category_heuristics` to prevent categorizing all raw engrams as "social" by default.
-- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](file:///home/joan/Documents/IA/sharing/tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
+- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
 
 ### 🛡️ Syntax Guard — Real-Time Syntax Integrity Shield
 - **[INCIDENT] Agent-Induced Syntax Corruption (2026-05-26)**: During a high-volume refactoring session (session `ab66007b`), the agent corrupted indentation in 6 critical Python files via `replace_file_content` tool calls that stripped leading tabs. This caused a cascading failure across all `systemd --user` services for ~10 hours (7 wake cycles lost). Root cause: the LLM model generated `ReplacementContent` without preserving tab indentation on deeply nested lines.
@@ -2437,11 +2578,11 @@ read side, and adds the first utility metric.
 
 
 ### 🧠 Sovereign Drive desatendido y Sesiones de Telegram desacopladas
-- **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
-- **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.
+- **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
+- **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.
 - **[FEAT] Compactación e Ingesta**: Diseñado el mecanismo de compactación local en `TelegramSessionManager` para rotar conversaciones al superar los 16 pasos: genera un resumen del contexto y crea una nueva sesión activa, moviendo el historial viejo a la cola de ingesta de `sleep.py` (`$XDG_CACHE_HOME/red-pill/staging/`).
 - **[FEAT] Barrido del Janitor verificado por Qdrant**: Implementado el método `run_janitor_sweep()` en `TelegramSessionManager` para verificar mediante `scroll()` en Qdrant (filtro en `metadata.source_buffer_id`) que una sesión marcada como `pending_purge` ha sido completamente ingerida antes de eliminar físicamente su JSON del disco.
-- **[FEAT] Entropía dinámica y Boost de Silencio**: Refactorizado `evaluate_pulse()` en [drive_evaluator.py](file:///home/joan/Documents/IA/sharing/src/red_pill/cognitive/drive_evaluator.py) para computar la entropía del sistema en tiempo real a partir del backlog de `TODO.md`, modificaciones locales en git, tiempo offline del usuario y un acumulador de silencio (`silence_boost`). El umbral de curiosidad de los perfiles (`balanced`, `visionary`, `sentinel`) se reduce de forma dinámica basándose en la entropía del entorno.
+- **[FEAT] Entropía dinámica y Boost de Silencio**: Refactorizado `evaluate_pulse()` en [drive_evaluator.py](src/red_pill/cognitive/drive_evaluator.py) para computar la entropía del sistema en tiempo real a partir del backlog de `TODO.md`, modificaciones locales en git, tiempo offline del usuario y un acumulador de silencio (`silence_boost`). El umbral de curiosidad de los perfiles (`balanced`, `visionary`, `sentinel`) se reduce de forma dinámica basándose en la entropía del entorno.
 - **[TEST] Pruebas de integración de Telegram y Curiosidad**: Creado `tests/test_telegram_session.py` para verificar de forma aislada el ciclo de vida de las sesiones y la ejecución de comandos del worker. Corregidas las pruebas de actividad y stat en `tests/test_curiosity_will.py` tras la alineación XDG del archivo `last_user_activity.txt`.
 
 
@@ -2504,8 +2645,8 @@ read side, and adds the first utility metric.
 - **[FEAT] Graceful Sandboxing in Pulse Manager**: Patched `schedule_pulse.py` to check D-Bus and systemctl availability using dynamic probes, preventing crashes inside containerized sandboxes lacking systemd.
 - **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
 - **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
-- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh).
-- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh) script.
+- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](scripts/upgrade.sh).
+- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](scripts/upgrade.sh) script.
 
 ### 🔌 Antigravity Python SDK Connection Audit
 - **[AUDIT] Viability Assessment of google-antigravity**: Conducted a comprehensive audit of the `LocalConnectionStrategy` inside the Google Antigravity SDK (`google-antigravity` package).
@@ -2615,7 +2756,7 @@ read side, and adds the first utility metric.
 - **[HEAL] XDG Smith Filter**: Added an autonomous static-analysis unit test (`test_xdg_compliance.py`) and a strict `CONVENTIONS.md` manifesto rule to instantly fail any PR attempting to reintroduce localized `storage/` patterns.
 - **[HEAL] Database Path Collision Resolution**: Resolved critical `sqlite3.OperationalError` collision logic inside `worker.py` ensuring it queries `cognitive_tasks` directly from the XDG-compliant `bunker_queue.db` without cross-polluting `events.db`.
 - **[FIX] XDG Pulse & Background Pathing**: Patched `schedule_pulse.py` to correctly register `bunker_telemetry.py` timers. Fixed `setup_background_model.sh` to construct the local LLM daemon with strict XDG cache paths (`~/.local/share/red-pill/models/`) instead of relative dirs.
-- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/joan/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
+- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/<user>/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
 
 ### 🧠 Sovereign Chronicle & Archival Pipeline
 - **[HEAL] Chronicle LS Fallback Reversion**: Disabled the AES GCM decryption path due to Protobuf binary parsing incompatibilities with legacy keys. The extraction pipeline now defaults securely and exclusively to the native LanguageServer (`aghistory export`), yielding 100% data coherence.
@@ -3147,7 +3288,7 @@ read side, and adds the first utility metric.
   - New `_write_calendar_timer()` helper for `OnCalendar`-style timers
   - `_write_systemd_unit()` now accepts optional `Nice=` parameter
 - **[FIX] `scripts/chronicle_refine.py`**: Fixed `ValidationError` — truncated `raw_content` and `refined_content` in fragment payloads to 1024 characters (schema limit).
-- **[FIX] `.env`**: Fixed `FASTEMBED_CACHE_PATH` — replaced literal `~` with absolute path `/home/joan/Documents/IA/storage/models`. Dotenv loaders do not expand tilde, causing `ONNXRuntimeError: NO_SUCH_FILE` on fastembed model load.
+- **[FIX] `.env`**: Fixed `FASTEMBED_CACHE_PATH` — replaced literal `~` with absolute path `/home/<user>/Documents/IA/storage/models`. Dotenv loaders do not expand tilde, causing `ONNXRuntimeError: NO_SUCH_FILE` on fastembed model load.
 
 
 ### 🧠 Bünker Stabilization: Offline Decryption & The Atomized Chronicle

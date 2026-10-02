@@ -30,5 +30,5 @@ a route in `factory.create_bridge()`.
 
 ## Consumers
 `swarm/agents/agent.py:AgentMinion` (first-class minion, registered `"agent"` in
-`MinionFactory`), `swarm/executor.py` (cognitive-queue executor), `plugins/antigravity_ide/worker.py`
-(Telegram / AWAKENINGs), `cli.py` (`red-pill ide status|test`).
+`MinionFactory`), `swarm/executor.py` (cognitive-queue executor), `core/agent_worker.py`
+(Telegram / AWAKENINGs; backend-specific pulse via `core/pulse_strategy.py`), `cli.py` (`red-pill ide status|test`).

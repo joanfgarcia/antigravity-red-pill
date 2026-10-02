@@ -3,14 +3,12 @@ type: index
 title: "Planner — sistema de planificación del desk"
 status: active
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-10-02
 author: "Joan García (Operator) / Aleth (Agent)"
 project: aleth-core
 related:
   - ../INDEX.md
   - ../FRONTMATTER_TEMPLATE.md
-  - ./design/governance/RFC_FLUJO_RFCS.md
-  - ./design/governance/RFC_DOSSIER_IDEACION.md
 tags: [planner, fases, panel, prioridad]
 ---
 
@@ -25,6 +23,10 @@ herramienta que genera el panel de seguimiento on-demand (`tools/panel.py`).
 >   (`design/governance/RFC_DOSSIER_IDEACION.md`): spark → llama → maturing → matured.
 > - `design/pending/in_progress/` usan el **ciclo de vida de RFCs**
 >   (`design/governance/RFC_FLUJO_RFCS.md`): draft → ratified → implemented → closed.
+>
+> Esos dos RFCs de gobernanza **no vienen con la semilla** del despacho: si tu
+> despacho los tiene (`design/governance/`), mandan ellos; si no, este README
+> resume lo esencial (fases, estados y ciclo de vida).
 
 ## Modelo: la fase es una carpeta
 
@@ -106,7 +108,7 @@ planner/
   primero** — antes de buscar en el repo. El proyecto **nunca** aloja el RFC del
   desk ni lo referencia: solo su esencia implementada (AD-NNN, docs del repo).
   Ciclo de vida: `draft → ratified → implemented → closed → archived`
-  (`design/governance/RFC_FLUJO_RFCS.md`).
+  (detallado en `design/governance/RFC_FLUJO_RFCS.md` si tu despacho lo tiene).
 
 ## Panel
 

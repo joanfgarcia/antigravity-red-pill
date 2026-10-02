@@ -52,7 +52,7 @@ El vocabulario de estados depende de la **fase** del ítem en el planner
 
 | Status | Meaning |
 |---|---|
-| `draft` | Born in the desk, decisions open (see `planner/design/governance/RFC_FLUJO_RFCS.md`) |
+| `draft` | Born in the desk, decisions open (lifecycle: see `planner/README.md`) |
 | `ratified` | Business decisions closed, ready to implement |
 | `in-design` | Design in progress, iterating with the Operator |
 | `implemented` | Code merged in the target project |
@@ -84,7 +84,7 @@ El vocabulario de estados depende de la **fase** del ítem en el planner
   wins; the `.md` is only a design record.
 - `related` entries are relative paths from the desk root.
 - An archived document must have `status: archived` plus `archived:`/`archive_reason:`.
-- Personal `.md` in the Vault (novels, finances, Hotetec) may omit `project`;
+- Personal `.md` in the Vault (novels, finances, employment) may omit `project`;
   they use `type` if the template is applied.
 - Project docs (`sharing/docs/`, `frankenswarm/docs/`, ...) are **out of scope**:
   they follow each project's own conventions (e.g. DMN-770).

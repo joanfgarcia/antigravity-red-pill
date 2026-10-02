@@ -232,7 +232,7 @@ async def test_log_rotation_execute_rotates_big_log(tmp_path, monkeypatch):
 def test_salient_terms_prefers_identifiers():
 	from red_pill.memento.hybrid import salient_terms
 
-	terms = salient_terms("consulta sobre BIT-003 y Hotetec con palabras normales")
+	terms = salient_terms("consulta sobre BIT-003 y Initech con palabras normales")
 	assert "BIT-003" in terms
 
 

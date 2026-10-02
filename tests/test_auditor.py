@@ -61,11 +61,10 @@ def test_self_heals_signal_on_pass_without_force(mock_run):
 	green.returncode = 0
 	mock_run.side_effect = [green, green, green]  # ruff, mypy, pytest all pass
 
-	# Bypass the differential mtime gate so the audit body runs.
+	# Bypass the differential gate so the audit body runs.
 	with (
-		patch.object(auditor, "_get_project_mtime", return_value=100.0),
-		patch.object(auditor, "_get_cached_mtime", return_value=0.0),
-		patch.object(auditor, "_update_cached_mtime", return_value=None),
+		patch.object(auditor, "_step_is_current", return_value=False),
+		patch.object(auditor, "_mark_step", return_value=None),
 	):
 		report = auditor.audit_repo(".")
 
@@ -264,3 +263,111 @@ def test_read_log_new_lines_handles_truncation(auditor, tmp_path):
 
 	log.write_text("error: after truncation\n", encoding="utf-8")  # smaller than before
 	assert auditor._read_log_new_lines(log) == ["error: after truncation"]
+
+
+def _green():
+	res = MagicMock()
+	res.returncode = 0
+	res.stdout = ""
+	return res
+
+
+@patch("subprocess.run")
+def test_tests_are_not_run_by_default(mock_run, auditor, monkeypatch):
+	"""El timer horario no corre la suite del checkout vivo (AUDITOR_RUN_TESTS off)."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg.get_config(), "AUDITOR_RUN_TESTS", False, raising=False)
+	auditor.memory_mgr = MagicMock()
+	mock_run.side_effect = [_green(), _green()]
+
+	auditor.audit_repo(".")
+
+	cmds = [c.args[0] for c in mock_run.call_args_list]
+	assert not any("pytest" in cmd for cmd in cmds)
+	auditor.memory_mgr.evaporate_signals.assert_any_call("signal_test_failure")
+
+
+@patch("subprocess.run")
+def test_tests_run_unit_only_when_enabled(mock_run, auditor, monkeypatch):
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg.get_config(), "AUDITOR_RUN_TESTS", True, raising=False)
+	auditor.memory_mgr = MagicMock()
+	mock_run.side_effect = [_green(), _green(), _green()]
+
+	auditor.audit_repo(".")
+
+	pytest_cmd = [c.args[0] for c in mock_run.call_args_list if "pytest" in c.args[0]][0]
+	assert "--ignore=tests/integration" in pytest_cmd and "not integration" in pytest_cmd
+
+
+def _git_repo(path):
+	import subprocess as sp
+
+	path.mkdir()
+	for cmd in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+		sp.run(["git", "-C", str(path), *cmd], check=True)
+	(path / "m.py").write_text("x = 1\n")
+	sp.run(["git", "-C", str(path), "add", "."], check=True)
+	sp.run(["git", "-C", str(path), "commit", "-qm", "init"], check=True)
+	return path
+
+
+def _checks_run(mock_run):
+	return [c.args[0][2] for c in mock_run.call_args_list if c.args and c.args[0][1:2] == ["run"]]
+
+
+@patch("subprocess.run")
+def test_unchanged_code_is_not_audited_again(mock_run, tmp_path):
+	"""Sin cambios desde la última pasada completa, ruff/mypy no se repiten; un
+	cambio versionado o un fichero nuevo no ignorado los vuelve a lanzar."""
+	repo = _git_repo(tmp_path / "repo")
+	auditor = SentinelAuditor(force=False)
+	auditor.memory_mgr = MagicMock()
+	auditor.cache_file = tmp_path / "auditor_cache.json"
+	mock_run.return_value = _green()
+
+	auditor.audit_repo(str(repo))
+	assert _checks_run(mock_run) == ["ruff", "mypy"]
+
+	mock_run.reset_mock()
+	auditor.audit_repo(str(repo))
+	assert _checks_run(mock_run) == []
+
+	(repo / "m.py").write_text("x = 2\n")
+	auditor.audit_repo(str(repo))
+	assert _checks_run(mock_run) == ["ruff", "mypy"]
+
+	mock_run.reset_mock()
+	(repo / "nuevo.py").write_text("y = 1\n")
+	auditor.audit_repo(str(repo))
+	assert _checks_run(mock_run) == ["ruff", "mypy"]
+
+
+@patch("subprocess.run")
+def test_a_killed_run_only_redoes_the_unfinished_steps(mock_run, tmp_path):
+	"""El caché se guarda al acabar cada paso: si la unit mata la pasada a mitad,
+	la siguiente no repite lo que sí terminó."""
+	repo = _git_repo(tmp_path / "repo")
+	auditor = SentinelAuditor(force=False)
+	auditor.memory_mgr = MagicMock()
+	auditor.cache_file = tmp_path / "auditor_cache.json"
+	auditor._mark_step(str(repo), "ruff", auditor._project_fingerprint(str(repo)))
+	mock_run.return_value = _green()
+
+	auditor.audit_repo(str(repo))
+
+	assert _checks_run(mock_run) == ["mypy"]
+
+
+def test_fingerprint_ignores_noise_outside_the_code(tmp_path):
+	repo = _git_repo(tmp_path / "repo")
+	(repo / ".gitignore").write_text("*.log\n")
+	auditor = SentinelAuditor(force=False)
+	fp = auditor._project_fingerprint(str(repo))
+	(repo / "debug.log").write_text("ruido")
+	(repo / ".venv").mkdir()
+	(repo / ".venv" / "lib.py").write_text("z = 0\n")
+	assert auditor._project_fingerprint(str(repo)) == fp
+

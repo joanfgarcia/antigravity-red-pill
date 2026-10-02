@@ -33,6 +33,18 @@ HANDLER_LOW = "granite-low"
 # OpenAI tool_calls through it (bake-off 2026-09-30).
 TOOL_CHAT_FALLBACK = "chatml-function-calling"
 
+# Al cargar, llama_cpp registra el template del GGUF en `llm._chat_handlers`
+# con este nombre; sin template su propio default es `llama-2`. `chat_format=None`
+# NO vale en request-time (llama_cpp>=0.3: get_chat_completion_handler(None)
+# lanza), así que "template nativo" se traduce a uno de estos dos.
+NATIVE_TEMPLATE_FORMAT = "chat_template.default"
+LLAMA_CPP_DEFAULT_FORMAT = "llama-2"
+
+# Handlers que renderizan con el template NATIVO del GGUF. El de Granite 4.2
+# tiene rol `tool` (lo envuelve en `<tool_response>` dentro de un turno user);
+# `chatml-function-calling` no tiene rama `tool` y lo descarta en silencio.
+NATIVE_TOOL_HANDLERS = (HANDLER_THINKING, HANDLER_NOTHINK, HANDLER_LOW, NATIVE_TEMPLATE_FORMAT)
+
 
 def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 	"""Registra chat handlers por modo thinking derivados del template del GGUF.
@@ -78,17 +90,44 @@ def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 		logger.error("no se pudieron registrar chat handlers thinking: %s", e)
 
 
+def tool_chat_format(minion_chat_format: Optional[str], thinking_supported: bool, thinking: str = "off") -> str:
+	"""chat_format que sirve una request CON tools — fuente única daemon/cliente.
+
+	`minion_chat_format` del perfil → handler nativo del modo thinking (su
+	template Jinja renderiza tools) → `chatml-function-calling` genérico. El
+	`chat_format` de destilación NUNCA se usa con tools (los descarta en
+	silencio). El cliente (`local_minion`) lo consulta para saber cómo
+	realimentar los resultados (`renders_tool_role`).
+	"""
+	if minion_chat_format:
+		return minion_chat_format
+	handler_name = mr.apply_thinking_to_template(thinking)
+	if handler_name and thinking_supported:
+		return handler_name
+	return TOOL_CHAT_FALLBACK
+
+
+def renders_tool_role(chat_format: str) -> bool:
+	"""¿El handler renderiza mensajes `role="tool"`? Solo el template nativo del GGUF."""
+	return chat_format in NATIVE_TOOL_HANDLERS
+
+
+def _native_chat_format(llm: Any) -> str:
+	"""chat_format del template nativo del GGUF (o el default de llama_cpp sin template)."""
+	handlers = getattr(llm, "_chat_handlers", None)
+	if isinstance(handlers, dict) and NATIVE_TEMPLATE_FORMAT in handlers:
+		return NATIVE_TEMPLATE_FORMAT
+	return LLAMA_CPP_DEFAULT_FORMAT
+
+
 def apply_chat_handler(llm: Any, resolved: mr.ResolvedModel, body: Optional[Dict[str, Any]] = None) -> None:
 	"""Aplica el chat handler / chat_format correcto según la request.
 
 	Orden para requests SIN tools: template nativo + thinking → handler
 	registrado del modo; si el perfil declara `chat_format` explícito, gana el
-	perfil (o el override del body).
+	perfil (o el override del body); sin ninguno, el template del GGUF.
 
-	Orden para requests CON tools (`tools`/`functions`): `minion_chat_format`
-	del perfil → handler nativo del modo thinking (su template Jinja renderiza
-	tools) → `chatml-function-calling` genérico. El `chat_format` de destilación
-	NUNCA se usa con tools (los descarta en silencio).
+	Requests CON tools (`tools`/`functions`): ver `tool_chat_format`.
 	"""
 	body = body or {}
 	wants_tools = bool(body.get("tools") or body.get("functions"))
@@ -99,17 +138,8 @@ def apply_chat_handler(llm: Any, resolved: mr.ResolvedModel, body: Optional[Dict
 	# Tool requests MUST use a tool-capable handler. The profile `chat_format`
 	# (the distiller template, e.g. "chatml") silently drops the `tools` — the
 	# model then answers in prose, or invents a tool and fabricates its output.
-	# Profile `minion_chat_format` wins; a thinking model's native handler (its
-	# Jinja template renders tools) is next; the generic function-calling
-	# formatter is the last resort. NOTE: `chat_format=None` is NOT valid at
-	# request time in llama_cpp>=0.3 — get_chat_completion_handler(None) raises.
 	if wants_tools:
-		if resolved.minion_chat_format:
-			llm.chat_format = resolved.minion_chat_format
-		elif handler_name and resolved.extra.get("thinking_supported"):
-			llm.chat_format = handler_name
-		else:
-			llm.chat_format = TOOL_CHAT_FALLBACK
+		llm.chat_format = tool_chat_format(resolved.minion_chat_format, bool(resolved.extra.get("thinking_supported")), thinking)
 		return
 
 	if handler_name and explicit is None and resolved.extra.get("thinking_supported"):
@@ -118,8 +148,10 @@ def apply_chat_handler(llm: Any, resolved: mr.ResolvedModel, body: Optional[Dict
 	if explicit is not None:
 		llm.chat_format = explicit
 		return
-	# Template nativo por defecto (chat_format=None → llama_cpp usa el del GGUF).
-	llm.chat_format = None
+	# Template nativo por defecto. NO `None`: llama_cpp solo lo resuelve al
+	# cargar; en request-time get_chat_completion_handler(None) lanza (perfiles
+	# sin chat_format ni thinking, p. ej. `smith`).
+	llm.chat_format = _native_chat_format(llm)
 
 
 def complete(model: Any, messages: list, **kwargs: Any) -> Any:

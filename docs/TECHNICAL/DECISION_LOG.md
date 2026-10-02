@@ -78,13 +78,13 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 ## [AD-038] Recall de la memoria curada: híbrido + MMR sí, texto enriquecido no (medido)
 **Date**: 2026-09-25
 **Status**: ACCEPTED (2026-09-25) — híbrido, MMR y dedup post-rewrite encendidos en el operador; voz v2 detrás de flag hasta el piloto; texto enriquecido refutado y apagado.
-**Context**: tras la resiembra (AD-037) la memoria estaba íntegra (vectores coherentes, fechas, 0 cruces, 0 sellos rotos) pero recordaba mal: de 13 hechos conocidos, 9 en el top-3. Diagnóstico medido: (1) solo el 28,8% de las notas nombra el proyecto — la nota del anexo de Hotetec no dice "Hotetec" (coseno 0,17 contra su consulta); (2) el 50,2% abre con "Joan me dijo/explicó/pidió…", porque el prompt de voz v1 lo exigía y prohibía "Joan implementó" → muletilla e inversiones de sujeto; (3) el embedder trunca a 128 tokens; (4) paráfrasis del mismo hecho ocupan el top-k. Memento sí tenía todos los hechos (captura completa).
+**Context**: tras la resiembra (AD-037) la memoria estaba íntegra (vectores coherentes, fechas, 0 cruces, 0 sellos rotos) pero recordaba mal: de 13 hechos conocidos, 9 en el top-3. Diagnóstico medido: (1) solo el 28,8% de las notas nombra el proyecto — la nota de una revisión contractual no nombra a la empresa implicada (coseno 0,17 contra su consulta); (2) el 50,2% abre con "Joan me dijo/explicó/pidió…", porque el prompt de voz v1 lo exigía y prohibía "Joan implementó" → muletilla e inversiones de sujeto; (3) el embedder trunca a 128 tokens; (4) paráfrasis del mismo hecho ocupan el top-k. Memento sí tenía todos los hechos (captura completa).
 **Decision**:
 - **Recall híbrido** (semántico + palabras clave sobre el árbol, RRF) y **MMR** con relevancia por rango, solo en llamantes explícitos (oracle/CLI). El árbol es la verdad y ya sabe qué punto de Qdrant cubre cada línea (`source_lines` + `ascended_point_id`): sin índice nuevo.
 - **Texto enriquecido para embeber: NO.** Hipótesis razonable (poner la entidad delante), refutada por el banco: empeora el semántico solo (8/13 vs 9/13) y no suma sobre el híbrido. Se conserva apagado por si otro embedder cambia el resultado.
 - **Voz v2** (sujeto = quien actuó, sin muletilla, entidad nombrada) detrás de `MEMENTO_ANNOTATE_VOICE_V2`: cambia el fingerprint de annotate, así que migrar el corpus es un rebuild explícito (el nocturno no re-anota sesiones con pase agéntico) + `memento_ascend --reconcile` para no dejar huérfanos.
 - **Método**: medir antes de encender (`tools/memento_recall_bench.py`, solo lectura; el banco de consultas es del operador y no va al repo).
-**Evidence**: banco de 13 consultas — plano 9/13 · plano+MMR 9/13 · **plano+híbrido+MMR 12/13** (λ=0,85; 11/13 con 0,7) · enriquecido 8/13 · enriquecido+híbrido+MMR 11/13 hit@3. Verificado en vivo con `search_and_reinforce(hybrid=True)`: Hotetec y DL-007 entran en el top-3 en ~0,26 s.
+**Evidence**: banco de 13 consultas — plano 9/13 · plano+MMR 9/13 · **plano+híbrido+MMR 12/13** (λ=0,85; 11/13 con 0,7) · enriquecido 8/13 · enriquecido+híbrido+MMR 11/13 hit@3. Verificado en vivo con `search_and_reinforce(hybrid=True)`: la revisión contractual y DL-007 entran en el top-3 en ~0,26 s.
 **Por qué**: el fallo era de la interfaz nota→vector, no de captura ni de curación; el híbrido lo ataca sin re-embeber nada ni re-anotar. Lo que no mejoró se apaga en vez de mantenerse por intuición.
 
 ---
@@ -202,7 +202,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 **Context**: el 4.2-8B con thinking fallaba "no JSON" en el harness. Tras iterar (temp 0.1, n_ctx 6144/8192/16384, marcadores `[Start thinking]` vs ` response`), el desenlace: eran 4 piezas a la vez, no una.
 **Hallazgos** (fuente: model card oficial ibm-granite/granite-4.2-8b + verificación local):
 1. **Parámetros REQUERIDOS por IBM**: `temperature=1.0`, `top_p=0.95` en todos los modos; `max_new_tokens=8192` thinking / `2048` nothink. Con temp baja el 4.2 queda en bucle de deliberación sin cerrar el reasoning.
-2. **Marcadores**: el reasoning va entre ` thinking` y ` response` (el `extract_thinking` del daemon ya usa el correcto). En llama-cli el marcador es `[Start thinking]` (motor Jinja distinto) — por eso el harness CLI divergía.
+2. **Marcadores**: el reasoning va entre `<think>` y `</think>` (tokens 100274/100275 del GGUF, emitidos literales por el detokenizador; el prompt de generación ya abre `<think>`). En llama-cli el marcador es `[Start thinking]` (motor Jinja distinto) — por eso el harness CLI divergía. *(Corregido 2026-10-02: este punto decía «` thinking`/` response`», marcadores corruptos que acabaron en la regex de `extract_thinking` y partían la prosa por la palabra «response»; ver AD-042.)*
 3. **KV cache del 4.2** (GQA, 8 KV heads): 2.62 GB fp16 a 16K. Con pesos 5.35 GB → **16K no cabe en la RTX 5070 (8 GB)** ni con cuantización. **12K + K cuantizada sí cabe**.
 4. **Cuánto cuesta la KV**: `2 × n_layers × n_kv_heads × head_dim` por token (40×8×128 = 81920 valores × 2 B = 160 KB/token fp16).
 5. **Cuantización KV en llama-cpp-python**: vía **`type_k`/`type_v`** (PR #1307, merged desde 0.2.58; NO `kv_cache_type`/`cache_type_k`). Mal documentada (no en la firma pública). Issues relacionados abiertos: **#1335** (KV cuantizada falla en algunas configs) y **#1732** (scores fp32 con KV cuantizada). Verificado: 16K no cabe ni cuantizado en 8 GB; **12K + `type_k=GGML_TYPE_Q8_0` SÍ**.
@@ -225,12 +225,58 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 - `chatml-function-calling` SÍ emite `tool_calls` válidos para Granite-4.1-Q4; el bake-off de 2026-09-11 lo acusó por error (medía el binario `llama-server`, no el daemon).
 - Ese handler no tiene rama `role="tool"` y descarta el resultado → el modelo repetía a ciegas. Se realimenta como turno de usuario + `_finalize` con stdout en texto plano.
 - Granite 4.2 (thinking) emite el tool-call **nativo como texto**; `model_runtime.extract_toolcalls` ya lo parseaba pero **sin consumidor**. Su template renderiza `arguments|items` (mapping), así que el string JSON de llama_cpp reventaba el 2º turno → se conserva mapping.
-- Arnés `scripts/autonomy_ladder.py` (P1–P7, jaula de cwd): 4.1 `5/7 S=1`, 4.2 `6/7 S=1`. Ambos **mutan sin preguntar** (4.1: `find … -delete` sobre-ancho; 4.2: `sed -i` sobre dato ambiguo). 4.2 encadena mejor (P3 en 6 pasos).
+- Arnés `scripts/autonomy_ladder.py` (P1–P7, jaula de cwd): 4.1 `5/7 S=1`, 4.2 `5/7 S=1` (re-calificado 2026-10-02: su P4 aprobaba con las 4 llamadas al Bünker en error; el criterio exige ahora ≥1 resultado sin error). Ambos **mutan sin preguntar** (4.1: `find … -delete` sobre-ancho; 4.2: `sed -i` sobre dato ambiguo). 4.2 encadena mejor (P3 en 6 pasos).
 **Decision**:
 - `apply_chat_handler`: con `tools`/`functions` usa `minion_chat_format` del perfil → handler nativo del modo thinking → `chatml-function-calling`. Nunca el de destilación.
 - `local_minion`: parser de tool-calls nativos + `arguments` mapping + `payload` MCP coaccionado; expone `used_tools`/`tool_calls`; el bridge marca error si responde sin tools.
 - `model_profiles.yaml` (seed + local): `granite_8b.minion_chat_format="chatml-function-calling"`; altas de `granite_4_2_8b` (nativo + thinking) y `granite_4_2_3b` (~1200 tokens de presupuesto). Catálogo: `local/granite-4.2-8b` y `local/granite-4.2-3b`.
 - **Autonomía**: read-only/inspection con verificador; mutaciones con gate humano. `run_bash` NO confina rutas (cwd + timeout) — jaula real pendiente.
+
+---
+
+## [AD-042] Minion local-tools: los resultados de tools son DATO, no órdenes del operador
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek (rama `fix/deepseek-audit-remediation`). Pendiente re-pasar `autonomy_ladder.py --model granite_4_2_8b` contra el modelo real.
+**Context**: AD-041 dejó los resultados realimentados como turno `user` (el handler `chatml-function-calling` no tiene rama `tool`): contenido de ficheros o del Bünker llegaba con autoridad de operador a un bucle con `run_bash` sin jaula y `auto_approve`. Además el parser corría sobre todo el texto (un `<tool_call>` *pensado* dentro de `<think>` se ejecutaba), un tool-call truncado salía como respuesta final, y `extract_thinking` partía la prosa por la palabra «response» (los marcadores reales se habían perdido; verificados en el GGUF: `<think>`/`</think>`).
+**Decision**:
+- Template nativo con rol `tool` (Granite 4.2) → `role="tool"` + `tool_call_id`/`name`. Sin rol `tool` (`chatml-function-calling`) → turno `user` con el resultado **cercado** (`<tool_output id=nonce>`, nonce por ejecución) y etiquetado como no fiable; `_finalize` recibe lo mismo.
+- Los tool-calls se extraen solo de la RESPUESTA (fuera del razonamiento); todos los del turno, con tope total `MAX_TOOL_CALLS=8`; un bloque abierto sin parsear vuelve al modelo como error, nunca como respuesta. `used_tools` solo cuenta resultados válidos.
+- La conducta (temperature, max_tokens, tool_format) sale de candidato > task `minion_tool` > perfil, como en el daemon; el 0.3/1024 fijo queda como fallback.
+
+---
+
+## [AD-043] `janitor.yaml` es config viva y el latido de sesión cierra turnos sin `Stop`
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek.
+**Context**: AWAKEN-001 hizo que `JanitorMinion` cargue por fin `${CONFIG_DIR}/janitor.yaml` (el seed estaba inerte) y P4 introdujo el latido `.start/.end`. La auditoría encontró: el plugin `awakening_logs` resolvía el desk solo por env (systemd no la exporta) y fabricaba un desk fantasma; el merge reventaba con tipos inválidos; las sub-sesiones de opencode contaban como vivas; el latido dependía del flag de captura; y en Claude Code un turno que acaba en error de API no dispara `Stop`.
+**Decision**:
+- `janitor.yaml`: merge por plugin (el caller gana), `nombre: bool` = `{enabled: bool}`, tipos inválidos ignorados con warning. TTLs: `awakening_logs` 30 d por **nombre** (`YYYYMMDD_HHMM.log`; lo que no casa no se toca), `session_liveness` 48 h, `events_db_purge` 7 d entregado / 30 d `FAILED`+`dead_letters` (margen para `neon-link redrive`).
+- El desk se resuelve env → `workspaces.yaml:agent_core` → hermano del bunker; los lectores/limpiadores no crean directorios.
+- Latido: independiente de la captura (`REDPILL_SCRIBE_DISABLE` solo apaga la captura); sub-sesiones (`parent_id`) fuera del tablón; `StopFailure` y `SessionEnd` marcan `.end`. Esc no dispara hook alguno → cota `SESSION_ACTIVE_MIN`.
+
+---
+
+## [AD-044] Worker agnóstico (ex «ARCH-001» del PR #103): el core hace el housekeeping, el plugin solo su pulse
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek.
+**Context**: el PR #103 movió el worker a `core/agent_worker.py` con la lógica de Antigravity tras un registro de estrategias de pulse (`core/pulse_strategy.py`). La auditoría encontró trabajo genérico (janitor de sesiones Telegram, señal a Samantha) atrapado dentro de `AntigravityPulseStrategy`, un fallback a `NullPulseStrategy` que se tragaba fallos de import sin señal, un descubrimiento que dependía del orden de imports e importaba ~900 módulos por oneshot, restos de proveedor en el core (`BackendType.GRPC` por defecto, nombres de tools de Antigravity en los prompts) y el Derecho al Silencio clasificado por subcadena.
+**Decision**:
+- El housekeeping genérico vive en `run_once` del core; una estrategia solo puede declinarlo explícitamente (`allows_core_housekeeping()`, rama gRPC legacy). Las fábricas reciben un `PulseContext` y pueden devolver `None`: con la config real (opencode) no se construye cliente IDE alguno.
+- Descubrimiento una vez por proceso (`_discovered`), solo de paquetes con `pulse.py` en disco; un `pulse.py` roto → `logger.error` + señal `pulse_strategy_fallback_<plugin>` (dedup).
+- Fallback de puentes por `IDE_BACKEND`, puente a puente; la cascada degradada se detecta sin conocer proveedores (backend efectivo ∉ cascada configurada) → señal `worker_bridge_cascade_degraded`.
+- AWAKEN-002: silencio = respuesta < 200 caracteres que EMPIEZA por la frase canónica; recuento + INSERT bajo `BEGIN IMMEDIATE`; los despertares fallidos siguen D24 y acaban en `dead_letters`.
+- Prompts de despertar/Telegram sin nombres de cliente (`sovereign_handshake`, shell no interactivo acotado al worktree/desk, tests desde la raíz del worktree). Un test AST vigila imports y literales del core.
+
+---
+
+## [AD-045] La suite es hermética y el auditor horario no la corre
+**Date**: 2026-10-02
+**Status**: ACCEPTED — segunda revisión de la remediación del lote DeepSeek.
+**Context**: `redpill-auditor.timer` ejecutaba cada hora `uv run pytest` en el checkout vivo. La suite no era hermética (síntesis y BitTraining con URLs a fuego, `/run/user` real, stubs de backup sobre los `.env` reales) y la unit la mataba a los 120 s: el resultado nunca servía y los efectos sí ocurrían — kits acumulados, `.env` reescritos, reservas de GPU vaciadas, modelo descargado y peticiones `hub` con memorias reales; el 2-oct, con la GPU ocupada, el fallback a CPU llevó a un OOM. La caché diferencial por mtime nunca se guardaba (se escribía al final de la pasada que la unit mataba).
+**Decision**:
+- La suite es hermética **por construcción**: `conftest` instala antes de importar red-pill una guarda de red (Qdrant, LLM local, neon-link, UNIX fuera del sandbox, hosts remotos), emula los comandos de host (`systemctl`/`journalctl`/`podman`/`docker`/`systemd-run`) y redirige config, state, runtime, desk y TMPDIR. Un test que necesite un servicio local real lo declara (`@pytest.mark.allow_local_services`).
+- El auditor horario audita lint y tipos; la suite queda en CI salvo `AUDITOR_RUN_TESTS=true` (solo unitarios).
+- Cada paso del auditor se repite solo si cambió el código desde que ese paso terminó (huella de git), con caché guardada al acabar cada paso.
 
 ---
 

@@ -38,6 +38,32 @@ def _load_janitor_config() -> Dict[str, Any]:
 	return {}
 
 
+def _normalize_plugins(raw: Any, source: str) -> Dict[str, Dict[str, Any]]:
+	"""`plugins` → `{nombre: dict}` tolerante a YAML mal formado.
+
+	Acepta el atajo `nombre: true|false` (el mismo que ya honra
+	`JanitorPlugin.is_enabled`) como `{"enabled": bool}` y `nombre:` vacío como
+	`{}`. Un `plugins` que no es mapa, o un valor de otro tipo (lista, número,
+	texto), se ignora con un warning en vez de tumbar el barrido entero.
+	"""
+	if raw is None:
+		return {}
+	if not isinstance(raw, dict):
+		logger.warning(f"[Janitor] {source}: 'plugins' debe ser un mapa (es {type(raw).__name__}); se ignora.")
+		return {}
+	plugins: Dict[str, Dict[str, Any]] = {}
+	for name, plugin_cfg in raw.items():
+		if isinstance(plugin_cfg, dict):
+			plugins[str(name)] = dict(plugin_cfg)
+		elif plugin_cfg is None:
+			plugins[str(name)] = {}
+		elif isinstance(plugin_cfg, bool):
+			plugins[str(name)] = {"enabled": plugin_cfg}
+		else:
+			logger.warning(f"[Janitor] {source}: config de '{name}' inválida ({type(plugin_cfg).__name__}); se ignora.")
+	return plugins
+
+
 def discover_plugins() -> List[JanitorPlugin]:
 	"""Auto-descubre las subclases de JanitorPlugin del paquete janitor_plugins."""
 	import red_pill.swarm.agents.janitor_plugins as plugins_pkg
@@ -72,15 +98,16 @@ class JanitorMinion(Minion):
 		"""Ejecuta un ciclo de limpieza recorriendo los plugins habilitados."""
 		self.log("--- [Janitor] Initializing Cleaning Cycle (plugin sweep) ---")
 
-		config_dict: Dict[str, Any] = dict(kwargs.get("config", {}))
+		caller_cfg = kwargs.get("config")
+		config_dict: Dict[str, Any] = dict(caller_cfg) if isinstance(caller_cfg, dict) else {}
 		# YAML del operador como fuente por defecto; un `config` explícito del
 		# caller gana a nivel de plugin (merge superficial por nombre de plugin).
-		file_plugins = _load_janitor_config().get("plugins", {})
-		if file_plugins:
-			merged = dict(file_plugins)
-			for plugin_name, plugin_cfg in config_dict.get("plugins", {}).items():
-				merged[plugin_name] = {**file_plugins.get(plugin_name, {}), **plugin_cfg}
-			config_dict["plugins"] = merged
+		# Ambos lados se normalizan: un tipo inválido se ignora con warning.
+		file_plugins = _normalize_plugins(_load_janitor_config().get("plugins"), "janitor.yaml")
+		merged = dict(file_plugins)
+		for plugin_name, plugin_cfg in _normalize_plugins(config_dict.get("plugins"), "config del caller").items():
+			merged[plugin_name] = {**file_plugins.get(plugin_name, {}), **plugin_cfg}
+		config_dict["plugins"] = merged
 		# Retrocompat: run_janitor_sweep pasa days_to_keep como kwarg global — se
 		# inyecta como default de los plugins de retención corta sin pisar una
 		# config explícita del operador.

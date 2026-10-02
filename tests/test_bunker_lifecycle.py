@@ -84,12 +84,22 @@ def test_bunker_export_stub(capsys):
 
 
 def test_bunker_restore_stub(capsys):
-	"""Test that the restore stub outputs the correct plan safely."""
-	# Since it's a stub, it doesn't do anything yet, but we test the skeleton.
+	"""Restore of a kit exported in this same (isolated) bunker root.
+
+	It used to restore the newest kit of the operator's REAL bunker root, copying
+	that kit's .env files over the real ~/.config/{red-pill,neon-link}/.env: the
+	kit must come from the test's own export."""
+	bunker_export()
+	capsys.readouterr()
 	bunker_restore()
 	captured = capsys.readouterr()
 	assert "[BÜNKER RESTORE: SMART REHYDRATION]" in captured.out
 	assert "Decrypting .mls package" in captured.out
+
+
+def test_bunker_restore_without_kits_reports_missing_backups(capsys):
+	bunker_restore()
+	assert "No backups directory found" in capsys.readouterr().out
 
 
 def test_bunker_install(tmp_path, monkeypatch):
@@ -120,6 +130,44 @@ def test_bunker_install(tmp_path, monkeypatch):
 	env_file = config_dir / ".env"
 	assert env_file.exists()
 	assert env_file.read_text() == "TEST_VAR=1"
+
+
+def test_seed_config_examples_copies_only_missing(tmp_path, monkeypatch, capsys):
+	"""Instalación limpia: task_profiles/model_catalog/model_profiles se siembran desde
+	examples/; lo que el operador ya tiene NUNCA se pisa."""
+	import red_pill.bunker_lifecycle as bl
+
+	config_dir = tmp_path / "config"
+	monkeypatch.setattr(bl, "get_config_dir", lambda: config_dir)
+	examples = tmp_path / "repo" / "examples"
+	examples.mkdir(parents=True)
+	for name in ("task_profiles", "model_catalog", "model_profiles"):
+		(examples / f"{name}.yaml.example").write_text(f"seed: {name}\n")
+	config_dir.mkdir()
+	(config_dir / "model_profiles.yaml").write_text("curado: true\n")
+
+	seeded = bl.seed_config_examples(tmp_path / "repo")
+
+	assert sorted(seeded) == ["model_catalog.yaml", "task_profiles.yaml"]
+	assert (config_dir / "task_profiles.yaml").read_text() == "seed: task_profiles\n"
+	assert (config_dir / "model_profiles.yaml").read_text() == "curado: true\n"
+	# idempotente: la segunda pasada no toca nada
+	(config_dir / "task_profiles.yaml").write_text("editado\n")
+	assert bl.seed_config_examples(tmp_path / "repo") == []
+	assert (config_dir / "task_profiles.yaml").read_text() == "editado\n"
+
+
+def test_repo_examples_cover_every_config_seed():
+	"""Cada plantilla sembrada existe en examples/ y parsea (task_profiles con `validate`)."""
+	from pathlib import Path
+
+	import red_pill.bunker_lifecycle as bl
+
+	examples = Path(__file__).resolve().parents[1] / "examples"
+	for example, _target in bl.CONFIG_EXAMPLE_SEEDS:
+		assert yaml.safe_load((examples / example).read_text(encoding="utf-8")), example
+	tasks = yaml.safe_load((examples / "task_profiles.yaml.example").read_text(encoding="utf-8"))["tasks"]
+	assert "validate" in tasks
 
 
 def test_bunker_update(tmp_path, monkeypatch):

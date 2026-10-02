@@ -350,7 +350,7 @@ def test_antigravity_export_source_parses_frozen_transcripts(tmp_path):
 			"",
 			"- **Cascade ID**: `bcd69401-9690-4026-a2ab-b0213a68cba4`",
 			"- **Steps**: 1533",
-			"- **Workspace**: file:///home/joan/Documents/IA/sharing",
+			"- **Workspace**: file:///home/user/Documents/IA/sharing",
 			"",
 			"---",
 			"",

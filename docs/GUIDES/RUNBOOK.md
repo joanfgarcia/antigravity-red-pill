@@ -227,10 +227,27 @@ productive = sum(1 for r in rows if r[3])
 print(f'Total hoy: {len(rows)} | productivos (consumen tope): {productive}/8')
 "
 
-# Límite diario: 8 AWAKENINGs *productivos* (configurable en worker.py
-# MAX_AWAKENINGS_PER_DAY). Los que ejercen el Derecho al Silencio quedan con
-# counted=0 y no consumen tope (AWAKENING_SILENCE_COUNTS=true revierte esto).
+# Límite diario: 8 AWAKENINGs *productivos* (MAX_AWAKENINGS_PER_DAY en
+# src/red_pill/core/agent_worker.py). Los que ejercen el Derecho al Silencio
+# (la respuesta TERMINA con la frase canónica, o EMPIEZA por ella y es corta)
+# quedan con counted=0 y no consumen tope (AWAKENING_SILENCE_COUNTS=true
+# revierte esto). Un despertar
+# fallido cuenta y se reintenta con la política D24 (timeout: 1 reintento;
+# transitorio: 3 intentos) antes de quedar DEAD en dead_letters.
 ```
+
+**Logs de despertar:** uno por sesión en `${AGENT_CORE_DIR}/awakening/YYYYMMDD_HHMM.log`.
+El Janitor diario (plugin `awakening_logs`) borra los de más de `days_to_keep` días
+(30 por defecto, en `~/.config/red-pill/janitor.yaml`): compara la **fecha** del
+nombre con `hoy - days_to_keep` (el de hace exactamente 30 días se conserva), así
+que un `*.log` fuera de ese esquema no se toca. Como el desk es un repo git y los
+despertares commitean sus logs, el Janitor deja la baja **preparada** en el índice
+(`git rm --cached`): el siguiente commit del desk la registra y no quedan `D` sin
+preparar. El desk se resuelve por `workspaces.yaml:agent_core` aunque el servicio
+no exporte `AGENT_CORE_DIR`.
+
+**Mensajes que no llegaron a Telegram:** desde neon-link 0.6.3 se reintentan con backoff durante
+24 h y después quedan en `dead_letters` (`neon-link redrive` los devuelve a la cola).
 
 ---
 

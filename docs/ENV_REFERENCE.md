@@ -152,6 +152,12 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_MIN_FREE_VRAM_MB` | `1500` | Minimum free VRAM (MB) required to start the sleep cycle. If the GPU has less free VRAM at 03:00 (e.g. occupied by a game or other model), the cycle aborts gracefully and emits a muted `vram_busy` pain signal. Set to `0` to disable the preflight check. CPU-only systems are unaffected. |
 | `SLEEP_CUTOFF_ENABLED` | `True` | Bounds the consolidation drain to engrams with `timestamp <=` the instant the cycle started (persisted in the job checkpoint). Engrams written while the cycle runs stay buffered for the next cycle, so the drain terminates deterministically. |
 
+### 🛡️ Sentinel Auditor
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `AUDITOR_RUN_TESTS` | `False` | The hourly `redpill-auditor` also runs the live checkout's pytest suite (unit only: `-m "not integration"`, `--ignore=tests/integration`). Off by default: tests belong to CI, and inside the unit's 120 s budget the suite never finished. Lint (ruff) and types (mypy) are always audited. Every step re-runs only when the code changed since that step last completed (git fingerprint: HEAD + tracked diff + untracked non-ignored files), so an idle repo costs nothing per hour. |
+
 ### 🔧 Operator Profile & Pre-Heating
 
 | Parameter | Default | Description |
@@ -177,17 +183,23 @@ Plugins 05–10. Each is independently toggleable.
 | `OPENCODE_BIN` | | Explicit path to the `opencode` binary. Wins over PATH resolution — the robust option for service-manager contexts. |
 | `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
 | `PI_BIN` | | Explicit path to the `pi` binary (pi-coding-agent). Wins over PATH resolution — the robust option for service-manager contexts. |
-| `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
+| `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. With it off and no gRPC bridge, the Antigravity pulse strategy declines and the worker never builds the IDE client (ARCH-001). |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Per-target fields: `backend`, `model`, `effort`, `timeout` (optional, overrides the method timeout for that target). Example: `'[{"backend":"opencode","model":"opencode-go/deepseek-v4-pro","timeout":300},{"backend":"opencode","model":"opencode/deepseek-v4-flash-free"}]'`. |
 | `TELEGRAM_INLINE_TIMEOUT` | `120` | Fast-path inline timeout (s) for Telegram conversational messages (D3). Passed as the method timeout to `CascadeBridge.prompt()`; a per-target `timeout` in `TELEGRAM_BRIDGE_CASCADE` overrides it for that target (D14). |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
 | `AWAKENING_PLANNER_ACCESS` | `planner` | Qué puede tocar el despertar autónomo en el desk: CSV de zonas (`ideas`, `research`, `design`, `pending`, `in_progress`, `awakening`) o `planner` (todas) / `none` (solo lectura). |
 | `AWAKENING_TIMEOUT` | `600` | Techo duro (s) del despertar autónomo (A-5, AWAKEN-002). Recomendado `2700`-`3600` (45-60 min) una vez el despertar herede el latido (heartbeat D21); sin latido un techo alto deja colgado al agente. El despertar auto-empaqueta lo largo en `dag_job`. |
+| `AWAKENING_SILENCE_COUNTS` | `False` | Si `False`, un despertar que ejerce el Derecho al Silencio (la respuesta TERMINA con la frase canónica —aunque la preceda narración intermedia— o EMPIEZA por ella y mide < 400 caracteres; un informe que solo la cita a mitad no lo es) no consume el tope diario de 8 (`execution_ledger.counted=0`); los productivos y los errores sí. `True` restaura el cómputo antiguo (todo despertar cuenta). El día se corta a medianoche local (AWAKEN-002). |
+| `SESSION_ACTIVE_MIN` | `10` | Umbral (min) del latido de sesión (RFC-DESPERTAR-001 P4): un `.start` más nuevo que su `.end` dentro de esta ventana = turno en vuelo. |
+| `SESSION_LIVENESS_TTL_H` | `48` | Retención (h) de los ficheros de latido de sesión antes de que el Janitor (`session_liveness`) los limpie. |
+| `HEARTBEAT_LEASE` | `900` | Lease (s) del hilo de latido del worker (D21): late mientras el bucle principal haya tocado la actividad dentro de este plazo; un bucle muerto deja de latir y neon-link detecta el offline real. |
+| `LOCAL_ALLOWED_FOR_HEAVY` | `False` | D5: con `False`, los targets `local` se filtran de `TELEGRAM_BRIDGE_CASCADE` y, si el worker cae al `IDE_BACKEND` porque los puentes no se construyen, un `IDE_BACKEND=local` tampoco sirve Telegram. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
 
 > **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo
-> `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (auto-seeded desde
-> `examples/model_catalog.yaml.example`) es la fuente de verdad de modelos.
+> `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (sembrado si falta desde
+> `examples/model_catalog.yaml.example` en install/update, igual que `model_profiles.yaml`
+> y `task_profiles.yaml`) es la fuente de verdad de modelos.
 > `red-pill telegram models` lista el catálogo; `red-pill telegram roles` los
 > roles. Los comandos Telegram `/models`, `/model`, `/defaults`, `/deferred`,
 > `/queue`, `/mission` operan sobre él. Si el catálogo no existe, el runtime cae a
