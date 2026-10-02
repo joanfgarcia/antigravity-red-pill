@@ -22,6 +22,7 @@ import pytest
 from red_pill.core.agent_worker import IDEWorker
 from red_pill.core.pulse_strategy import (
 	NullPulseStrategy,
+	PulseContext,
 	PulseStrategy,
 	build_pulse_strategy,
 	register_pulse_strategy,
@@ -79,30 +80,21 @@ def worker(tmp_path, monkeypatch):
 # ── pulse_strategy registry ─────────────────────────────────────────────────
 
 
-def test_build_pulse_strategy_returns_registered():
-	def factory(bridge):
-		return NullPulseStrategy()
-
-	register_pulse_strategy(factory)
-	# Debe devolver la primera que aplique (la registrada o una descubierta).
-	assert isinstance(build_pulse_strategy(None), PulseStrategy)
-
-
-def test_build_pulse_strategy_falls_back_to_null(monkeypatch):
-	import red_pill.core.pulse_strategy as ps
-
-	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
-	monkeypatch.setattr(ps, "_discover_plugin_strategies", lambda: None)
-	assert isinstance(build_pulse_strategy(None), NullPulseStrategy)
+def test_build_pulse_strategy_returns_registered(isolated_pulse_registry):
+	"""Registro aislado (antes mutaba el registro global sin monkeypatch y
+	envenenaba el E2E que corría después: test dependiente del orden)."""
+	chosen = NullPulseStrategy()
+	register_pulse_strategy(lambda context: chosen)
+	assert build_pulse_strategy(PulseContext()) is chosen
 
 
-def test_factory_returning_none_is_skipped(monkeypatch):
-	import red_pill.core.pulse_strategy as ps
+def test_build_pulse_strategy_falls_back_to_null(isolated_pulse_registry):
+	assert isinstance(build_pulse_strategy(PulseContext()), NullPulseStrategy)
 
-	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
-	register_pulse_strategy(lambda bridge: None)
-	monkeypatch.setattr(ps, "_discover_plugin_strategies", lambda: None)
-	assert isinstance(build_pulse_strategy(None), NullPulseStrategy)
+
+def test_factory_returning_none_is_skipped(isolated_pulse_registry):
+	register_pulse_strategy(lambda context: None)
+	assert isinstance(build_pulse_strategy(PulseContext()), NullPulseStrategy)
 
 
 # ── worker helpers ──────────────────────────────────────────────────────────

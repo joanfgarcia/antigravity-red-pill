@@ -94,6 +94,22 @@ def bunker_isolation(monkeypatch):
 
 
 @pytest.fixture
+def isolated_pulse_registry(monkeypatch):
+	"""Empty pulse-strategy registry for one test, restored afterwards.
+
+	Plugin discovery registers factories as an import side effect, once per
+	process: run the real discovery BEFORE swapping the registry so a plugin's
+	first import never lands in (and dies with) the test's temporary list."""
+	import red_pill.core.pulse_strategy as ps
+
+	if not ps._discovered:
+		ps._discover_plugin_strategies()
+	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
+	monkeypatch.setattr(ps, "_discovered", True)
+	return ps
+
+
+@pytest.fixture
 def memory_manager():
 	"""Provides a clean, memory-based MemoryManager for each test."""
 	from red_pill.memory import MemoryManager
