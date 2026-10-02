@@ -624,7 +624,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   solo lo piden oracle y el CLI, nunca los interceptores del handshake. Flags
   `MEMORY_HYBRID_RECALL_ENABLED`, `MEMORY_RECALL_MMR_ENABLED`,
   `MEMORY_RECALL_MMR_LAMBDA=0.85`. **Banco de 13 consultas: 9/13 → 12/13 hit@3**
-  (recupera Hotetec, DL-007 y la graduación de Bit, antes fuera del top-5).
+  (recupera la revisión contractual, DL-007 y la graduación de Bit, antes fuera del top-5).
 - **[FIX] `search_memento` caía siempre al escaneo python**: `rg` evalúa `-g`
   relativo al directorio de trabajo, no a la ruta buscada → desde otro cwd no
   casaba nada y el fallback daba 1 hit por fichero. Ahora `cwd=root` (0,03 s).
@@ -653,9 +653,9 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   SOCIAL salvo jurista). Fingerprint v2.1 `4ddeefe66a` (incluye scorer y alcance).
   Piloto (3 sesiones, árbol persistente): inglés 0%, "Joan me" 58/44% → 2/0%,
   entidad 32→27% y 18→36%, +29/+52% de notas; **pero** el sujeto sigue sin ser
-  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota del
-  anexo sigue enrutándose a work. El piloto v2 (sin .1) había dado inglés en 3ª
-  persona y 0 notas en Hotetec.
+  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota de
+  la revisión contractual sigue enrutándose a work. El piloto v2 (sin .1) había
+  dado inglés en 3ª persona y 0 notas sobre la empresa.
 - **[NEW] Vista del fragmento de annotate** (`MEMENTO_ANNOTATE_FRAGMENT_VIEW`:
   `raw` por defecto | `actors` | `pairs`; nombres en `MEMENTO_OPERATOR_LABEL` /
   `MEMENTO_AGENT_LABEL`): `actors` pone el actor en cada turno; `pairs` deja solo

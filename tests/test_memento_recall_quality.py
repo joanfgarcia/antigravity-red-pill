@@ -17,7 +17,7 @@ from red_pill.memento.agentic import annotate
 	"raw, expected",
 	[
 		("Joan me dijo que el daemon perdía la VRAM.", "El daemon perdía la VRAM."),
-		("Joan me pidió que revisara el anexo de Hotetec.", "Revisara el anexo de Hotetec."),
+		("Joan me pidió que revisara la adenda de Initech.", "Revisara la adenda de Initech."),
 		("Le expliqué a Joan que el fallo era de FA.", "El fallo era de FA."),
 		("Le expliqué que había que reiniciar.", "Había que reiniciar."),
 		("Joan corrigió el bug de tree_hash.", "Joan corrigió el bug de tree_hash."),  # sin muletilla: intacto
@@ -29,8 +29,8 @@ def test_strip_lead(raw, expected):
 
 
 def test_engram_embed_text_pone_el_ancla_delante():
-	out = embed_text.engram_embed_text("Joan me dijo que el anexo tenía trampas.", "hr_legal_review", ["Hotetec", "teletrabajo"])
-	assert out == "hr legal review · Hotetec, teletrabajo · El anexo tenía trampas."
+	out = embed_text.engram_embed_text("Joan me dijo que la adenda tenía trampas.", "contract_review", ["Initech", "renovación"])
+	assert out == "contract review · Initech, renovación · La adenda tenía trampas."
 
 
 def test_embedding_text_for_respeta_flag_y_tipo(monkeypatch):
@@ -48,9 +48,9 @@ def test_embedding_text_for_respeta_flag_y_tipo(monkeypatch):
 
 
 def test_salient_terms_prioriza_identificadores_y_nombres():
-	terms = hybrid.salient_terms("anexo de teletrabajo de Hotetec y el bug de tree_hash en BIT-003")
+	terms = hybrid.salient_terms("adenda de renovación de Initech y el bug de tree_hash en BIT-003")
 	assert terms[:2] == ["BIT-003", "tree_hash"] or terms[:2] == ["tree_hash", "BIT-003"]
-	assert "Hotetec" in terms
+	assert "Initech" in terms
 
 
 def test_rrf_merge_premia_consenso():
@@ -68,12 +68,12 @@ def test_mmr_select_evita_parafrasis():
 def test_memento_keyword_hits_mapea_linea_a_nota(tmp_path):
 	sess = tmp_path / "2026-08" / "memory_queue" / "s1"
 	(sess / "memento").mkdir(parents=True)
-	(sess / "memento" / "index.md").write_text("cabecera\n" * 3 + "Revisión del anexo de Hotetec\n" + "relleno\n" * 20, encoding="utf-8")
+	(sess / "memento" / "index.md").write_text("cabecera\n" * 3 + "Revisión de la adenda de Initech\n" + "relleno\n" * 20, encoding="utf-8")
 	(sess / "annotate").mkdir()
 	note = "---\nsource_lines: memento/index.md#l1-10\nascended: true\nascended_to: work_memories\nascended_point_id: p-1\n---\n\ntexto"
 	(sess / "annotate" / "001-a.md").write_text(note, encoding="utf-8")
 	(sess / "annotate" / "002-b.md").write_text(note.replace("l1-10", "l11-30").replace("p-1", "p-2"), encoding="utf-8")
-	hits = hybrid.memento_keyword_hits("¿qué pasó con Hotetec?", "work_memories", root=tmp_path)
+	hits = hybrid.memento_keyword_hits("¿qué pasó con Initech?", "work_memories", root=tmp_path)
 	assert [pid for pid, _ in hits] == ["p-1"]
 
 
@@ -201,7 +201,7 @@ def test_v21_reescribe_ingles_y_aleth_en_tercera(monkeypatch):
 	assert annotate.looks_english("Aleth updated the CHANGELOG.md to document the Sentinel Auditor validation")
 	assert not annotate.looks_english("Joan corrigió el bug de tree_hash en la rama de la release")
 	assert annotate._needs_voice_rewrite("Aleth updated the CHANGELOG.")
-	assert annotate._needs_voice_rewrite("Aleth verificó la jurisprudencia del anexo.")
+	assert annotate._needs_voice_rewrite("Aleth verificó la jurisprudencia de la adenda.")
 	assert not annotate._needs_voice_rewrite("Joan corrigió el bug de tree_hash.")
 
 

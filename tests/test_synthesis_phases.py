@@ -108,11 +108,11 @@ def test_operator_profile_publishes_valid(tmp_path, monkeypatch):
 	monkeypatch.setattr(opp, "recall_recent", lambda coll, limit, tag=None: ["work hub"])
 	monkeypatch.setattr(opp, "_fetch_social_immune", lambda limit=5: ["social"])
 	monkeypatch.setattr(opp, "_fetch_directive_immune", lambda limit=3: ["directive"])
-	monkeypatch.setattr(opp, "chat", lambda *a, **k: "Joan — Arquitecto IA en Hotetec; foco actual: release v7.14 de red-pill.")
+	monkeypatch.setattr(opp, "chat", lambda *a, **k: "Joan — Ingeniero de software; foco actual: release v7.14 de red-pill.")
 
 	opp.OperatorProfilePhase().execute(SleepContext(memory_manager=None))
 
-	assert "Arquitecto IA" in artifact.read_text()
+	assert "Ingeniero de software" in artifact.read_text()
 
 
 def test_validate_activity_rejects_short_and_nominal():
