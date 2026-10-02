@@ -10,7 +10,8 @@ tocado" (ver ``red_pill.core.session_liveness``).
 Fires when the Operator submits the prompt — before tools/thinking — so the
 `start` is a clean turn boundary.
 
-Non-fatal by contract: any error is swallowed and we exit 0.
+Non-fatal by contract: any error (unreadable or non-object payload included) is
+swallowed and we exit 0 — the hook never blocks the IDE turn.
 """
 
 import json
@@ -32,20 +33,26 @@ def _safe(token: str) -> str:
 	return token.strip().replace("/", "_").replace("__", "_")
 
 
-def main() -> int:
+def _run() -> None:
 	try:
 		payload = json.load(sys.stdin)
 	except Exception:
-		return 0
-	session_id = payload.get("session_id", "")
-	if not session_id:
-		return 0
+		return
+	if not isinstance(payload, dict):
+		return
+	session_id = payload.get("session_id")
+	if not isinstance(session_id, str) or not session_id.strip():
+		return
+	live = _live_dir()
+	live.mkdir(parents=True, exist_ok=True)
+	(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.start").touch(exist_ok=True)
+
+
+def main() -> int:
 	try:
-		live = _live_dir()
-		live.mkdir(parents=True, exist_ok=True)
-		(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.start").touch(exist_ok=True)
+		_run()
 	except Exception:
-		pass
+		pass  # Nunca bloquear el turno por el latido.
 	return 0
 
 
