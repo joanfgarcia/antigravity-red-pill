@@ -14,10 +14,12 @@ externa + arnés propio). Sin cambios de esquema ni de política NO-DESTRUCTIVE.
   idea heredaba el `ascended_point_id` de otra. La clave pasa a `(source_lines, stem)`,
   el mismo discriminador de `refine_point_id`.
 - **[FIX] Texto por idea:** los prompts de refine (WORK/SOCIAL) piden ahora un campo
-  `memory` autocontenido por idea; antes N ideas del mismo fragmento llegaban a Qdrant
-  con el summary idéntico. Fallback al summary si el modelo no emite `memory`
-  (compatibilidad). `refine_prompt_version` cambia en consecuencia: los artefactos
-  sellados con el prompt anterior quedan marcados para regeneración selectiva.
+  `memory` autocontenido por idea, en el idioma de los fragmentos (no se hardcodea
+  español: la `voice_rule` ya fija «same language as the source»); antes N ideas del
+  mismo fragmento llegaban a Qdrant con el summary idéntico. Fallback al summary si el
+  modelo no emite `memory` (compatibilidad). `refine_prompt_version` cambia en
+  consecuencia: los artefactos sellados con el prompt anterior quedan marcados para
+  regeneración selectiva.
 - **[FIX] Fragmentación de turnos gigantes:** `_split_long_message` no partía una
   línea individual mayor que el presupuesto (JSON minificado/dump de tool) y no
   descontaba la cabecera repetida. Ahora corta por caracteres como último recurso y
