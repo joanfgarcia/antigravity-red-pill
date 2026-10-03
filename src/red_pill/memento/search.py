@@ -49,7 +49,9 @@ def _rg_search(root: Path, query: str, globs: List[str], prefix: str, limit: int
 	rg = shutil.which("rg")
 	if rg is None:
 		return None
-	cmd = [rg, "-n", "-i", "--no-heading", "--max-count", "3", "-m", str(limit)]
+	# `-F` (literal) para paridad con el fallback Python (`re.escape`): sin él,
+	# `foo.bar` significa regex en rg y literal en Python según el host.
+	cmd = [rg, "-n", "-i", "-F", "--no-heading", "--max-count", "3", "-m", str(limit)]
 	for glob in globs:
 		cmd += ["-g", f"{prefix}{glob}"]
 	# cwd=root y ruta ".": rg evalúa `-g` relativo al directorio de trabajo, no a la

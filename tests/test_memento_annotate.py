@@ -220,9 +220,9 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
 
-	assert distill_prompt_version() == "66c679f1bb"
-	assert refine_prompt_version() == "85209a6c9e"
-	assert annotate_prompt_version() == "3282c538f8"  # v1 + Bio fija (test)
+	assert distill_prompt_version() == "64ab6661d1"  # idioma de la fuente (2026-10-03)
+	assert refine_prompt_version() == "69466365b9"  # + memory por idea, idioma de los fragmentos (2026-10-03)
+	assert annotate_prompt_version() == "4a31060ed9"  # v1 + Bio fija + idioma de la fuente (test)
 	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
 
 
@@ -451,3 +451,49 @@ def test_ascender_dual_route_none_no_asciende(tmp_path):
 	)
 	res = ascender(tmp_path, None, refine)
 	assert res == {"ascended": False, "reason": "dual_route_none"}
+
+
+def test_annotate_preserva_sello_ascended_yaml_bool(tmp_path, monkeypatch):
+	"""Bug 2026-10-03: `pfm.get("ascended") == "true"` nunca casaba con el bool
+	que devuelve yaml.safe_load → la re-anotación perdía el sello. Ahora se
+	conserva si el stem no cambió (ascender es upsert idempotente por point id)."""
+	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	dir_rel = _tree(tmp_path)
+	annotate_dir = tmp_path / dir_rel / "annotate"
+	annotate_dir.mkdir(parents=True, exist_ok=True)
+	(annotate_dir / "001-fix-del-endpoint.md").write_text(
+		"---\nsession_id: opencode:s1\nsource_lines: memento/index.md#l1-20\n"
+		"ascended: true\nascended_at: 2026-09-17T00:00:00Z\nascended_to: work_memories\n"
+		"ascended_point_id: P-123\n---\nnota previa\n",
+		encoding="utf-8",
+	)
+	annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", _fake_transport())
+	text = (annotate_dir / "001-fix-del-endpoint.md").read_text(encoding="utf-8")
+	assert "ascended: true" in text
+	assert "ascended_point_id: P-123" in text
+
+
+def _load_ascend_script():
+	import importlib.util
+
+	spec = importlib.util.spec_from_file_location("memento_ascend_script", Path("scripts/memento_ascend.py"))
+	mod = importlib.util.module_from_spec(spec)
+	assert spec.loader is not None
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def test_ascend_script_ignora_notas_ya_ascendidas(tmp_path):
+	"""Bug 2026-10-03: `_ascendable_sessions` comparaba `== "true"` y colaba notas
+	ya ascendidas (contadores inflados y trabajo redundante). Con el bool real se
+	excluyen."""
+	mod = _load_ascend_script()
+	root = tmp_path / "memento_root"
+	nota = root / "2026-09" / "opencode" / "s1" / "annotate"
+	nota.mkdir(parents=True)
+	(nota / "001-nota.md").write_text(
+		"---\nsession_id: opencode:s1\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.1\n"
+		"significance: 0.9\nascended: true\n---\ncuerpo\n",
+		encoding="utf-8",
+	)
+	assert mod._ascendable_sessions(root) == {}
