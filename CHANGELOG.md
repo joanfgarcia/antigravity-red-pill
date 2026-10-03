@@ -1,5 +1,32 @@
 ## Unreleased
 
+### 🧬 Memento — sellos de ascensión, texto multi-idea y robustez (2026-10-03)
+
+Corrección quirúrgica de bugs verificados con evidencia reproducible (auditoría
+externa + arnés propio). Sin cambios de esquema ni de política NO-DESTRUCTIVE.
+
+- **[FIX] Sello de ascensión YAML:** `annotate.py` y `memento_ascend.py` comparaban
+  `ascended == "true"` mientras `yaml.safe_load` devuelve `True` — el sello nunca se
+  detectaba en la re-anotación (pérdida de idempotencia) ni en el precálculo de
+  sesiones ascendibles (contadores inflados). Ahora aceptan bool y string.
+- **[FIX] Colisión de sellos multi-idea:** `refine.py` guardaba los sellos previos
+  solo por `source_lines`; un fragmento con N ideas colapsaba N sellos en uno y una
+  idea heredaba el `ascended_point_id` de otra. La clave pasa a `(source_lines, stem)`,
+  el mismo discriminador de `refine_point_id`.
+- **[FIX] Texto por idea:** los prompts de refine (WORK/SOCIAL) piden ahora un campo
+  `memory` autocontenido por idea; antes N ideas del mismo fragmento llegaban a Qdrant
+  con el summary idéntico. Fallback al summary si el modelo no emite `memory`
+  (compatibilidad). `refine_prompt_version` cambia en consecuencia: los artefactos
+  sellados con el prompt anterior quedan marcados para regeneración selectiva.
+- **[FIX] Fragmentación de turnos gigantes:** `_split_long_message` no partía una
+  línea individual mayor que el presupuesto (JSON minificado/dump de tool) y no
+  descontaba la cabecera repetida. Ahora corta por caracteres como último recurso y
+  el presupuesto incluye la cabecera.
+- **[FIX] Paridad de búsqueda:** `search.py` usa `rg -F` (literal) para alinearse con
+  el fallback Python (`re.escape`); antes `foo.bar` era regex con rg y literal sin él.
+- **[FIX] Registry atómico:** `MementoRegistry.save()` escribe con tmp + flush + fsync
+  + `os.replace` bajo lock; antes un crash podía truncar `memento_registry.json`.
+
 ### 🩺 Remediación de la auditoría del lote DeepSeek (2026-10-02)
 
 Revisión a fondo de lo entrado en #103 y en la rama P1b. El refactor conservaba

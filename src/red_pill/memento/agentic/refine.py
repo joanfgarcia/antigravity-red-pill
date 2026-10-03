@@ -133,10 +133,11 @@ def refine_session(
 	escribe UN refine. El 1:1 anterior (1 distill → 1 refine) queda obsoleto."""
 	refine_dir = root / dir_rel / "refine"
 	refine_dir.mkdir(parents=True, exist_ok=True)
-	# Preservar el sello de ascensión de los refines previos con la MISMA identidad
-	# (`source_lines`): la re-destilización no debe des-ascender lo que ya está
-	# promocionado — `ascender` es un upsert idempotente por esa clave.
-	prev_seals: Dict[str, Dict[str, Any]] = {}
+	# Preservar el sello de ascensión de refines previos. `source_lines` NO basta
+	# como identidad: un mismo fragmento puede producir varias ideas y el dict
+	# colapsaría sus sellos (la última sobreescribe). La clave es
+	# (source_lines, stem), el mismo discriminador que usa refine_point_id.
+	prev_seals: Dict[tuple[str, str], Dict[str, Any]] = {}
 	for prev in refine_dir.glob("*.md"):
 		try:
 			from red_pill.memento.ascension import parse_refine as _parse_refine
@@ -145,7 +146,7 @@ def refine_session(
 		except Exception:
 			continue
 		if pfm.get("ascended"):
-			prev_seals[str(pfm.get("source_lines") or "")] = {
+			prev_seals[(str(pfm.get("source_lines") or ""), prev.stem)] = {
 				"ascended": True,
 				"ascended_at": pfm.get("ascended_at"),
 				"ascended_to": pfm.get("ascended_to"),
@@ -172,6 +173,7 @@ def refine_session(
 				continue
 			title = str(idea.get("title") or f"Idea {nnn}")[:80]
 			slug = slugify_title(title)
+			stem = f"{nnn}-{slug}"
 			try:
 				ref_idx = int(idea.get("fragment_ref") or 1)
 			except (TypeError, ValueError):
@@ -184,7 +186,13 @@ def refine_session(
 				category_score = 0.5
 			# Sanear relicas: el LLM a veces devuelve un int en vez de un array.
 			relics = [str(r) for r in _as_list(idea.get("relics"))][:4]
-			seal = prev_seals.get(str(origin["source_lines"]), {})
+			# Texto propio de la idea: sin él, varias ideas del mismo fragmento
+			# comparten el summary y llegan idénticas a Qdrant. Fallback al summary
+			# para prompts/modelos que aún no emiten `memory`.
+			memory_text = str(idea.get("memory") or idea.get("text") or origin["summary"]).strip()
+			if not memory_text:
+				memory_text = str(origin["summary"]).strip()
+			seal = prev_seals.get((str(origin["source_lines"]), stem), {})
 			refine_fm = _frontmatter_block(
 				[
 					("session_id", session_id),
@@ -200,7 +208,7 @@ def refine_session(
 					("category_score", category_score),
 					("engine", runtime.engine_id()),
 					("prompt_version", runtime.refine_prompt_version()),
-					# Estado de ascensión (Fase 4 §3): se preserva si la identidad (source_lines) no cambió.
+					# Estado de ascensión (Fase 4 §3): se preserva si (source_lines, stem) no cambió.
 					("ascended", bool(seal.get("ascended", False))),
 					("ascended_at", seal.get("ascended_at")),
 					("ascended_to", seal.get("ascended_to")),
@@ -209,5 +217,5 @@ def refine_session(
 					("last_reinforced_at", seal.get("last_reinforced_at")),
 				]
 			)
-			(refine_dir / f"{nnn}-{slug}.md").write_text(f"{refine_fm}\n\n{origin['summary']}\n", encoding="utf-8")
+			(refine_dir / f"{stem}.md").write_text(f"{refine_fm}\n\n{memory_text}\n", encoding="utf-8")
 	return max_significance

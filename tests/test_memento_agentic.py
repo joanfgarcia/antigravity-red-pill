@@ -776,3 +776,86 @@ def test_refine_no_preserva_sello_si_cambia_source_lines(tmp_path):
 	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s2, [], _alta, min_significance=0.3)
 	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
 	assert "ascended: false" in text
+
+
+def test_refine_preserva_sello_por_idea_en_mismo_source_lines(tmp_path):
+	"""Dos ideas del MISMO fragmento no colapsan su sello: cada stem conserva su
+	propio ascended_point_id (bug 2026-10-03: prev_seals keyed solo por
+	source_lines → la última sobreescribía a la otra y una idea heredaba un point
+	id ajeno)."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.ascension import parse_refine
+	from red_pill.memento.render import update_frontmatter_fields
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	def transport(system, user, max_tokens):
+		return json.dumps(
+			[
+				{"title": "Idea Alfa", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []},
+				{"title": "Idea Beta", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []},
+			]
+		)
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], transport, min_significance=0.3)
+	refine_dir = root / rendered.dir_rel / "refine"
+	update_frontmatter_fields(refine_dir / "001-idea-alfa.md", {"ascended": True, "ascended_point_id": "AAA"})
+	update_frontmatter_fields(refine_dir / "001-idea-beta.md", {"ascended": True, "ascended_point_id": "BBB"})
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], transport, min_significance=0.3)
+	seals = {}
+	for f in refine_dir.glob("*.md"):
+		fm, _ = parse_refine(f.read_text(encoding="utf-8"))
+		seals[f.stem] = fm.get("ascended_point_id")
+	assert seals["001-idea-alfa"] == "AAA"
+	assert seals["001-idea-beta"] == "BBB"
+
+
+def test_refine_escribe_memory_por_idea_y_fallback_al_summary(tmp_path):
+	"""El refine usa el texto `memory` de cada idea (autocontenido); si el modelo
+	no lo emite, cae al summary del fragmento (compatibilidad hacia atrás)."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.ascension import parse_refine
+
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "RESUMEN DEL FRAGMENTO", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	def with_memory(system, user, max_tokens):
+		return json.dumps(
+			[
+				{"title": "Alfa", "memory": "Texto propio de alfa", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []},
+				{"title": "Beta", "memory": "Texto propio de beta", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []},
+			]
+		)
+
+	root_a, _reg_a, rendered_a = _tree_with_session(tmp_path / "a")
+	refine_session(root_a, rendered_a.dir_rel, "opencode:s1", "opencode", sections, [], with_memory, min_significance=0.3)
+	bodies = {
+		f.stem: parse_refine(f.read_text(encoding="utf-8"))[1] for f in (root_a / rendered_a.dir_rel / "refine").glob("*.md")
+	}
+	assert set(bodies.values()) == {"Texto propio de alfa", "Texto propio de beta"}
+
+	def legacy(system, user, max_tokens):
+		return json.dumps([{"title": "Alfa", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []}])
+
+	root_b, _reg_b, rendered_b = _tree_with_session(tmp_path / "b")
+	refine_session(root_b, rendered_b.dir_rel, "opencode:s1", "opencode", sections, [], legacy, min_significance=0.3)
+	body = parse_refine(next((root_b / rendered_b.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8"))[1]
+	assert body == "RESUMEN DEL FRAGMENTO"
+
+
+def test_split_long_message_corta_linea_unica_gigante():
+	"""Una línea individual mayor que el presupuesto (JSON minificado, dump de
+	tool) se corta por caracteres y ningún trozo excede max_chars, cabecera
+	incluida (bug 2026-10-03)."""
+	from red_pill.memento.agentic import _split_long_message
+
+	subs = _split_long_message(("HEADER", "X" * 100_000), max_chars=1000, overlap=0)
+	assert subs
+	assert all(len(h) + 1 + len(b) <= 1000 for h, b in subs)
+	assert "".join(b for _h, b in subs) == "X" * 100_000
+
+	# presupuesto con cabecera repetida: un cuerpo que "cabía" antes ahora no desborda
+	lines = "\n".join(["y" * 99] * 10)
+	subs2 = _split_long_message(("H" * 20, lines), max_chars=1000, overlap=0)
+	assert all(len(h) + 1 + len(b) <= 1000 for h, b in subs2)

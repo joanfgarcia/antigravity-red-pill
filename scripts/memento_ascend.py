@@ -74,7 +74,9 @@ def _ascendable_sessions(root: Path) -> Dict[str, Dict[str, Any]]:
 	for p in sorted(root.rglob("annotate/*.md")):
 		txt = p.read_text(encoding="utf-8", errors="replace")
 		fm, _body = parse_refine(txt)
-		if fm.get("ascended") == "true":
+		ascended_raw = fm.get("ascended")
+		ascended = ascended_raw if isinstance(ascended_raw, bool) else str(ascended_raw).strip().lower() == "true"
+		if ascended:
 			continue
 		route = str(fm.get("dual_route") or "none").strip().lower()
 		if route not in ("work", "social"):

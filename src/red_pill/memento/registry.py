@@ -11,6 +11,9 @@ alimenta el hilo.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,6 +32,7 @@ class MementoRegistry:
 
 			path = get_data_dir() / "memento_registry.json"
 		self.path = Path(path)
+		self._lock = threading.RLock()
 		self.state = _default_state()
 		if self.path.exists():
 			try:
@@ -79,9 +83,29 @@ class MementoRegistry:
 		sessions.setdefault(session_id, {}).update(entry)
 
 	def save(self) -> None:
-		self.state["last_run"] = datetime.now(timezone.utc).isoformat()
-		self.path.parent.mkdir(parents=True, exist_ok=True)
-		self.path.write_text(json.dumps(self.state, indent=2, ensure_ascii=False), encoding="utf-8")
+		"""Escritura atómica: tmp + flush + fsync + os.replace bajo lock.
+
+		El lock protege hilos que comparten instancia; la coordinación
+		entre procesos queda delegada a la arquitectura single-writer.
+		"""
+		with self._lock:
+			self.state["last_run"] = datetime.now(timezone.utc).isoformat()
+			self.path.parent.mkdir(parents=True, exist_ok=True)
+			payload = json.dumps(self.state, indent=2, ensure_ascii=False)
+			fd, tmp_name = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
+			tmp = Path(tmp_name)
+			try:
+				with os.fdopen(fd, "w", encoding="utf-8") as f:
+					f.write(payload)
+					f.flush()
+					os.fsync(f.fileno())
+				os.replace(tmp, self.path)
+			except Exception:
+				try:
+					tmp.unlink(missing_ok=True)
+				except Exception:
+					pass
+				raise
 
 
 def recompute_chain(root: Path, registry: MementoRegistry, source: str) -> int:

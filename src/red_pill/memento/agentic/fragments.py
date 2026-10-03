@@ -193,18 +193,39 @@ def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap:
 
 def _split_long_message(msg: Tuple[str, str], max_chars: int, overlap: int) -> List[Tuple[str, str]]:
 	"""Sub-particiona un turno gigante por líneas: cada trozo ≤ max_chars, con
-	solape de las últimas `overlap` líneas, y la cabecera repetida en cada uno."""
+	solape de las últimas `overlap` líneas, y la cabecera repetida en cada uno.
+
+	El presupuesto descuenta la cabecera repetida (antes un cuerpo de `max_chars`
+	excedía el contrato por `len(header) + 1`). Una línea individual mayor que el
+	presupuesto (JSON minificado, dump de tool) se corta por caracteres: violar
+	el contexto del modelo es peor que partir una línea."""
 	header, body = msg
+	body_budget = max(1, max_chars - len(header) - 1)
 	lines = body.split("\n")
 	out: List[Tuple[str, str]] = []
 	current: List[str] = []
 	current_chars = 0
+
+	def flush(*, keep_overlap: bool = True) -> None:
+		nonlocal current, current_chars
+		if not current:
+			return
+		out.append((header, "\n".join(current)))
+		current = current[-overlap:] if keep_overlap and overlap > 0 else []
+		current_chars = sum(len(ln) + 1 for ln in current)
+
 	for line in lines:
 		line_len = len(line) + 1
-		if current and current_chars + line_len > max_chars:
-			out.append((header, "\n".join(current)))
-			current = current[-overlap:] if overlap > 0 else []
-			current_chars = sum(len(ln) + 1 for ln in current)
+		if line_len > body_budget:
+			# Línea única mayor que el presupuesto total: volcar lo pendiente y
+			# partirla por caracteres (último recurso).
+			flush(keep_overlap=False)
+			for start in range(0, len(line), body_budget):
+				out.append((header, line[start : start + body_budget]))
+			current, current_chars = [], 0
+			continue
+		if current and current_chars + line_len > body_budget:
+			flush()
 		current.append(line)
 		current_chars += line_len
 	if current:

@@ -513,7 +513,9 @@ def annotate_session(
 			pfm, _ = _parse_refine(prev.read_text(encoding="utf-8"))
 		except Exception:
 			continue
-		if pfm.get("ascended") == "true":
+		ascended_raw = pfm.get("ascended")
+		ascended = ascended_raw if isinstance(ascended_raw, bool) else str(ascended_raw).strip().lower() == "true"
+		if ascended:
 			prev_seals[prev.stem] = {
 				"ascended": True,
 				"ascended_at": pfm.get("ascended_at"),

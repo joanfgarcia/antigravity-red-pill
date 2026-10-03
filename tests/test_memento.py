@@ -1,5 +1,7 @@
 """Memento Chronicle (RFC-002 Fase 1): renderer, scrubber, registry e hilo prev/next."""
 
+import pytest
+
 from red_pill.memento.clean import normalize_noise
 from red_pill.memento.registry import MementoRegistry, recompute_chain
 from red_pill.memento.render import (
@@ -223,6 +225,29 @@ def test_registry_roundtrip_and_chain(tmp_path):
 	assert reloaded.state["stats"]["total_sessions"] == 3
 
 
+def test_registry_save_es_atomico_ante_fallo(tmp_path, monkeypatch):
+	"""save() usa tmp+fsync+os.replace: un fallo a mitad no trunca el registro
+	existente ni deja temporales sueltos (bug 2026-10-03: write_text directo)."""
+	import red_pill.memento.registry as registry_mod
+
+	path = tmp_path / "memento_registry.json"
+	registry = MementoRegistry(path=path)
+	registry.upsert("opencode", "opencode:s1", {"dir": "d1"})
+	registry.save()
+	original = path.read_text(encoding="utf-8")
+
+	registry.upsert("opencode", "opencode:s2", {"dir": "d2"})
+
+	def boom(*_a, **_k):
+		raise OSError("disk full")
+
+	monkeypatch.setattr(registry_mod.os, "fsync", boom)
+	with pytest.raises(OSError):
+		registry.save()
+	assert path.read_text(encoding="utf-8") == original
+	assert list(tmp_path.glob(".memento_registry.json.*.tmp")) == []
+
+
 def test_chain_skips_unrendered_sessions(tmp_path):
 	registry = MementoRegistry(path=tmp_path / "reg.json")
 	registry.upsert("opencode", "opencode:empty", {"step_count": 5})
@@ -274,6 +299,25 @@ def test_search_memento_python_fallback(tmp_path):
 	root, _registry = _build_tree(tmp_path)
 	hits = _python_search(root, "carpaccio", _SCOPE_GLOBS["memento"], "*/*/*/", 10)
 	assert len(hits) == 2
+
+
+def test_rg_search_es_literal_como_el_fallback_python(tmp_path):
+	"""rg busca con -F como el fallback Python (`re.escape`): `foo.bar` no debe
+	casar `fooXbar` según el host tenga ripgrep o no (bug 2026-10-03)."""
+	import shutil
+
+	from red_pill.memento.search import _python_search, _rg_search
+
+	if shutil.which("rg") is None:
+		pytest.skip("ripgrep no instalado")
+
+	root = tmp_path / "m"
+	root.mkdir()
+	(root / "a.md").write_text("foo.bar literal\nfooXbar regex-only\n", encoding="utf-8")
+	rg_hits = _rg_search(root, "foo.bar", ["*.md"], "", 20) or []
+	py_hits = _python_search(root, "foo.bar", ["*.md"], "", 20)
+	assert len(rg_hits) == 1 and "foo.bar literal" in rg_hits[0]["snippet"]
+	assert len(py_hits) == 1 and "foo.bar literal" in py_hits[0]["snippet"]
 
 
 def test_rebuild_indexes(tmp_path):
