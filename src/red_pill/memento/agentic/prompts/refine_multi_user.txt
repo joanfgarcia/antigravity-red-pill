@@ -1,7 +1,7 @@
 Extract ALL durable ideas from these distilled fragments.
 
 Each idea is an independent durable memory (decision, insight, milestone). Return an ARRAY (may be empty). For each idea:
-- "title": short Spanish title (≤80 chars).
+- "title": short title (≤80 chars), same language as the fragments.
 - "significance": 0.0-1.0 — durable value for LONG-TERM MEMORY. NOT only technical: personal, relational, emotional, identity-shaping moments are ALSO durable. Calibration: technical decisions/insights 0.6-1.0; meaningful personal/relational/emotional moments 0.4-0.9; small talk, routine plumbing, filler < 0.3.
 - "emotion": one color of [gray, blue, cyan, green, yellow, orange, red, purple].
 - "intensity": 0.0-1.0.

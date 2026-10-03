@@ -220,9 +220,9 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
 
-	assert distill_prompt_version() == "66c679f1bb"
+	assert distill_prompt_version() == "64ab6661d1"  # idioma de la fuente (2026-10-03)
 	assert refine_prompt_version() == "69466365b9"  # + memory por idea, idioma de los fragmentos (2026-10-03)
-	assert annotate_prompt_version() == "3282c538f8"  # v1 + Bio fija (test)
+	assert annotate_prompt_version() == "4a31060ed9"  # v1 + Bio fija + idioma de la fuente (test)
 	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
 
 

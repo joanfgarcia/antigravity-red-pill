@@ -23,7 +23,7 @@ ACTIVITY_PATH = get_data_dir() / "recent_activity.md"
 EMPTY_MARKER = "No recent activity data available."
 
 SYSTEM_PROMPT = "You are a context-summarizer. Output ONLY the 2-3 line activity summary. No preamble, no filler."
-USER_PROMPT = """Synthesize a 2-3 line summary of the operator's recent activity. Highlight key technical decisions, project milestones, and emotional context. Be specific, concrete. Spanish or mixed OK. No filler phrases like 'The operator has been...'. Max 3 lines.
+USER_PROMPT = """Synthesize a 2-3 line summary of the operator's recent activity. Highlight key technical decisions, project milestones, and emotional context. Be specific, concrete. Same language as the source data. No filler phrases like 'The operator has been...'. Max 3 lines.
 
 DATA:
 {context}"""

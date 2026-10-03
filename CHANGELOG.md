@@ -20,6 +20,11 @@ externa + arnés propio). Sin cambios de esquema ni de política NO-DESTRUCTIVE.
   modelo no emite `memory` (compatibilidad). `refine_prompt_version` cambia en
   consecuencia: los artefactos sellados con el prompt anterior quedan marcados para
   regeneración selectiva.
+- **[FIX] Idioma de todo el pipeline Memento:** los prompts de distill, annotate
+  (v1/v2), refine y voice-rewrite dejan de hardcodear español y siguen el idioma de
+  la fuente (convención ya presente en `voice_rule`: «same language as the source»);
+  igual para las fases metabólicas de perfil/actividad («Spanish or mixed OK» fuera).
+  Cambian los fingerprints de distill y annotate (pins de test actualizados).
 - **[FIX] Fragmentación de turnos gigantes:** `_split_long_message` no partía una
   línea individual mayor que el presupuesto (JSON minificado/dump de tool) y no
   descontaba la cabecera repetida. Ahora corta por caracteres como último recurso y

@@ -21,7 +21,7 @@ TAG = "OPERATOR_PROFILE"
 PROFILE_PATH = get_data_dir() / "operator_profile.md"
 
 SYSTEM_PROMPT = "You are a context-summarizer. Output ONLY the operator profile. No preamble, no filler."
-USER_PROMPT = """Generate a short profile of the OPERATOR (the human), 2-4 lines: their name, role, key traits, and current focus areas. Be concrete — name real projects and decisions from the data. Spanish or mixed OK.
+USER_PROMPT = """Generate a short profile of the OPERATOR (the human), 2-4 lines: their name, role, key traits, and current focus areas. Be concrete — name real projects and decisions from the data. Same language as the source data.
 If no meaningful data about the operator, respond: INSUFFICIENT_DATA
 
 DATA:
