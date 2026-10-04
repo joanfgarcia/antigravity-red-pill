@@ -504,6 +504,70 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="bunker_memory_api",
+	action="recall",
+	description=(
+		"[OFFICIAL] Scored recall over the vector memory collections (Qdrant): the same path the "
+		"CLI `search` and the per-turn handshake RAG use. Applies hybrid semantic+keyword recall "
+		"(RRF + MMR) when MEMORY_HYBRID_RECALL_ENABLED. Use `search_memento` for literal full-text "
+		"over the Memento tree and `search_memory_research` for Oracle-based research. "
+		"Collections/aliases: work (default), social, directive, story, interaction."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string", "description": "Natural-language query."},
+			"collection": {
+				"type": "string",
+				"description": "Collection or alias: work|social|directive|story|interaction. Default: work.",
+			},
+			"limit": {"type": "integer", "description": "Max results. Default: 3."},
+			"deep": {
+				"type": "boolean",
+				"description": "Deep recall (bypass the reinforcement floor). Default: false; DEEP_RECALL_TRIGGERS auto-enable it.",
+			},
+		},
+		"required": ["query"],
+	},
+)
+async def handle_recall(arguments: Dict[str, Any]):
+	import asyncio
+
+	from red_pill.cli import get_collection
+	from red_pill.memory import MemoryManager
+
+	query = arguments["query"]
+	collection = get_collection(arguments.get("collection", "work"))
+	limit = int(arguments.get("limit", 3))
+	deep = bool(arguments.get("deep", False))
+
+	def _run() -> List[Any]:
+		return MemoryManager().search_and_reinforce(
+			collection, query, limit=limit, deep_recall=deep, caller="mcp_recall", hybrid=True
+		)
+
+	try:
+		# Blocking search (embeddings + Qdrant + RRF/MMR): never run it on the event loop.
+		results = await asyncio.to_thread(_run)
+	except Exception as e:
+		logger.error(f"recall failed: {e}", exc_info=True)
+		return [types.TextContent(type="text", text=f"[RED PILL ERROR] recall failed: {e}")]
+
+	header = f"--- [RESULTS: {collection.upper()}] ---"
+	if not results:
+		return [types.TextContent(type="text", text=f"{header}\n(no results in the Búnker)")]
+	lines = [header]
+	for hit in results:
+		payload = getattr(hit, "payload", {}) or {}
+		score = payload.get("reinforcement_score", 0.0)
+		color = str(payload.get("color", "gray")).upper()
+		intensity = payload.get("intensity", 1.0)
+		status = " [IMMUNE]" if payload.get("immune") else f" (Score: {float(score):.2f})"
+		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
+	return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
 	action="traverse_thread",
 	description="Walk the Ariadne's Thread through work_memories or social_memories. level='session' (default): best matching synthesis_hub + temporal chain via prev/next_session_hub axons. level='member': the intra-session chain of curated member engrams (order of refine).",
 	schema={
