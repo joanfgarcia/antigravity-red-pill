@@ -135,6 +135,7 @@ async function recall(query: string, collection: string, limit: number): Promise
 			action: "recall",
 			payload: { query: clean, collection, limit },
 		});
+		if (result.isError) return ""; // server-side validation failure → degrade, don't inject the error
 		return filterByScore(mcpResultText(result).trim());
 	} catch {
 		return ""; // Búnker caído/offline → degradación silenciosa
