@@ -36,10 +36,26 @@ def load_distiller_config(yaml_path: Optional[str] = None) -> DistillerParamsCon
 	return DistillerParamsConfig()
 
 
-def load_prompt_text(filename: str, fallback_prompt: str = "", override_text: Optional[str] = None) -> str:
-	"""Carga el texto del prompt desde archivo externo .txt con soporte para override."""
+def load_prompt_text(
+	filename: str,
+	fallback_prompt: str = "",
+	override_text: Optional[str] = None,
+	static: Optional[Dict[str, str]] = None,
+) -> str:
+	"""Carga el texto del prompt desde recurso (PROMPT-001): manifiesto del
+	componente con placeholders resueltos. `override_text` (bake-offs) gana.
+
+	Si el fichero no está declarado en el manifiesto (prompt_file custom de un
+	perfil), cae a lectura directa — compatibilidad con el carril antiguo."""
 	if override_text:
 		return override_text
+	try:
+		from red_pill.core import prompts as core
+
+		stem = os.path.basename(filename).rsplit(".", 1)[0]
+		return core.resolve("metabolism", stem, static=static or {}).text.strip()
+	except Exception:
+		pass
 	path = os.path.join(PROMPTS_DIR, filename)
 	if os.path.exists(path):
 		try:
@@ -266,7 +282,7 @@ def distill_engram(
 	prompt_file = (override_params or {}).get("prompt_file")
 	if not prompt_file:
 		prompt_file = _resolve_prompt_for_profile() or params.get("prompt_file") or "distiller_v3.txt"
-	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
+	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt, static={"agent_name": "Aleth", "operator_name": "Joan"})
 
 	agent_name = "Aleth"
 	operator_name = "Joan"
@@ -742,7 +758,7 @@ def audit_engram_quality(
 
 	from red_pill.core.providers import ProviderRegistry
 
-	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt)
+	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name})
 	system_prompt = system_prompt.replace("{agent_name}", agent_name).replace("{operator_name}", operator_name)
 
 	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"

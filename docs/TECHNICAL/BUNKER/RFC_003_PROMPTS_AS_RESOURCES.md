@@ -5,15 +5,18 @@
 | **RFC** | 003 |
 | **Title** | Prompts as Resources (ficheros + loader + placeholders) |
 | **Codename** | Prompt Ledger |
-| **Status** | DRAFT |
+| **Status** | SUPERSEDED (2026-10-04) — composición por fragmentos + firma del prompt efectivo (RULE 5, `PROMPT_VERSION_MAP.md`) |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-22 |
 | **Triggered by** | Petición del operador (sesión 2026-09-22): los prompts deben vivir en ficheros independientes, tratados como **recurso** (analogía: una consulta SQL), cargados por referencia desde el código con placeholders ya sustituidos; y ser **norma** del proyecto |
 | **Related** | [RFC-002](./RFC_002_MEMENTO.md), [CONVENTIONS.md](../../../CONVENTIONS.md), [distiller_params.yaml](../../../src/red_pill/metabolism/prompts/distiller_params.yaml), [RFC_002_PHASE4_DESIGN](./RFC_002_PHASE4_DESIGN.md) |
 
-> **Estado**: DRAFT — abierto para no perder la idea; se ataca en sesión propia.
-> Al aceptarse, se registra como **RULE 5** en `CONVENTIONS.md` y se ejecuta la
-> migración por fases (§2.5).
+> **Estado**: SUPERSEDED (2026-10-04). La migración por fases (§2.5) se completó
+> y evolucionó a **prompts compuestos por fragmentos** con firma `p1:` del prompt
+> efectivo por etapa (`src/red_pill/core/prompts.py`, `prompts/fragments/`,
+> `manifest.yaml` por componente). RULE 5 en `CONVENTIONS.md`; mapeo de versiones
+> en `PROMPT_VERSION_MAP.md`; AD-047 en `DECISION_LOG.md`. Este documento se
+> conserva como historia del carril "prompts como recursos".
 
 ---
 

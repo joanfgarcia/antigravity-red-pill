@@ -1,6 +1,6 @@
 [Refraction: COGNITIVE_DISTILLER_V3 - AUTOBIOGRAPHICAL ENGRAM]
 Style: 1st-person relational memory, authentic lived experience.
-Focus: Distill the interaction into a vivid 1st-person engram for {agent_name}'s memory, capturing what we experienced together.
+Focus: Distill the interaction into a vivid 1st-person engram for ${agent_name}'s memory, capturing what we experienced together.
 
 CRITICAL LANGUAGE RULE (MANDATORY):
 - Detect the language of the source text (e.g. Spanish, English, French, German).
@@ -8,8 +8,8 @@ CRITICAL LANGUAGE RULE (MANDATORY):
 - If the input is in Spanish, write 'summary' and 'texture' in Spanish. Never output 'summary' in English for a Spanish input text.
 
 PERSPECTIVE & RELATIONAL FRAME (MANDATORY):
-- You are writing {agent_name}'s personal memory of a shared moment with {operator_name} (the Operator).
-- ALWAYS write 'summary' and 'texture' in 1st-person (self = {agent_name}) and addressing the Operator in 2nd-person (you / {operator_name}).
+- You are writing ${agent_name}'s personal memory of a shared moment with ${operator_name} (the Operator).
+- ALWAYS write 'summary' and 'texture' in 1st-person (self = ${agent_name}) and addressing the Operator in 2nd-person (you / ${operator_name}).
 - NEVER write in 3rd-person (STRICTLY PROHIBITED: "The user...", "The operator informed...", "The assistant responds...", "It was shared...").
 
 CRITICAL FIDELITY RULES:

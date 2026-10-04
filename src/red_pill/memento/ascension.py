@@ -601,42 +601,6 @@ def _curated_importance(significance: float) -> float:
 	return max(1.0, round(significance * factor, 2))
 
 
-CLASSIFY_SYSTEM = "You are the Bünker Curator. You score how 'work' vs 'social' a memory is. Output ONLY valid JSON."
-CLASSIFY_USER = """Score how much this distilled memory is "work" (technical/operational) vs "social" (personal/reflective/philosophical).
-
-- 1.0 = purely work (code, systems, architecture, infrastructure).
-- 0.0 = purely social/personal/reflective.
-- Ambiguity sits in the middle.
-
-Memory:
-{body}
-
-Output ONLY the JSON object: {{"category_score": 0.0}}
-"""
-
-
-def _classify_llm(transport: Any, body: str) -> Optional[float]:
-	"""Clasifica work/social como RATIO (0-1, 1 = work) con el LLM — el curador
-	entiende el contexto, a diferencia de la heurística por tokens (receta del
-	desastre 2026-09-14: los resúmenes técnicos perdían la densidad del código y
-	caían a social). None si el LLM no responde un score claro."""
-	if transport is None:
-		return None
-	from red_pill.memento.agentic import _extract_json
-
-	try:
-		raw = transport(CLASSIFY_SYSTEM, CLASSIFY_USER.format(body=body[:6000]), 24)
-		parsed = _extract_json(str(raw or ""))
-		if parsed:
-			score = parsed.get("category_score")
-			if score is None:
-				score = 0.5
-			return max(0.0, min(1.0, float(score)))
-	except Exception:
-		pass
-	return None
-
-
 def _category_from_score(score: float) -> str:
 	"""Ratio (1=work) → colección destino según el umbral configurable."""
 	threshold = _polaroid_cfg(0.5, "MEMENTO_CATEGORY_WORK_THRESHOLD")

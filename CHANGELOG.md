@@ -9,6 +9,10 @@
   `MEMENTO_PROMPT_LANGUAGE=auto|es|en|ca|...` (default `auto` = idioma de la
   fuente; forzar uno entra en la firma → stale). La frase de idioma se retira de
   los prompts y del voice rule (una sola directiva).
+- **[CHANGE]** F4 — migración de metabolism (distiller/fases/hubs) y del tool de
+  recalibración a manifiestos propios; prompts inline eliminados (`_classify_llm`
+  muerto fuera). RULE 5 en `CONVENTIONS.md`; RFC-003 marcado **superseded**
+  (AD-047); CI `validate_all` + anti-huérfanos/duplicación/inline.
 
 - **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
   curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;

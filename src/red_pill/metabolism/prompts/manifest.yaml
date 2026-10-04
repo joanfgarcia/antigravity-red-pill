@@ -1,0 +1,47 @@
+# Manifiesto de prompts de metabolism (PROMPT-001, F4).
+#
+# - `template`: relativo a este directorio.
+# - `static`: valores de configuración resueltos en generación (nombres del
+#   agente/operador; `prompt_language` vía provider del loader).
+# - `runtime`: valores por llamada (contexto de la fase) — sentinelas.
+component: metabolism
+
+prompts:
+  distiller_v3:
+    template: distiller_v3.txt
+    static: [agent_name, operator_name]
+
+  distiller_v3_voice:
+    template: distiller_v3_voice.txt
+    static: [agent_name, operator_name]
+
+  engram_quality_auditor:
+    template: engram_quality_auditor.txt
+    static: [agent_name, operator_name]
+
+  hub_synthesis_v2:
+    template: hub_synthesis_v2.txt
+
+  classify_category:
+    template: classify_category.txt
+
+  session_anchors:
+    template: session_anchors.txt
+
+  recent_activity_system:
+    template: recent_activity_system.txt
+
+  recent_activity_user:
+    template: recent_activity_user.txt
+    fragments: {language: language.txt}
+    static: [prompt_language]
+    runtime: [context]
+
+  operator_profile_system:
+    template: operator_profile_system.txt
+
+  operator_profile_user:
+    template: operator_profile_user.txt
+    fragments: {language: language.txt}
+    static: [prompt_language]
+    runtime: [context]

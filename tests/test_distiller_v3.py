@@ -114,9 +114,9 @@ def test_profile_prompt_routing_beats_params_default(monkeypatch):
 	seen = {}
 	real_load = dist.load_prompt_text
 
-	def spy(filename, fallback_prompt="", override_text=None):
+	def spy(filename, fallback_prompt="", override_text=None, **kwargs):
 		seen["prompt_file"] = filename
-		return real_load(filename, fallback_prompt, override_text)
+		return real_load(filename, fallback_prompt, override_text, **kwargs)
 
 	monkeypatch.setattr(dist, "load_prompt_text", spy)
 	_mock_provider(monkeypatch, {"summary": "s", "emotion": "joy", "intensity": 0.5, "category": "social", "lang": "es"})

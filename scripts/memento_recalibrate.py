@@ -31,21 +31,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-SYSTEM_CLASSIFY = (
-	"Eres el curador de memoria del operador. Clasificas refinados de conversaciones en: "
-	"work (técnico/operativo: código, tests, comandos, sistemas, configs, arquitectura, infraestructura, "
-	"decisiones de ingeniería) o social (vínculo, emociones, vida personal, biografía, relaciones, familia). "
-	"Juzga el CONTENIDO, nunca el tono conversacional: un fragmento técnico narrado en primera persona sigue siendo work. "
-	'Responde SOLO un JSON array: [{"i": <índice>, "category": "work|social"}].'
-)
-SYSTEM_JUDGE = (
-	"Eres el curador de memoria del operador. Para cada fragmento decide si es memoria valiosa y "
-	"durable a largo plazo (important) o contenido trivial (trivial). Durable NO es solo técnico: "
-	"decisiones, insights y milestones de ingeniería, Y momentos personales/relacionales/emocionales con "
-	"significado (infancia, vínculos, salud, identidad, familia) también son important. "
-	"Trivial = small talk, plumbing rutinario, duplicado o relleno. "
-	'Responde SOLO un JSON array: [{"i": <índice>, "verdict": "important|trivial", "reason": "<8 palabras>"}].'
-)
+
+def _audit_prompt(prompt_id: str) -> str:
+	"""System prompt del componente de auditoría (PROMPT-001 F4: sin inline)."""
+	from red_pill.core import prompts as core
+
+	return core.resolve("memento/audit", prompt_id).text.strip()
 
 
 def _memento_root() -> Path:
@@ -190,7 +181,7 @@ def _listing(items: List[Dict[str, Any]], chars: int = 500) -> str:
 
 def _judge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 	"""El LLM re-etiqueta work/social (juez independiente del scorer)."""
-	return _llm_json(SYSTEM_CLASSIFY, f"Clasifica estos {len(items)} fragmentos:\n\n{_listing(items)}")
+	return _llm_json(_audit_prompt("classify_system"), f"Clasifica estos {len(items)} fragmentos:\n\n{_listing(items)}")
 
 
 def audit_category(items: List[Dict[str, Any]], seed: int, dry_run: bool) -> Dict[str, Any]:
@@ -374,7 +365,7 @@ def audit_significance(items: List[Dict[str, Any]], seed: int, dry_run: bool) ->
 		for i, it in enumerate(items):
 			print(f"[{i}] ({it['sig']:.2f}) {it['snippet'][:160]}")
 		return {}
-	data = _llm_json(SYSTEM_JUDGE, f"Juzga estos {len(items)} fragmentos:\n\n{_listing(items)}")
+	data = _llm_json(_audit_prompt("judge_system"), f"Juzga estos {len(items)} fragmentos:\n\n{_listing(items)}")
 	verdicts = {"important": 0, "trivial": 0}
 	triviales: List[Dict[str, Any]] = []
 	for row in data:

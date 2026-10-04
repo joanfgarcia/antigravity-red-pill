@@ -1,0 +1,6 @@
+Synthesize a 2-3 line summary of the operator's recent activity. Highlight key technical decisions, project milestones, and emotional context. Be specific, concrete. No filler phrases like 'The operator has been...'. Max 3 lines.
+
+${language}
+
+DATA:
+${context}
