@@ -20,6 +20,18 @@ FIX = json.loads(FIXTURE.read_text(encoding="utf-8"))
 COMPONENT = "memento/agentic"
 STATIC_KEYS = {"identity", "work_scope", "social_scope"}
 RUNTIME_KEYS = {"fragment", "notes", "memories", "content", "previous", "candidates", "fragments", "summary", "title"}
+# F2 cambia a propósito estos prompts (inyecta la leyenda emocional): ya no
+# aplica el oráculo byte-exacto pre-F1; tienen su propio gate más abajo.
+CHANGED_IN_F2 = {
+	"annotate_work_user",
+	"annotate_social_user",
+	"annotate_work_user_v2",
+	"annotate_social_user_v2",
+	"refine_work_user",
+	"refine_social_user",
+	"refine_multi_user",
+	"refine_user",
+}
 
 
 def _inputs(pid: str):
@@ -30,11 +42,43 @@ def _inputs(pid: str):
 	return static, runtime
 
 
-@pytest.mark.parametrize("pid", sorted(FIX["prompts"]))
+@pytest.mark.parametrize("pid", sorted(set(FIX["prompts"]) - CHANGED_IN_F2))
 def test_render_equivalente_pre_f1(pid):
 	static, runtime = _inputs(pid)
 	out = core.render(COMPONENT, pid, static=static, **runtime)
 	assert out == FIX["prompts"][pid]["rendered"]
+
+
+def test_emotion_legend_presente_solo_donde_toca():
+	for pid in sorted(CHANGED_IN_F2):
+		static, runtime = _inputs(pid)
+		assert "EMOTION COLORS" in core.render(COMPONENT, pid, static=static, **runtime), pid
+	for pid in sorted(set(FIX["prompts"]) - CHANGED_IN_F2):
+		static, runtime = _inputs(pid)
+		assert "EMOTION COLORS" not in core.render(COMPONENT, pid, static=static, **runtime), pid
+
+
+def test_emotion_legend_consistente_con_mapa():
+	"""Gate: la leyenda cubre exactamente la inversa de EMOTION_CHROMA_MAP."""
+	from collections import defaultdict
+
+	from red_pill.utils.emotion import EMOTION_CHROMA_MAP
+
+	text = (core._FRAGMENTS_DIR / "emotion_legend.txt").read_text(encoding="utf-8")
+	colors = {}
+	for line in text.splitlines():
+		if not line.startswith("- "):
+			continue
+		color, _, rest = line[2:].partition(" — ")
+		assert rest.endswith(")"), line
+		labels = {part.strip() for part in rest[rest.rindex("(") + 1 : -1].split(",")}
+		colors[color.strip()] = labels
+	inverse: dict = defaultdict(set)
+	for label, color in EMOTION_CHROMA_MAP.items():
+		inverse[color].add(label)
+	assert set(colors) == set(inverse) == {"gray", "yellow", "orange", "cyan", "blue", "purple", "red", "green"}
+	for color, labels in colors.items():
+		assert labels == inverse[color], (color, labels, inverse[color])
 
 
 def test_validate_all_sin_errores():

@@ -225,8 +225,8 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
 
 	assert distill_prompt_version() == "p1:693b83e15fd523f5fe7060f6aeed9d60b365e9ace3dfafa7e83e0bce88fb1a70"
-	assert refine_prompt_version() == "p1:1cf95a510cec45aae7202de686d39aecc7d8f3575f4d84c2af07c48752228983"
-	assert annotate_prompt_version() == "p1:71854828be79d38b8ec6622b73aa94f8514b2c5e9603587696bc685d76e4f8b8"  # v1 + TEST-BIO-FIXED
+	assert refine_prompt_version() == "p1:cd872d976215dc1f676bf7da88b2cf04979069ead8696e1e79be23964c49f870"  # + leyenda emocional (F2)
+	assert annotate_prompt_version() == "p1:76fc8c44eedf8999b05aa9345820ac60d2149f44928f35c4c7888e97b2596901"  # v1 + TEST-BIO-FIXED + leyenda (F2)
 	assert validate_prompt_version() == "p1:88a26e1b73d8dab13d41e953a59ec5b9ac2ec5b0a43ea4f6759b8ba97088422e"
 
 

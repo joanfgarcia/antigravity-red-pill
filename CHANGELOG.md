@@ -1,6 +1,10 @@
 ## Unreleased
 
-### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1, 2026-10-04)
+### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1–F2, 2026-10-04)
+
+- **[FEATURE]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
+  en los 8 prompts que piden `emotion`, con **gate de consistencia** contra
+  `EMOTION_CHROMA_MAP` (la leyenda ya no se improvisa: el color tiene semántica).
 
 - **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
   curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;

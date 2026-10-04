@@ -1,4 +1,4 @@
-# Manifiesto de prompts de memento.agentic (PROMPT-001, F1).
+# Manifiesto de prompts de memento.agentic (PROMPT-001, F1–F2).
 #
 # - `template`/`system`: rutas relativas a este directorio.
 # - `fragments`: fragmentos globales curados (src/red_pill/prompts/fragments/),
@@ -14,21 +14,21 @@ prompts:
   annotate_work_user:
     template: annotate_work_user.txt
     system: annotate_work_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
     static: [identity]
     runtime: [fragment]
 
   annotate_social_user:
     template: annotate_social_user.txt
     system: annotate_social_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
     static: [identity]
     runtime: [fragment]
 
   annotate_work_user_v2:
     template: annotate_work_user_v2.txt
     system: annotate_work_system.txt
-    fragments: {voice: voice_annotate.txt}
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt}
     static: [identity, work_scope]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
@@ -36,7 +36,7 @@ prompts:
   annotate_social_user_v2:
     template: annotate_social_user_v2.txt
     system: annotate_social_system.txt
-    fragments: {voice: voice_annotate.txt}
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt}
     static: [identity, social_scope]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
@@ -85,24 +85,25 @@ prompts:
   refine_work_user:
     template: refine_work_user.txt
     system: refine_work_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
     runtime: [candidates, fragments]
 
   refine_social_user:
     template: refine_social_user.txt
     system: refine_social_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
     runtime: [candidates, fragments]
 
   refine_multi_user:
     template: refine_multi_user.txt
     system: refine_multi_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
     runtime: [candidates, fragments]
 
   refine_user:
     template: refine_user.txt
     system: refine_system.txt
+    fragments: {emotion_legend: emotion_legend.txt}
     runtime: [candidates, summary, title]
 
   content_validate_user:
