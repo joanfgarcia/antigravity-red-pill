@@ -559,8 +559,9 @@ class MemoryManager:
 		'texture' searches the resonance space (T5) — texture_shadow points —
 		and resolves each match back to its parent engram.
 		hybrid: el llamante pide recall híbrido (semántico + palabras clave sobre
-		Memento); solo actúa si `MEMORY_HYBRID_RECALL_ENABLED`. Los interceptores del
-		handshake no lo piden (hot path).
+		Memento); solo actúa si `MEMORY_HYBRID_RECALL_ENABLED`. Decisión 2026-10-04: el
+		hot path (RAG del handshake por turno, vía la action MCP `recall`) SÍ lo pide;
+		ver RFC-002 §4.7.1.
 		"""
 		if search_space == "texture":
 			results = self._search_texture_space(collection, query, limit=limit, strict=strict)

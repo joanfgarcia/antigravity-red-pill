@@ -614,8 +614,9 @@ class RedPillConfig(BaseSettings):
 	# work/social con `scripts/qdrant_reembed.py` (sigue el flag).
 	MEMENTO_EMBED_ENRICHED: bool = False
 	# Recall híbrido: semántico (Qdrant) + palabras clave sobre el árbol Memento,
-	# fusionados por RRF. Solo en llamantes explícitos (oracle/CLI/traverse), nunca
-	# en los interceptores del handshake (hot path).
+	# fusionados por RRF (+ MMR, MEMORY_RECALL_MMR_ENABLED). Decisión 2026-10-04:
+	# el hot path (RAG del handshake por turno, vía la action MCP `recall`) SÍ lo pide;
+	# antes se restringía a llamantes explícitos (oracle/CLI/traverse). RFC-002 §4.7.1.
 	MEMORY_HYBRID_RECALL_ENABLED: bool = False
 	# Diversidad del top-k por MMR (evita que tres paráfrasis del mismo hecho
 	# ocupen los tres huecos). λ = peso de la relevancia frente a la novedad.

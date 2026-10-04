@@ -695,6 +695,29 @@ New first-class action `search_memento` in `bunker_memory_api`:
   semantic hits point to engrams; Memento hits point to exact passages in
   `memento/index.md`.
 
+### 4.7.1 Scored recall (hybrid) — the hot-path read path
+
+`search_memento` is literal full-text; it does not rank by semantic similarity.
+The scored recall over the vector collections is a separate, first-class action:
+
+- **`recall`** in `bunker_memory_api`: wraps
+  `MemoryManager.search_and_reinforce(collection, query, limit, hybrid=True)`.
+  Returns scored engrams from the vector collections; accepts the CLI aliases
+  `work` (default), `social`, `directive`, `story`, `interaction`.
+- **Hybrid**: when `MEMORY_HYBRID_RECALL_ENABLED`, the semantic ranking is fused
+  (RRF) with keyword hits over the Memento tree, plus MMR diversity
+  (`MEMORY_RECALL_MMR_ENABLED`) — AD-038, 2026-09-25.
+  *Naming note*: this "hybrid" (semantic + Memento keyword) is distinct from the
+  composition the bullet above calls "hybrid" (`search_memento` +
+  `search_memory_research`).
+- **Hot-path policy (2026-10-04, operator)**: the per-turn handshake RAG **does**
+  use scored/hybrid recall (`recall`), not only full-text Memento. The earlier
+  restriction of hybrid recall to explicit callers (CLI/oracle/traverse) is
+  lifted: the hot path trades per-turn cost (embedding + Qdrant + RRF/MMR) for a
+  higher hit@3. `search_memento` (exact/literal, and the degradation path when
+  the embedder or Qdrant are unavailable) and `recall` (semantic) compose; the
+  hot path injects one of them (`recall`), never both.
+
 ### 4.8 Configuration (named keys)
 
 | Key | Default | Meaning |

@@ -1,10 +1,15 @@
 // Red Pill ↔ Pi bridge extension (pi-coding-agent).
 //
-// Pi does NOT support MCP, so the Búnker is reached through its CLI. The
-// `red-pill` binary is NOT on the PATH of the harness: it lives in the
-// checkout (`.venv/bin/red-pill`) and is invoked via `uv run --no-sync`
-// from the red-pill directory. The `${RED_PILL_DIR}` / `${UV}` placeholders
-// are resolved by `scripts/inject/pi/inject.py` at seeding time.
+// The per-turn RAG goes through the RedPill-Kernel MCP server (`bunker_memory_api`
+// action `recall`) over a persistent stdio connection, instead of spawning the
+// red-pill CLI every turn. The client is `@earendil-works/pi-mcp` (the standalone
+// MCP client published with Pi, pinned to Pi's version); the injector provisions
+// it under `~/.pi/agent/node_modules`. Identity injection (runWake) and the
+// on-demand tools stay on the CLI for now. The `red-pill` binary is NOT on the
+// PATH of the harness: it lives in the checkout (`.venv/bin/red-pill`) and is
+// invoked via `uv run --no-sync` from the red-pill directory. The
+// `${RED_PILL_DIR}` / `${UV}` placeholders are resolved by
+// `scripts/inject/pi/inject.py` at seeding time.
 //
 // Skills are NOT exposed here: the injector copies the red-pill skills into
 // `~/.pi/agent/skills/`, which pi auto-discovers (single merged dir, so the
@@ -12,6 +17,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -21,6 +30,11 @@ const TIMEOUT_MS = 20000;
 const LIGHT_TIMEOUT_MS = 20000;
 // Umbral de relevancia para el recall liviano (sobreescribible con RED_PILL_SCORE_THRESHOLD).
 const SCORE_THRESHOLD = parseFloat(process.env.RED_PILL_SCORE_THRESHOLD ?? "0.7");
+// Queue DB (single sink the kernel worker drains) — same path the Claude Code
+// Stop hook and the opencode scribe plugin write to.
+const XDG_DATA = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
+const QUEUE_DB = join(XDG_DATA, "red-pill", "queue", "bunker_queue.db");
+const RELAY_DEDUP_WINDOW_S = 12 * 3600;
 
 /** Filtra el output de `red-pill search`: conserva solo bullets con (Score: N >= umbral). */
 function filterByScore(output: string): string {
@@ -68,37 +82,118 @@ function runWake(mode = "full"): Promise<string> {
 	);
 }
 
+// ── Persistent MCP client (single process) ──────────────────────────────
+// One stdio connection to RedPill-Kernel shared by every hook. The import is
+// lazy on purpose: a missing @earendil-works/pi-mcp degrades only the RAG
+// (recall returns ""), instead of breaking the whole bridge at load time.
+// A dropped connection clears the singleton so the next call reconnects lazily.
+type McpClientT = import("@earendil-works/pi-mcp").McpClient;
+let mcpModulePromise: Promise<typeof import("@earendil-works/pi-mcp")> | null = null;
+let mcpClientPromise: Promise<McpClientT> | null = null;
+
+function loadMcpModule() {
+	mcpModulePromise ??= import("@earendil-works/pi-mcp");
+	return mcpModulePromise;
+}
+
+function getMcpClient(): Promise<McpClientT> {
+	if (mcpClientPromise) return mcpClientPromise;
+	mcpClientPromise = (async () => {
+		const { McpClient, StdioTransport } = await loadMcpModule();
+		const serverPath = RED_PILL_DIR + "/src/red_pill/mcp_server.py";
+		const client = new McpClient({ name: "red-pill-pi", version: "1.0.0", requestTimeoutMs: LIGHT_TIMEOUT_MS });
+		client.onClose(() => {
+			mcpClientPromise = null;
+		});
+		await client.connect(
+			new StdioTransport({
+				command: UV,
+				args: ["--directory", RED_PILL_DIR, "run", "--no-sync", "python", serverPath],
+				stderr: "pipe",
+			}),
+		);
+		return client;
+	})().catch((e) => {
+		mcpClientPromise = null;
+		throw e;
+	});
+	return mcpClientPromise;
+}
+
+function mcpResultText(result: { content?: unknown }): string {
+	const content = result?.content;
+	if (!Array.isArray(content)) return "";
+	return content.map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("");
+}
+
 async function recall(query: string, collection: string, limit: number): Promise<string> {
 	const clean = query.slice(0, 1500).replace(/\s+/g, " ").trim();
 	if (!clean) return "";
 	try {
-		const { stdout } = await execFileAsync(
-			UV,
-			["run", "--no-sync", "red-pill", "search", collection, "--limit", String(limit), clean],
-			{ timeout: LIGHT_TIMEOUT_MS, maxBuffer: 256 * 1024, cwd: RED_PILL_DIR },
-		);
-		return filterByScore((stdout ?? "").trim());
+		const client = await getMcpClient();
+		const result = await client.callTool("bunker_memory_api", {
+			action: "recall",
+			payload: { query: clean, collection, limit },
+		});
+		if (result.isError) return ""; // server-side validation failure → degrade, don't inject the error
+		return filterByScore(mcpResultText(result).trim());
 	} catch {
 		return ""; // Búnker caído/offline → degradación silenciosa
 	}
 }
 
-/** Silent Scribe Relay: encola el turno anterior (fire-and-forget, nunca bloquea). */
+/** Silent Scribe Relay: queue the completed turn straight into `memory_queue`
+ * (like the Claude Code Stop hook and the opencode scribe plugin), instead of
+ * spawning Python. Raw insert — the queue worker filters tooling noise at the
+ * single drain point. Fire-and-forget: never blocks or throws into the turn. */
 function relay(prevPrompt: string, prevResponse: string, model: string, sessionId: string) {
 	if (prevPrompt.trim().length < 20 && prevResponse.trim().length < 20) return;
-	const code = `
-import sys
-from red_pill.core.queue_manager import MemoryQueueManager
-from red_pill.utils.telemetry_filter import filter_noise_from_turn
-p, r, m, s = sys.argv[1], sys.argv[2], sys.argv[3] or None, sys.argv[4] or None
-cp, cr = filter_noise_from_turn(p), filter_noise_from_turn(r)
-if len(cp) > 20 or len(cr) > 20:
-    MemoryQueueManager().enqueue_memory(cp, cr, "assistant", category="mixed", originator="pi", model=m, session_id=s)
-`;
-	execFileAsync(UV, ["run", "--no-sync", "python", "-c", code, prevPrompt.slice(0, 4000), prevResponse.slice(0, 8000), model, sessionId], {
-		timeout: LIGHT_TIMEOUT_MS,
-		cwd: RED_PILL_DIR,
-	}).catch(() => {});
+	void (async () => {
+		try {
+			const { DatabaseSync } = await import("node:sqlite");
+			if (!existsSync(QUEUE_DB)) return; // kernel never ran here (no table to create)
+			const db = new DatabaseSync(QUEUE_DB);
+			try {
+				db.exec("PRAGMA journal_mode=WAL");
+				const cols = new Set(
+					(db.prepare("PRAGMA table_info(memory_queue)").all() as Array<{ name: string }>).map((r) => r.name),
+				);
+				if (cols.size === 0) return;
+				const contentHash = createHash("sha256").update(`${prevPrompt}\x00${prevResponse}`, "utf8").digest("hex");
+				if (cols.has("content_hash")) {
+					const dup = db
+						.prepare("SELECT id FROM memory_queue WHERE content_hash = ? AND created_at > ? LIMIT 1")
+						.get(contentHash, Date.now() / 1000 - RELAY_DEDUP_WINDOW_S);
+					if (dup) return;
+				}
+				const fields = ["prompt", "response", "role", "status", "created_at", "category", "originator", "model"];
+				const values: Array<string | number | null> = [
+					prevPrompt.slice(0, 4000),
+					prevResponse.slice(0, 8000),
+					"assistant",
+					"pending",
+					Date.now() / 1000,
+					"mixed",
+					"pi",
+					model || null,
+				];
+				if (cols.has("content_hash")) {
+					fields.push("content_hash");
+					values.push(contentHash);
+				}
+				if (cols.has("session_id") && cols.has("affinity")) {
+					fields.push("session_id", "affinity");
+					values.push(sessionId || null, null);
+				}
+				const placeholders = fields.map(() => "?").join(", ");
+				db.prepare(`INSERT INTO memory_queue (${fields.join(", ")}) VALUES (${placeholders})`).run(...values);
+			} finally {
+				db.close();
+			}
+		} catch {
+			/* best-effort: a relay failure must never break the turn */
+		}
+	})();
 }
 
 function assistantTextOf(messages: any[]): string {
@@ -137,6 +232,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_compact", async () => {
 		pendingIdentity = (await runWake("full")) || null;
 		needFull = !!pendingIdentity;
+	});
+
+	// Close the persistent MCP connection when the session ends.
+	pi.on("session_shutdown", async () => {
+		if (mcpClientPromise) {
+			try {
+				(await mcpClientPromise).close();
+			} catch {
+				/* noop */
+			}
+			mcpClientPromise = null;
+		}
 	});
 
 	// ── Turno: prompt + respuesta del assistant. El relay va por HOOKS (nunca por
