@@ -100,7 +100,7 @@ function getMcpClient(): Promise<McpClientT> {
 	if (mcpClientPromise) return mcpClientPromise;
 	mcpClientPromise = (async () => {
 		const { McpClient, StdioTransport } = await loadMcpModule();
-		const serverPath = `${RED_PILL_DIR}/src/red_pill/mcp_server.py`;
+		const serverPath = RED_PILL_DIR + "/src/red_pill/mcp_server.py";
 		const client = new McpClient({ name: "red-pill-pi", version: "1.0.0", requestTimeoutMs: LIGHT_TIMEOUT_MS });
 		client.onClose(() => {
 			mcpClientPromise = null;
