@@ -47,15 +47,6 @@ def engine_id() -> str:
 	return str(_ENGINE_CACHE)
 
 
-def _prompt_hash(*texts: str) -> str:
-	import hashlib
-
-	h = hashlib.sha256()
-	for t in texts:
-		h.update(t.encode("utf-8"))
-	return h.hexdigest()[:10]
-
-
 def distill_prompt_version() -> str:
 	"""Fingerprint de la etapa de SÍNTESIS (user+system, con fragmento de voz)."""
 	return prompts.stage_signature(["distill_user", "distill_user_opening", "distill_user_continuation"])

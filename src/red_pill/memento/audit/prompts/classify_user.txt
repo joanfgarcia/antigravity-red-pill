@@ -1,0 +1,3 @@
+Clasifica estos ${n} fragmentos:
+
+${items}

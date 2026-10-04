@@ -67,6 +67,8 @@ backups/
 export/
 tmp/
 audit/
+!src/red_pill/memento/audit/
+!src/red_pill/memento/audit/**
 # docs/certification/ <-- Allow tracking of formal reports
 # *CERTIFICATION_REPORT* <-- Allow tracking
 RED_PILL_DIGEST*.txt

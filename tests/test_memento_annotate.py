@@ -223,11 +223,14 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(prompts, "IDENTITY_BIO", "TEST-BIO-FIXED")
 	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
+	import red_pill.config as cfg
 
-	assert distill_prompt_version() == "p1:5eb4c64beff357bc44b05fe105e3296621ffa4de3a8cd353eed2aae1d4f6ed9f"  # + idioma configurable (F3)
-	assert refine_prompt_version() == "p1:abe494d37297f94f0af0e8c09a48dba14e402caa2804ff5d7a2d02c568960c7e"  # + leyenda (F2) + idioma (F3)
-	assert annotate_prompt_version() == "p1:93a103fd9a90036825d4ee2adaed3e187b5ed0504e31e71eec1b1c2fb34625b5"  # v1 + TEST-BIO + F2 + F3
-	assert validate_prompt_version() == "p1:88a26e1b73d8dab13d41e953a59ec5b9ac2ec5b0a43ea4f6759b8ba97088422e"
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto")
+
+	assert distill_prompt_version() == "p1:6d34dbc21450c9b69a62ee5ae751c4e4c6f977d98b14337d92909648344434ef"
+	assert refine_prompt_version() == "p1:0564c498e16d632b908cffd9b9540bba8550851630fb0fcbf2ef19ba6f0164c1"
+	assert annotate_prompt_version() == "p1:36199c3def5f91450052f7eabc24b5c2531f99fee98681292610afaa8abd5b8b"  # v1 + TEST-BIO-FIXED + auto
+	assert validate_prompt_version() == "p1:215b61acd8f43ff41693940e06dd68cc0ca65341edc49560b4830d524b93e8f4"
 
 
 def test_is_garbage_reason_expoene_la_firma():

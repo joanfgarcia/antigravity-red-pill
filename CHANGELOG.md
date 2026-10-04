@@ -24,8 +24,9 @@
   esquema anterior quedan marcados stale (la regeneración ya está prevista).
 - **[CHANGE]** Prompts de `memento.agentic` migrados a `${var}` (fin del escape
   `{{}}` del `str.format`); `voice_rule*.txt` movidos a `prompts/fragments/`.
-  Equivalencia byte-exacta verificada contra goldens pre-migración
-  (`tests/test_core_prompts.py`, 16 prompts + adversarial `$`/llaves).
+  Equivalencia verificada contra goldens pre-migración: byte-exacta en los
+  prompts no tocados por F2/F3 y reconstrucción controlada (solo inserciones de
+  leyenda/idioma) en los 13 restantes (`tests/test_core_prompts.py`).
 - **[FEATURE]** Prompt efectivo materializado en
   `~/.local/share/red-pill/prompts/` (tmp+replace; 0700/0600 por la Bio).
 

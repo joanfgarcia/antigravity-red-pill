@@ -78,7 +78,13 @@ def test_load_distiller_config_y_prompt(tmp_path):
 
 	# prompt: override gana
 	assert D.load_prompt_text("distiller_v3.txt", fallback_prompt="FB", override_text="OV") == "OV"
-	# prompt desde fichero real
-	assert D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB") != "FB"
+	# prompt desde fichero real (declarado: exige sus estáticos y resuelve)
+	text = D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB", static={"agent_name": "Aleth", "operator_name": "Joan"})
+	assert text != "FB" and "${agent_name}" not in text
+	# declarado sin estáticos → fail-closed (nada de fallback silencioso roto)
+	import pytest
+
+	with pytest.raises(Exception):
+		D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB")
 	# prompt inexistente → fallback
 	assert D.load_prompt_text("no_existe.txt", fallback_prompt="FB") == "FB"

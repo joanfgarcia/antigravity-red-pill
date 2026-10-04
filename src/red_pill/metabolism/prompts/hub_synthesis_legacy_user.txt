@@ -1,0 +1,4 @@
+Synthesize these chronological memory chunks into a single, cohesive master summary. Be highly concise but preserve key facts and overall narrative trajectory.
+
+CHUNKS:
+${chunks}

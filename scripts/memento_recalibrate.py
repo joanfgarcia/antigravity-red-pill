@@ -39,6 +39,12 @@ def _audit_prompt(prompt_id: str) -> str:
 	return core.resolve("memento/audit", prompt_id).text.strip()
 
 
+def _audit_render(prompt_id: str, **runtime: str) -> str:
+	from red_pill.core import prompts as core
+
+	return core.render("memento/audit", prompt_id, **runtime)
+
+
 def _memento_root() -> Path:
 	from red_pill.memento import get_memento_root
 
@@ -181,7 +187,7 @@ def _listing(items: List[Dict[str, Any]], chars: int = 500) -> str:
 
 def _judge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 	"""El LLM re-etiqueta work/social (juez independiente del scorer)."""
-	return _llm_json(_audit_prompt("classify_system"), f"Clasifica estos {len(items)} fragmentos:\n\n{_listing(items)}")
+	return _llm_json(_audit_prompt("classify_system"), _audit_render("classify_user", n=str(len(items)), items=_listing(items)))
 
 
 def audit_category(items: List[Dict[str, Any]], seed: int, dry_run: bool) -> Dict[str, Any]:
@@ -365,7 +371,7 @@ def audit_significance(items: List[Dict[str, Any]], seed: int, dry_run: bool) ->
 		for i, it in enumerate(items):
 			print(f"[{i}] ({it['sig']:.2f}) {it['snippet'][:160]}")
 		return {}
-	data = _llm_json(_audit_prompt("judge_system"), f"Juzga estos {len(items)} fragmentos:\n\n{_listing(items)}")
+	data = _llm_json(_audit_prompt("judge_system"), _audit_render("judge_user", n=str(len(items)), items=_listing(items)))
 	verdicts = {"important": 0, "trivial": 0}
 	triviales: List[Dict[str, Any]] = []
 	for row in data:

@@ -45,27 +45,41 @@ def load_prompt_text(
 	"""Carga el texto del prompt desde recurso (PROMPT-001): manifiesto del
 	componente con placeholders resueltos. `override_text` (bake-offs) gana.
 
-	Si el fichero no está declarado en el manifiesto (prompt_file custom de un
-	perfil), cae a lectura directa — compatibilidad con el carril antiguo."""
+	Si el fichero NO está declarado (prompt_file custom de un perfil), cae a
+	lectura directa — compatibilidad. Un prompt declarado que falla NO se
+	enmascara: el error del loader sube (fail-closed)."""
 	if override_text:
 		return override_text
-	try:
-		from red_pill.core import prompts as core
+	from red_pill.core import prompts as core
 
-		stem = os.path.basename(filename).rsplit(".", 1)[0]
+	stem = os.path.basename(filename).rsplit(".", 1)[0]
+	if core.is_declared("metabolism", stem):
 		return core.resolve("metabolism", stem, static=static or {}).text.strip()
-	except Exception:
-		pass
 	path = os.path.join(PROMPTS_DIR, filename)
 	if os.path.exists(path):
 		try:
 			with open(path, "r", encoding="utf-8") as f:
 				content = f.read().strip()
 				if content:
+					if static:
+						for name, value in static.items():
+							content = content.replace("${" + name + "}", value)
+					if "${" in content:
+						logger.warning(
+							f"[DISTILLER] prompt no declarado '{filename}' con placeholders sin resolver; "
+							"mígralo al manifiesto de metabolism (RULE 5)."
+						)
 					return content
 		except Exception as e:
 			logger.warning(f"[DISTILLER] Error leyendo archivo de prompt '{path}': {e}.")
 	return fallback_prompt
+
+
+def _render_metabolism(prompt_id: str, **runtime: Any) -> str:
+	"""Render de un prompt de metabolism por el loader (PROMPT-001 F4)."""
+	from red_pill.core import prompts as core
+
+	return core.render("metabolism", prompt_id, **runtime)
 
 
 # Closed emotional taxonomy the erosion/affect stack understands. Anything the
@@ -433,31 +447,15 @@ def distill_engram(
 def synthesize_hub(summaries: List[str]) -> str:
 	"""Creates the final Neocortex Hub Node from a chain of chunks."""
 	combined = "\n".join([f"- {s}" for s in summaries])
-	prompt = (
-		"Synthesize these chronological memory chunks into a single, cohesive master summary. Be highly concise but preserve key facts and overall narrative trajectory.\n\nCHUNKS:\n"
-		+ combined
-	)
+	system_prompt = load_prompt_text("hub_synthesis_legacy_system.txt")
+	user_prompt = _render_metabolism("hub_synthesis_legacy_user", chunks=combined)
 
 	payload = json.dumps(
 		{
 			"task": "hub",
 			"messages": [
-				{
-					"role": "system",
-					"content": (
-						"[Refraction: NEOCORTEX_SYNTHESIS] Style: Highly concise, descriptive. "
-						"Focus: Synthesize memory chunks into a master summary. "
-						"Format requirements:\n"
-						"1. Start the output with a descriptive, contextual title in square brackets "
-						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]').\n"
-						"2. Follow with a newline, then the summary.\n"
-						"Constraints:\n"
-						"- Do not use generic titles like '[Memory Synthesis]' or '[Session Summary]'.\n"
-						"- Be highly specific about core technical actions, errors fixed, or philosophical/personal themes.\n"
-						"- Output ONLY the title and summary string without any introductory phrases or markdown."
-					),
-				},
-				{"role": "user", "content": prompt},
+				{"role": "system", "content": system_prompt},
+				{"role": "user", "content": user_prompt},
 			],
 			"temperature": 0.1,
 			"max_tokens": 512,
@@ -507,22 +505,15 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 	logger.info(f"[SLEEP ENGINE] Commencing Logical Distillation of {len(hub_summaries)} technical hubs...")
 
 	combined_hubs = "\n".join([f"- {s}" for s in hub_summaries])
-	prompt = (
-		"Analyze these technical memory hubs from the current session. "
-		"Identify key architectural decisions, dependency changes, and the core rationale. "
-		"Synthesize into a 'Session Anchor' that explains WHY changes were made, not just WHAT. "
-		"Be concise but technically precise.\n\nHUBS:\n" + combined_hubs
-	)
+	system_prompt = load_prompt_text("session_anchors.txt")
+	user_prompt = _render_metabolism("session_anchors_user", hubs=combined_hubs)
 
 	payload = json.dumps(
 		{
 			"task": "hub",
 			"messages": [
-				{
-					"role": "system",
-					"content": "[Refraction: CHIEF_ARCHITECT_SYNTHESIS] Style: Technical, direct. Focus: Analyze session memory hubs, identify key architectural decisions/rationale, and output ONLY the architectural session anchor string.",
-				},
-				{"role": "user", "content": prompt},
+				{"role": "system", "content": system_prompt},
+				{"role": "user", "content": user_prompt},
 			],
 			"temperature": 0.1,
 			"max_tokens": 1024,

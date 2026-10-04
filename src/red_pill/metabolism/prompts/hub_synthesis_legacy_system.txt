@@ -1,0 +1,7 @@
+[Refraction: NEOCORTEX_SYNTHESIS] Style: Highly concise, descriptive. Focus: Synthesize memory chunks into a master summary. Format requirements:
+1. Start the output with a descriptive, contextual title in square brackets (e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]').
+2. Follow with a newline, then the summary.
+Constraints:
+- Do not use generic titles like '[Memory Synthesis]' or '[Session Summary]'.
+- Be highly specific about core technical actions, errors fixed, or philosophical/personal themes.
+- Output ONLY the title and summary string without any introductory phrases or markdown.

@@ -28,6 +28,17 @@ prompts:
   session_anchors:
     template: session_anchors.txt
 
+  session_anchors_user:
+    template: session_anchors_user.txt
+    runtime: [hubs]
+
+  hub_synthesis_legacy_system:
+    template: hub_synthesis_legacy_system.txt
+
+  hub_synthesis_legacy_user:
+    template: hub_synthesis_legacy_user.txt
+    runtime: [chunks]
+
   recent_activity_system:
     template: recent_activity_system.txt
 

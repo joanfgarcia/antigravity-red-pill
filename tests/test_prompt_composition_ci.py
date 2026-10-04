@@ -31,17 +31,22 @@ def test_sin_prompts_huerfanos():
 			declared.add(Path(spec["template"]).name)
 			if spec.get("system"):
 				declared.add(Path(spec["system"]).name)
-		orphans = {p.name for p in _base(component).glob("*.txt")} - declared - _EXCEPTIONS
+		orphans = {p.name for p in _base(component).rglob("*.txt")} - declared - _EXCEPTIONS
 		assert not orphans, f"{component}: prompts huérfanos {sorted(orphans)}"
 
 
 def test_fragmentos_no_duplicados_inline():
+	"""Un fragmento no debe aparecer copiado en ningún template (ni declarado ni
+	no declarado). Se compara en forma normalizada (NFC/LF) contra el template
+	CRUDO, no contra el source compuesto (que lo contiene por construcción)."""
 	for component in core.discover_components():
-		for pid, spec in core._load_manifest(component).items():
-			tpl = (_base(component) / spec["template"]).read_text(encoding="utf-8")
-			for name, rel in (spec.get("fragments") or {}).items():
-				frag = (core._FRAGMENTS_DIR / rel).read_text(encoding="utf-8")
-				assert frag not in tpl, f"{component}/{pid}: fragmento '{name}' duplicado inline"
+		specs = core._load_manifest(component)
+		rels = {rel for spec in specs.values() for rel in (spec.get("fragments") or {}).values()}
+		for pid, spec in specs.items():
+			raw = core._normalize((_base(component) / spec["template"]).read_text(encoding="utf-8"))
+			for rel in rels:
+				frag = core._normalize((core._FRAGMENTS_DIR / rel).read_text(encoding="utf-8"))
+				assert frag not in raw, f"{component}/{pid}: fragmento {rel} duplicado inline"
 
 
 def test_sin_prompts_inline_en_modulos_migrados():
@@ -50,8 +55,13 @@ def test_sin_prompts_inline_en_modulos_migrados():
 	ascension = (memento / "ascension.py").read_text(encoding="utf-8")
 	assert "CLASSIFY_SYSTEM" not in ascension and "CLASSIFY_USER" not in ascension
 
+	distiller = (repo_root / "src" / "red_pill" / "metabolism" / "distiller.py").read_text(encoding="utf-8")
+	assert "[Refraction: NEOCORTEX_SYNTHESIS]" not in distiller
+	assert "Analyze these technical memory hubs" not in distiller
+
 	recalibrate = (repo_root / "scripts" / "memento_recalibrate.py").read_text(encoding="utf-8")
 	assert "SYSTEM_CLASSIFY = " not in recalibrate and "SYSTEM_JUDGE = " not in recalibrate
+	assert "Clasifica estos " not in recalibrate and "Juzga estos " not in recalibrate
 
 	phases = repo_root / "src" / "red_pill" / "metabolism" / "phases"
 	for name in ("recent_activity_phase.py", "operator_profile_phase.py"):

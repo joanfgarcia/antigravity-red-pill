@@ -84,6 +84,35 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: uv run mypy src/red_pill/
 
+    - name: Prompt resources packaging gate (PROMPT-001)
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        uv build --wheel --out-dir /tmp/rp-wheel
+        uv run python - <<'PY'
+        import glob, zipfile
+        import yaml
+        wheel = glob.glob("/tmp/rp-wheel/*.whl")[0]
+        zf = zipfile.ZipFile(wheel)
+        names = set(zf.namelist())
+        missing = []
+        manifests = [n for n in names if n.endswith("prompts/manifest.yaml")]
+        assert manifests, "no hay manifiestos de prompts en el wheel"
+        for manifest in manifests:
+            base = manifest.rsplit("/", 1)[0]
+            data = yaml.safe_load(zf.read(manifest)) or {}
+            for pid, spec in (data.get("prompts") or {}).items():
+                for key in ("template", "system"):
+                    rel = spec.get(key)
+                    if rel and f"{base}/{rel}" not in names:
+                        missing.append(f"{base}/{rel}")
+                for rel in (spec.get("fragments") or {}).values():
+                    if rel and f"red_pill/prompts/fragments/{rel}" not in names:
+                        missing.append(f"red_pill/prompts/fragments/{rel}")
+        assert not missing, f"recursos de prompts ausentes en el wheel: {sorted(set(missing))}"
+        print(f"OK: {len(manifests)} manifiestos y todos sus recursos verificados en el wheel")
+        PY
+
     - name: Run All Validation & Logic Tests with Coverage
       env:
         QDRANT_API_KEY: "ci-test-key-770"

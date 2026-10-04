@@ -16,16 +16,21 @@ mapeo histórico que exige el RFC para interpretar artefactos sellados.
 
 ## Mapeo
 
-Firmas medidas con la config de test (`IDENTITY_BIO="TEST-BIO-FIXED"`, voz v2
-OFF, vista `raw`). Las marcadas «no» no dependen de config y coinciden con
-producción; `annotate` sí depende (Bio/scopes/vista/variante).
+Firmas finales medidas (2026-10-04, tras F1–F4) con `IDENTITY_BIO="TEST-BIO-FIXED"`,
+voz v2 OFF, vista `raw` y `MEMENTO_PROMPT_LANGUAGE=auto`. Las firmas de distill,
+refine y annotate **dependen del idioma** (`auto`/`es`/…): fijar otro idioma
+produce firmas distintas a propósito. `validate` no depende de config.
 
-| Etapa | Hash antiguo (fecha/nota) | Firma nueva | ¿Depende de config? |
+| Etapa | Hashes antiguos (fecha/nota) | Firma nueva (auto) | ¿Depende de config? |
 |---|---|---|---|
-| distill | `66c679f1bb` (2026-09-23, RFC-003) · `64ab6661d1` (2026-10-03, idioma) | `p1:693b83e1…` | No |
-| refine | `85209a6c9e` (2026-09-23) · `c79c7595a9` (2026-10-03, `memory`) · `69466365b9` (2026-10-03, idioma) | `p1:1cf95a51…` | No |
-| annotate | `07a5c9b529` (v1 viva) · `3282c538f8` (test v1) · `4a31060ed9` (test v1+idioma) · `33d93aed78` (viva v1+idioma) | `p1:71854828…` (TEST-BIO-FIXED/v1/raw) | Sí (Bio, scopes, vista, variante) |
-| validate | `217aafd8dd` (2026-09-23, v2 endurecido) | `p1:88a26e1b…` | No |
+| distill | `66c679f1bb` (2026-09-23) · `64ab6661d1` (2026-10-03, idioma) | `p1:6d34dbc2…` | Sí (idioma) |
+| refine | `85209a6c9e` (2026-09-23) · `c79c7595a9` (2026-10-03, `memory`) · `69466365b9` (2026-10-03, idioma) | `p1:0564c498…` | Sí (idioma) |
+| annotate | `07a5c9b529` (v1 viva) · `3282c538f8` (test v1) · `4a31060ed9` (test v1+idioma) · `33d93aed78` (viva v1+idioma) | `p1:36199c3d…` (TEST-BIO-FIXED/v1/raw/auto) | Sí (Bio, scopes, vista, variante, idioma) |
+| validate | `217aafd8dd` (2026-09-23, v2 endurecido) | `p1:215b61ac…` | No |
+
+> Las firmas intermedias de F1/F2/F3 (`p1:693b83e1…`, `p1:cd872d97…`, etc.) ya no
+> se emiten: la agregación de etapa usa prefijo de longitud desde el cierre del
+> adversarial (2026-10-04). Esta tabla registra la versión vigente.
 
 ## Notas
 
