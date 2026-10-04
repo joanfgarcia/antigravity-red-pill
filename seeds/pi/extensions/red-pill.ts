@@ -1,10 +1,15 @@
 // Red Pill ↔ Pi bridge extension (pi-coding-agent).
 //
-// Pi does NOT support MCP, so the Búnker is reached through its CLI. The
-// `red-pill` binary is NOT on the PATH of the harness: it lives in the
-// checkout (`.venv/bin/red-pill`) and is invoked via `uv run --no-sync`
-// from the red-pill directory. The `${RED_PILL_DIR}` / `${UV}` placeholders
-// are resolved by `scripts/inject/pi/inject.py` at seeding time.
+// The per-turn RAG goes through the RedPill-Kernel MCP server (`bunker_memory_api`
+// action `recall`) over a persistent stdio connection, instead of spawning the
+// red-pill CLI every turn. The client is `@earendil-works/pi-mcp` (the standalone
+// MCP client published with Pi, pinned to Pi's version); the injector provisions
+// it under `~/.pi/agent/node_modules`. Identity injection (runWake) and the
+// on-demand tools stay on the CLI for now. The `red-pill` binary is NOT on the
+// PATH of the harness: it lives in the checkout (`.venv/bin/red-pill`) and is
+// invoked via `uv run --no-sync` from the red-pill directory. The
+// `${RED_PILL_DIR}` / `${UV}` placeholders are resolved by
+// `scripts/inject/pi/inject.py` at seeding time.
 //
 // Skills are NOT exposed here: the injector copies the red-pill skills into
 // `~/.pi/agent/skills/`, which pi auto-discovers (single merged dir, so the
@@ -68,16 +73,60 @@ function runWake(mode = "full"): Promise<string> {
 	);
 }
 
+// ── Persistent MCP client (single process) ──────────────────────────────
+// One stdio connection to RedPill-Kernel shared by every hook. The import is
+// lazy on purpose: a missing @earendil-works/pi-mcp degrades only the RAG
+// (recall returns ""), instead of breaking the whole bridge at load time.
+// A dropped connection clears the singleton so the next call reconnects lazily.
+type McpClientT = import("@earendil-works/pi-mcp").McpClient;
+let mcpModulePromise: Promise<typeof import("@earendil-works/pi-mcp")> | null = null;
+let mcpClientPromise: Promise<McpClientT> | null = null;
+
+function loadMcpModule() {
+	mcpModulePromise ??= import("@earendil-works/pi-mcp");
+	return mcpModulePromise;
+}
+
+function getMcpClient(): Promise<McpClientT> {
+	if (mcpClientPromise) return mcpClientPromise;
+	mcpClientPromise = (async () => {
+		const { McpClient, StdioTransport } = await loadMcpModule();
+		const serverPath = `${RED_PILL_DIR}/src/red_pill/mcp_server.py`;
+		const client = new McpClient({ name: "red-pill-pi", version: "1.0.0", requestTimeoutMs: LIGHT_TIMEOUT_MS });
+		client.onClose(() => {
+			mcpClientPromise = null;
+		});
+		await client.connect(
+			new StdioTransport({
+				command: UV,
+				args: ["--directory", RED_PILL_DIR, "run", "--no-sync", "python", serverPath],
+				stderr: "pipe",
+			}),
+		);
+		return client;
+	})().catch((e) => {
+		mcpClientPromise = null;
+		throw e;
+	});
+	return mcpClientPromise;
+}
+
+function mcpResultText(result: { content?: unknown }): string {
+	const content = result?.content;
+	if (!Array.isArray(content)) return "";
+	return content.map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("");
+}
+
 async function recall(query: string, collection: string, limit: number): Promise<string> {
 	const clean = query.slice(0, 1500).replace(/\s+/g, " ").trim();
 	if (!clean) return "";
 	try {
-		const { stdout } = await execFileAsync(
-			UV,
-			["run", "--no-sync", "red-pill", "search", collection, "--limit", String(limit), clean],
-			{ timeout: LIGHT_TIMEOUT_MS, maxBuffer: 256 * 1024, cwd: RED_PILL_DIR },
-		);
-		return filterByScore((stdout ?? "").trim());
+		const client = await getMcpClient();
+		const result = await client.callTool("bunker_memory_api", {
+			action: "recall",
+			payload: { query: clean, collection, limit },
+		});
+		return filterByScore(mcpResultText(result).trim());
 	} catch {
 		return ""; // Búnker caído/offline → degradación silenciosa
 	}
@@ -137,6 +186,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_compact", async () => {
 		pendingIdentity = (await runWake("full")) || null;
 		needFull = !!pendingIdentity;
+	});
+
+	// Close the persistent MCP connection when the session ends.
+	pi.on("session_shutdown", async () => {
+		if (mcpClientPromise) {
+			try {
+				(await mcpClientPromise).close();
+			} catch {
+				/* noop */
+			}
+			mcpClientPromise = null;
+		}
 	});
 
 	// ── Turno: prompt + respuesta del assistant. El relay va por HOOKS (nunca por
