@@ -19,3 +19,6 @@ if __name__ == "__main__":
 	print("[Daemon] Processing IDE Worker Telemetry/Telegram routing...")
 	worker = IDEWorker()
 	worker.run_once()
+	# Drain-wait del carril Samantha: el pulse es oneshot — sin esta espera el
+	# hilo daemon muere con el proceso a mitad de compactación (PROCESSING huérfano).
+	worker.wait_for_samantha()

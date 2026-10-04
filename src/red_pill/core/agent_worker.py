@@ -649,14 +649,17 @@ class IDEWorker:
 		return retries >= cap
 
 	def _signal_samantha_worker(self):
-		"""NON-BLOCKING: check if there are pending Samantha tasks and signal the worker thread."""
+		"""NON-BLOCKING: recover orphans and signal the worker if there are pending tasks."""
 		if not self._samantha_worker:
 			return
 		try:
 			from red_pill.cognitive.queue_manager import CognitiveQueueManager
-			from red_pill.inference.samantha_worker import SAMANTHA_SOURCE
+			from red_pill.inference.samantha_worker import SAMANTHA_SOURCE, STALE_RECOVERY_SECONDS
 
 			qm = CognitiveQueueManager()
+			# Huérfanos de un pulse anterior (proceso muerto a mitad de tarea):
+			# sin esto quedarían PROCESSING hasta el barrido nocturno (>24h).
+			qm.recover_stale_processing(SAMANTHA_SOURCE, older_than_seconds=STALE_RECOVERY_SECONDS)
 			if qm.has_pending(source=SAMANTHA_SOURCE):
 				self._samantha_worker.wake()
 		except Exception as e:
@@ -701,6 +704,33 @@ class IDEWorker:
 		except Exception as e:
 			logger.error(f"[Watchdog] SamanthaWorker restart failed: {e}")
 			self._samantha_worker = None
+
+	def wait_for_samantha(self, timeout: Optional[int] = None) -> bool:
+		"""Espera acotada a que el carril Samantha drene antes de cerrar el pulse.
+
+		El pulse es un oneshot de systemd: al volver, el hilo daemon SamanthaWorker
+		muere con el proceso y una tarea en vuelo (p. ej. compactación de sesión
+		Telegram) quedaría huérfana en PROCESSING. Aquí se asegura el wake (por si
+		la estrategia del pulse declinó el housekeeping) y se espera el drenaje;
+		después se detiene el worker limpiamente (join + shutdown del llama-server
+		efímero si lo arrancó). Devuelve True si quedó drenado antes del timeout.
+		"""
+		if timeout is None:
+			timeout = cfg.get_config().SAMANTHA_DRAIN_TIMEOUT
+		if not self._samantha_worker:
+			return True
+		self._signal_samantha_worker()
+		try:
+			idle = self._samantha_worker.wait_until_idle(timeout)
+			if not idle:
+				logger.warning(f"[IDEWorker] Samantha drain timeout ({timeout}s) — la tarea en vuelo queda para recover_stale_processing")
+			return idle
+		finally:
+			try:
+				self._samantha_worker.stop()
+				self._samantha_worker.join(timeout=5)
+			except Exception as e:
+				logger.error(f"[IDEWorker] Samantha shutdown failed: {e}")
 
 	def process_inbox(self):
 		conn = get_connection()

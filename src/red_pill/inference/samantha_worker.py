@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 SAMANTHA_SOURCE = "samantha"
 WATCHDOG_TIMEOUT = 120  # seconds — if no heartbeat for this long, worker kills us
 DEFAULT_IDLE_TIMEOUT = 60  # seconds — grace period before shutting down ephemeral
+STALE_RECOVERY_SECONDS = 900  # huérfanos PROCESSING del carril → PENDING (disyuntor) a los 15 min
 
 
 # ── Task handlers registry ────────────────────────────────
@@ -152,6 +153,7 @@ class SamanthaWorker(threading.Thread):
 		self._idle_timeout = idle_timeout
 		self._health_ts = time.time()
 		self._current_task_id: Optional[str] = None
+		self._draining = False  # True mientras corre el bucle de drenaje (boot + pop + process)
 		self._ephemeral_proc: Optional[Any] = None  # Track ephemeral process for watchdog kill
 		self._stats = {"processed": 0, "failed": 0, "boots": 0}
 
@@ -162,6 +164,42 @@ class SamanthaWorker(threading.Thread):
 	def is_healthy(self, timeout: int = WATCHDOG_TIMEOUT) -> bool:
 		"""Watchdog check: has the thread reported health recently?"""
 		return (time.time() - self._health_ts) < timeout
+
+	def is_idle(self) -> bool:
+		"""True cuando no hay tarea Samantha en vuelo ni pendiente.
+
+		`_draining` cubre la ventana entre el pop (que ya marca PROCESSING y deja
+		`has_pending` en False) y la asignación de `_current_task_id`: sin él, un
+		observador externo podría creer que el carril está quieto justo cuando
+		acaba de arrancar una tarea.
+		"""
+		if self._draining or self._current_task_id is not None:
+			return False
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		return not CognitiveQueueManager().has_pending(source=SAMANTHA_SOURCE)
+
+	def wait_until_idle(self, timeout: float) -> bool:
+		"""Espera acotada a que el carril quede drenado (sin vuelo ni PENDING).
+
+		Pensado para el final del pulse oneshot: al volver del proceso, los hilos
+		daemon mueren con él y una tarea en vuelo (p. ej. compactación) quedaría
+		huérfana en PROCESSING. Devuelve True si quedó idle antes de `timeout`;
+		False si venció o el hilo murió — la recuperación de huérfanos del
+		siguiente pulse se encarga de la tarea a medias.
+		"""
+		deadline = time.monotonic() + timeout
+		while time.monotonic() < deadline:
+			if not self.is_alive():
+				return False
+			try:
+				if self.is_idle():
+					return True
+			except Exception as e:
+				logger.error(f"[SamanthaWorker] wait_until_idle check failed: {e}")
+				return False
+			time.sleep(0.25)
+		return False
 
 	def get_stats(self) -> Dict[str, Any]:
 		"""Return processing statistics."""
@@ -229,15 +267,19 @@ class SamanthaWorker(threading.Thread):
 
 		try:
 			# Drain loop
-			while self._running:
-				task = qm.pop_next_task(allowed_sources=[SAMANTHA_SOURCE])
-				if not task:
-					break
+			self._draining = True
+			try:
+				while self._running:
+					task = qm.pop_next_task(allowed_sources=[SAMANTHA_SOURCE])
+					if not task:
+						break
 
-				self._current_task_id = task["id"]
-				self._health_ts = time.time()
-				self._process_task(qm, task, port)
-				self._current_task_id = None
+					self._current_task_id = task["id"]
+					self._health_ts = time.time()
+					self._process_task(qm, task, port)
+					self._current_task_id = None
+			finally:
+				self._draining = False
 
 			# Grace period: wait for new work before killing ephemeral
 			if self._ephemeral_proc and self._running:
