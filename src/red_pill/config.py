@@ -431,6 +431,14 @@ class RedPillConfig(BaseSettings):
 	# Default 900s > worst-case single operation block (~610s). Touch points:
 	# start of run_once() and before each bridge call.
 	HEARTBEAT_LEASE: int = 900
+	# SAMANTHA_DRAIN_TIMEOUT (s): espera máxima al drenaje del carril Samantha al
+	# final del pulse. El pulse es un oneshot de systemd: al volver, los hilos
+	# daemon mueren con el proceso y una tarea en vuelo (p. ej. compactación de
+	# sesión Telegram) quedaría huérfana en PROCESSING. Esta espera acotada le da
+	# tiempo al LLM local a terminar. Default 240s ≥ 3× _REQUEST_TIMEOUT_S (60s):
+	# un LLM colgado agota sus 3 intentos (disyuntor → FRUSTRATED) dentro del
+	# propio pulse. Solo se paga cuando hay trabajo Samantha pendiente.
+	SAMANTHA_DRAIN_TIMEOUT: int = int(os.getenv("SAMANTHA_DRAIN_TIMEOUT", "240"))
 	# D5 (Fase 1 guard): when False (default), targets with backend='local' are
 	# filtered out of the Telegram execution cascade — a local model (e.g.
 	# Granite-4.1-8B) is NOT capable of heavy/ambitious tasks. In Fase 3 this is

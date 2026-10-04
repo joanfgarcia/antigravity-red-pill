@@ -280,6 +280,18 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
+## [AD-046] El carril Samantha sobrevive al pulse oneshot: drain-wait acotado + recovery de huérfanos
+**Date**: 2026-10-04
+**Status**: ACCEPTED — fix del hang crónico de `compact_session` (RFC-INV-TELEGRAM-001).
+**Context**: los jobs `source=samantha` (compactación de sesiones Telegram vía LLM local) morían a mitad de tarea y quedaban `PROCESSING` hasta que el janitor los frustraba >24 h después (`queue_hygiene`). Casos: 3 jobs el 15-sep (purgados a mano), 2 el 1-oct (`a30e8e9b`/`f2015633`, sesión `7974f3cd`). Root cause: `SamanthaWorker` es un hilo daemon del pulse, pero el pulse pasó a ser un oneshot de systemd (~1,5 s por tick, `redpill-worker.service`). Al volver `run_once()`, el proceso se lleva el hilo por delante — el `pop` ya había marcado `PROCESSING` y el carril no tenía recovery propio (a diferencia del mecánico, con `requeue_stale` a los 15 min).
+**Decision**:
+- **Drain-wait al final del pulse**: `IDEWorker.wait_for_samantha()` espera acotado (`SAMANTHA_DRAIN_TIMEOUT`, default 240 s ≥ 3× `_REQUEST_TIMEOUT_S`) a que el carril quede idle (`is_idle()`: sin tarea en vuelo, sin `_draining`, sin PENDING) y luego para el worker con join + shutdown del efímero. Lo invoca `run_sovereign_daemon.py` tras `run_once()`. El heartbeat D21 (lease 900 s) cubre la espera; systemd da `TimeoutStartSec=infinity` a las oneshot y el timer no solapa (`OnUnitInactiveSec`).
+- **Recovery de huérfanos**: `CognitiveQueueManager.recover_stale_processing(source, older_than_seconds=900)` devuelve a PENDING los `PROCESSING` colgados con `attempts+1` (disyuntor a los 3 → FRUSTRATED). `_signal_samantha_worker` lo llama cada pulse antes de mirar PENDING — un crash se auto-recupera en ~15 min, no en 24 h. Acotado por `source` (R5).
+- **Dedup**: `trigger_compaction()` no encola si ya hay una compactación PENDING/PROCESSING para la misma sesión (`find_task_by_payload_key`), que era la fuente del duplicado del 1-oct.
+- **Por qué esto y no un servicio dedicado**: un consumidor persistente (timer propio del carril) es el siguiente paso natural si el drain-wait molesta al pulse; hoy el coste solo se paga cuando hay trabajo Samantha y mantiene un único consumidor (sin carreras de boot entre pulse y servicio). El acoplamiento queda documentado como deuda en el RFC.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).

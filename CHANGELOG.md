@@ -1,5 +1,31 @@
 ## Unreleased
 
+### 🔧 Carril Samantha — drain-wait del pulse y recuperación de huérfanos (2026-10-04)
+
+Los jobs `compact_session` (compactación de sesiones Telegram) morían a mitad de
+tarea: el `SamanthaWorker` es un hilo daemon del pulse oneshot
+(`redpill-worker.service`, ~1,5 s por tick) y al volver `run_once()` el proceso se
+llevaba el hilo por delante, dejando la tarea huérfana en `PROCESSING` hasta que el
+janitor la frustraba >24 h después (`queue_hygiene`).
+
+- **[FIX] Drain-wait al final del pulse:** `IDEWorker.wait_for_samantha()`
+  (`SAMANTHA_DRAIN_TIMEOUT`, default 240 s) espera a que el carril quede drenado
+  antes de que el proceso oneshot muera; después detiene el worker con join y
+  apaga el llama-server efímero si lo arrancó. `run_sovereign_daemon.py` lo invoca
+  tras `run_once()`. El heartbeat D21 mantiene el lease durante la espera.
+- **[FIX] Recuperación de huérfanos del carril:** `recover_stale_processing(source,
+  older_than_seconds=900)` devuelve a PENDING los `PROCESSING` colgados con
+  `attempts+1` (disyuntor a los 3 → FRUSTRATED); `_signal_samantha_worker` lo llama
+  en cada pulse antes de mirar PENDING, de modo que un crash del proceso se
+  auto-recupera en ~15 min en vez de esperar al janitor.
+- **[FIX] Dedup de compactaciones:** `trigger_compaction()` no encola otra
+  compactación si ya hay una PENDING/PROCESSING para la misma sesión
+  (`find_task_by_payload_key`) — evita duplicar trabajo del LLM local (caso real
+  del 01-oct: dos jobs para la sesión `7974f3cd`).
+- **[TEST] Cobertura:** `is_idle()/wait_until_idle()`, `recover_stale_processing()`
+  (incl. disyuntor y acotación por source), `wait_for_samantha()` y el flujo real
+  encolar→drenar→COMPLETED con DB temporal y LLM mockeado.
+
 ### 🧬 Memento — sellos de ascensión, texto multi-idea y robustez (2026-10-03)
 
 Corrección quirúrgica de bugs verificados con evidencia reproducible (auditoría

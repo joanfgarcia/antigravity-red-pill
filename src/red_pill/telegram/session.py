@@ -139,6 +139,21 @@ class TelegramSessionManager:
 		if len(steps) < MAX_STEPS and total_chars < MAX_CHARS:
 			return None
 
+		# Dedup: una compactación ya encolada/en vuelo para esta sesión rotará la
+		# sesión al completar — encolar otra solo duplica trabajo del LLM local.
+		try:
+			from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+			existing = CognitiveQueueManager().find_task_by_payload_key(source="samantha", key="session_id", value=session_id)
+			if existing:
+				logger.info(
+					f"[TelegramSession] Compaction already {existing['status']} for {session_id} "
+					f"({existing['id'][:8]}) — skipping duplicate"
+				)
+				return None
+		except Exception as e:
+			logger.warning(f"[TelegramSession] Compaction dedup check failed: {e} — enqueueing anyway")
+
 		logger.info(f"[TelegramSession] Enqueueing compaction for {session_id} ({len(steps)} steps, {total_chars} chars)")
 
 		# 2. Enqueue summarization to the Samantha Queue

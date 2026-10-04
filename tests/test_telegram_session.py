@@ -191,6 +191,33 @@ def test_trigger_compaction(mock_telegram_env):
 	assert not (get_legacy_staging_dir() / f"{session_id}.json").exists()
 
 
+def test_trigger_compaction_dedup(mock_telegram_env):
+	"""Una compactación ya PENDING/PROCESSING para la sesión no se duplica."""
+	mock_telegram_env
+	tsm = TelegramSessionManager()
+	session = tsm.create_session("user123")
+	session_id = session["id"]
+
+	for i in range(8):
+		tsm.append_message(session_id, "user", f"message {i}")
+		tsm.append_message(session_id, "assistant", f"reply {i}")
+
+	# Compactación previa ya encolada (PENDING) para la misma sesión
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	qm = CognitiveQueueManager()
+	qm.enqueue_task(
+		source="samantha",
+		payload={"action": "compact_session", "session_id": session_id, "channel_user_id": "user123", "history_text": "previo"},
+		priority=7,
+	)
+
+	with patch("red_pill.inference.samantha_worker.enqueue") as mock_enqueue:
+		result = tsm.trigger_compaction(session_id)
+		assert result is None
+		mock_enqueue.assert_not_called()
+
+
 def test_run_janitor_sweep(mock_telegram_env):
 	mock_telegram_env
 	from red_pill.memento.registry import MementoRegistry

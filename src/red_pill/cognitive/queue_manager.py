@@ -849,3 +849,32 @@ class CognitiveQueueManager:
 		if recovered:
 			logger.warning(f"[QUEUE] Recovered {recovered} stale PROCESSING job(s) from sources {sources}.")
 		return recovered
+
+	def recover_stale_processing(self, source: str, older_than_seconds: int = 900) -> int:
+		"""Recupera huérfanos PROCESSING de un carril sin recovery propio.
+
+		A diferencia de `requeue_stale` (carril mecánico, donde el driver gestiona
+		el disyuntor), aquí el huérfano se trata como fallo real: `mark_failed`
+		incrementa `attempts` y a los 3 lo sella FRUSTRATED. Pensado para el carril
+		`samantha`, cuyo consumidor es un hilo daemon del pulse efímero — si el
+		proceso muere a mitad de tarea, nada más la recuperaría hasta el barrido
+		nocturno del janitor (>24h).
+
+		Acotada por `source` (R5): jamás debe tocar carriles que dejan PROCESSING
+		a propósito (p. ej. el cognitivo, que reporta por MCP).
+		"""
+		with self._get_connection() as conn:
+			rows = conn.execute(
+				"""
+				SELECT id FROM cognitive_tasks
+				WHERE status = 'PROCESSING' AND source = ?
+					AND updated_at < datetime('now', ?)
+				""",
+				(source, f"-{int(older_than_seconds)} seconds"),
+			).fetchall()
+		orphans = [row["id"] for row in rows]
+		for task_id in orphans:
+			self.mark_failed(task_id, "Orphan PROCESSING recovery (consumer died mid-task)")
+		if orphans:
+			logger.warning(f"[QUEUE] Recovered {len(orphans)} orphan PROCESSING task(s) from source '{source}'.")
+		return len(orphans)
