@@ -1,5 +1,22 @@
 ## Unreleased
 
+### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1, 2026-10-04)
+
+- **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
+  curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;
+  render en UNA pasada (`string.Template`, `${var}`) y valores de runtime como
+  sentinelas (seguro ante `$` en Bio/scopes).
+- **[CHANGE]** Firma por etapa `p1:<sha256>` del **prompt efectivo** (fragmentos
+  + config resuelta), con system prompts incluidos; mapeo antiguo→nuevo en
+  `docs/TECHNICAL/BUNKER/PROMPT_VERSION_MAP.md`. Los artefactos sellados con el
+  esquema anterior quedan marcados stale (la regeneración ya está prevista).
+- **[CHANGE]** Prompts de `memento.agentic` migrados a `${var}` (fin del escape
+  `{{}}` del `str.format`); `voice_rule*.txt` movidos a `prompts/fragments/`.
+  Equivalencia byte-exacta verificada contra goldens pre-migración
+  (`tests/test_core_prompts.py`, 16 prompts + adversarial `$`/llaves).
+- **[FEATURE]** Prompt efectivo materializado en
+  `~/.local/share/red-pill/prompts/` (tmp+replace; 0700/0600 por la Bio).
+
 ### 🔧 Carril Samantha — drain-wait del pulse y recuperación de huérfanos (2026-10-04)
 
 Los jobs `compact_session` (compactación de sesiones Telegram) morían a mitad de

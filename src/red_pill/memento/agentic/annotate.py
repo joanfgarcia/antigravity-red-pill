@@ -141,15 +141,11 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	ideas: List[Dict[str, Any]] = []
 	v2 = runtime.voice_v2_enabled()
 	work_scope, social_scope = runtime.annotate_scopes()
-	templates = (
-		((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER_V2), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER_V2))
-		if v2
-		else ((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER))
-	)
-	voice = prompts._VOICE_RULE_ANNOTATE if v2 else prompts._VOICE_RULE
-	for system, template in templates:
-		prompt = template.format(identity=prompts.IDENTITY_BIO, voice=voice, fragment=content, work_scope=work_scope, social_scope=social_scope)
-		raw = transport(system, prompt, 1024)
+	prompt_ids = ("annotate_work_user_v2", "annotate_social_user_v2") if v2 else ("annotate_work_user", "annotate_social_user")
+	static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
+	for prompt_id in prompt_ids:
+		prompt = prompts.render(prompt_id, static=static, fragment=content)
+		raw = transport(prompts.system(prompt_id) or "", prompt, 1024)
 		for idea in runtime._extract_json_array(raw) or []:
 			if not isinstance(idea, dict):
 				continue
@@ -204,8 +200,9 @@ def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str
 		for start in range(0, len(pending), size):
 			chunk = pending[start : start + size]
 			listing = "\n\n".join(f"[{i}] {a['text'][:600]}" for i, a in enumerate(chunk))
-			template = prompts.VOICE_REWRITE_USER_V2 if runtime.voice_v2_enabled() else prompts.VOICE_REWRITE_USER
-			raw = transport(prompts.VOICE_REWRITE_SYSTEM, template.format(identity=prompts.IDENTITY_BIO, notes=listing), 2048)
+			prompt_id = "voice_rewrite_user_v2" if runtime.voice_v2_enabled() else "voice_rewrite_user"
+			user = prompts.render(prompt_id, static={"identity": prompts.IDENTITY_BIO}, notes=listing)
+			raw = transport(prompts.system(prompt_id) or "", user, 2048)
 			for row in runtime._extract_json_array(raw) or []:
 				if not isinstance(row, dict):
 					continue
@@ -289,10 +286,12 @@ def _score_dual(transport: runtime.Transport, annotations: List[Dict[str, Any]])
 			listing = "\n\n".join(f"[{i}] {a['text'][:400]}" for i, a in enumerate(chunk))
 			if runtime.voice_v2_enabled():
 				work_scope, social_scope = runtime.annotate_scopes()
-				user = prompts.DUAL_SCORE_USER_V2.format(memories=listing, work_scope=work_scope, social_scope=social_scope)
+				prompt_id = "dual_score_user_v2"
+				user = prompts.render(prompt_id, static={"work_scope": work_scope, "social_scope": social_scope}, memories=listing)
 			else:
-				user = prompts.DUAL_SCORE_USER.format(memories=listing)
-			raw = transport(prompts.DUAL_SCORE_SYSTEM, user, 2048)
+				prompt_id = "dual_score_user"
+				user = prompts.render(prompt_id, memories=listing)
+			raw = transport(prompts.system(prompt_id) or "", user, 2048)
 			for row in runtime._extract_json_array(raw) or []:
 				if not isinstance(row, dict):
 					continue

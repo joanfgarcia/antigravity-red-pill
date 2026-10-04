@@ -1,7 +1,7 @@
 Rate each memory on TWO independent axes of durable value (0.0-1.0 each). Judge the CONTENT, never the conversational tone: a technical decision narrated in first person is still work.
 
-- "work_score": durable value in the WORK register: {work_scope}.
-- "social_score": durable value in the SOCIAL register: {social_scope}.
+- "work_score": durable value in the WORK register: ${work_scope}.
+- "social_score": durable value in the SOCIAL register: ${social_scope}.
 Formal or serious is NOT the same as work: whatever falls outside the WORK scope scores low on work.
 
 Both axes can be high (a technical milestone lived as an intimate moment) or both low (small talk, routine plumbing). Calibration:
@@ -11,9 +11,9 @@ Both axes can be high (a technical milestone lived as an intimate moment) or bot
 - "Hicimos una llamada trivial sobre el tiempo." → work 0.1, social 0.1.
 - "Revisé con Joan el contrato de alquiler de su piso y los riesgos para él." → work 0.1, social 0.7.
 
-Return an ARRAY with one object per memory: [{{"i": <index>, "work_score": 0.0, "social_score": 0.0}}]
+Return an ARRAY with one object per memory: [{"i": <index>, "work_score": 0.0, "social_score": 0.0}]
 
 Memories:
-{memories}
+${memories}
 
 Output ONLY the JSON array.

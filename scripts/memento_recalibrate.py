@@ -246,9 +246,9 @@ def score_dual(items: List[Dict[str, Any]], dry_run: bool, temperature: float = 
 		for i, it in enumerate(items):
 			print(f"[{i}] {it['snippet'][:160]}")
 		return []
-	from red_pill.memento.agentic import DUAL_SCORE_SYSTEM, DUAL_SCORE_USER
+	from red_pill.memento.agentic import prompts
 
-	data = _llm_json(DUAL_SCORE_SYSTEM, DUAL_SCORE_USER.format(memories=_listing(items)), temperature=temperature)
+	data = _llm_json(prompts.system("dual_score_user") or "", prompts.render("dual_score_user", memories=_listing(items)), temperature=temperature)
 	out: List[Dict[str, Any]] = []
 	for row in data:
 		try:

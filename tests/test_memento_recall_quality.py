@@ -186,10 +186,15 @@ def test_v21_plantillas_con_alcance_del_operador(monkeypatch):
 	monkeypatch.setattr(cfg, "MEMENTO_WORK_SCOPE", "derecho laboral y contratos", raising=False)
 	monkeypatch.setattr(cfg, "MEMENTO_SOCIAL_SCOPE", "vida personal", raising=False)
 	jurista = runtime.annotate_prompt_version()
-	work = prompts.ANNOTATE_WORK_USER_V2.format(identity="", voice="", fragment="x", work_scope="derecho laboral y contratos", social_scope="")
+	work = prompts.render(
+		"annotate_work_user_v2",
+		static={"identity": "", "work_scope": "derecho laboral y contratos", "social_scope": ""},
+		fragment="x",
+	)
 	assert "WORK here means: derecho laboral y contratos" in work
 	assert '"Joan implementó X." → "Joan implementó X."' in work  # sin la muletilla v1
-	assert "{work_scope}" not in prompts.DUAL_SCORE_USER_V2.format(memories="m", work_scope="w", social_scope="s")
+	dual = prompts.render("dual_score_user_v2", static={"work_scope": "w", "social_scope": "s"}, memories="m")
+	assert "${work_scope}" not in dual and "w" in dual
 	monkeypatch.setattr(cfg, "MEMENTO_WORK_SCOPE", "código y sistemas", raising=False)
 	assert runtime.annotate_prompt_version() != jurista  # otro oficio, otra huella
 

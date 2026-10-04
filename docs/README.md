@@ -121,6 +121,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [RFC_002_MEMENTO.md](TECHNICAL/BUNKER/RFC_002_MEMENTO.md) | Memento Chronicle RFC (formerly Sovereign Vault) — disk-based chronicle, Qdrant as curated-only memory, TTL buffer |
 | [RFC_002_PHASE4_DESIGN.md](TECHNICAL/BUNKER/RFC_002_PHASE4_DESIGN.md) | RFC-002 Amendment — Phase 4: dynamic curation, deferred ascension, Memento-conscious weaving (DRAFT design) |
 | [RFC_003_PROMPTS_AS_RESOURCES.md](TECHNICAL/BUNKER/RFC_003_PROMPTS_AS_RESOURCES.md) | Prompts as Resources — prompts en ficheros, loader con placeholders y RULE 5 de convención (DRAFT) |
+| [PROMPT_VERSION_MAP.md](TECHNICAL/BUNKER/PROMPT_VERSION_MAP.md) | Mapa de versiones de prompts: esquema `p1:` de PROMPT-001 F1 (prompt efectivo por etapa) y mapeo antiguo→nuevo |
 | [RFC_004_REALTIME_TAG_SIDECAR.md](TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md) | Real-time emotion/theme tagging via Laya UDS sidecar (COMPLETE) |
 
 ### Certification

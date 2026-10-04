@@ -45,9 +45,7 @@ def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars:
 		next_lots: List[List[Dict[str, Any]]] = []
 		split = False
 		for lot in lots:
-			prompt_len = len(
-				prompts.REFINE_WORK_USER.format(voice=prompts._VOICE_RULE, candidates=json.dumps(candidates), fragments=_format_fragments(lot))
-			)
+			prompt_len = len(prompts.render("refine_work_user", candidates=json.dumps(candidates), fragments=_format_fragments(lot)))
 			if prompt_len <= max_chars or len(lot) <= 1:
 				next_lots.append(lot)
 			else:
@@ -72,9 +70,9 @@ def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates:
 	for lot in _split_to_fit(frags, candidates, runtime.model_prompt_budget()):
 		fragments = _format_fragments(lot, cursor)
 		cands = json.dumps(candidates)
-		for system, template in ((prompts.REFINE_WORK_SYSTEM, prompts.REFINE_WORK_USER), (prompts.REFINE_SOCIAL_SYSTEM, prompts.REFINE_SOCIAL_USER)):
-			prompt = template.format(voice=prompts._VOICE_RULE, candidates=cands, fragments=fragments)
-			raw = transport(system, prompt, 1024)
+		for prompt_id in ("refine_work_user", "refine_social_user"):
+			prompt = prompts.render(prompt_id, candidates=cands, fragments=fragments)
+			raw = transport(prompts.system(prompt_id) or "", prompt, 1024)
 			ideas.extend(runtime._extract_json_array(raw) or [])
 		cursor += len(lot)
 	return ideas

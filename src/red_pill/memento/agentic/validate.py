@@ -141,7 +141,7 @@ def validate_notes(transport: runtime.Transport, paths: List[Path], batch: int =
 	for start in range(0, len(pendientes), batch):
 		chunk = pendientes[start : start + batch]
 		listing = "\n\n".join(f"[{i}] {_body(p)[:600]}" for i, p in enumerate(chunk))
-		raw = transport(prompts.CONTENT_VALIDATE_SYSTEM, prompts.CONTENT_VALIDATE_USER.format(notes=listing), 2048)
+		raw = transport(prompts.system("content_validate_user") or "", prompts.render("content_validate_user", notes=listing), 2048)
 		answered = set()
 		for row in runtime._extract_json_array(raw) or []:
 			if not isinstance(row, dict):

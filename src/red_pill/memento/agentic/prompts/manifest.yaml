@@ -1,0 +1,111 @@
+# Manifiesto de prompts de memento.agentic (PROMPT-001, F1).
+#
+# - `template`/`system`: rutas relativas a este directorio.
+# - `fragments`: fragmentos globales curados (src/red_pill/prompts/fragments/),
+#   inyectados en generación por su placeholder `${nombre}`.
+# - `static`: valores de configuración efectiva resueltos en generación
+#   (identidad/Bio, idioma, scopes) — entran en la firma.
+# - `runtime`: valores por llamada — viajan como sentinelas en el prompt
+#   efectivo y se sustituyen con replace() (sin re-escaneo de `$`).
+# - `select`: clave de config que elige esta variante (documental en F1).
+component: memento.agentic
+
+prompts:
+  annotate_work_user:
+    template: annotate_work_user.txt
+    system: annotate_work_system.txt
+    fragments: {voice: voice.txt}
+    static: [identity]
+    runtime: [fragment]
+
+  annotate_social_user:
+    template: annotate_social_user.txt
+    system: annotate_social_system.txt
+    fragments: {voice: voice.txt}
+    static: [identity]
+    runtime: [fragment]
+
+  annotate_work_user_v2:
+    template: annotate_work_user_v2.txt
+    system: annotate_work_system.txt
+    fragments: {voice: voice_annotate.txt}
+    static: [identity, work_scope]
+    runtime: [fragment]
+    select: MEMENTO_ANNOTATE_VOICE_V2
+
+  annotate_social_user_v2:
+    template: annotate_social_user_v2.txt
+    system: annotate_social_system.txt
+    fragments: {voice: voice_annotate.txt}
+    static: [identity, social_scope]
+    runtime: [fragment]
+    select: MEMENTO_ANNOTATE_VOICE_V2
+
+  voice_rewrite_user:
+    template: voice_rewrite_user.txt
+    system: voice_rewrite_system.txt
+    static: [identity]
+    runtime: [notes]
+
+  voice_rewrite_user_v2:
+    template: voice_rewrite_user_v2.txt
+    system: voice_rewrite_system.txt
+    static: [identity]
+    runtime: [notes]
+
+  dual_score_user:
+    template: dual_score_user.txt
+    system: dual_score_system.txt
+    runtime: [memories]
+
+  dual_score_user_v2:
+    template: dual_score_user_v2.txt
+    system: dual_score_system.txt
+    static: [work_scope, social_scope]
+    runtime: [memories]
+
+  distill_user:
+    template: distill_user.txt
+    system: distill_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [content]
+
+  distill_user_opening:
+    template: distill_user_opening.txt
+    system: distill_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [content]
+
+  distill_user_continuation:
+    template: distill_user_continuation.txt
+    system: distill_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [content, previous]
+
+  refine_work_user:
+    template: refine_work_user.txt
+    system: refine_work_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [candidates, fragments]
+
+  refine_social_user:
+    template: refine_social_user.txt
+    system: refine_social_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [candidates, fragments]
+
+  refine_multi_user:
+    template: refine_multi_user.txt
+    system: refine_multi_system.txt
+    fragments: {voice: voice.txt}
+    runtime: [candidates, fragments]
+
+  refine_user:
+    template: refine_user.txt
+    system: refine_system.txt
+    runtime: [candidates, summary, title]
+
+  content_validate_user:
+    template: content_validate_user.txt
+    system: content_validate_system.txt
+    runtime: [notes]

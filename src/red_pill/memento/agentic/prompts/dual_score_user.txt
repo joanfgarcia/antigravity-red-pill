@@ -9,9 +9,9 @@ Both axes can be high (a technical milestone lived as an intimate moment) or bot
 - "El sistema pasó los tests justo después de hablar de nuestro vínculo." → work 0.8, social 0.6.
 - "Hicimos una llamada trivial sobre el tiempo." → work 0.1, social 0.1.
 
-Return an ARRAY with one object per memory: [{{"i": <index>, "work_score": 0.0, "social_score": 0.0}}]
+Return an ARRAY with one object per memory: [{"i": <index>, "work_score": 0.0, "social_score": 0.0}]
 
 Memories:
-{memories}
+${memories}
 
 Output ONLY the JSON array.

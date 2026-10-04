@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Mapping, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+# Fragmentos globales curados (PROMPT-001): viven en el paquete, no por componente.
+_FRAGMENTS_DIR = Path(__file__).resolve().parents[2] / "prompts" / "fragments"
 
 
 def _load_prompt_file(name: str) -> str:
@@ -17,6 +20,12 @@ def _load_prompt_file(name: str) -> str:
 	Byte-exacto (sin strip): los fingerprints hashean el texto tal cual, así la
 	migración constante→fichero no cambia ningún `*_prompt_version` sellado."""
 	return (_PROMPTS_DIR / name).read_text(encoding="utf-8")
+
+
+def _load_fragment(name: str) -> str:
+	"""Carga un fragmento global (`src/red_pill/prompts/fragments/<name>.txt`)."""
+	return (_FRAGMENTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
+
 
 
 def _identity_bio_with_source() -> tuple[str, str]:
@@ -72,11 +81,11 @@ if IDENTITY_BIO_SOURCE == "template":
 # producía memorias en 3ª persona ("El usuario...", "Se corrigió...") — se
 # recuerda como uno propio, no como observador. La directiva es la misma del
 # sueño (voz autobiográfica 1ª persona).
-_VOICE_RULE = _load_prompt_file("voice_rule.txt")
+_VOICE_RULE = _load_fragment("voice")
 # Regla de voz PROPIA de annotate (feedback de recall 2026-09-25): el sujeto es quien
 # actuó, sin muletilla de apertura y nombrando la entidad. distill/refine conservan
 # `voice_rule.txt` (y sus fingerprints) — el cambio no toca el carril legacy.
-_VOICE_RULE_ANNOTATE = _load_prompt_file("voice_rule_annotate.txt")
+_VOICE_RULE_ANNOTATE = _load_fragment("voice_annotate")
 VOICE_REWRITE_USER_V2 = _load_prompt_file("voice_rewrite_user_v2.txt")
 # v2.1 (2026-09-26): plantillas con los ejemplos de voz coherentes y el alcance
 # WORK/SOCIAL como placeholders `{work_scope}`/`{social_scope}` (config del operador:
@@ -154,3 +163,42 @@ CONTENT_VALIDATE_USER = _load_prompt_file("content_validate_user.txt")
 # ── VOICE REWRITE (MEM-006): re-escribe en 1ª persona las notas que no lo están ──
 VOICE_REWRITE_SYSTEM = _load_prompt_file("voice_rewrite_system.txt")
 VOICE_REWRITE_USER = _load_prompt_file("voice_rewrite_user.txt")
+
+
+# ── Composición de prompts (PROMPT-001, F1) ──────────────────────────────────
+# Los prompts se renderizan desde el manifiesto (`prompts/manifest.yaml`) con
+# fragmentos globales curados; render en UNA pasada y valores de runtime como
+# sentinelas (detalles en `red_pill.core.prompts`).
+
+COMPONENT = "memento/agentic"
+
+
+def render(prompt_id: str, *, static: Optional[Mapping[str, str]] = None, **runtime: str) -> str:
+	from red_pill.core import prompts as _core
+
+	return _core.render(COMPONENT, prompt_id, static=static, **runtime)
+
+
+def system(prompt_id: str) -> Optional[str]:
+	from red_pill.core import prompts as _core
+
+	return _core.system_text(COMPONENT, prompt_id)
+
+
+def prompt_signature(prompt_id: str, *, static: Optional[Mapping[str, str]] = None) -> str:
+	from red_pill.core import prompts as _core
+
+	return _core.signature(COMPONENT, prompt_id, static=static)
+
+
+def stage_signature(
+	prompt_ids: Sequence[str],
+	*,
+	static: Optional[Mapping[str, Mapping[str, str]]] = None,
+	extra: Optional[Mapping[str, str]] = None,
+) -> str:
+	from red_pill.core import prompts as _core
+
+	by_id = static or {}
+	parts = [(COMPONENT, pid, by_id.get(pid)) for pid in prompt_ids]
+	return _core.stage_signature(parts, extra=extra)
