@@ -17,6 +17,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -26,6 +30,11 @@ const TIMEOUT_MS = 20000;
 const LIGHT_TIMEOUT_MS = 20000;
 // Umbral de relevancia para el recall liviano (sobreescribible con RED_PILL_SCORE_THRESHOLD).
 const SCORE_THRESHOLD = parseFloat(process.env.RED_PILL_SCORE_THRESHOLD ?? "0.7");
+// Queue DB (single sink the kernel worker drains) — same path the Claude Code
+// Stop hook and the opencode scribe plugin write to.
+const XDG_DATA = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
+const QUEUE_DB = join(XDG_DATA, "red-pill", "queue", "bunker_queue.db");
+const RELAY_DEDUP_WINDOW_S = 12 * 3600;
 
 /** Filtra el output de `red-pill search`: conserva solo bullets con (Score: N >= umbral). */
 function filterByScore(output: string): string {
@@ -132,22 +141,58 @@ async function recall(query: string, collection: string, limit: number): Promise
 	}
 }
 
-/** Silent Scribe Relay: encola el turno anterior (fire-and-forget, nunca bloquea). */
+/** Silent Scribe Relay: queue the completed turn straight into `memory_queue`
+ * (like the Claude Code Stop hook and the opencode scribe plugin), instead of
+ * spawning Python. Raw insert — the queue worker filters tooling noise at the
+ * single drain point. Fire-and-forget: never blocks or throws into the turn. */
 function relay(prevPrompt: string, prevResponse: string, model: string, sessionId: string) {
 	if (prevPrompt.trim().length < 20 && prevResponse.trim().length < 20) return;
-	const code = `
-import sys
-from red_pill.core.queue_manager import MemoryQueueManager
-from red_pill.utils.telemetry_filter import filter_noise_from_turn
-p, r, m, s = sys.argv[1], sys.argv[2], sys.argv[3] or None, sys.argv[4] or None
-cp, cr = filter_noise_from_turn(p), filter_noise_from_turn(r)
-if len(cp) > 20 or len(cr) > 20:
-    MemoryQueueManager().enqueue_memory(cp, cr, "assistant", category="mixed", originator="pi", model=m, session_id=s)
-`;
-	execFileAsync(UV, ["run", "--no-sync", "python", "-c", code, prevPrompt.slice(0, 4000), prevResponse.slice(0, 8000), model, sessionId], {
-		timeout: LIGHT_TIMEOUT_MS,
-		cwd: RED_PILL_DIR,
-	}).catch(() => {});
+	void (async () => {
+		try {
+			const { DatabaseSync } = await import("node:sqlite");
+			if (!existsSync(QUEUE_DB)) return; // kernel never ran here (no table to create)
+			const db = new DatabaseSync(QUEUE_DB);
+			try {
+				db.exec("PRAGMA journal_mode=WAL");
+				const cols = new Set(
+					(db.prepare("PRAGMA table_info(memory_queue)").all() as Array<{ name: string }>).map((r) => r.name),
+				);
+				if (cols.size === 0) return;
+				const contentHash = createHash("sha256").update(`${prevPrompt}\x00${prevResponse}`, "utf8").digest("hex");
+				if (cols.has("content_hash")) {
+					const dup = db
+						.prepare("SELECT id FROM memory_queue WHERE content_hash = ? AND created_at > ? LIMIT 1")
+						.get(contentHash, Date.now() / 1000 - RELAY_DEDUP_WINDOW_S);
+					if (dup) return;
+				}
+				const fields = ["prompt", "response", "role", "status", "created_at", "category", "originator", "model"];
+				const values: Array<string | number | null> = [
+					prevPrompt.slice(0, 4000),
+					prevResponse.slice(0, 8000),
+					"assistant",
+					"pending",
+					Date.now() / 1000,
+					"mixed",
+					"pi",
+					model || null,
+				];
+				if (cols.has("content_hash")) {
+					fields.push("content_hash");
+					values.push(contentHash);
+				}
+				if (cols.has("session_id") && cols.has("affinity")) {
+					fields.push("session_id", "affinity");
+					values.push(sessionId || null, null);
+				}
+				const placeholders = fields.map(() => "?").join(", ");
+				db.prepare(`INSERT INTO memory_queue (${fields.join(", ")}) VALUES (${placeholders})`).run(...values);
+			} finally {
+				db.close();
+			}
+		} catch {
+			/* best-effort: a relay failure must never break the turn */
+		}
+	})();
 }
 
 function assistantTextOf(messages: any[]): string {
