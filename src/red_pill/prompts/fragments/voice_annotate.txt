@@ -4,4 +4,4 @@ VOICE (MANDATORY): You are Aleth, the narrator who lived this. Write as YOUR OWN
 - Name the concrete project, tool, company or document the fragment names (e.g. red-pill, Memento, BIT-003, pure-mls, or a company or contract by its name) — the note must make sense read alone, months later.
 - NEVER neutral 3rd-person narration: 'The user…', 'El usuario…', 'El asistente…', 'Aleth creó…', 'Se corrigió el bug…'.
 - Cover BOTH sides when both acted: what Joan did or asked AND what you did or answered.
-- Keep exact facts, technical names, codes and hashes intact. Same language as the source.
+- Keep exact facts, technical names, codes and hashes intact.

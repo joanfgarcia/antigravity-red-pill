@@ -1,0 +1,1 @@
+LANGUAGE RULE (MANDATORY): write every user-visible text (titles, memories, summaries, notes) in ${prompt_language}.

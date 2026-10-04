@@ -639,6 +639,10 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
 	MEMENTO_OPERATOR_LABEL: str = "Joan"
 	MEMENTO_AGENT_LABEL: str = "Aleth"
+	# Idioma de los textos generados por el pase Memento (PROMPT-001 F3):
+	# `auto` = idioma de la fuente (deja interpretar al modelo); `es`/`en`/`ca`...
+	# fuerzan uno. Entra en la firma de los prompts → cambiarlo marca stale.
+	MEMENTO_PROMPT_LANGUAGE: str = "auto"
 	MEMENTO_WORK_SCOPE: str = (
 		"the operator's technical craft — code, systems, configuration, tests, architecture, "
 		"infrastructure, tooling, engineering and product decisions"

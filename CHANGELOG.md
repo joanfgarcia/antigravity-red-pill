@@ -5,6 +5,10 @@
 - **[FEATURE]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
   en los 8 prompts que piden `emotion`, con **gate de consistencia** contra
   `EMOTION_CHROMA_MAP` (la leyenda ya no se improvisa: el color tiene semántica).
+- **[FEATURE]** Idioma configurable (F3): fragmento `language` con
+  `MEMENTO_PROMPT_LANGUAGE=auto|es|en|ca|...` (default `auto` = idioma de la
+  fuente; forzar uno entra en la firma → stale). La frase de idioma se retira de
+  los prompts y del voice rule (una sola directiva).
 
 - **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
   curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;

@@ -20,9 +20,8 @@ FIX = json.loads(FIXTURE.read_text(encoding="utf-8"))
 COMPONENT = "memento/agentic"
 STATIC_KEYS = {"identity", "work_scope", "social_scope"}
 RUNTIME_KEYS = {"fragment", "notes", "memories", "content", "previous", "candidates", "fragments", "summary", "title"}
-# F2 cambia a propósito estos prompts (inyecta la leyenda emocional): ya no
-# aplica el oráculo byte-exacto pre-F1; tienen su propio gate más abajo.
-CHANGED_IN_F2 = {
+# Prompts que piden `emotion` (F2 les inyecta la leyenda).
+EMOTION_PROMPTS = {
 	"annotate_work_user",
 	"annotate_social_user",
 	"annotate_work_user_v2",
@@ -31,6 +30,15 @@ CHANGED_IN_F2 = {
 	"refine_social_user",
 	"refine_multi_user",
 	"refine_user",
+}
+# F2/F3 cambian a propósito estos prompts (leyenda emocional / regla de idioma):
+# ya no aplica el oráculo byte-exacto pre-F1; tienen sus gates propios.
+CHANGED_BY_REFACTOR = EMOTION_PROMPTS | {
+	"distill_user",
+	"distill_user_opening",
+	"distill_user_continuation",
+	"voice_rewrite_user",
+	"voice_rewrite_user_v2",
 }
 
 
@@ -42,7 +50,7 @@ def _inputs(pid: str):
 	return static, runtime
 
 
-@pytest.mark.parametrize("pid", sorted(set(FIX["prompts"]) - CHANGED_IN_F2))
+@pytest.mark.parametrize("pid", sorted(set(FIX["prompts"]) - CHANGED_BY_REFACTOR))
 def test_render_equivalente_pre_f1(pid):
 	static, runtime = _inputs(pid)
 	out = core.render(COMPONENT, pid, static=static, **runtime)
@@ -50,12 +58,31 @@ def test_render_equivalente_pre_f1(pid):
 
 
 def test_emotion_legend_presente_solo_donde_toca():
-	for pid in sorted(CHANGED_IN_F2):
+	for pid in sorted(EMOTION_PROMPTS):
 		static, runtime = _inputs(pid)
 		assert "EMOTION COLORS" in core.render(COMPONENT, pid, static=static, **runtime), pid
-	for pid in sorted(set(FIX["prompts"]) - CHANGED_IN_F2):
+	for pid in sorted(set(FIX["prompts"]) - EMOTION_PROMPTS):
 		static, runtime = _inputs(pid)
 		assert "EMOTION COLORS" not in core.render(COMPONENT, pid, static=static, **runtime), pid
+
+
+def test_language_auto_y_forzado(monkeypatch):
+	"""F3: `auto` deja interpretar (idioma de la fuente); `es`/`ca` fuerzan uno.
+
+	El valor resuelto entra en la firma: cambiar el idioma marca stale."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto")
+	auto_sig = core.signature(COMPONENT, "refine_work_user")
+	auto_out = core.render(COMPONENT, "refine_work_user", candidates="[]", fragments="x")
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "es")
+	es_sig = core.signature(COMPONENT, "refine_work_user")
+	es_out = core.render(COMPONENT, "refine_work_user", candidates="[]", fragments="x")
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "ca")
+	ca_out = core.render(COMPONENT, "refine_work_user", candidates="[]", fragments="x")
+	assert "the same language as the source text" in auto_out
+	assert "Spanish" in es_out and "Catalan" in ca_out
+	assert auto_sig != es_sig
 
 
 def test_emotion_legend_consistente_con_mapa():

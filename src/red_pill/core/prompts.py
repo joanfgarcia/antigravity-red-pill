@@ -43,6 +43,32 @@ class PromptError(RuntimeError):
 	"""Manifiesto incoherente, placeholder desconocido o valor ausente."""
 
 
+# Idioma de los textos (PROMPT-001 F3): `auto` deja interpretar al modelo
+# (idioma de la fuente); el resto fuerza uno. Valor resuelto desde config.
+_LANGUAGE_VALUES = {
+	"auto": "the same language as the source text",
+	"es": "Spanish",
+	"en": "English",
+	"ca": "Catalan",
+	"gl": "Galician",
+	"eu": "Basque",
+	"fr": "French",
+	"de": "German",
+	"pt": "Portuguese",
+	"it": "Italian",
+}
+
+
+def _prompt_language_value() -> str:
+	import red_pill.config as cfg
+
+	raw = str(getattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto") or "auto").strip()
+	return _LANGUAGE_VALUES.get(raw.lower(), raw)
+
+
+_STATIC_PROVIDERS = {"prompt_language": _prompt_language_value}
+
+
 @dataclass(frozen=True)
 class EffectivePrompt:
 	component: str
@@ -105,44 +131,44 @@ def _template_fields(text: str) -> Tuple[set, bool]:
 	return fields, invalid
 
 
-def _resolved_values(component: str, prompt_id: str, spec: dict, static: Mapping[str, str]) -> Dict[str, str]:
-	values: Dict[str, str] = {}
+def _compose_source(component: str, prompt_id: str, spec: dict) -> str:
+	"""Embebe los fragmentos en el source antes del render (una sola pasada).
+
+	Los fragmentos son curados (repo); sus placeholders internos (p. ej.
+	`${prompt_language}`) se resuelven en la MISMA sustitución final. Un `$`
+	literal en un fragmento debe escaparse como `$$` (lo detecta el validador).
+	"""
+	template_path = _manifest_path(component).parent / spec["template"]
+	if not template_path.is_file():
+		raise PromptError(f"template no encontrado: {template_path}")
+	source = _normalize(template_path.read_text(encoding="utf-8"))
 	fragments = spec.get("fragments")
 	if isinstance(fragments, dict):
 		for name, rel in fragments.items():
 			path = _FRAGMENTS_DIR / rel
 			if not path.is_file():
 				raise PromptError(f"fragmento '{name}' no encontrado: {path}")
-			values[name] = path.read_text(encoding="utf-8")
-	for name in spec.get("static") or []:
-		if name not in static:
-			raise PromptError(f"valor estático '{name}' requerido por {component}/{prompt_id}")
-		values[name] = str(static[name])
-	for name in spec.get("runtime") or []:
-		values[name] = _RUNTIME_SENTINEL.format(name=name)
-	return values
+			source = source.replace("${" + name + "}", _normalize(path.read_text(encoding="utf-8")))
+	return source
 
 
 @lru_cache(maxsize=None)
 def _render_cached(component: str, prompt_id: str, static_items: Tuple[Tuple[str, str], ...]) -> EffectivePrompt:
 	spec = spec_of(component, prompt_id)
 	static = dict(static_items)
-	template_path = _manifest_path(component).parent / spec["template"]
-	if not template_path.is_file():
-		raise PromptError(f"template no encontrado: {template_path}")
-	raw = _normalize(template_path.read_text(encoding="utf-8"))
-	fields, invalid = _template_fields(raw)
+	source = _compose_source(component, prompt_id, spec)
+	fields, invalid = _template_fields(source)
 	if invalid:
 		raise PromptError(f"'$' inválido en {component}/{prompt_id} (usa $$ para literal)")
 	declared = set(spec.get("static") or []) | set(spec.get("runtime") or [])
-	if isinstance(spec.get("fragments"), dict):
-		declared |= set(spec["fragments"].keys())
 	missing = fields - declared
 	if missing:
 		raise PromptError(f"placeholders no declarados en {component}/{prompt_id}: {sorted(missing)}")
-	values = _resolved_values(component, prompt_id, spec, static)
+	values: Dict[str, str] = {name: static[name] for name in spec.get("static") or []}
+	for name in spec.get("runtime") or []:
+		values[name] = _RUNTIME_SENTINEL.format(name=name)
 	try:
-		text = Template(raw).substitute(values)
+		text = Template(source).substitute(values)
 	except KeyError as e:
 		raise PromptError(f"placeholder sin valor en {component}/{prompt_id}: {e}") from e
 	system_file = spec.get("system")
@@ -166,7 +192,16 @@ def _render_cached(component: str, prompt_id: str, static_items: Tuple[Tuple[str
 
 
 def resolve(component: str, prompt_id: str, *, static: Optional[Mapping[str, str]] = None) -> EffectivePrompt:
-	static_items = tuple(sorted((k, str(v)) for k, v in (static or {}).items()))
+	spec = spec_of(component, prompt_id)
+	merged: Dict[str, str] = {}
+	for name in spec.get("static") or []:
+		if static and name in static:
+			merged[name] = str(static[name])
+		elif name in _STATIC_PROVIDERS:
+			merged[name] = str(_STATIC_PROVIDERS[name]())
+		else:
+			raise PromptError(f"valor estático '{name}' requerido por {component}/{prompt_id}")
+	static_items = tuple(sorted(merged.items()))
 	ep = _render_cached(component, prompt_id, static_items)
 	_persist(ep)  # idempotente (early-return si ya existe); best-effort
 	return ep
@@ -288,17 +323,15 @@ def validate_all() -> list:
 			if not isinstance(frag, dict):
 				errors.append(f"{component}/{pid}: 'fragments' debe ser mapping")
 				continue
-			for name, rel in frag.items():
-				if not (_FRAGMENTS_DIR / rel).is_file():
-					errors.append(f"{component}/{pid}: fragmento '{name}' no existe ({rel})")
-			tpl = base / spec.get("template", "")
-			if not tpl.is_file():
-				errors.append(f"{component}/{pid}: template no existe ({tpl})")
+			try:
+				source = _compose_source(component, pid, spec)
+			except PromptError as e:
+				errors.append(str(e))
 				continue
-			fields, invalid = _template_fields(tpl.read_text(encoding="utf-8"))
+			fields, invalid = _template_fields(source)
 			if invalid:
-				errors.append(f"{component}/{pid}: '$' inválido en template")
-			declared = set(spec.get("static") or []) | set(spec.get("runtime") or []) | set(frag.keys())
+				errors.append(f"{component}/{pid}: '$' inválido (usa $$ para literal)")
+			declared = set(spec.get("static") or []) | set(spec.get("runtime") or [])
 			missing = fields - declared
 			unused = declared - fields
 			if missing:

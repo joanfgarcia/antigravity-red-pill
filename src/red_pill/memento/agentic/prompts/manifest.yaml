@@ -1,10 +1,11 @@
-# Manifiesto de prompts de memento.agentic (PROMPT-001, F1–F2).
+# Manifiesto de prompts de memento.agentic (PROMPT-001, F1–F3).
 #
 # - `template`/`system`: rutas relativas a este directorio.
 # - `fragments`: fragmentos globales curados (src/red_pill/prompts/fragments/),
 #   inyectados en generación por su placeholder `${nombre}`.
 # - `static`: valores de configuración efectiva resueltos en generación
-#   (identidad/Bio, idioma, scopes) — entran en la firma.
+#   (identidad/Bio, idioma, scopes) — entran en la firma. `prompt_language` se
+#   resuelve del provider del loader (MEMENTO_PROMPT_LANGUAGE).
 # - `runtime`: valores por llamada — viajan como sentinelas en el prompt
 #   efectivo y se sustituyen con replace() (sin re-escaneo de `$`).
 # - `select`: clave de config que elige esta variante (documental en F1).
@@ -14,43 +15,45 @@ prompts:
   annotate_work_user:
     template: annotate_work_user.txt
     system: annotate_work_system.txt
-    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
-    static: [identity]
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, prompt_language]
     runtime: [fragment]
 
   annotate_social_user:
     template: annotate_social_user.txt
     system: annotate_social_system.txt
-    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
-    static: [identity]
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, prompt_language]
     runtime: [fragment]
 
   annotate_work_user_v2:
     template: annotate_work_user_v2.txt
     system: annotate_work_system.txt
-    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt}
-    static: [identity, work_scope]
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, work_scope, prompt_language]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
   annotate_social_user_v2:
     template: annotate_social_user_v2.txt
     system: annotate_social_system.txt
-    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt}
-    static: [identity, social_scope]
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, social_scope, prompt_language]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
   voice_rewrite_user:
     template: voice_rewrite_user.txt
     system: voice_rewrite_system.txt
-    static: [identity]
+    fragments: {language: language.txt}
+    static: [identity, prompt_language]
     runtime: [notes]
 
   voice_rewrite_user_v2:
     template: voice_rewrite_user_v2.txt
     system: voice_rewrite_system.txt
-    static: [identity]
+    fragments: {language: language.txt}
+    static: [identity, prompt_language]
     runtime: [notes]
 
   dual_score_user:
@@ -67,43 +70,50 @@ prompts:
   distill_user:
     template: distill_user.txt
     system: distill_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [content]
 
   distill_user_opening:
     template: distill_user_opening.txt
     system: distill_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [content]
 
   distill_user_continuation:
     template: distill_user_continuation.txt
     system: distill_system.txt
-    fragments: {voice: voice.txt}
+    fragments: {voice: voice.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [content, previous]
 
   refine_work_user:
     template: refine_work_user.txt
     system: refine_work_system.txt
-    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [candidates, fragments]
 
   refine_social_user:
     template: refine_social_user.txt
     system: refine_social_system.txt
-    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [candidates, fragments]
 
   refine_multi_user:
     template: refine_multi_user.txt
     system: refine_multi_system.txt
-    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt}
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [candidates, fragments]
 
   refine_user:
     template: refine_user.txt
     system: refine_system.txt
-    fragments: {emotion_legend: emotion_legend.txt}
+    fragments: {emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [prompt_language]
     runtime: [candidates, summary, title]
 
   content_validate_user:

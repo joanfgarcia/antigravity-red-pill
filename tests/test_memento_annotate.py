@@ -224,9 +224,9 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
 
-	assert distill_prompt_version() == "p1:693b83e15fd523f5fe7060f6aeed9d60b365e9ace3dfafa7e83e0bce88fb1a70"
-	assert refine_prompt_version() == "p1:cd872d976215dc1f676bf7da88b2cf04979069ead8696e1e79be23964c49f870"  # + leyenda emocional (F2)
-	assert annotate_prompt_version() == "p1:76fc8c44eedf8999b05aa9345820ac60d2149f44928f35c4c7888e97b2596901"  # v1 + TEST-BIO-FIXED + leyenda (F2)
+	assert distill_prompt_version() == "p1:5eb4c64beff357bc44b05fe105e3296621ffa4de3a8cd353eed2aae1d4f6ed9f"  # + idioma configurable (F3)
+	assert refine_prompt_version() == "p1:abe494d37297f94f0af0e8c09a48dba14e402caa2804ff5d7a2d02c568960c7e"  # + leyenda (F2) + idioma (F3)
+	assert annotate_prompt_version() == "p1:93a103fd9a90036825d4ee2adaed3e187b5ed0504e31e71eec1b1c2fb34625b5"  # v1 + TEST-BIO + F2 + F3
 	assert validate_prompt_version() == "p1:88a26e1b73d8dab13d41e953a59ec5b9ac2ec5b0a43ea4f6759b8ba97088422e"
 
 

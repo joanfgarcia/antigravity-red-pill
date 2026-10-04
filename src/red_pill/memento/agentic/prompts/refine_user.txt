@@ -8,6 +8,8 @@ Rules:
 - "relics": 0-4 memorable literal phrases from the section.
 - "cross_refs": subset of these candidate session ids that this section genuinely relates to: ${candidates}
 
+${language}
+
 ${emotion_legend}
 
 - Output ONLY the JSON object: {"significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": []}
