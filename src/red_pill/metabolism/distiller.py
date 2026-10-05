@@ -298,12 +298,6 @@ def distill_engram(
 		prompt_file = _resolve_prompt_for_profile() or params.get("prompt_file") or "distiller_v3.txt"
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt, static={"agent_name": "Aleth", "operator_name": "Joan"})
 
-	agent_name = "Aleth"
-	operator_name = "Joan"
-	# .replace, not .format: prompts like distiller_v3_voice.txt contain literal
-	# JSON braces that make str.format raise KeyError.
-	system_prompt = system_prompt.replace("{agent_name}", agent_name).replace("{operator_name}", operator_name)
-
 	# Prepend dynamic identity context if not already present
 	identity_context = get_dynamic_identity_context()
 	if identity_context and identity_context not in system_prompt:
@@ -750,7 +744,6 @@ def audit_engram_quality(
 	from red_pill.core.providers import ProviderRegistry
 
 	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name})
-	system_prompt = system_prompt.replace("{agent_name}", agent_name).replace("{operator_name}", operator_name)
 
 	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"
 

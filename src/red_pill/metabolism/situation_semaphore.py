@@ -48,12 +48,10 @@ def situation_point_id(affinity: str) -> str:
 
 def _default_distiller(text: str) -> Dict[str, Any]:
 	"""Destilado ligero del estado (LLM local). Devuelve {situation, emotion, intensity}."""
+	from red_pill.core import prompts as core
 	from red_pill.core.providers import ProviderRegistry
 
-	prompt = (
-		"Resume en UNA frase el ESTADO actual de este trabajo (qué se está haciendo/preguntando) "
-		' y el tono del operador. Responde SOLO JSON: {"situation":"...","emotion":"gray","intensity":0.5}\n\n' + text[:4000]
-	)
+	prompt = core.render("metabolism", "situation_distiller", text=text[:4000])
 	try:
 		provider = ProviderRegistry.get_inference_provider()
 		data = json.loads(provider.generate(prompt))

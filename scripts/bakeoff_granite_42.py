@@ -26,10 +26,10 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from red_pill.core import model_runtime as mr  # noqa: E402
 from red_pill.core.model_runtime import extract_thinking  # noqa: E402
+from red_pill.metabolism.distiller import load_prompt_text  # noqa: E402
 
 MODELS = Path.home() / ".local" / "share" / "red-pill" / "models"
-PROMPT_VOICE = (REPO / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt").read_text()
-PROMPT_VOICE = PROMPT_VOICE.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
+PROMPT_VOICE = load_prompt_text("distiller_v3_voice.txt", static={"agent_name": "Aleth", "operator_name": "Joan"})
 
 FEM_RE = re.compile(
 	r"\b(abrumada|cansada|emocionada|orgullosa|frustrada|tranquila|preocupada|sola|despierta|"

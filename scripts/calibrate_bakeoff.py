@@ -32,6 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from llama_cli_runner import _parse_cli_output
 from model_battle_lib import BattleRunner, Probe, start_daemon_if_inactive, stop_daemon_if_active
 
+from red_pill.metabolism.distiller import load_prompt_text
+
 LLAMA_CLI = os.environ.get("LLAMA_CLI_PATH") or str(
 	Path(__file__).resolve().parent.parent / "3rdparty" / "llama_official" / "build" / "bin" / "llama-cli"
 )
@@ -50,10 +52,7 @@ PROBES_SMOKE = [
 PROBES_DISTILL = [
 	Probe(
 		name="decision",
-		system_prompt=open(str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt"))
-		.read()
-		.replace("{agent_name}", "Aleth")
-		.replace("{operator_name}", "Joan"),
+		system_prompt=load_prompt_text("distiller_v3_voice.txt", static={"agent_name": "Aleth", "operator_name": "Joan"}),
 		user_message=(
 			"USER: ¿migramos a Postgres o seguimos con SQLite? el volumen "
 			"no justifica aún un motor nuevo\n\nASSISTANT: seguimos con SQLite "
