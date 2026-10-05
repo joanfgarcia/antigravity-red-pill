@@ -1,5 +1,16 @@
 ## Unreleased
 
+### 🎛️ Jobs — pin GPU sin fallback CPU (2026-10-05)
+
+- **[FEATURE]** `llm.device_fallback` en recipes → `RP_LLM_DEVICE_FALLBACK`: el
+  transporte Memento lo envía como `device_fallback` del request, así el daemon
+  NUNCA cae a CPU (con `[gpu]`, si no cabe devuelve error y el job difiere).
+- **[FEATURE]** `preflight.min_free_vram_mb` en `element_job` (resident-aware):
+  si el modelo del recipe ya está residente en GPU pasa sin coste; si no, exige
+  VRAM libre suficiente; si no cabe → `JobDeferred` (jamás CPU disfrazada).
+- **[CHANGE]** `memento_annotate_rebuild` (rebuild de 900 sesiones stale) pasa a
+  GPU-only con `min_free_vram_mb: 7600` y prioridad 3 (checkpoint por sesión).
+
 ### 🧩 Prompts — F5: perímetro completo por composición (RULE 5, 2026-10-05)
 
 - **[FEATURE]** Migración total del resto del perímetro a manifiestos y

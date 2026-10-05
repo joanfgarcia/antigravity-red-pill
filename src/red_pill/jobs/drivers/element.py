@@ -83,6 +83,34 @@ class ElementJobDriver(ResumableJobDriver):
 		if pre.get("llm_required") and not self._llm_healthy(self._llm_port()):
 			raise JobDeferred("LLM local no responde — se difiere hasta que la GPU/LLM se libere")
 
+		# Gate GPU (2026-10-05): con `min_free_vram_mb`, el step solo arranca si el
+		# modelo del recipe ya está residente en GPU (coste 0) o hay VRAM libre
+		# suficiente para cargarlo. Si no cabe → defer (jamás CPU disfrazada).
+		min_free = int(pre.get("min_free_vram_mb", 0))
+		if min_free > 0 and not self._model_resident_on_gpu(payload):
+			from red_pill.core.vram_probe import VramProbe
+
+			free_mb = VramProbe.get_free_mb()
+			if free_mb < min_free:
+				raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {min_free}MB) y el modelo no está residente en GPU — sin fallback CPU")
+
+	@staticmethod
+	def _model_resident_on_gpu(payload: Dict[str, Any]) -> bool:
+		"""True si el daemon sirve ya el modelo del recipe en GPU (cero VRAM extra)."""
+		llm = payload.get("llm") or {}
+		model = str(llm.get("model") or "").strip()
+		if not model:
+			return False
+		import json as _json
+		import urllib.request
+
+		try:
+			with urllib.request.urlopen(f"http://127.0.0.1:{ElementJobDriver._llm_port()}/status", timeout=3) as resp:
+				data = _json.loads(resp.read().decode("utf-8"))
+		except Exception:
+			return False
+		return str(data.get("loaded_profile") or "") == model and str(data.get("mode") or "") == "gpu"
+
 	@staticmethod
 	def _llm_port() -> int:
 		try:
