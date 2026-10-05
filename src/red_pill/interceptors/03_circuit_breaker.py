@@ -33,11 +33,9 @@ class CircuitBreakerPlugin(BaseInterceptorPlugin):
 				if not engine.llm:
 					return ""
 
-				eval_sys = (
-					"You are an internal routing Gatekeeper. Evaluate the user's prompt strictly.\n"
-					"If you have enough hard factual data to answer the prompt conclusively directly from memory, you MUST prefix your answer with the EXACT string `[VALID]`.\n"
-					"If you don't have enough data, or the prompt is narrative, conversational, or philosophical, do NOT use the prefix. Output ONLY: `INSUFFICIENT_CONTEXT`."
-				)
+				from red_pill.core import prompts as core
+
+				eval_sys = core.render("interceptors", "circuit_breaker_system")
 				formatted_prompt = f"<|im_start|>system\n{eval_sys}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
 
 				try:

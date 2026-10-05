@@ -71,5 +71,22 @@ def test_situation_distiller_compone_language_y_text():
 	assert "${" not in out
 
 
+def test_circuit_breaker_system_equivale_al_inline():
+	out = core.render("interceptors", "circuit_breaker_system")
+	assert out.startswith("You are an internal routing Gatekeeper.")
+	assert "[VALID]" in out and "INSUFFICIENT_CONTEXT" in out
+	assert "${" not in out
+
+
+def test_drive_evaluator_compone_user_y_system():
+	user = core.render("cognitive", "drive_evaluator_user", context="BACKLOG: nada")
+	system = core.system_text("cognitive", "drive_evaluator_user")
+	assert "BACKLOG: nada" in user
+	assert "autonomous_research" in user and "graphify_sync" in user
+	assert user.endswith("conversational filler.")
+	assert system and "dynamic task generation sub-routine" in system
+	assert "${" not in user
+
+
 def test_validate_all_sin_errores():
 	assert core.validate_all() == []
