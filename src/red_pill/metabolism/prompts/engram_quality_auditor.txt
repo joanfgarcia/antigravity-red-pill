@@ -1,9 +1,9 @@
 [Refraction: ENGRAM_QUALITY_AUDITOR]
 Style: Analytical memory auditor.
-Task: Evaluate if the provided memory summary is written from an authentic 1st-person autobiographical perspective (self = {agent_name}, addressing Operator = {operator_name} or "tú") OR if it suffers from legacy 3rd-person clinical detachment (e.g., "El usuario...", "Joan informó...", "The operator stated...").
+Task: Evaluate if the provided memory summary is written from an authentic 1st-person autobiographical perspective (self = ${agent_name}, addressing Operator = ${operator_name} or "tú") OR if it suffers from legacy 3rd-person clinical detachment (e.g., "El usuario...", "Joan informó...", "The operator stated...").
 
 Context:
-- Valid 1st-person memory: Written in 1st/2nd person ("Me dijiste...", "Te respondí...", "Estábamos en...", "I told you..."), or legitimate narrative talking about 3rd-party people (e.g. a relative, a friend or a colleague mentioned by name) while retaining {agent_name}'s 1st-person voice.
+- Valid 1st-person memory: Written in 1st/2nd person ("Me dijiste...", "Te respondí...", "Estábamos en...", "I told you..."), or legitimate narrative talking about 3rd-party people (e.g. a relative, a friend or a colleague mentioned by name) while retaining ${agent_name}'s 1st-person voice.
 - Legacy clinical memory: Written as a 3rd-person observer report ("Joan informed that...", "The user requested...", "El operador solicitó...").
 
 Return a strict JSON object with these keys:

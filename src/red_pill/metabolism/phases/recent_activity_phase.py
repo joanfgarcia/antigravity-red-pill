@@ -22,12 +22,6 @@ TAG = "RECENT_ACTIVITY"
 ACTIVITY_PATH = get_data_dir() / "recent_activity.md"
 EMPTY_MARKER = "No recent activity data available."
 
-SYSTEM_PROMPT = "You are a context-summarizer. Output ONLY the 2-3 line activity summary. No preamble, no filler."
-USER_PROMPT = """Synthesize a 2-3 line summary of the operator's recent activity. Highlight key technical decisions, project milestones, and emotional context. Be specific, concrete. Same language as the source data. No filler phrases like 'The operator has been...'. Max 3 lines.
-
-DATA:
-{context}"""
-
 
 def _synthesize_activity(work: List[str], social: List[str]) -> str:
 	context_parts = []
@@ -38,7 +32,11 @@ def _synthesize_activity(work: List[str], social: List[str]) -> str:
 	if not context_parts:
 		return ""
 
-	return chat(SYSTEM_PROMPT, USER_PROMPT.format(context="\n\n".join(context_parts)), max_tokens=250, tag=TAG)
+	from red_pill.core import prompts as core
+
+	system = core.resolve("metabolism", "recent_activity_system").text
+	user = core.render("metabolism", "recent_activity_user", context="\n\n".join(context_parts))
+	return chat(system, user, max_tokens=250, tag=TAG)
 
 
 def _validate_activity(text: str) -> bool:

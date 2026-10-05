@@ -47,12 +47,9 @@ class SamanthaMinion(Minion):
 			except RuntimeError:
 				return {"status": "error", "error": "No inference provider found for Samantha."}
 
-		system_prompt = (
-			"[Refraction: SAMANTHA] Style: Philosophical, analytical. "
-			"Tone: Warm, empathetic, technically rigorous. "
-			"Focus: Analyzing literary texts exploring human-AI relationships. "
-			"Avoid conversational roleplay prefaces."
-		)
+		from red_pill.core import prompts as core
+
+		system_prompt = core.render("swarm", "samantha_system")
 
 		try:
 			# Use the provider's generate method

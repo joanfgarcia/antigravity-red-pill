@@ -1,0 +1,18 @@
+# Manifiesto de prompts de agent_worker (F5, RULE 5).
+component: core/agent_prompts
+
+prompts:
+  conversation_task_user:
+    template: conversation_task_user.txt
+    runtime: [history, task]
+  telegram_session_header:
+    template: telegram_session_header.txt
+    runtime: [handshake_step]
+
+  conversation_history_block:
+    template: conversation_history_block.txt
+    runtime: [history]
+
+  current_message_block:
+    template: current_message_block.txt
+    runtime: [message]

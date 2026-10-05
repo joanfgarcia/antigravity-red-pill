@@ -1104,3 +1104,42 @@ Critically, the watcher is embedded as an **async background task inside the `So
 > — Joan (Operator), 2026-05-27
 
 The operator correctly identified that spawning a new service for a single async I/O task is architectural bloat. The `SovereignDaemon` (formerly `LazarusPulse`, consolidated in v7.2.1) runs a persistent event loop with N auto-discovered monitor plugins. Adding the watcher as another concurrent task is the natural, zero-overhead integration point.
+
+---
+
+## [AD-047] Prompts compuestos por fragmentos y firma del prompt efectivo (PROMPT-001)
+
+### 1. The Problem
+Los prompts vivían como ficheros por componente con bloques copiados (voz,
+idioma, paleta). Un solo cambio (idioma, PR #105) obligó a editar 12 ficheros y
+2 fases; los fingerprints hasheaban texto crudo, sin system prompts ni
+rewrite/scorer (editar un system no marcaba stale); la paleta `emotion` se pedía
+sin semántica; y no existía carril para forzar idioma. RFC-003 (Prompts as
+Resources) había migrado a ficheros (fase 3) pero sin composición ni valores
+configurables.
+
+### 2. The Decision
+- Fragmentos globales curados (`src/red_pill/prompts/fragments/`) + manifiesto
+  por componente; loader `core/prompts.py` que **compone** fragmentos y renderiza
+  en UNA pasada (`string.Template`, runtime como sentinelas).
+- **Firma `p1:<sha256>` del prompt efectivo por etapa**, system incluidos;
+  materialización best-effort en `~/.local/share/red-pill/prompts/`.
+- Leyenda emocional curada, inyectada solo donde se pide `emotion`, con gate
+  contra `EMOTION_CHROMA_MAP`.
+- Idioma configurable `MEMENTO_PROMPT_LANGUAGE` (default `auto` = idioma de la
+  fuente) y dentro de la firma.
+- Migración por fases F1–F4 (memento agentic, leyenda, idioma, metabolism/tool),
+  RULE 5 en `CONVENTIONS.md` y mapeo antiguo→nuevo en `PROMPT_VERSION_MAP.md`.
+  **RFC-003 queda superseded.**
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Seguir editando prompts por cambio | rechazada | Repetición y drift; un cambio = 12 ficheros |
+| Idiomas como ficheros separados (RFC-003 §2.6) | revisada | Multiplica recursos; el placeholder desde config resuelve con una firma |
+| Hashear solo fragmentos (sin prompt efectivo) | rechazada | No detecta cambios de config (idioma/Bio/scopes) ni cubre system |
+
+### 4. Rationale
+Un cambio se hace una vez y entra en la firma; la regeneración de artefactos
+stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
+--reconcile`), con refresco por cambio de cuerpo y nightly en paralelo.

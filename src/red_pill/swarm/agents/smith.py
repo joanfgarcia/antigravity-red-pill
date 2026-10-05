@@ -175,7 +175,9 @@ class SmithMinion(Minion):
 			self.log(f"🔍 Validando hallazgos previos con {os.path.basename(engine.model_path) if engine.model_path else 'No model path'}...")
 			for finding in results["findings"][:5]:  # Limit to top 5 for speed
 				snippet = finding.get("context", finding["msg"])
-				prompt = f"Security Analysis Request: Code snippet '{snippet}' was flagged as '{finding['msg']}'. Is this a genuine security risk (True Positive) or a safe usage (False Positive)? Explain briefly."
+				from red_pill.core import prompts as core
+
+				prompt = core.render("swarm", "smith_security_user", snippet=snippet, finding=finding["msg"])
 				analysis = engine.synthesize(snippet, prompt)
 				finding["slm_validation"] = analysis
 

@@ -288,26 +288,15 @@ class DriveEvaluator:
 		profile_data = self.profiles.get(profile_name, DEFAULT_PROFILES["balanced"])
 		temp = profile_data.get("temperature", 0.3)
 
-		prompt = (
-			"You are the internal consciousness of Aleth. The operator is currently idle.\n"
-			"Review the provided backlog and system context:\n\n"
-			f"{context_data}\n\n"
-			"Propose ONE highly specific, useful, and isolated background task to execute right now.\n"
-			"It could be researching a specific concept, writing a test for a recent feature, cleaning/compaction of memories, or updating a document.\n"
-			"Output ONLY a valid JSON object matching this schema:\n"
-			"{\n"
-			'  "action": "autonomous_research" | "proactive_coding" | "memory_compaction" | "graphify_sync",\n'
-			'  "objective": "Detailed description of the task goals",\n'
-			'  "tools_allowed": ["run_command", "search_memory_research", "read_url_content"]\n'
-			"}\n"
-			"Do not add any preamble, markdown formatting, or conversational filler."
-		)
+		from red_pill.core import prompts as core
+
+		prompt = core.render("cognitive", "drive_evaluator_user", context=context_data)
 
 		payload = {
 			"messages": [
 				{
 					"role": "system",
-					"content": "You are a dynamic task generation sub-routine. Output ONLY the JSON object. Do not add markdown backticks. Stop generating immediately after closing the JSON object.",
+					"content": core.system_text("cognitive", "drive_evaluator_user") or "",
 				},
 				{"role": "user", "content": prompt},
 			],

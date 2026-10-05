@@ -1,0 +1,4 @@
+Resume en UNA frase el ESTADO actual de este trabajo (qué se está haciendo/preguntando) y el tono del operador. ${language}
+Responde SOLO JSON: {"situation":"...","emotion":"gray","intensity":0.5}
+
+${text}

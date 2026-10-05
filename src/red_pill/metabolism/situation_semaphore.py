@@ -27,6 +27,32 @@ _NS = uuid.NAMESPACE_OID
 COLLECTION = "situation_memories"
 GLOBAL_AFFINITY = "global"
 
+# Margen bajo el tope del esquema (MAX_METADATA_STR) para el merge solera: el
+# valor escrito SIEMPRE debe pasar `CreateEngramRequest.validate_metadata_structure`.
+_META_MARGIN = 10
+
+
+def _meta_limit() -> int:
+	"""Tope efectivo para strings de metadata (deriva del esquema, única fuente)."""
+	return max(1, int(cfg.MAX_METADATA_STR) - _META_MARGIN)
+
+
+def _meta_str(value: Any, limit: int) -> str:
+	text = str(value or "")
+	return text if len(text) <= limit else text[:limit]
+
+
+def _json_counts_capped(counts: Dict[str, Any], limit: int) -> str:
+	"""JSON de recuentos que cabe en `limit`: descarta las claves menos frecuentes."""
+	entries = sorted(counts.items(), key=lambda kv: (-float(kv[1]), str(kv[0])))
+	while entries:
+		dumped = json.dumps(dict(entries), ensure_ascii=False)
+		if len(dumped) <= limit:
+			return dumped
+		entries.pop()
+	return "{}"
+
+
 # Chroma para las etiquetas del tag RFC-004 (taxonomía propia; NO la del modelo
 # de emociones local). Necesario porque `add_memory` puede re-detectar `emotion`
 # cuando mood coincide con DEFAULT_EMOTION ("neutral") — el `color` explícito no
@@ -48,12 +74,10 @@ def situation_point_id(affinity: str) -> str:
 
 def _default_distiller(text: str) -> Dict[str, Any]:
 	"""Destilado ligero del estado (LLM local). Devuelve {situation, emotion, intensity}."""
+	from red_pill.core import prompts as core
 	from red_pill.core.providers import ProviderRegistry
 
-	prompt = (
-		"Resume en UNA frase el ESTADO actual de este trabajo (qué se está haciendo/preguntando) "
-		' y el tono del operador. Responde SOLO JSON: {"situation":"...","emotion":"gray","intensity":0.5}\n\n' + text[:4000]
-	)
+	prompt = core.render("metabolism", "situation_distiller", text=text[:4000])
 	try:
 		provider = ProviderRegistry.get_inference_provider()
 		data = json.loads(provider.generate(prompt))
@@ -97,7 +121,7 @@ def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 		emo_count[emo] += 1
 		emo_weight[emo] = emo_weight.get(emo, 0.0) + c
 		confs.append(c)
-		themes[str(it.get("tag_theme") or "?")] += 1
+		themes[_meta_str(it.get("tag_theme") or "?", 120)] += 1
 	mood = max(emo_count, key=lambda k: (emo_weight[k], emo_count[k]))
 	theme = themes.most_common(1)[0][0]
 	conf = sum(confs) / len(confs)
@@ -119,16 +143,17 @@ def _default_merger(old: str, delta: str, ratio: float) -> str:
 	`ratio` = peso de lo NUEVO (0.2 = 20% nuevo / 80% previo, D20/D25). Un delta
 	vacío NO degrada el resumen previo.
 	"""
+	limit = _meta_limit()
 	old = (old or "").strip()
 	delta = (delta or "").strip()
 	if not delta:
-		return old[:2000]
+		return old[:limit]
 	if not old:
-		return delta[:2000]
+		return delta[:limit]
 	r = max(0.0, min(1.0, ratio))
-	old_budget = int(2000 * (1 - r))
-	new_budget = int(2000 * r)
-	return (old[:old_budget].rstrip() + " " + delta[:new_budget]).strip()[:2000]
+	old_budget = int(limit * (1 - r))
+	new_budget = int(limit * r)
+	return (old[:old_budget].rstrip() + " " + delta[:new_budget]).strip()[:limit]
 
 
 def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, Any]], distiller: Callable, merger: Callable, ratio: float) -> bool:
@@ -147,6 +172,7 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 	# modo tag está activo y no hay turnos etiquetados, no se actualiza (más
 	# vale no actualizar que inventar la situación con el LLM).
 	tag_mode = bool(getattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", False))
+	limit = _meta_limit()
 	extra_meta: Dict[str, Any] = {}
 	tag_color = None
 	if tag_mode:
@@ -165,10 +191,10 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 		# emotional_vector): los recuentos van como JSON en string.
 		extra_meta = {
 			"tag_mode": True,
-			"tag_theme": agg["theme"],
+			"tag_theme": _meta_str(agg["theme"], limit),
 			"tag_mood": agg["mood"],
-			"tag_themes_json": json.dumps(agg["theme_counts"], ensure_ascii=False),
-			"tag_emotions_json": json.dumps(agg["emotion_counts"], ensure_ascii=False),
+			"tag_themes_json": _json_counts_capped(agg["theme_counts"], limit),
+			"tag_emotions_json": _json_counts_capped(agg["emotion_counts"], limit),
 			"tagged_n": agg["n"],
 			"tag_coverage": agg["coverage"],
 		}
@@ -185,7 +211,10 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 	# lento) + `situation_recent` (el último delta, volátil). `situation` = estable
 	# (compatibilidad con el pre-heating).
 	stable_old = str(old_payload.get("situation_stable") or old_payload.get("situation", ""))
-	new_situation = merger(stable_old, recent, ratio)
+	# Cinturón y tirantes: el merger por defecto ya deriva del límite, pero un
+	# merger inyectado (tests/custom) no puede colar un valor que el esquema rechace.
+	new_situation = _meta_str(merger(stable_old, recent, ratio), limit)
+	recent = _meta_str(recent, limit)
 	new_id = memory_manager.add_memory(
 		collection=COLLECTION,
 		text=new_situation or aff,

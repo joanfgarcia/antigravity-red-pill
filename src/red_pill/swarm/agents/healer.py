@@ -103,13 +103,15 @@ class HealerMinion(Minion):
 			end_win = min(len(lines), line_idx + 5)
 			context = "\n".join([f"{j + 1}: {line}" for j, line in enumerate(lines[start_win:end_win], start=start_win)])
 
-			prompt = (
-				f"You are an expert Python developer fixing Mypy type errors.\n"
-				f"FILE: {file_path}\n"
-				f"ERROR: {err['msg']}\n"
-				f"LINE {err['line']}: {original_line}\n\n"
-				"Return ONLY the single corrected line of code. No markdown, no triple backticks. Just the code.\n"
-				"Maintain the exact indentation of the original line."
+			from red_pill.core import prompts as core
+
+			prompt = core.render(
+				"swarm",
+				"healer_fix_user",
+				file_path=file_path,
+				error=err["msg"],
+				line=err["line"],
+				original_line=original_line,
 			)
 
 			raw_correction = engine.synthesize(context, prompt)

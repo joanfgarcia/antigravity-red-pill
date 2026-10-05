@@ -1,0 +1,5 @@
+Classify the following text into one of these categories: ${categories}.
+
+Text: ${text}
+
+Output ONLY the category name.

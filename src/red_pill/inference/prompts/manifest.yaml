@@ -1,0 +1,18 @@
+# Manifiesto de prompts de inference (Samantha) — F5 (RULE 5).
+component: inference
+
+prompts:
+  samantha_compact_user:
+    template: samantha_compact_user.txt
+    system: samantha_compact_system.txt
+    runtime: [history]
+
+  samantha_classify_user:
+    template: samantha_classify_user.txt
+    system: samantha_classify_system.txt
+    runtime: [categories, text]
+
+  samantha_summarize_user:
+    template: samantha_summarize_user.txt
+    system: samantha_summarize_system.txt
+    runtime: [text]

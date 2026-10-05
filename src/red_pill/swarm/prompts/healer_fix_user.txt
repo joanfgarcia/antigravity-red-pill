@@ -1,0 +1,7 @@
+You are an expert Python developer fixing Mypy type errors.
+FILE: ${file_path}
+ERROR: ${error}
+LINE ${line}: ${original_line}
+
+Return ONLY the single corrected line of code. No markdown, no triple backticks. Just the code.
+Maintain the exact indentation of the original line.

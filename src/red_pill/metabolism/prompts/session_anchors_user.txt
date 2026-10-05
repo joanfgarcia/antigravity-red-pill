@@ -1,0 +1,4 @@
+Analyze these technical memory hubs from the current session. Identify key architectural decisions, dependency changes, and the core rationale. Synthesize into a 'Session Anchor' that explains WHY changes were made, not just WHAT. Be concise but technically precise.
+
+HUBS:
+${hubs}

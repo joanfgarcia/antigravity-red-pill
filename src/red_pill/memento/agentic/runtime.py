@@ -47,43 +47,41 @@ def engine_id() -> str:
 	return str(_ENGINE_CACHE)
 
 
-def _prompt_hash(*texts: str) -> str:
-	import hashlib
-
-	h = hashlib.sha256()
-	for t in texts:
-		h.update(t.encode("utf-8"))
-	return h.hexdigest()[:10]
-
-
 def distill_prompt_version() -> str:
-	"""Fingerprint del prompt de SÍNTESIS (DISTILL_* + VOICE)."""
-	return _prompt_hash(prompts.DISTILL_USER, prompts.DISTILL_USER_OPENING, prompts.DISTILL_USER_CONTINUATION, prompts._VOICE_RULE)
+	"""Fingerprint de la etapa de SÍNTESIS (user+system, con fragmento de voz)."""
+	return prompts.stage_signature(["distill_user", "distill_user_opening", "distill_user_continuation"])
 
 
 def annotate_prompt_version() -> str:
-	"""Fingerprint del prompt de ANNOTATE (WORK + SOCIAL + VOICE + Bio de identidad)."""
-	if voice_v2_enabled():
-		# Voz v2.1 (2026-09-26): plantillas v2 + regla propia + re-escritura v2 + scorer
-		# dual v2 + el alcance WORK/SOCIAL del operador — todo lo que decide la nota
-		# entra en la huella (antes la re-escritura y el scorer quedaban fuera).
-		work_scope, social_scope = annotate_scopes()
-		view = fragment_view_settings()
-		return _prompt_hash(
-			*(view if view[0] != "raw" else ()),
-			prompts.ANNOTATE_WORK_USER_V2,
-			prompts.ANNOTATE_SOCIAL_USER_V2,
-			prompts._VOICE_RULE_ANNOTATE,
-			prompts.IDENTITY_BIO,
-			prompts.VOICE_REWRITE_USER_V2,
-			prompts.DUAL_SCORE_USER_V2,
-			work_scope,
-			social_scope,
-		)
+	"""Fingerprint de ANNOTATE: cubre TODOS los prompts que emite la etapa.
+
+	Incluye system prompts (vía stage_signature), re-escritura de voz y scorer
+	dual — antes quedaban fuera de la huella v1 (A2-B2/A3-H2 del RFC). La Bio y
+	los scopes entran como valores estáticos; la vista de fragmento como marcador.
+	"""
+	work_scope, social_scope = annotate_scopes()
 	view = fragment_view_settings()
-	if view[0] != "raw":
-		return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO, *view)
-	return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO)
+	extra = {"view": "|".join(view)} if view[0] != "raw" else None
+	if voice_v2_enabled():
+		return prompts.stage_signature(
+			["annotate_work_user_v2", "annotate_social_user_v2", "voice_rewrite_user_v2", "dual_score_user_v2"],
+			static={
+				"annotate_work_user_v2": {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope},
+				"annotate_social_user_v2": {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope},
+				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
+				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
+			},
+			extra=extra,
+		)
+	return prompts.stage_signature(
+		["annotate_work_user", "annotate_social_user", "voice_rewrite_user", "dual_score_user"],
+		static={
+			"annotate_work_user": {"identity": prompts.IDENTITY_BIO},
+			"annotate_social_user": {"identity": prompts.IDENTITY_BIO},
+			"voice_rewrite_user": {"identity": prompts.IDENTITY_BIO},
+		},
+		extra=extra,
+	)
 
 
 def fragment_view_settings() -> Tuple[str, str, str]:
@@ -124,13 +122,13 @@ def voice_v2_enabled() -> bool:
 
 
 def validate_prompt_version() -> str:
-	"""Fingerprint del prompt del VALIDADOR de contenido (MEM-006)."""
-	return _prompt_hash(prompts.CONTENT_VALIDATE_USER)
+	"""Fingerprint del VALIDADOR de contenido (user + system)."""
+	return prompts.stage_signature(["content_validate_user"])
 
 
 def refine_prompt_version() -> str:
-	"""Fingerprint del prompt de REFINADO (WORK + SOCIAL + VOICE)."""
-	return _prompt_hash(prompts.REFINE_WORK_USER, prompts.REFINE_SOCIAL_USER, prompts._VOICE_RULE)
+	"""Fingerprint de REFINADO (WORK + SOCIAL + sistemas + fragmento de voz)."""
+	return prompts.stage_signature(["refine_work_user", "refine_social_user"])
 
 
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs

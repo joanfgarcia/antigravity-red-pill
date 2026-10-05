@@ -1,0 +1,6 @@
+# Manifiesto de prompts de interceptors (F5, RULE 5).
+component: interceptors
+
+prompts:
+  circuit_breaker_system:
+    template: circuit_breaker_system.txt

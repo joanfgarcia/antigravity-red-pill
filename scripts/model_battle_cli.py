@@ -28,10 +28,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from llama_cli_runner import CliProbe, LlamaCliRunner
 
-DEFAULT_PROMPT = str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3.txt")
+from red_pill.metabolism.distiller import load_prompt_text
+
+DEFAULT_PROMPT = "distiller_v3.txt"
 prompt_path = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_PROMPT
-PROMPT = open(prompt_path).read()
-PROMPT = PROMPT.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
+try:
+	PROMPT = load_prompt_text(Path(prompt_path).name, static={"agent_name": "Aleth", "operator_name": "Joan"})
+	if not PROMPT:
+		raise ValueError(f"prompt no declarado: {prompt_path}")
+except Exception:
+	PROMPT = Path(prompt_path).read_text(encoding="utf-8")
 print(f"[prompt] {prompt_path}", flush=True)
 
 PROBES = {

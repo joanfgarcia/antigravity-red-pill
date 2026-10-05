@@ -20,13 +20,6 @@ logger = logging.getLogger(__name__)
 TAG = "OPERATOR_PROFILE"
 PROFILE_PATH = get_data_dir() / "operator_profile.md"
 
-SYSTEM_PROMPT = "You are a context-summarizer. Output ONLY the operator profile. No preamble, no filler."
-USER_PROMPT = """Generate a short profile of the OPERATOR (the human), 2-4 lines: their name, role, key traits, and current focus areas. Be concrete — name real projects and decisions from the data. Same language as the source data.
-If no meaningful data about the operator, respond: INSUFFICIENT_DATA
-
-DATA:
-{context}"""
-
 
 def _fetch_social_immune(limit: int = 5) -> List[str]:
 	flt = {"must": [{"key": "immune", "match": {"value": True}}], **NON_CANONICAL_FILTER}
@@ -48,7 +41,11 @@ def _synthesize_profile(work: List[str], social: List[str], directives: List[str
 		context_parts.append("DIRECTIVES:\n" + "\n".join(f"- {d}" for d in directives))
 	context = "\n\n".join(context_parts) if context_parts else "No data."
 
-	return chat(SYSTEM_PROMPT, USER_PROMPT.format(context=context), max_tokens=250, tag=TAG)
+	from red_pill.core import prompts as core
+
+	system = core.resolve("metabolism", "operator_profile_system").text
+	user = core.render("metabolism", "operator_profile_user", context=context)
+	return chat(system, user, max_tokens=250, tag=TAG)
 
 
 def _validate_profile(profile: str) -> bool:

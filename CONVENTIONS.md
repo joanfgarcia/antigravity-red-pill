@@ -114,3 +114,47 @@ On 2026-09-21 the nightly dag_job reported **"18/18 success"** while its `chroni
 
 **Reference:** the owning design doc of the component (per project self-documentation).
 
+
+---
+
+## 🚨 RULE 5: Prompts as Composed Resources (STRICT)
+
+Every prompt that instructs a model (system or user, production or tooling)
+MUST live as a declared resource and be rendered through the composition
+loader. **Inline instruction strings in code are forbidden** (PROMPT-001).
+
+### Mandatory Requirements
+
+1. **Fragmentos globales** en `src/red_pill/prompts/fragments/`; un bloque
+   compartido (voz, idioma, leyenda, contrato) se define UNA vez y se inyecta
+   por placeholder — nunca copiado entre prompts.
+2. **Manifiesto por componente** (`<componente>/prompts/manifest.yaml`) que
+   declara `template`, `system`, `fragments`, `static` y `runtime`.
+3. **Solo el loader** (`red_pill.core.prompts`) renderiza: `string.Template`
+   con `${var}` en UNA pasada; los valores de runtime viajan como sentinelas
+   (nada de `str.format` ni `.replace` artesanal).
+4. **Firma del prompt efectivo** por etapa (`p1:<sha256>`, system incluidos);
+   los artefactos sellan esa firma. Mapeo en
+   `docs/TECHNICAL/BUNKER/PROMPT_VERSION_MAP.md`.
+5. **Overrides** solo por API explícita (tests/bake-offs); en producción, recurso.
+6. `validate_all()` en CI: placeholders declarados, fragmentos existentes, sin
+   prompts huérfanos ni fragmentos duplicados inline.
+
+### Scope (2026-10-05)
+
+Perímetro migrado: `memento/agentic`, `metabolism`, `memento/audit`,
+`inference` (Samantha), `interceptors`, `cognitive`, `swarm` (agents + bridges),
+`plugins/antigravity_ide`, `core/agent_prompts`, `hive.py` y el tool
+`scripts/memento_recalibrate.py` (+ scripts de bake-off). **Deuda declarada
+(F1–F4) cerrada en F5**: `samantha_queue` se eliminó por duplicado muerto; los
+wrappers ChatML/templates de chat que quedan (providers, edge_engine) son
+transporte, no prompts de instrucción. El lint de CI cubre el perímetro
+completo (RULE 5).
+
+### Why This Matters
+
+Un cambio de idioma (PR #105) obligó a editar 12 prompts y 2 fases porque los
+bloques estaban copiados; y los fingerprints no cubrían system prompts ni
+rewrite/scorer, así que editar un system no marcaba nada stale. Con composición
++ firma del efectivo, un cambio se hace una vez, entra en la firma y dispara la
+regeneración prevista.

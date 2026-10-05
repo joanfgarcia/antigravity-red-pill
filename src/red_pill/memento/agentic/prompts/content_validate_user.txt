@@ -11,9 +11,9 @@ APPROVE only if the note is a coherent memory OF THE OPERATOR'S DAY told in firs
 
 For every APPROVE, the reason MUST quote the narrative element (who told/asked what). If you cannot quote it, REJECT.
 
-Return an ARRAY: [{{"i": <index>, "approved": true/false, "reason": "<8 palabras>"}}]
+Return an ARRAY: [{"i": <index>, "approved": true/false, "reason": "<8 palabras>"}]
 
 Notes:
-{notes}
+${notes}
 
 Output ONLY the JSON array.

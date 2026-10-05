@@ -52,10 +52,10 @@ def distill_session(
 		prev_summary = ""
 		for frag_text, i, total in frag_parts:
 			if total > 1 and i > 1:
-				prompt = prompts.DISTILL_USER_CONTINUATION.format(voice=prompts._VOICE_RULE, previous=prev_summary or "(ninguno)", content=frag_text)
+				prompt = prompts.render("distill_user_continuation", previous=prev_summary or "(ninguno)", content=frag_text)
 			else:
-				prompt = prompts.DISTILL_USER_OPENING.format(voice=prompts._VOICE_RULE, content=frag_text)
-			raw = transport(prompts.DISTILL_SYSTEM, prompt, 512)
+				prompt = prompts.render("distill_user_opening", content=frag_text)
+			raw = transport(prompts.system("distill_user_opening") or "", prompt, 512)
 			parsed = runtime._extract_json(raw) or {}
 			title = str(parsed.get("title") or f"Sección {nnn}")[:80]
 			summary = str(parsed.get("summary") or frag_text[:400]).strip()

@@ -1,0 +1,8 @@
+# Manifiesto de prompts de cognitive (F5, RULE 5).
+component: cognitive
+
+prompts:
+  drive_evaluator_user:
+    template: drive_evaluator_user.txt
+    system: drive_evaluator_system.txt
+    runtime: [context]

@@ -199,13 +199,17 @@ class _FakeReg:
 
 
 def test_prompt_fingerprints_estables(monkeypatch):
-	"""Fase 3 RFC-003: mover prompts constante→fichero NO cambia los fingerprints.
+	"""PROMPT-001 F1: la firma es `p1:<sha256>` del prompt EFECTIVO.
 
-	Hermético: la Bio de identidad (`identity_bio.md`) y el gate de voz v2 viven
-	en la config del operador; aquí se fijan para que el fingerprint no dependa
-	del host (en CI no hay identity_bio.md → plantilla → otro hash).
-	Si cambias un prompt a propósito, actualiza esta tabla (hash mapping) y
-	documenta el cambio en el CHANGELOG (los artefactos sellados lo referencian).
+	El prompt efectivo = fragmentos + config resueltos en generación; los valores
+	de runtime viajan como sentinelas. La firma cubre todos los prompts que emite
+	cada etapa, system prompts incluidos (antes quedaban fuera, A2-B2/A3-H2).
+
+	Hermético: la Bio de identidad (`identity_bio.md`) y la voz v2 viven en la
+	config del operador; aquí se fijan para que la firma no dependa del host.
+	Si cambias un prompt a propósito, actualiza esta tabla y documenta el cambio
+	en el CHANGELOG. Mapeo de hashes antiguos → esquema nuevo:
+	`docs/TECHNICAL/BUNKER/PROMPT_VERSION_MAP.md`.
 	"""
 	from red_pill.memento.agentic import (
 		annotate_prompt_version,
@@ -219,11 +223,14 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	monkeypatch.setattr(prompts, "IDENTITY_BIO", "TEST-BIO-FIXED")
 	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
 	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
+	import red_pill.config as cfg
 
-	assert distill_prompt_version() == "64ab6661d1"  # idioma de la fuente (2026-10-03)
-	assert refine_prompt_version() == "69466365b9"  # + memory por idea, idioma de los fragmentos (2026-10-03)
-	assert annotate_prompt_version() == "4a31060ed9"  # v1 + Bio fija + idioma de la fuente (test)
-	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto")
+
+	assert distill_prompt_version() == "p1:6d34dbc21450c9b69a62ee5ae751c4e4c6f977d98b14337d92909648344434ef"
+	assert refine_prompt_version() == "p1:0564c498e16d632b908cffd9b9540bba8550851630fb0fcbf2ef19ba6f0164c1"
+	assert annotate_prompt_version() == "p1:36199c3def5f91450052f7eabc24b5c2531f99fee98681292610afaa8abd5b8b"  # v1 + TEST-BIO-FIXED + auto
+	assert validate_prompt_version() == "p1:215b61acd8f43ff41693940e06dd68cc0ca65341edc49560b4830d524b93e8f4"
 
 
 def test_is_garbage_reason_expoene_la_firma():

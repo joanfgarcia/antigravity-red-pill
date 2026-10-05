@@ -1,19 +1,23 @@
-{identity}
+${identity}
 
-Extract SOCIAL/PERSONAL ideas from this RAW conversation fragment. SOCIAL here means: {social_scope}. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if the fragment mixes both, extract the personal idea.
+Extract SOCIAL/PERSONAL ideas from this RAW conversation fragment. SOCIAL here means: ${social_scope}. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if the fragment mixes both, extract the personal idea.
 
-Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (in the same language as the fragment, SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
 
-{voice}
+${language}
+
+${emotion_legend}
+
+${voice}
 
 VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
 - "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
 - "Aleth creó un branch." → "Creé un branch."
-- "Aleth updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person, same language as the source)
+- "Aleth updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person)
 - "Joan implementó X." → "Joan implementó X." (Joan acted: Joan stays the subject)
 - "Joan me dijo que el daemon perdía VRAM." → "El daemon perdía VRAM; Joan lo detectó." (straight to the fact)
 
 Raw fragment:
-{fragment}
+${fragment}
 
 Output ONLY the JSON array.

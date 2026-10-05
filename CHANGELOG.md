@@ -1,5 +1,50 @@
 ## Unreleased
 
+### 🧩 Prompts — F5: perímetro completo por composición (RULE 5, 2026-10-05)
+
+- **[FEATURE]** Migración total del resto del perímetro a manifiestos y
+  fragmentos: `distiller_v3`/`distiller_v3_voice` (idioma por fragmento +
+  `voice_distiller`/`voice_distiller_b`), `situation_semaphore` (plantilla),
+  Samantha (`inference`, `samantha_queue` muerto eliminado), `interceptors`
+  (circuit breaker), `cognitive` (drive evaluator), `swarm` (local_minion,
+  healer, smith, samantha, technical extractor, hive guard y sonda de salud
+  común para bridges), `plugins/antigravity_ide` (inyecciones del pulse) y
+  `core/agent_prompts` (envoltura de historial). Scripts de bake-off al loader.
+- **[CHANGE]** El CI anti-inline cubre ya todo el perímetro (RULE 5 completo);
+  sin prompts huérfanos ni fragmentos duplicados en los nuevos componentes.
+- **[CHANGE]** Reconstrucción controlada de `distiller_v3`/`voice` verificada
+  contra golden pre-F5 (`tests/test_prompt_migration_f5.py`).
+
+### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1–F2, 2026-10-04)
+
+- **[FEATURE]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
+  en los 8 prompts que piden `emotion`, con **gate de consistencia** contra
+  `EMOTION_CHROMA_MAP` (la leyenda ya no se improvisa: el color tiene semántica).
+- **[FEATURE]** Idioma configurable (F3): fragmento `language` con
+  `MEMENTO_PROMPT_LANGUAGE=auto|es|en|ca|...` (default `auto` = idioma de la
+  fuente; forzar uno entra en la firma → stale). La frase de idioma se retira de
+  los prompts y del voice rule (una sola directiva).
+- **[CHANGE]** F4 — migración de metabolism (distiller/fases/hubs) y del tool de
+  recalibración a manifiestos propios; prompts inline eliminados (`_classify_llm`
+  muerto fuera). RULE 5 en `CONVENTIONS.md`; RFC-003 marcado **superseded**
+  (AD-047); CI `validate_all` + anti-huérfanos/duplicación/inline.
+
+- **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
+  curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;
+  render en UNA pasada (`string.Template`, `${var}`) y valores de runtime como
+  sentinelas (seguro ante `$` en Bio/scopes).
+- **[CHANGE]** Firma por etapa `p1:<sha256>` del **prompt efectivo** (fragmentos
+  + config resuelta), con system prompts incluidos; mapeo antiguo→nuevo en
+  `docs/TECHNICAL/BUNKER/PROMPT_VERSION_MAP.md`. Los artefactos sellados con el
+  esquema anterior quedan marcados stale (la regeneración ya está prevista).
+- **[CHANGE]** Prompts de `memento.agentic` migrados a `${var}` (fin del escape
+  `{{}}` del `str.format`); `voice_rule*.txt` movidos a `prompts/fragments/`.
+  Equivalencia verificada contra goldens pre-migración: byte-exacta en los
+  prompts no tocados por F2/F3 y reconstrucción controlada (solo inserciones de
+  leyenda/idioma) en los 13 restantes (`tests/test_core_prompts.py`).
+- **[FEATURE]** Prompt efectivo materializado en
+  `~/.local/share/red-pill/prompts/` (tmp+replace; 0700/0600 por la Bio).
+
 ### 🔧 Carril Samantha — drain-wait del pulse y recuperación de huérfanos (2026-10-04)
 
 Los jobs `compact_session` (compactación de sesiones Telegram) morían a mitad de

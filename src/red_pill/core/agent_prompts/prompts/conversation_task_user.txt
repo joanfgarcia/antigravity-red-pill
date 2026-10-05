@@ -1,0 +1,7 @@
+<conversation_history>
+${history}
+</conversation_history>
+
+<current_task>
+${task}
+</current_task>

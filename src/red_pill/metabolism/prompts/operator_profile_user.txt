@@ -1,0 +1,7 @@
+Generate a short profile of the OPERATOR (the human), 2-4 lines: their name, role, key traits, and current focus areas. Be concrete — name real projects and decisions from the data.
+If no meaningful data about the operator, respond: INSUFFICIENT_DATA
+
+${language}
+
+DATA:
+${context}

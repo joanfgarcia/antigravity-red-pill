@@ -203,3 +203,64 @@ def test_fresh_vacio_no_consume(monkeypatch):
 	ok = _upsert_semaphore(mm, "global", items, _boom, _default_merger, 0.2)
 	assert ok is False
 	assert mm.captured == []
+
+
+# ── Límite de metadata (fuente única: cfg.MAX_METADATA_STR) ────────────────
+
+
+def test_merger_deriva_del_limite_del_esquema():
+	from red_pill.schemas import CreateEngramRequest
+
+	out = _default_merger("A" * 5000, "B" * 5000, 0.2)
+	assert len(out) <= cfg.MAX_METADATA_STR - 10
+	CreateEngramRequest(content="x", metadata={"situation": out})
+
+
+def test_merger_custom_largo_se_clampa_al_escribir(monkeypatch):
+	monkeypatch.setattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", True)
+
+	def _huge(_old, _delta, _ratio):
+		return "Z" * 4000
+
+	mm = _FakeMM()
+	items = [{"content": "a", "ts": 1, "tag_status": "ok", "tag_emotion": "calm", "tag_theme": "meta", "tag_confidence": 0.5}]
+	assert _upsert_semaphore(mm, "global", items, _boom, _huge, 0.2) is True
+	meta = mm.captured[0]["metadata"]
+	assert len(meta["situation"]) <= cfg.MAX_METADATA_STR - 10
+	assert len(meta["situation_stable"]) <= cfg.MAX_METADATA_STR - 10
+
+
+def test_distiller_custom_largo_se_clampa_al_escribir(monkeypatch):
+	monkeypatch.setattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", False)
+
+	def _huge_distiller(_text):
+		return {"situation": "S" * 4000, "emotion": "gray", "intensity": 0.5}
+
+	mm = _FakeMM()
+	items = [{"content": "a", "ts": 1}]
+	assert _upsert_semaphore(mm, "global", items, _huge_distiller, _default_merger, 0.2) is True
+	meta = mm.captured[0]["metadata"]
+	assert len(meta["situation_recent"]) <= cfg.MAX_METADATA_STR - 10
+
+
+def test_tag_counts_json_cabe_en_el_limite(monkeypatch):
+	import json as _json
+
+	monkeypatch.setattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", True)
+	mm = _FakeMM()
+	items = [
+		{
+			"content": f"c{i}",
+			"ts": i + 1,
+			"tag_status": "ok",
+			"tag_emotion": "calm",
+			"tag_theme": f"tema-{i}-" + "x" * 80,
+			"tag_confidence": 0.5,
+		}
+		for i in range(40)
+	]
+	assert _upsert_semaphore(mm, "global", items, _boom, _default_merger, 0.2) is True
+	meta = mm.captured[0]["metadata"]
+	assert len(meta["tag_themes_json"]) <= cfg.MAX_METADATA_STR - 10
+	assert len(meta["tag_theme"]) <= cfg.MAX_METADATA_STR - 10
+	_json.loads(meta["tag_themes_json"])

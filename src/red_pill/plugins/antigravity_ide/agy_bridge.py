@@ -293,7 +293,9 @@ class AgyBridge(AgentBridge):
 	def health_check(self) -> bool:
 		"""Quick connectivity test — sends a minimal prompt."""
 		try:
-			result = self.prompt("Responde SOLO: OK", timeout=30)
+			from red_pill.core import prompts as core
+
+			result = self.prompt(core.render("swarm", "liveness_probe"), timeout=30)
 			return result.ok and "OK" in result.response
 		except Exception:
 			return False

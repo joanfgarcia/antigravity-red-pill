@@ -1,0 +1,9 @@
+EMOTION COLORS — pick exactly ONE color for the "emotion" field; it encodes the emotional charge of the memory:
+- gray — neutral, calm, baseline (neutral)
+- yellow — joy, humor, irony (happiness, sarcasm)
+- orange — affection, warmth, desire (love, desire)
+- cyan — surprise, curiosity, confusion (surprise, confusion)
+- blue — sadness, guilt (sadness, guilt)
+- purple — fear, shame (fear, shame)
+- red — anger, tension (anger)
+- green — disgust, aversion (disgust)

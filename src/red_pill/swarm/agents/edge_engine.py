@@ -89,11 +89,9 @@ class EdgeEngine:
 			return self._fallback_compress(text)
 
 		try:
-			system_prompt = (
-				"[Refraction: TECHNICAL_EXTRACTOR] Style: Bulleted, extremely brief. "
-				"Tone: Objective, strict. Focus: Extract core instructions and technical requirements. "
-				"Output language: Match user prompt language."
-			)
+			from red_pill.core import prompts as core
+
+			system_prompt = core.render("swarm", "technical_extractor_system")
 			# ChatML format for Qwen
 			prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{text}<|im_end|>\n<|im_start|>assistant\n"
 

@@ -1,0 +1,13 @@
+# Manifiesto de prompts del plugin antigravity_ide (F5, RULE 5).
+component: plugins/antigravity_ide
+
+prompts:
+  pulse_cognitive_queue_user:
+    template: pulse_cognitive_queue_user.txt
+    fragments: {rules_header: pulse_rules_header.txt, task_tail: pulse_task_tail.txt}
+    runtime: [rule_run_cmd, task_id, task_source, payload]
+
+  pulse_cognitive_agy_user:
+    template: pulse_cognitive_agy_user.txt
+    fragments: {rules_header: pulse_rules_header.txt, task_tail: pulse_task_tail.txt}
+    runtime: [task_id, task_source, payload]

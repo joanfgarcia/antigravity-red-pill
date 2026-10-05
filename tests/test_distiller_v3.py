@@ -86,13 +86,13 @@ def test_taxonomy_matches_prompt():
 
 def test_voice_prompt_renders_without_keyerror():
 	# distiller_v3_voice.txt carries literal JSON braces; str.format would raise
-	# KeyError — the renderer must use .replace (bake-off 2026-08-13 regression).
+	# KeyError. PROMPT-001: el loader resuelve ${agent_name}/${operator_name}.
 	from red_pill.metabolism.distiller import load_prompt_text
 
-	text = load_prompt_text("distiller_v3_voice.txt")
+	text = load_prompt_text("distiller_v3_voice.txt", static={"agent_name": "Aleth", "operator_name": "Joan"})
 	assert text, "distiller_v3_voice.txt missing or empty"
-	rendered = text.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
-	assert "{agent_name}" not in rendered and "{operator_name}" not in rendered
+	assert "${agent_name}" not in text and "${operator_name}" not in text
+	assert "Aleth" in text
 
 
 def test_voice_prompt_flows_through_distill_engram(monkeypatch):
@@ -114,9 +114,9 @@ def test_profile_prompt_routing_beats_params_default(monkeypatch):
 	seen = {}
 	real_load = dist.load_prompt_text
 
-	def spy(filename, fallback_prompt="", override_text=None):
+	def spy(filename, fallback_prompt="", override_text=None, **kwargs):
 		seen["prompt_file"] = filename
-		return real_load(filename, fallback_prompt, override_text)
+		return real_load(filename, fallback_prompt, override_text, **kwargs)
 
 	monkeypatch.setattr(dist, "load_prompt_text", spy)
 	_mock_provider(monkeypatch, {"summary": "s", "emotion": "joy", "intensity": 0.5, "category": "social", "lang": "es"})

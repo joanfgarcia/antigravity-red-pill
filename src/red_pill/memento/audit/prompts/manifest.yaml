@@ -1,0 +1,17 @@
+# Manifiesto de prompts del tool de auditoría Memento (PROMPT-001, F4).
+component: memento/audit
+
+prompts:
+  classify_system:
+    template: classify_system.txt
+
+  judge_system:
+    template: judge_system.txt
+
+  classify_user:
+    template: classify_user.txt
+    runtime: [n, items]
+
+  judge_user:
+    template: judge_user.txt
+    runtime: [n, items]
