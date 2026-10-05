@@ -51,11 +51,15 @@ def test_fragmentos_no_duplicados_inline():
 
 def test_sin_prompts_inline_en_modulos_migrados():
 	repo_root = Path(core.__file__).resolve().parents[3]
-	memento = repo_root / "src" / "red_pill" / "memento"
-	ascension = (memento / "ascension.py").read_text(encoding="utf-8")
+	src = repo_root / "src" / "red_pill"
+
+	def text(rel: str) -> str:
+		return (src / rel).read_text(encoding="utf-8")
+
+	ascension = text("memento/ascension.py")
 	assert "CLASSIFY_SYSTEM" not in ascension and "CLASSIFY_USER" not in ascension
 
-	distiller = (repo_root / "src" / "red_pill" / "metabolism" / "distiller.py").read_text(encoding="utf-8")
+	distiller = text("metabolism/distiller.py")
 	assert "[Refraction: NEOCORTEX_SYNTHESIS]" not in distiller
 	assert "Analyze these technical memory hubs" not in distiller
 
@@ -63,7 +67,26 @@ def test_sin_prompts_inline_en_modulos_migrados():
 	assert "SYSTEM_CLASSIFY = " not in recalibrate and "SYSTEM_JUDGE = " not in recalibrate
 	assert "Clasifica estos " not in recalibrate and "Juzga estos " not in recalibrate
 
-	phases = repo_root / "src" / "red_pill" / "metabolism" / "phases"
+	phases = src / "metabolism" / "phases"
 	for name in ("recent_activity_phase.py", "operator_profile_phase.py"):
-		text = (phases / name).read_text(encoding="utf-8")
-		assert 'USER_PROMPT = """' not in text and "SYSTEM_PROMPT = " not in text
+		phase = (phases / name).read_text(encoding="utf-8")
+		assert 'USER_PROMPT = """' not in phase and "SYSTEM_PROMPT = " not in phase
+
+	# ── F5: perímetro completo (RULE 5) ────────────────────────────────────
+	assert "Resume en UNA frase el ESTADO actual" not in text("metabolism/situation_semaphore.py")
+	assert "You are a conversation summarizer" not in text("inference/samantha_worker.py")
+	assert "You are an internal routing Gatekeeper" not in text("interceptors/03_circuit_breaker.py")
+	assert "You are the internal consciousness of Aleth" not in text("cognitive/drive_evaluator.py")
+	assert "You are a local minion. You have EXACTLY these tools" not in text("swarm/agents/local_minion.py")
+	assert "You are a local minion. Answer the task" not in text("swarm/agents/local_minion.py")
+	assert "You are an expert Python developer fixing Mypy" not in text("swarm/agents/healer.py")
+	assert "Security Analysis Request" not in text("swarm/agents/smith.py")
+	assert "[Refraction: SAMANTHA]" not in text("swarm/agents/samantha.py")
+	assert "[Refraction: TECHNICAL_EXTRACTOR]" not in text("swarm/agents/edge_engine.py")
+	assert "Is this interaction 'Know-How'" not in text("hive.py")
+	assert "Responde SOLO: OK" not in text("swarm/bridges/claude.py")
+	assert "Responde SOLO: OK" not in text("swarm/bridges/opencode.py")
+	assert "Responde SOLO: OK" not in text("swarm/bridges/pi.py")
+	assert "Responde SOLO: OK" not in text("plugins/antigravity_ide/agy_bridge.py")
+	assert "<conversation_history>" not in text("core/agent_worker.py")
+	assert "[SYSTEM: COGNITIVE EVALUATOR INJECTION]" not in text("plugins/antigravity_ide/pulse.py")

@@ -140,16 +140,16 @@ loader. **Inline instruction strings in code are forbidden** (PROMPT-001).
 6. `validate_all()` en CI: placeholders declarados, fragmentos existentes, sin
    prompts huérfanos ni fragmentos duplicados inline.
 
-### Scope (2026-10-04)
+### Scope (2026-10-05)
 
-Perímetro migrado: `memento/agentic`, `metabolism`, `memento/audit` y el tool
-`scripts/memento_recalibrate.py`. **Deuda declarada** (prompts inline fuera del
-perímetro, con su propio carril pendiente): `swarm/agents/*` (edge_engine,
-healer, samantha, local_minion), `interceptors/03_circuit_breaker`, `hive.py`,
-`inference/samantha_queue`/`samantha_worker` (duplicados), `cognitive/
-drive_evaluator`, `metabolism/situation_semaphore`, `plugins/antigravity_ide/`,
-`core/agent_worker.py`, `swarm/bridges/opencode.py` y los scripts de bake-off.
-El lint de CI cubre el perímetro; ampliarlo es trabajo de seguimiento.
+Perímetro migrado: `memento/agentic`, `metabolism`, `memento/audit`,
+`inference` (Samantha), `interceptors`, `cognitive`, `swarm` (agents + bridges),
+`plugins/antigravity_ide`, `core/agent_prompts`, `hive.py` y el tool
+`scripts/memento_recalibrate.py` (+ scripts de bake-off). **Deuda declarada
+(F1–F4) cerrada en F5**: `samantha_queue` se eliminó por duplicado muerto; los
+wrappers ChatML/templates de chat que quedan (providers, edge_engine) son
+transporte, no prompts de instrucción. El lint de CI cubre el perímetro
+completo (RULE 5).
 
 ### Why This Matters
 

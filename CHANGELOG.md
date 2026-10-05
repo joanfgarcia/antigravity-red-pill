@@ -1,5 +1,20 @@
 ## Unreleased
 
+### 🧩 Prompts — F5: perímetro completo por composición (RULE 5, 2026-10-05)
+
+- **[FEATURE]** Migración total del resto del perímetro a manifiestos y
+  fragmentos: `distiller_v3`/`distiller_v3_voice` (idioma por fragmento +
+  `voice_distiller`/`voice_distiller_b`), `situation_semaphore` (plantilla),
+  Samantha (`inference`, `samantha_queue` muerto eliminado), `interceptors`
+  (circuit breaker), `cognitive` (drive evaluator), `swarm` (local_minion,
+  healer, smith, samantha, technical extractor, hive guard y sonda de salud
+  común para bridges), `plugins/antigravity_ide` (inyecciones del pulse) y
+  `core/agent_prompts` (envoltura de historial). Scripts de bake-off al loader.
+- **[CHANGE]** El CI anti-inline cubre ya todo el perímetro (RULE 5 completo);
+  sin prompts huérfanos ni fragmentos duplicados en los nuevos componentes.
+- **[CHANGE]** Reconstrucción controlada de `distiller_v3`/`voice` verificada
+  contra golden pre-F5 (`tests/test_prompt_migration_f5.py`).
+
 ### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1–F2, 2026-10-04)
 
 - **[FEATURE]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
