@@ -1,0 +1,3 @@
+Resume la siguiente conversación de Telegram entre el operador (Joan) y el agente (Aleth). Crea un resumen técnico y de progreso conciso para usarlo como contexto en el siguiente turno. Sé directo y resume los puntos clave de decisión y tareas pendientes.
+
+${history}

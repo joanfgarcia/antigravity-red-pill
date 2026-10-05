@@ -40,6 +40,13 @@ def register_handler(action: str):
 	return decorator
 
 
+def _prompt(prompt_id: str, **runtime: Any) -> tuple:
+	"""Render (user, system) del componente `inference` (PROMPT-001 F5)."""
+	from red_pill.core import prompts as core
+
+	return core.render("inference", prompt_id, **runtime), core.system_text("inference", prompt_id) or ""
+
+
 # ── Built-in handlers ─────────────────────────────────────
 
 
@@ -51,20 +58,8 @@ def _handle_compact_session(payload: Dict[str, Any], samantha_fn: Callable) -> D
 	if not history_text:
 		return {"status": "skipped", "reason": "empty history"}
 
-	summary = samantha_fn(
-		prompt=(
-			"Resume la siguiente conversación de Telegram entre el operador (Joan) y el agente (Aleth). "
-			"Crea un resumen técnico y de progreso conciso para usarlo como contexto en el siguiente turno. "
-			"Sé directo y resume los puntos clave de decisión y tareas pendientes.\n\n"
-			f"{history_text}"
-		),
-		system_prompt=(
-			"You are a conversation summarizer. Output ONLY the summary. "
-			"Be concise, technical, and include key decisions and pending tasks. "
-			"Do not add conversational filler."
-		),
-		max_tokens=300,
-	)
+	prompt, system_prompt = _prompt("samantha_compact_user", history=history_text)
+	summary = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=300)
 
 	if not summary:
 		return {"status": "error", "reason": "Samantha returned empty"}
@@ -78,11 +73,8 @@ def _handle_classify(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[str
 	text = payload.get("text", "")
 	categories = payload.get("categories", [])
 
-	result = samantha_fn(
-		prompt=f"Classify the following text into one of these categories: {', '.join(categories)}.\n\nText: {text}\n\nOutput ONLY the category name.",
-		system_prompt="You are a classifier. Output ONLY the category name, nothing else.",
-		max_tokens=20,
-	)
+	prompt, system_prompt = _prompt("samantha_classify_user", categories=", ".join(categories), text=text)
+	result = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=20)
 
 	return {"status": "completed", "category": result or "unknown"}
 
@@ -93,11 +85,8 @@ def _handle_summarize(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[st
 	text = payload.get("text", "")
 	max_tokens = payload.get("max_tokens", 200)
 
-	result = samantha_fn(
-		prompt=f"Summarize the following text concisely:\n\n{text}",
-		system_prompt="You are a summarizer. Be concise and direct. Output ONLY the summary.",
-		max_tokens=max_tokens,
-	)
+	prompt, system_prompt = _prompt("samantha_summarize_user", text=text)
+	result = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens)
 
 	return {"status": "completed", "summary": result or ""}
 
