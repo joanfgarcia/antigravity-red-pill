@@ -1,0 +1,33 @@
+# Manifiesto de prompts de swarm (agents + bridges) — F5 (RULE 5).
+component: swarm
+
+prompts:
+  local_minion_system:
+    template: local_minion_system.txt
+    runtime: [max_tool_calls]
+
+  local_minion_answer_user:
+    template: local_minion_answer_user.txt
+    system: local_minion_answer_system.txt
+    runtime: [task, tool_output]
+
+  healer_fix_user:
+    template: healer_fix_user.txt
+    runtime: [file_path, error, line, original_line]
+
+  smith_security_user:
+    template: smith_security_user.txt
+    runtime: [snippet, finding]
+
+  samantha_system:
+    template: samantha_system.txt
+
+  technical_extractor_system:
+    template: technical_extractor_system.txt
+
+  hive_guard_user:
+    template: hive_guard_user.txt
+    runtime: [content]
+
+  liveness_probe:
+    template: liveness_probe.txt

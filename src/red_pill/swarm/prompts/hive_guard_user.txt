@@ -1,0 +1,4 @@
+Review the following engram. Is this interaction 'Know-How' (a reusable guide, advice, or behavioral pattern for an AI agent to better serve a human)? Or is it just 'Noise' (personal chatter, data with no pedagogical value)?
+Engram: "${content}"
+
+Reply ONLY with 'KNOW-HOW' or 'NOISE'.

@@ -88,5 +88,24 @@ def test_drive_evaluator_compone_user_y_system():
 	assert "${" not in user
 
 
+def test_swarm_local_minion_budget_y_answer():
+	system = core.render("swarm", "local_minion_system", max_tool_calls=8)
+	assert "at most 8 tool calls" in system
+	answer = core.render("swarm", "local_minion_answer_user", task="T", tool_output="OUT")
+	assert answer == "Task: T\n\nTool output:\nOUT\n\nAnswer:"
+
+
+def test_swarm_healer_smith_hive_y_sonda():
+	healer = core.render("swarm", "healer_fix_user", file_path="a.py", error="err", line=7, original_line="    x = 1")
+	assert "FILE: a.py" in healer and "LINE 7:     x = 1" in healer
+	smith = core.render("swarm", "smith_security_user", snippet="eval(x)", finding="B307")
+	assert "eval(x)" in smith and "B307" in smith
+	hive = core.render("swarm", "hive_guard_user", content="hola")
+	assert 'Engram: "hola"' in hive
+	assert core.render("swarm", "liveness_probe") == "Responde SOLO: OK"
+	assert core.render("swarm", "samantha_system").startswith("[Refraction: SAMANTHA]")
+	assert core.render("swarm", "technical_extractor_system").startswith("[Refraction: TECHNICAL_EXTRACTOR]")
+
+
 def test_validate_all_sin_errores():
 	assert core.validate_all() == []

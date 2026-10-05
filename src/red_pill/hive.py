@@ -124,13 +124,9 @@ class HiveMind:
 		engine = EdgeEngine()
 		if engine.model_path and os.path.exists(engine.model_path):
 			try:
-				prompt = (
-					"Review the following engram. Is this interaction 'Know-How' (a reusable guide, "
-					"advice, or behavioral pattern for an AI agent to better serve a human)? "
-					"Or is it just 'Noise' (personal chatter, data with no pedagogical value)?\n"
-					f'Engram: "{content}"\n\n'
-					"Reply ONLY with 'KNOW-HOW' or 'NOISE'."
-				)
+				from red_pill.core import prompts as core
+
+				prompt = core.render("swarm", "hive_guard_user", content=content)
 				# Use a very low max_tokens to save GPU/Time
 				analysis = engine.synthesize("HiveGuard Protocol v5.6.0", prompt).upper()
 

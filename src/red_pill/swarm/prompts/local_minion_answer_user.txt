@@ -1,0 +1,6 @@
+Task: ${task}
+
+Tool output:
+${tool_output}
+
+Answer:
