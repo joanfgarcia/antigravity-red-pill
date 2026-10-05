@@ -318,6 +318,10 @@ class RedPillConfig(BaseSettings):
 	EMOTIONAL_SEED_FACTOR: float = 3.0
 	MAX_PROPAGATION_POINTS: int = 20
 	MAX_AXONS: int = 500
+	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
+	# única: todo writer/merger que componga metadata deriva de aquí con margen
+	# (p. ej. situation_semaphore usa MAX_METADATA_STR - _META_MARGIN).
+	MAX_METADATA_STR: int = 1024
 
 	@field_validator("DECAY_STRATEGY")
 	@classmethod
