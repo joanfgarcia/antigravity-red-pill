@@ -191,6 +191,12 @@ def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> 
 	if "thinking" in llm and llm["thinking"]:
 		env["RP_LLM_THINKING"] = str(llm["thinking"])
 
+	fallback = llm.get("device_fallback")
+	if fallback:
+		if not isinstance(fallback, list) or any(str(device) not in ("gpu", "cpu") for device in fallback):
+			raise ValueError("llm.device_fallback debe ser una lista de 'gpu'/'cpu' (p. ej. [gpu])")
+		env["RP_LLM_DEVICE_FALLBACK"] = json.dumps([str(device) for device in fallback])
+
 	custom = llm.get("custom")
 	experimental = llm.get("experimental")
 	if custom or experimental:

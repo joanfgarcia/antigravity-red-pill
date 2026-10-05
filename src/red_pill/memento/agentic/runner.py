@@ -125,6 +125,10 @@ def _is_llm_connection_error(exc: Exception) -> bool:
 		return True
 	if "timed out" in msg or "timedout" in msg.lower():
 		return True
+	# GPU ocupada sin alternativa (device_fallback=[gpu]): no es fallo del trabajo,
+	# es entorno → deferral (2026-10-05, pin GPU-only de jobs de memoria).
+	if "insufficient free vram" in msg.lower():
+		return True
 	return False
 
 

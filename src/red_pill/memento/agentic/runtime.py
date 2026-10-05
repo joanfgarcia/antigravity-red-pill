@@ -163,12 +163,24 @@ def _llm_env() -> dict:
 	"""Demanda de inferencia del job: RP_LLM_TASK / RP_LLM_MODEL / RP_LLM_THINKING.
 
 	Un job que NO declara `llm:` no las define → el transporte cae al default
-	del daemon (comportamiento actual, sin cambios).
+	del daemon (comportamiento actual, sin cambios). `RP_LLM_DEVICE_FALLBACK`
+	(JSON, p. ej. `["gpu"]`) fija la cascada de dispositivos por request: con
+	`[gpu]` el daemon NUNCA cae a CPU (si no cabe → error, y el job difiere).
 	"""
+	device_fallback: List[str] = []
+	raw = os.getenv("RP_LLM_DEVICE_FALLBACK", "").strip()
+	if raw:
+		try:
+			parsed = json.loads(raw)
+			if isinstance(parsed, list):
+				device_fallback = [str(d) for d in parsed if str(d) in ("gpu", "cpu")]
+		except json.JSONDecodeError:
+			device_fallback = []
 	return {
 		"task": os.getenv("RP_LLM_TASK", "").strip(),
 		"model": os.getenv("RP_LLM_MODEL", "").strip(),
 		"thinking": os.getenv("RP_LLM_THINKING", "").strip(),
+		"device_fallback": device_fallback,
 	}
 
 
@@ -237,6 +249,8 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		payload["model"] = llm["model"]
 	if llm["thinking"]:
 		payload["thinking"] = llm["thinking"]
+	if llm["device_fallback"]:
+		payload["device_fallback"] = llm["device_fallback"]
 	for _attempt in range(4):
 		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
 		if response.status_code == 500 and len(attempt_user) > 1500:
