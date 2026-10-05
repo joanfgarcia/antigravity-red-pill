@@ -1,0 +1,3 @@
+<current_message>
+${message}
+</current_message>

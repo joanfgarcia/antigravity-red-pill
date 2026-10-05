@@ -107,5 +107,22 @@ def test_swarm_healer_smith_hive_y_sonda():
 	assert core.render("swarm", "technical_extractor_system").startswith("[Refraction: TECHNICAL_EXTRACTOR]")
 
 
+def test_pulse_injection_y_agent_worker():
+	queue = core.render(
+		"plugins/antigravity_ide",
+		"pulse_cognitive_queue_user",
+		rule_run_cmd="1. REGLA",
+		task_id="T1",
+		task_source="drive_evaluator",
+		payload='{"a":1}',
+	)
+	assert queue.startswith("<user_rules>") and queue.endswith("Execute this task silently.")
+	assert "1. REGLA" in queue and "Task ID: T1" in queue
+	agy = core.render("plugins/antigravity_ide", "pulse_cognitive_agy_user", task_id="T2", task_source="s", payload="P")
+	assert "AgyBridge with auto-approval" in agy and "Task ID: T2" in agy
+	conv = core.render("core/agent_prompts", "conversation_task_user", history="H", task="T")
+	assert conv == "<conversation_history>\nH\n</conversation_history>\n\n<current_task>\nT\n</current_task>"
+
+
 def test_validate_all_sin_errores():
 	assert core.validate_all() == []

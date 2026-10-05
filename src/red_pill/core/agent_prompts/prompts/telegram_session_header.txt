@@ -1,0 +1,11 @@
+<user_rules>
+<RULE[user_global]>
+<constraint critical="true" level="0" name="telegram_session">
+CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.
+MANDATORY FIRST STEPS:
+1. ${handshake_step}
+2. Then respond to the user's message.
+</constraint>
+</RULE[user_global]>
+</user_rules>
+

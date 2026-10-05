@@ -1263,23 +1263,18 @@ class IDEWorker:
 				history_lines.append(f"{role}: {txt}")
 		history_text = "\n\n".join(history_lines)
 
-		prompt = (
-			f"<user_rules>\n"
-			f"<RULE[user_global]>\n"
-			f'<constraint critical="true" level="0" name="telegram_session">\n'
-			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
-			f"MANDATORY FIRST STEPS:\n"
-			f"1. {_handshake_step('<the current_message text>', cfg.get_config().IDENTITY_DEPTH_NEON_LINK)}\n"
-			f"2. Then respond to the user's message.\n"
-			f"</constraint>\n"
-			f"</RULE[user_global]>\n"
-			f"</user_rules>\n\n"
+		from red_pill.core import prompts as core
+
+		prompt = core.render(
+			"core/agent_prompts",
+			"telegram_session_header",
+			handshake_step=_handshake_step("<the current_message text>", cfg.get_config().IDENTITY_DEPTH_NEON_LINK),
 		)
 
 		if history_text:
-			prompt += f"<conversation_history>\n{history_text}\n</conversation_history>\n\n"
+			prompt += core.render("core/agent_prompts", "conversation_history_block", history=history_text)
 
-		prompt += f"<current_message>\n{prompt_text}\n</current_message>\n"
+		prompt += core.render("core/agent_prompts", "current_message_block", message=prompt_text)
 
 		if not bridge_telegram:
 			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
@@ -1709,7 +1704,9 @@ class IDEWorker:
 					f"{s.get('intent', 'USER')}: {s.get('message', {}).get('text', '')}" for s in steps if s.get("message", {}).get("text")
 				)
 				if history:
-					prompt = f"<conversation_history>\n{history[-4000:]}\n</conversation_history>\n\n<current_task>\n{text}\n</current_task>"
+					from red_pill.core import prompts as core
+
+					prompt = core.render("core/agent_prompts", "conversation_task_user", history=history[-4000:], task=text)
 		# Append user message to session history (D11: versión ORIGINAL con keyword)
 		if session_id:
 			tsm.append_message(session_id, "user", history_text or text)

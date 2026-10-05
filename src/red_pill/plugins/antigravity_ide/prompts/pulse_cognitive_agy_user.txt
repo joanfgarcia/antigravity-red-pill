@@ -1,0 +1,3 @@
+${rules_header}
+1. PERMITTED: You are running headlessly via AgyBridge with auto-approval. You can use any tool including `run_command` if needed.
+${task_tail}

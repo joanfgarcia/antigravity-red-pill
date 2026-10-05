@@ -145,7 +145,7 @@ TOOLS: List[Dict[str, Any]] = [
 	},
 ]
 
-SYSTEM_PROMPT = core.render("swarm", "local_minion_system", max_tool_calls=MAX_TOOL_CALLS)
+SYSTEM_PROMPT = core.render("swarm", "local_minion_system", max_tool_calls=str(MAX_TOOL_CALLS))
 
 # Opening of a text tool-call block (qwen/Granite `<tool_call>`, gemma `<|tool_call|>`).
 # Counted against the parsed calls to detect truncated/garbled ones.

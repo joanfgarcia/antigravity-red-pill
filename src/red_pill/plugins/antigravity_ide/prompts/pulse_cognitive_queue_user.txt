@@ -1,0 +1,3 @@
+${rules_header}
+${rule_run_cmd}
+${task_tail}
