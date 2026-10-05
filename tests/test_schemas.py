@@ -97,4 +97,5 @@ def test_validate_metadata_structure_directly():
 	with pytest.raises(ValueError, match="Nested dict in metadata field my_dict"):
 		validator({"my_dict": {"nested": "dict"}})
 	with pytest.raises(ValueError, match="Metadata field toolong exceeds limit"):
-		validator({"toolong": "A" * 1025})
+		validator({"toolong": "A" * (cfg.MAX_METADATA_STR + 1)})
+	assert validator({"maxlen": "A" * cfg.MAX_METADATA_STR}) == {"maxlen": "A" * cfg.MAX_METADATA_STR}
