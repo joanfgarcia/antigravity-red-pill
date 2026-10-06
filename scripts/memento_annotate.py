@@ -105,7 +105,7 @@ def _gate_sweep(root: Path) -> list:
 		result = gating.gate_session(root, d, run_id=run_id, pipeline=pipeline, engine=engine)
 		decisions[d] = {"action": result.get("action") or "?", "reason": str(result.get("reason") or "")}
 		if result.get("emit"):
-			elements.append({"dir": d, "action": result["action"], "run_id": run_id})
+			elements.append({"dir": d, "action": result["action"], "run_id": result.get("run_id") or run_id})
 	ledger.record_decisions(run_id, decisions)
 	ledger.set_counts(run_id, skipped=sum(1 for v in decisions.values() if v["action"] == "skip"))
 	_close_stale_runs(root, run_id)

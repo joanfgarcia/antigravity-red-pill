@@ -312,6 +312,7 @@ def evaluate(
 			"reason": str(latest.get("reason") or "pendiente"),
 			"delta": latest.get("delta") or [],
 			"input_hash": input_hash,
+			"keep_run_id": str(latest.get("run_id") or ""),  # la remediación no la pisa el sweep
 		}
 	if latest.get("input_hash") and input_hash and latest.get("input_hash") != input_hash:
 		return {"action": "process", "state": "pending", "reason": "input cambió (re-render)", "delta": ["input"], "input_hash": input_hash}
@@ -347,7 +348,7 @@ def gate_session(
 	entry = seal(
 		root,
 		dir_rel,
-		run_id=run_id,
+		run_id=str(decision.get("keep_run_id") or run_id),
 		action=decision["action"],
 		state=decision["state"],
 		reason=decision["reason"],
