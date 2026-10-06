@@ -1,5 +1,23 @@
 ## Unreleased
 
+### 🧠 Memento — gating previo de rebuilds (MEM-010 F1, 2026-10-06)
+
+- **[FEATURE]** Manifest estructurado del pipeline `annotate`
+  (`gate-manifest-v1`): componentes por separado + contratos partidos
+  `extract_contract`/`score_contract` (`annotate_manifest()` /
+  `annotate_manifest_hash()` en `runtime.py`). El fingerprint legacy
+  `annotate_prompt_version()` **no cambia** (verificado idéntico al del rebuild
+  vivo: `p1:49f12414…`), así que F1 no invalida ninguna sesión.
+- **[FEATURE]** Métricas por sesión al anotar (`annotate/_meta.json` + espejo
+  `_session.json`): `pct_gt_600`, `pct_primera_persona`, `near_dups` (umbral
+  efectivo guardado), `min_margin`, `bio_leaks` — `compute_note_metrics()`.
+- **[FEATURE]** `input_hash` normativo de la entrada (mismo cómputo que el
+  `memento_hash` del render: `compute_hash(extract_body(index.md))`) con
+  `input_hash_source`, más fallback defensivo por unidades.
+- **[CHANGE]** Umbral de dedup P1-A con fuente única
+  (`runtime.memento_dedup_threshold()`, config `MEMENTO_ANNOTATE_DEDUP_THRESHOLD`
+  default 0.6), usado tanto por el dedup como por la métrica `near_dups`.
+
 ### 🎛️ Jobs — pin GPU sin fallback CPU (2026-10-05)
 
 - **[FEATURE]** `llm.device_fallback` en recipes → `RP_LLM_DEVICE_FALLBACK`: el
