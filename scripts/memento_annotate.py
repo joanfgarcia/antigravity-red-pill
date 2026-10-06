@@ -88,18 +88,53 @@ def _run_id(pipeline: dict) -> str:
 
 
 def _gate_sweep(root: Path) -> list:
-	"""Recorre las sesiones, evalúa y sella el gate; devuelve los elementos a emitir."""
-	from red_pill.memento import gating
+	"""Recorre las sesiones, evalúa y sella el gate; devuelve los elementos a emitir.
+
+	MEM-010 F3: abre/refresca la entrada del run en el ledger, vuelca el mapa
+	run→sesiones, cuenta `skipped` al sellar y cierra runs abiertos obsoletos
+	con la precedencia del RFC (terminalidad primero)."""
+	from red_pill.memento import gating, ledger
 
 	pipeline = gating.current_pipeline()
 	run_id = _run_id(pipeline)
 	engine = _current_engine() or None
+	ledger.open_run(run_id=run_id, stage=gating.STAGE, to_fingerprint=pipeline["manifest_hash"], reason="gate sweep")
+	decisions: dict = {}
 	elements = []
 	for d in _sessions(root):
 		result = gating.gate_session(root, d, run_id=run_id, pipeline=pipeline, engine=engine)
+		decisions[d] = {"action": result.get("action") or "?", "reason": str(result.get("reason") or "")}
 		if result.get("emit"):
-			elements.append({"dir": d, "action": result["action"]})
+			elements.append({"dir": d, "action": result["action"], "run_id": run_id})
+	ledger.record_decisions(run_id, decisions)
+	ledger.set_counts(run_id, skipped=sum(1 for v in decisions.values() if v["action"] == "skip"))
+	_close_stale_runs(root, run_id)
 	return elements
+
+
+def _close_stale_runs(root: Path, current_run_id: str) -> None:
+	"""Cierra runs abiertos previos (MEM-010 F3): todas las decisiones terminales
+	→ `closed` (o `closed-incomplete` si hay failed); con pendientes → `aborted`."""
+	from red_pill.memento import gating, ledger
+
+	resolutions: dict = {}
+	for run in ledger.load_runs():
+		rid = str(run.get("run_id"))
+		if run.get("status") != "open" or rid == current_run_id:
+			continue
+		pending = failed = 0
+		for d in list((run.get("decisions") or {}).keys()):
+			latest = gating.read_gate(root, d).get("latest") or {}
+			if str(latest.get("run_id") or "") != rid:
+				continue  # la sesión ya pertenece a un run más nuevo
+			state = latest.get("state")
+			if state == "pending":
+				pending += 1
+			elif state == "failed":
+				failed += 1
+		resolutions[rid] = "aborted" if pending else ("closed" if not failed else "closed-incomplete")
+	if resolutions:
+		ledger.close_stale_runs(resolutions=resolutions)
 
 
 def _fresh(root: Path, dir_rel: str, engine_aware: bool = False) -> bool:
@@ -191,6 +226,7 @@ def process_one(
 	from_phase: Optional[str] = None,
 	reason: Optional[str] = None,
 	action: Optional[str] = None,
+	run_id: Optional[str] = None,
 ) -> dict:
 	# MEM-010 F2b: un elemento emitido por el GATE (action definida) no pasa por
 	# el atajo legacy `_fresh` — el gate ya decidió; `rescore` entra por `score`.
@@ -206,8 +242,7 @@ def process_one(
 	parts = Path(dir_rel).parts
 	source = parts[1] if len(parts) > 1 else "unknown"
 	session_id = _canonical_ids().get(dir_rel) or (parts[2] if len(parts) > 2 else dir_rel)
-	run_id = None
-	if action is not None:
+	if action is not None and not run_id:
 		from red_pill.memento import gating
 
 		run_id = _run_id(gating.current_pipeline())
@@ -215,17 +250,20 @@ def process_one(
 		max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
 	except Exception as e:
 		if run_id is not None:
-			from red_pill.memento import gating
+			from red_pill.memento import gating, ledger
 			from red_pill.memento.agentic.runner import _is_llm_connection_error
 
 			if not _is_llm_connection_error(e):
 				gating.mark_outcome(root, dir_rel, run_id=run_id, state="failed", outcome={"error": str(e)[:512]})
+				ledger.bump_counts(run_id, "failed")
+				ledger.record_failure(run_id, dir_rel, e)
 		raise
 	n = len(list((root / dir_rel / "annotate").glob("*.md")))
 	if run_id is not None:
-		from red_pill.memento import gating
+		from red_pill.memento import gating, ledger
 
 		gating.mark_outcome(root, dir_rel, run_id=run_id, state="done", outcome={"status": "ok", "notas": n})
+		ledger.bump_counts(run_id, "rescored" if action == "rescore" else "processed")
 	return {"dir": dir_rel, "anotaciones": n, "max_significance": round(float(max_sig), 2)}
 
 
@@ -248,11 +286,55 @@ def main() -> None:
 	)
 	parser.add_argument("--reason", default=None, help="Motivo de la invocación (audit trail en _meta.json).")
 	parser.add_argument("--gate-migrate", action="store_true", help="Migración one-shot (MEM-010 F2b): completa manifest/métricas en metas legacy adoptables.")
-	parser.add_argument("--dry-run", action="store_true", help="Con --gate-migrate: solo censo, sin escribir.")
+	parser.add_argument("--dry-run", action="store_true", help="Con --gate-migrate/--rebuild-run: solo censo, sin escribir.")
+	parser.add_argument("--runs", action="store_true", help="Lista los últimos runs del ledger (MEM-010 F3).")
+	parser.add_argument("--rebuild-run", default=None, help="Remediación (MEM-010 F3): re-sella como forced el subconjunto de ese run y emite la lista.")
+	parser.add_argument("--actions", default="all", help="Con --rebuild-run: processed,skipped,failed,all (CSV).")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = args.root or get_memento_root()
 
+	if args.runs:
+		from red_pill.memento import ledger
+
+		print(json.dumps(ledger.load_runs(), ensure_ascii=False, indent=2))
+		return
+	if args.rebuild_run:
+		from red_pill.memento import gating, ledger
+
+		original = next((r for r in ledger.load_runs() if str(r.get("run_id")) == str(args.rebuild_run)), None)
+		if original is None:
+			print(json.dumps({"error": f"run no encontrado: {args.rebuild_run}"}, ensure_ascii=False))
+			sys.exit(2)
+		actions = {a.strip() for a in str(args.actions or "all").split(",") if a.strip()}
+		subset = {
+			d: v
+			for d, v in (original.get("decisions") or {}).items()
+			if "all" in actions or str((v or {}).get("action")) in actions
+		}
+		new_run = f"{args.rebuild_run}-rb-" + ("".join(sorted(a[0] for a in actions)) or "all")
+		pipeline = gating.current_pipeline()
+		if not args.dry_run:
+			ledger.open_run(
+				run_id=new_run,
+				stage=gating.STAGE,
+				to_fingerprint=pipeline["manifest_hash"],
+				reason=args.reason or f"remediación de {args.rebuild_run}",
+			)
+			for d in sorted(subset):
+				gating.seal(
+					root,
+					d,
+					run_id=new_run,
+					action="forced",
+					state="pending",
+					reason=args.reason or f"rebuild-run {args.rebuild_run}",
+					to_fingerprint=pipeline["manifest_hash"],
+					input_hash=gating.session_input_hash(root, d),
+				)
+			ledger.record_decisions(new_run, {d: {"action": "forced", "reason": args.reason or f"rebuild-run {args.rebuild_run}"} for d in sorted(subset)})
+		print(json.dumps([{"dir": d, "action": "forced", "run_id": new_run} for d in sorted(subset)], ensure_ascii=False))
+		return
 	if args.status:
 		out = status(root)
 		if _gate_enabled():
@@ -305,6 +387,7 @@ def main() -> None:
 			from_phase=args.from_phase,
 			reason=args.reason,
 			action=el.get("action"),
+			run_id=el.get("run_id"),
 		)
 	except Exception as e:
 		from red_pill.memento.agentic.runner import _is_llm_connection_error

@@ -80,7 +80,8 @@ def test_list_con_gate_emite_solo_lo_que_toca_y_es_idempotente(tmp_path, monkeyp
 	voice_dir = _session(tmp_path, "voice", meta=_voice_meta(flags={"voice": 2}))
 
 	first = _run(monkeypatch, capsys, mod, ["--list", "--root", str(tmp_path)])
-	assert first == [{"dir": voice_dir, "action": "process"}]
+	assert [(e["dir"], e["action"]) for e in first] == [(voice_dir, "process")]
+	assert all(e.get("run_id") for e in first)  # MEM-010 F3: el elemento lleva su run
 	skip_record = tmp_path / skip_dir / "_session.json"
 	after_first = skip_record.read_text(encoding="utf-8")
 

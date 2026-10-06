@@ -1,6 +1,6 @@
 ## Unreleased
 
-### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F2, 2026-10-06)
+### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F3, 2026-10-06)
 
 - **[FEATURE]** Manifest estructurado del pipeline `annotate`
   (`gate-manifest-v1`): componentes por separado + contratos partidos
@@ -31,6 +31,17 @@
 - **[CHANGE]** `record.py`: RMW serializado con `flock` por fichero + tmp único
   (`mkstemp`); fin de las carreras de escritores medidas por el panel (12 hilos:
   160/160 incrementos, cero crashes).
+- **[FEATURE]** Ledger de rebuilds (`state/rebuilds.json`, cap 10, modo 0600):
+  índice run→sesiones (`decisions`), counts por acción, cierre con señal
+  (`closed`/`closed-incomplete`/`aborted`, terminalidad primero) y saneado de
+  textos libres (scrub + basename + ANSI/control + caps 512/1024).
+- **[FEATURE]** Remediación de un run: `--rebuild-run <run_id> [--actions ...]`
+  re-sella el subconjunto como `forced` bajo un run nuevo y emite la lista
+  congelada; helper `scripts/memento_rebuild_run.py` (element_job con
+  `elements_command` custom) y `--runs` para consultar el ledger.
+- **[CHANGE]** Los elementos del job llevan `run_id`; el sweep mantiene su run
+  al día, cierra los obsoletos con la precedencia del RFC y re-emite fielmente
+  los pendientes (cubre `forced` entre re-invocaciones de `--list`).
 - **[CHANGE]** Flags nuevos (RULE 4, default OFF): `MEMENTO_ANNOTATE_GATE`;
   `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (default 0.6).
 

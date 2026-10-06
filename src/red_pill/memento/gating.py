@@ -269,6 +269,16 @@ def evaluate(
 		return None  # fast-path: firma e input vigentes + terminal ⇒ nada que hacer
 	if partial:
 		return {"action": "process", "state": "pending", "reason": "resume-partial", "delta": [], "input_hash": input_hash}
+	if latest.get("state") == "pending" and latest.get("to_fingerprint") == current_hash:
+		# Re-emisión fiel (cubre `forced` de la remediación y pendientes a medias
+		# entre re-invocaciones de `--list`): no se re-evalúan predicados.
+		return {
+			"action": str(latest.get("action") or "process"),
+			"state": "pending",
+			"reason": str(latest.get("reason") or "pendiente"),
+			"delta": latest.get("delta") or [],
+			"input_hash": input_hash,
+		}
 	if engine and str(meta.get("engine") or "") and str(meta.get("engine")) != str(engine):
 		return {"action": "process", "state": "pending", "reason": f"engine distinto: {meta.get('engine')} → {engine}", "delta": ["engine"], "input_hash": input_hash}
 
