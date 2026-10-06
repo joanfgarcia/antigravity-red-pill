@@ -45,6 +45,13 @@
 - **[FEATURE]** Backfill F4: `--backfill-run <job_id> [--checkpoint ckpt.json]`
   reconstruye en el ledger un run ya ejecutado desde su log (`state/jobs/`) y
   su checkpoint; lo no alcanzado queda `unknown` (dato ausente ≠ skip).
+- **[FIX]** Ronda adversarial de implementación (zero-trust, 5 lentes): input_hash
+  cambiado ya dispara `process` (re-render), deltas mixtos usan prioridad
+  process>rescore>skip, hardening de `_meta.json` (tmp único + lock) y composición
+  del gate bajo un solo lock, saneado en el punto único de sellado, guard
+  anti-traversal en `record_path`, validación de `run_id`/`--actions` (alias
+  processed/skipped/rescored), `--list --all` con gate fuerza todo y `--status`
+  cierra runs obsoletos. Suite completa: 2747 passed.
 - **[CHANGE]** Flags nuevos (RULE 4, default OFF): `MEMENTO_ANNOTATE_GATE`;
   `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (default 0.6).
 

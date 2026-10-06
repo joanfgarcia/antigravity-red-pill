@@ -112,6 +112,26 @@ def _gate_sweep(root: Path) -> list:
 	return elements
 
 
+def _force_sweep(root: Path) -> list:
+	"""`--all` con gate (MEM-010): re-sella TODO como forced/pending y lo emite."""
+	from red_pill.memento import gating, ledger
+
+	pipeline = gating.current_pipeline()
+	run_id = _run_id(pipeline)
+	ledger.open_run(run_id=run_id, stage=gating.STAGE, to_fingerprint=pipeline["manifest_hash"], reason="forzado --all")
+	elements = []
+	decisions: dict = {}
+	for d in _sessions(root):
+		gating.seal(
+			root, d, run_id=run_id, action="forced", state="pending", reason="--all (forzado)",
+			to_fingerprint=pipeline["manifest_hash"], input_hash=gating.session_input_hash(root, d),
+		)
+		decisions[d] = {"action": "forced", "reason": "--all (forzado)"}
+		elements.append({"dir": d, "action": "forced", "run_id": run_id})
+	ledger.record_decisions(run_id, decisions)
+	return elements
+
+
 def _close_stale_runs(root: Path, current_run_id: str) -> None:
 	"""Cierra runs abiertos previos (MEM-010 F3): todas las decisiones terminales
 	→ `closed` (o `closed-incomplete` si hay failed); con pendientes → `aborted`."""
@@ -246,6 +266,19 @@ def process_one(
 		from red_pill.memento import gating
 
 		run_id = _run_id(gating.current_pipeline())
+	if run_id is not None:
+		# RFC §3.5.4: si el input cambió desde el sello (re-render), se re-sella
+		# como pending con el hash vigente antes de procesar el contenido actual.
+		from red_pill.memento import gating
+
+		latest = gating.read_gate(root, dir_rel).get("latest") or {}
+		current_hash = gating.session_input_hash(root, dir_rel)
+		if latest.get("input_hash") and current_hash and latest.get("input_hash") != current_hash:
+			gating.seal(
+				root, dir_rel, run_id=run_id, action=action or "forced", state="pending",
+				reason=f"{latest.get('reason') or 'pendiente'} (input cambió)",
+				to_fingerprint=str(latest.get("to_fingerprint") or ""), input_hash=current_hash,
+			)
 	try:
 		max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
 	except Exception as e:
@@ -334,19 +367,35 @@ def main() -> None:
 		print(json.dumps({"run_id": run_id, "decisiones": len(decisions), "processed": sum(1 for v in decisions.values() if v["action"] == "processed"), "unknown": sum(1 for v in decisions.values() if v["action"] == "unknown")}, ensure_ascii=False))
 		return
 	if args.rebuild_run:
+		import re as _re
+
 		from red_pill.memento import gating, ledger
 
+		if not _re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", str(args.rebuild_run)):
+			print(json.dumps({"error": "run_id inválido"}, ensure_ascii=False))
+			sys.exit(2)
 		original = next((r for r in ledger.load_runs() if str(r.get("run_id")) == str(args.rebuild_run)), None)
 		if original is None:
 			print(json.dumps({"error": f"run no encontrado: {args.rebuild_run}"}, ensure_ascii=False))
 			sys.exit(2)
-		actions = {a.strip() for a in str(args.actions or "all").split(",") if a.strip()}
-		subset = {
-			d: v
-			for d, v in (original.get("decisions") or {}).items()
-			if "all" in actions or str((v or {}).get("action")) in actions
+		aliases = {
+			"processed": {"process", "processed"},
+			"skipped": {"skip", "skipped"},
+			"rescored": {"rescore", "rescored"},
 		}
-		new_run = f"{args.rebuild_run}-rb-" + ("".join(sorted(a[0] for a in actions)) or "all")
+		requested = {a.strip() for a in str(args.actions or "all").split(",") if a.strip()}
+		if not requested <= {"processed", "skipped", "rescored", "failed", "all"}:
+			print(json.dumps({"error": f"actions inválidas: {sorted(requested)}"}, ensure_ascii=False))
+			sys.exit(2)
+		if "all" in requested:
+			subset = dict(original.get("decisions") or {})
+		else:
+			wanted = set().union(*(aliases.get(a, {a}) for a in requested)) if requested else set()
+			subset = {d: v for d, v in (original.get("decisions") or {}).items() if str((v or {}).get("action")) in wanted}
+			if "failed" in requested:
+				for d in (original.get("failures") or {}):
+					subset.setdefault(d, {"action": "failed", "reason": "fallo registrado"})
+		new_run = f"{args.rebuild_run}-rb-" + ("".join(sorted(a[0] for a in requested)) or "all")
 		pipeline = gating.current_pipeline()
 		if not args.dry_run:
 			ledger.open_run(
@@ -386,6 +435,7 @@ def main() -> None:
 						reason = str(latest.get("reason") or "?")
 						reasons[reason] = reasons.get(reason, 0) + 1
 			out["gate"] = {"acciones": actions, "motivos_skip": dict(sorted(reasons.items(), key=lambda kv: -kv[1])[:10])}
+			_close_stale_runs(root, _run_id(pipeline))  # cierra obsoletos (terminalidad primero)
 		print(json.dumps(out, indent=2, ensure_ascii=False))
 		return
 	if args.gate_migrate:
@@ -403,7 +453,10 @@ def main() -> None:
 		return
 	if args.list:
 		if _gate_enabled():
-			print(json.dumps(_gate_sweep(root), ensure_ascii=False))
+			if args.all:
+				print(json.dumps(_force_sweep(root), ensure_ascii=False))
+			else:
+				print(json.dumps(_gate_sweep(root), ensure_ascii=False))
 			return
 		print(json.dumps([{"dir": d} for d in pending(root, force=args.all, stale_engine=args.stale_engine)], ensure_ascii=False))
 		return

@@ -11,6 +11,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
+
 from red_pill.memento import gating
 from red_pill.memento.record import bump_session_record, read_session_record, update_session_record
 
@@ -237,3 +239,32 @@ def test_mark_outcome_actualiza_latest_y_history(tmp_path):
 	assert gate["latest"]["state"] == "done"
 	assert gate["latest"]["outcome"]["notas"] == 4
 	assert gate["history"][-1]["state"] == "done"
+
+
+def test_input_cambiado_dispara_process(tmp_path):
+	dir_rel = _session(tmp_path, meta=_meta())
+	pipeline = gating.current_pipeline()
+	gating.seal(
+		tmp_path, dir_rel, run_id="r1", action="skip", state="skipped",
+		reason="sin delta", to_fingerprint=pipeline["manifest_hash"], input_hash="hash-viejo",
+	)
+	result = gating.gate_session(tmp_path, dir_rel, run_id="r2", pipeline=pipeline)
+	assert result["action"] == "process"
+	assert "input" in result["reason"]
+
+
+def test_delta_mixto_usa_prioridad(tmp_path):
+	annotate_dir = tmp_path / "a"
+	annotate_dir.mkdir()
+	pipeline = gating.current_pipeline()
+	action, _ = gating.predicate_action(["bio", "extract_work"], {}, {}, annotate_dir, pipeline)
+	assert action == "process"  # extract manda sobre bio (que sería skip)
+	action, _ = gating.predicate_action(["voice_rewrite_prompt", "dual_score"], {"flags": {}}, {"pct_primera_persona": 100.0}, annotate_dir, pipeline)
+	assert action == "rescore"  # scorer manda sobre voz limpia (skip)
+
+
+def test_record_path_bloquea_traversal(tmp_path):
+	from red_pill.memento.record import update_session_record
+
+	with pytest.raises(ValueError):
+		update_session_record(tmp_path, "../fuera", "gate", {"stage": "gate"})

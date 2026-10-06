@@ -34,7 +34,11 @@ RECORD_NAME = "_session.json"
 
 
 def record_path(root: Path, dir_rel: str) -> Path:
-	return Path(root) / dir_rel / RECORD_NAME
+	base = (Path(root) / dir_rel).resolve()
+	root_r = Path(root).resolve()
+	if base != root_r and root_r not in base.parents:
+		raise ValueError(f"dir_rel fuera de la raíz Memento: {dir_rel!r}")
+	return base / RECORD_NAME
 
 
 def read_session_record(root: Path, dir_rel: str) -> Dict[str, Any]:
@@ -83,6 +87,25 @@ def update_session_record(root: Path, dir_rel: str, stage: str, data: Dict[str, 
 		record.setdefault("stages", {})[stage] = {k: v for k, v in data.items() if v is not None}
 		record["updated_at"] = datetime.now(timezone.utc).isoformat()
 		_write_atomic(path, record)
+
+
+def write_json_atomic(path: Path, data: Dict[str, Any]) -> None:
+	"""Escritura JSON atómica (tmp único) con lock del target (anti-carreras)."""
+	with _locked(path):
+		_write_atomic(path, data)
+
+
+def mutate_session_record(root: Path, dir_rel: str, stage: str, mutator) -> Dict[str, Any]:
+	"""RMW de un bloque de etapa bajo UN solo lock (anti-TOCTOU entre lectores)."""
+	path = record_path(root, dir_rel)
+	with _locked(path):
+		record = read_session_record(root, dir_rel)
+		stages = record.setdefault("stages", {})
+		block = mutator(dict(stages.get(stage) or {}))
+		stages[stage] = block
+		record["updated_at"] = datetime.now(timezone.utc).isoformat()
+		_write_atomic(path, record)
+		return dict(block)
 
 
 def bump_session_record(root: Path, dir_rel: str, stage: str, counts: Dict[str, int]) -> None:

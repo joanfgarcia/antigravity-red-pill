@@ -28,7 +28,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.memento.record import read_session_record, update_session_record
+from red_pill.memento.ledger import sanitize_text
+from red_pill.memento.record import mutate_session_record, read_session_record
 
 from .agentic import runtime
 from .agentic.fragments import work_units
@@ -104,31 +105,44 @@ def seal(
 	outcome: Optional[Dict[str, Any]] = None,
 	policy: str = POLICY_VERSION,
 ) -> Dict[str, Any]:
-	"""Sella/actualiza la decisión del run (`upsert` por run_id) y el espejo latest."""
-	gate = read_gate(root, dir_rel)
-	history = [e for e in (gate.get("history") or []) if isinstance(e, dict)]
+	"""Sella/actualiza la decisión del run (upsert por run_id) bajo UN lock.
+
+	El motivo y el outcome pasan por el contrato de saneado (MEM-010 §3.6) en
+	este punto único, de modo que `_session.json` no persiste secretos/rutas/ANSI."""
 	entry: Dict[str, Any] = {
 		"run_id": run_id,
 		"at": _now(),
 		"action": action,
 		"state": state,
-		"reason": reason,
+		"reason": sanitize_text(reason, 512),
 		"policy": policy,
 		"delta": sorted(delta or []),
 		"from_fingerprint": from_fingerprint,
 		"to_fingerprint": to_fingerprint,
 		"input_hash": input_hash,
-		"outcome": outcome,
+		"outcome": _sanitize_outcome(outcome),
 	}
-	for i, prev in enumerate(history):
-		if prev.get("run_id") == run_id:
-			history[i] = entry
-			break
-	else:
-		history.append(entry)
-	block = {"stage": STAGE, "latest": entry, "history": history[-HISTORY_CAP:]}
-	update_session_record(root, dir_rel, "gate", block)
-	return entry
+
+	def mutate(block: Dict[str, Any]) -> Dict[str, Any]:
+		history = [e for e in (block.get("history") or []) if isinstance(e, dict)]
+		for i, prev in enumerate(history):
+			if prev.get("run_id") == run_id:
+				history[i] = entry
+				break
+		else:
+			history.append(entry)
+		return {"stage": STAGE, "latest": entry, "history": history[-HISTORY_CAP:]}
+
+	return dict(mutate_session_record(root, dir_rel, "gate", mutate)["latest"])
+
+
+def _sanitize_outcome(outcome: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+	if not outcome:
+		return outcome
+	clean = dict(outcome)
+	if "error" in clean:
+		clean["error"] = sanitize_text(clean["error"], 1024)
+	return clean
 
 
 def mark_outcome(
@@ -140,23 +154,26 @@ def mark_outcome(
 	outcome: Optional[Dict[str, Any]] = None,
 ) -> None:
 	"""Cierre del paso: estado terminal + outcome en `latest` Y en su entrada."""
-	gate = read_gate(root, dir_rel)
-	latest = dict(gate.get("latest") or {})
-	if latest.get("run_id") != run_id:
-		logger.warning("mark_outcome: run_id %s no es el latest de %s (ignorado)", run_id, dir_rel)
-		return
-	latest["state"] = state
-	latest["outcome"] = outcome
-	latest["at"] = _now()
-	history = [e for e in (gate.get("history") or []) if isinstance(e, dict)]
-	for i, prev in enumerate(history):
-		if prev.get("run_id") == run_id:
-			merged = dict(prev)
-			merged.update({"state": state, "outcome": outcome, "at": latest["at"]})
-			history[i] = merged
-			break
-	block = {"stage": STAGE, "latest": latest, "history": history[-HISTORY_CAP:]}
-	update_session_record(root, dir_rel, "gate", block)
+	clean = _sanitize_outcome(outcome)
+
+	def mutate(block: Dict[str, Any]) -> Dict[str, Any]:
+		latest = dict(block.get("latest") or {})
+		if latest.get("run_id") != run_id:
+			logger.warning("mark_outcome: run_id %s no es el latest de %s (ignorado)", run_id, dir_rel)
+			return block
+		latest["state"] = state
+		latest["outcome"] = clean
+		latest["at"] = _now()
+		history = [e for e in (block.get("history") or []) if isinstance(e, dict)]
+		for i, prev in enumerate(history):
+			if prev.get("run_id") == run_id:
+				merged = dict(prev)
+				merged.update({"state": state, "outcome": clean, "at": latest["at"]})
+				history[i] = merged
+				break
+		return {"stage": STAGE, "latest": latest, "history": history[-HISTORY_CAP:]}
+
+	mutate_session_record(root, dir_rel, "gate", mutate)
 
 
 # ── predicados ───────────────────────────────────────────────────────────────
@@ -202,6 +219,47 @@ def _notes_near_dups(annotate_dir: Path, threshold: float) -> int:
 	return pairs
 
 
+def _component_action(
+	component: str,
+	meta: Dict[str, Any],
+	metrics: Dict[str, Any],
+	annotate_dir: Path,
+	pipeline: Dict[str, Any],
+) -> Tuple[str, str]:
+	flags = meta.get("flags") or {}
+	components = (pipeline.get("manifest") or {}).get("components") or {}
+	if component in ("extract_work", "extract_social", "fragment_view", "schema"):
+		return "process", "extract/vista cambiaron (sustancial: cambia el texto)"
+	if component in ("voice_rewrite_prompt", "voice_rewrite_enabled"):
+		voice_flags = int(flags.get("voice") or 0)
+		first_person = float(metrics.get("pct_primera_persona") or 0.0)
+		if voice_flags > 0 or first_person < 100.0:
+			return "process", f"voz: {voice_flags} flags / {first_person:.1f}% 1a persona"
+		return "skip", "voz sin defecto en esta sesión"
+	if component == "bio":
+		if int(flags.get("gender") or 0) > 0 or int(flags.get("identity") or 0) > 0 or int(metrics.get("bio_leaks") or 0) > 0:
+			return "process", "bio: flags/leaks presentes"
+		return "skip", "bio sin defecto en esta sesión"
+	if component in ("work_scope", "social_scope"):
+		routes = meta.get("routes") or {}
+		min_margin = metrics.get("min_margin")
+		dead_zone = float(((components.get("thresholds") or {}).get("dead_zone")) or 0.05)
+		if int(routes.get("none") or 0) > 0 or (min_margin is not None and float(min_margin) < 2 * dead_zone):
+			return "process", "scopes: notas en zona muerta"
+		return "skip", "scopes sin efecto en esta sesión"
+	if component == "dedup_policy":
+		threshold = float((components.get("dedup_policy") or {}).get("threshold") or 0.6)
+		if _notes_near_dups(annotate_dir, threshold) > 0:
+			return "process", "dedup: near-dups residuales al umbral vigente"
+		return "skip", "dedup sin near-dups residuales"
+	if component in ("dual_score", "thresholds"):
+		return "rescore", "scorer/umbrales: re-puntuar sin re-extraer"
+	return "process", f"delta desconocido: {component}"
+
+
+_PRIORITY = {"skip": 0, "rescore": 1, "process": 2}
+
+
 def predicate_action(
 	delta: List[str],
 	meta: Dict[str, Any],
@@ -209,36 +267,12 @@ def predicate_action(
 	annotate_dir: Path,
 	pipeline: Dict[str, Any],
 ) -> Tuple[str, str]:
-	"""Traduce el delta a (acción, motivo) con la evidencia de la sesión (RFC §3.2)."""
-	flags = meta.get("flags") or {}
-	components = (pipeline.get("manifest") or {}).get("components") or {}
-	if any(d in delta for d in ("extract_work", "extract_social", "fragment_view", "schema")):
-		return "process", "extract/vista cambiaron (sustancial: cambia el texto)"
-	if "voice_rewrite_prompt" in delta or "voice_rewrite_enabled" in delta:
-		voice_flags = int(flags.get("voice") or 0)
-		first_person = float(metrics.get("pct_primera_persona") or 0.0)
-		if voice_flags > 0 or first_person < 100.0:
-			return "process", f"voz: {voice_flags} flags / {first_person:.1f}% 1a persona"
-		return "skip", "voz sin defecto en esta sesión"
-	if "bio" in delta:
-		if int(flags.get("gender") or 0) > 0 or int(flags.get("identity") or 0) > 0 or int(metrics.get("bio_leaks") or 0) > 0:
-			return "process", "bio: flags/leaks presentes"
-		return "skip", "bio sin defecto en esta sesión"
-	if "work_scope" in delta or "social_scope" in delta:
-		routes = meta.get("routes") or {}
-		min_margin = metrics.get("min_margin")
-		dead_zone = float(((components.get("thresholds") or {}).get("dead_zone")) or 0.05)
-		if int(routes.get("none") or 0) > 0 or (min_margin is not None and float(min_margin) < 2 * dead_zone):
-			return "process", "scopes: notas en zona muerta"
-		return "skip", "scopes sin efecto en esta sesión"
-	if "dedup_policy" in delta:
-		threshold = float((components.get("dedup_policy") or {}).get("threshold") or 0.6)
-		if _notes_near_dups(annotate_dir, threshold) > 0:
-			return "process", "dedup: near-dups residuales al umbral vigente"
-		return "skip", "dedup sin near-dups residuales"
-	if "dual_score" in delta or "thresholds" in delta:
-		return "rescore", "scorer/umbrales: re-puntuar sin re-extraer"
-	return "process", f"delta desconocido: {','.join(sorted(delta))}"
+	"""Traduce el delta a (acción, motivo) con prioridad process > rescore > skip
+	(un delta mixto no puede quedar tapado por el primer componente: RFC §3.2)."""
+	actions = [_component_action(c, meta, metrics, annotate_dir, pipeline) for c in sorted(set(delta))]
+	best = max(actions, key=lambda pair: _PRIORITY[pair[0]])
+	reasons = [f"{a}: {r}" for a, r in actions if a == best[0]]
+	return best[0], "; ".join(reasons)
 
 
 # ── evaluación + sello ───────────────────────────────────────────────────────
@@ -279,6 +313,8 @@ def evaluate(
 			"delta": latest.get("delta") or [],
 			"input_hash": input_hash,
 		}
+	if latest.get("input_hash") and input_hash and latest.get("input_hash") != input_hash:
+		return {"action": "process", "state": "pending", "reason": "input cambió (re-render)", "delta": ["input"], "input_hash": input_hash}
 	if engine and str(meta.get("engine") or "") and str(meta.get("engine")) != str(engine):
 		return {"action": "process", "state": "pending", "reason": f"engine distinto: {meta.get('engine')} → {engine}", "delta": ["engine"], "input_hash": input_hash}
 
@@ -371,18 +407,7 @@ def migrate_session(root: Path, dir_rel: str, *, pipeline: Dict[str, Any], write
 	meta["input_hash"] = session_input_hash(root, dir_rel)
 	meta["input_hash_source"] = "index" if (root / dir_rel / "memento" / "index.md").exists() else "units"
 	if write:
-		import os
-		import tempfile
+		from red_pill.memento.record import write_json_atomic
 
-		fd, tmp_name = tempfile.mkstemp(prefix="_meta.json.", suffix=".tmp", dir=str(meta_path.parent))
-		try:
-			with os.fdopen(fd, "w", encoding="utf-8") as fh:
-				json.dump(meta, fh, ensure_ascii=False, indent=1)
-			os.replace(tmp_name, meta_path)
-		except BaseException:
-			try:
-				os.unlink(tmp_name)
-			except OSError:
-				pass
-			raise
+		write_json_atomic(meta_path, meta)
 	return "adopted"

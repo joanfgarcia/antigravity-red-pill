@@ -734,9 +734,9 @@ def annotate_session(
 		"input_hash": input_hash,
 		"input_hash_source": input_hash_source,
 	}
-	meta_tmp = (annotate_dir / "_meta.json").with_suffix(".json.tmp")
-	meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-	meta_tmp.replace(annotate_dir / "_meta.json")
+	from red_pill.memento.record import write_json_atomic
+
+	write_json_atomic(annotate_dir / "_meta.json", meta)
 	# Solo tras el `_meta` verificado: huérfanos fuera y parcial plegado.
 	for stale in annotate_dir.glob("*.md"):
 		if stale.name not in written:

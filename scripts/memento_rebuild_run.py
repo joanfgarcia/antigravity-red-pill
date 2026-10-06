@@ -22,6 +22,12 @@ import subprocess
 
 def build_payload(run_id: str, actions: str, reason: str | None, priority: int) -> dict:
 	"""Payload del element_job de remediación (testable sin tocar el manager)."""
+	import re
+
+	if not re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", str(run_id)):
+		raise ValueError(f"run_id inválido: {run_id!r}")
+	if not {a.strip() for a in str(actions or "all").split(",")} <= {"processed", "skipped", "rescored", "failed", "all"}:
+		raise ValueError(f"actions inválidas: {actions!r}")
 	elements_command = f"uv run python scripts/memento_annotate.py --rebuild-run {run_id} --actions {actions}"
 	if reason:
 		elements_command += f" --reason {json.dumps(reason)}"
