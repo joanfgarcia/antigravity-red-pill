@@ -146,3 +146,22 @@ def test_process_one_cuenta_en_ledger(tmp_path, tmp_ledger, monkeypatch):
 	run = next(r for r in ledger.load_runs() if r["run_id"] == "rC")
 	assert run["counts"]["processed"] == 1
 	assert gating.read_gate(tmp_path, dir_rel)["latest"]["state"] == "done"
+
+
+def test_backfill_run_desde_log_y_checkpoint(tmp_path, tmp_ledger, monkeypatch, capsys):
+	mod = _load_script()
+	monkeypatch.setattr(ledger, "ledger_path", lambda: tmp_path / "state" / "rebuilds.json")
+	from red_pill.core.paths import get_state_dir
+
+	jobs = get_state_dir() / "jobs"
+	jobs.mkdir(parents=True, exist_ok=True)
+	(jobs / "jobX.log").write_text('{"dir": "a/b/c", "anotaciones": 3}\nno json aquí\n{"dir": "d/e/f", "anotaciones": 0}\n', encoding="utf-8")
+	checkpoint = tmp_path / "ckpt.json"
+	checkpoint.write_text(json.dumps({"index": 1, "elements": [{"dir": "a/b/c"}, {"dir": "x/y/z"}]}), encoding="utf-8")
+	monkeypatch.setattr(sys, "argv", ["memento_annotate.py", "--backfill-run", "jobX", "--checkpoint", str(checkpoint)])
+	mod.main()
+	out = json.loads(capsys.readouterr().out)
+	assert out == {"run_id": "job-jobX", "decisiones": 3, "processed": 2, "unknown": 1}
+	run = next(r for r in ledger.load_runs() if r["run_id"] == "job-jobX")
+	assert run["status"] == "closed-incomplete" and run["job_id"] == "jobX"
+	assert run["decisions"]["x/y/z"]["action"] == "unknown"  # ausente ≠ skip

@@ -288,6 +288,8 @@ def main() -> None:
 	parser.add_argument("--gate-migrate", action="store_true", help="Migración one-shot (MEM-010 F2b): completa manifest/métricas en metas legacy adoptables.")
 	parser.add_argument("--dry-run", action="store_true", help="Con --gate-migrate/--rebuild-run: solo censo, sin escribir.")
 	parser.add_argument("--runs", action="store_true", help="Lista los últimos runs del ledger (MEM-010 F3).")
+	parser.add_argument("--backfill-run", default=None, help="F4: reconstruye en el ledger un job ya ejecutado desde su log (state/jobs/<id>.log).")
+	parser.add_argument("--checkpoint", default=None, help="Con --backfill-run: JSON {index, elements} del job para marcar no-alcanzadas como unknown.")
 	parser.add_argument("--rebuild-run", default=None, help="Remediación (MEM-010 F3): re-sella como forced el subconjunto de ese run y emite la lista.")
 	parser.add_argument("--actions", default="all", help="Con --rebuild-run: processed,skipped,failed,all (CSV).")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
@@ -298,6 +300,38 @@ def main() -> None:
 		from red_pill.memento import ledger
 
 		print(json.dumps(ledger.load_runs(), ensure_ascii=False, indent=2))
+		return
+	if args.backfill_run:
+		from red_pill.core.paths import get_state_dir
+		from red_pill.memento import ledger
+
+		job_id = str(args.backfill_run)
+		log_file = get_state_dir() / "jobs" / f"{job_id}.log"
+		if not log_file.exists():
+			print(json.dumps({"error": f"log no encontrado: {log_file}"}, ensure_ascii=False))
+			sys.exit(2)
+		decisions: dict = {}
+		for line in log_file.read_text(encoding="utf-8", errors="replace").splitlines():
+			line = line.strip()
+			if not line.startswith("{"):
+				continue
+			try:
+				payload = json.loads(line)
+			except json.JSONDecodeError:
+				continue
+			if isinstance(payload, dict) and payload.get("dir"):
+				decisions[str(payload["dir"])] = {"action": "processed", "reason": f"backfill job {job_id}"}
+		if args.checkpoint:
+			data = json.loads(Path(args.checkpoint).read_text(encoding="utf-8"))
+			index, elements = int(data.get("index") or 0), data.get("elements") or []
+			for element in elements[index:]:
+				decisions.setdefault(str((element or {}).get("dir")), {"action": "unknown", "reason": "no alcanzado al cierre del backfill"})
+		run_id = f"job-{job_id}"
+		ledger.open_run(run_id=run_id, stage="annotate", to_fingerprint="legacy", from_fingerprint="legacy", reason=f"backfill del run fundacional {job_id}", job_id=job_id)
+		ledger.record_decisions(run_id, decisions)
+		ledger.set_counts(run_id, processed=sum(1 for v in decisions.values() if v["action"] == "processed"))
+		ledger.close_stale_runs(resolutions={run_id: "closed-incomplete"})
+		print(json.dumps({"run_id": run_id, "decisiones": len(decisions), "processed": sum(1 for v in decisions.values() if v["action"] == "processed"), "unknown": sum(1 for v in decisions.values() if v["action"] == "unknown")}, ensure_ascii=False))
 		return
 	if args.rebuild_run:
 		from red_pill.memento import gating, ledger

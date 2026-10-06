@@ -42,6 +42,9 @@
 - **[CHANGE]** Los elementos del job llevan `run_id`; el sweep mantiene su run
   al día, cierra los obsoletos con la precedencia del RFC y re-emite fielmente
   los pendientes (cubre `forced` entre re-invocaciones de `--list`).
+- **[FEATURE]** Backfill F4: `--backfill-run <job_id> [--checkpoint ckpt.json]`
+  reconstruye en el ledger un run ya ejecutado desde su log (`state/jobs/`) y
+  su checkpoint; lo no alcanzado queda `unknown` (dato ausente ≠ skip).
 - **[CHANGE]** Flags nuevos (RULE 4, default OFF): `MEMENTO_ANNOTATE_GATE`;
   `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (default 0.6).
 
