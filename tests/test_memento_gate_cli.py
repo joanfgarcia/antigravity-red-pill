@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import red_pill.config as cfg
 from red_pill.memento import gating
 
@@ -140,6 +142,27 @@ def test_process_one_legacy_respeta_fresh(tmp_path, monkeypatch):
 	monkeypatch.setattr(mod, "annotate_session", lambda *a, **k: calls.append(1) or 0.0)
 	assert mod.process_one(tmp_path, dir_rel) == {"dir": dir_rel, "skipped": "fresh"}
 	assert calls == []
+
+
+def test_process_one_sella_failed_al_fallar(tmp_path, monkeypatch):
+	mod = _load_script()
+	pipeline = gating.current_pipeline()
+	dir_rel = _session(tmp_path, "boom", meta=_meta())
+	gating.seal(
+		tmp_path, dir_rel, run_id=mod._run_id(pipeline), action="process", state="pending",
+		reason="test", to_fingerprint=pipeline["manifest_hash"],
+	)
+
+	def boom(*a, **k):
+		raise ValueError("fallo de extract")
+
+	monkeypatch.setattr(mod, "annotate_session", boom)
+	monkeypatch.setattr(mod, "_canonical_ids", lambda: {})
+	with pytest.raises(ValueError):
+		mod.process_one(tmp_path, dir_rel, action="process")
+	gate = gating.read_gate(tmp_path, dir_rel)
+	assert gate["latest"]["state"] == "failed"
+	assert "fallo de extract" in gate["latest"]["outcome"]["error"]
 
 
 # ── migración one-shot ───────────────────────────────────────────────────────
