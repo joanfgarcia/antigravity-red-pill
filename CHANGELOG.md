@@ -1,6 +1,6 @@
 ## Unreleased
 
-### 🧠 Memento — gating previo de rebuilds (MEM-010 F1, 2026-10-06)
+### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F2, 2026-10-06)
 
 - **[FEATURE]** Manifest estructurado del pipeline `annotate`
   (`gate-manifest-v1`): componentes por separado + contratos partidos
@@ -17,6 +17,22 @@
 - **[CHANGE]** Umbral de dedup P1-A con fuente única
   (`runtime.memento_dedup_threshold()`, config `MEMENTO_ANNOTATE_DEDUP_THRESHOLD`
   default 0.6), usado tanto por el dedup como por la métrica `near_dups`.
+- **[FEATURE]** Motor de gating (`memento/gating.py`): decisión por sesión
+  (fast-path idempotente por firma+input, regla del parcial MEM-009, `failed`
+  terminal, deltas por manifest y predicados extract/voz/bio/scopes/dedup/scorer)
+  sellada en `_session.json` (`stages.gate`, upsert por `run_id`, cap 10);
+  `mark_outcome` cierra el estado por paso.
+- **[FEATURE]** CLI (`scripts/memento_annotate.py`): `--list` con
+  `MEMENTO_ANNOTATE_GATE=ON` emite `{dir, action}` (solo process/rescore/forced)
+  y sella decisiones; `--status` desglosa saltadas por razón; `--gate-migrate
+  [--dry-run]` adopta metas legacy de la versión vigente (manifest + métricas +
+  input_hash) y reporta `legacy-unknown`; el nocturno consulta el gate en solo
+  lectura (el sweep es quien sella).
+- **[CHANGE]** `record.py`: RMW serializado con `flock` por fichero + tmp único
+  (`mkstemp`); fin de las carreras de escritores medidas por el panel (12 hilos:
+  160/160 incrementos, cero crashes).
+- **[CHANGE]** Flags nuevos (RULE 4, default OFF): `MEMENTO_ANNOTATE_GATE`;
+  `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (default 0.6).
 
 ### 🎛️ Jobs — pin GPU sin fallback CPU (2026-10-05)
 

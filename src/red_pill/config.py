@@ -604,6 +604,14 @@ class RedPillConfig(BaseSettings):
 	# compresión) con Bio de identidad, dedup P1-A y gate de calidad; routing por
 	# ejes work/social con zona muerta. OFF → refine legacy (desde summaries).
 	MEMENTO_ANNOTATE_FROM_RAW: bool = False
+	# Gating previo de rebuilds (MEM-010 F2, RULE 4 default OFF): con ON, el
+	# `--list` del rebuild evalúa por sesión (manifest estructurado + predicados),
+	# sella la decisión en `_session.json` (`stages.gate`) y emite solo lo que
+	# toca ({dir, action}); OFF → frescura binaria legacy por prompt_version.
+	MEMENTO_ANNOTATE_GATE: bool = False
+	# Umbral efectivo de dedup P1-A (MEM-010 F2, fuente única): lo usa el dedup
+	# de anotaciones y la métrica `near_dups` del gating.
+	MEMENTO_ANNOTATE_DEDUP_THRESHOLD: float = 0.6
 	# Zona muerta del routing dual (annotate): margen mínimo sobre el gate para
 	# enrutar; por debajo → `unstable` (no asciende, queda en el árbol).
 	MEMENTO_ANNOTATE_DEAD_ZONE: float = 0.05

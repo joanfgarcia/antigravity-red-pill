@@ -312,3 +312,67 @@ def gate_session(
 	)
 	emit = entry["action"] in EMITTABLE_ACTIONS and entry["state"] == "pending"
 	return {"dir": dir_rel, "fast_path": False, "emit": emit, **entry}
+
+
+# ── migración one-shot (F2b) ─────────────────────────────────────────────────
+
+
+def _annotations_from_disk(annotate_dir: Path) -> List[Dict[str, Any]]:
+	"""Notas finales en disco → lista apta para `compute_note_metrics`."""
+	from red_pill.memento.ascension import parse_refine
+
+	items: List[Dict[str, Any]] = []
+	for path in sorted(annotate_dir.glob("*.md")):
+		try:
+			fm, body = parse_refine(path.read_text(encoding="utf-8", errors="replace"))
+		except Exception:
+			continue
+		item: Dict[str, Any] = {"title": str(fm.get("title") or ""), "text": " ".join(body.split())}
+		for key in ("work_score", "social_score"):
+			raw_score = fm.get(key)
+			if raw_score is None:
+				continue
+			try:
+				item[key] = float(str(raw_score))
+			except ValueError:
+				pass
+		items.append(item)
+	return items
+
+
+def migrate_session(root: Path, dir_rel: str, *, pipeline: Dict[str, Any], write: bool = True) -> str:
+	"""Migración one-shot de una meta legacy: completa `manifest`+`metrics`+`input_hash`
+	cuando la versión sellada ES la vigente (adopción, sin re-anotar); versiones
+	irresolubles se reportan como `legacy-unknown` y NO se tocan (decisión del
+	sweep). Devuelve `fresh|adopted|legacy-unknown|sin-meta|error`."""
+	from red_pill.memento.agentic.annotate import compute_note_metrics
+
+	meta_path = root / dir_rel / "annotate" / "_meta.json"
+	meta = read_meta(root, dir_rel)
+	if not meta:
+		return "sin-meta"
+	if meta.get("manifest"):
+		return "fresh"
+	if str(meta.get("annotate_prompt_version") or "") != str(pipeline["legacy_fingerprint"]):
+		return "legacy-unknown"
+	meta["manifest"] = pipeline["manifest"]
+	meta["manifest_hash"] = pipeline["manifest_hash"]
+	meta["metrics"] = compute_note_metrics(_annotations_from_disk(root / dir_rel / "annotate"), dedup_threshold=runtime.memento_dedup_threshold())
+	meta["input_hash"] = session_input_hash(root, dir_rel)
+	meta["input_hash_source"] = "index" if (root / dir_rel / "memento" / "index.md").exists() else "units"
+	if write:
+		import os
+		import tempfile
+
+		fd, tmp_name = tempfile.mkstemp(prefix="_meta.json.", suffix=".tmp", dir=str(meta_path.parent))
+		try:
+			with os.fdopen(fd, "w", encoding="utf-8") as fh:
+				json.dump(meta, fh, ensure_ascii=False, indent=1)
+			os.replace(tmp_name, meta_path)
+		except BaseException:
+			try:
+				os.unlink(tmp_name)
+			except OSError:
+				pass
+			raise
+	return "adopted"

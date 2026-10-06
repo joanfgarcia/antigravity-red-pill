@@ -71,6 +71,37 @@ def _current_engine() -> str:
 		return ""
 
 
+def _gate_enabled() -> bool:
+	"""MEM-010 F2 (RULE 4, default OFF): gating previo en `--list`/`--status`."""
+	import red_pill.config as cfg
+
+	return bool(getattr(cfg, "MEMENTO_ANNOTATE_GATE", False))
+
+
+def _run_id(pipeline: dict) -> str:
+	"""Identidad estable de una ola de gating (manifest vigente) — MEM-010 F2b.
+
+	Estable entre re-invocaciones de `--list` (defer → re-list): el upsert por
+	`run_id` del historial depende de ello. F3 (ledger) podrá refinarla con ids
+	de job sin romper este contrato."""
+	return f"r-{str(pipeline.get('manifest_hash') or '')[:12]}"
+
+
+def _gate_sweep(root: Path) -> list:
+	"""Recorre las sesiones, evalúa y sella el gate; devuelve los elementos a emitir."""
+	from red_pill.memento import gating
+
+	pipeline = gating.current_pipeline()
+	run_id = _run_id(pipeline)
+	engine = _current_engine() or None
+	elements = []
+	for d in _sessions(root):
+		result = gating.gate_session(root, d, run_id=run_id, pipeline=pipeline, engine=engine)
+		if result.get("emit"):
+			elements.append({"dir": d, "action": result["action"]})
+	return elements
+
+
 def _fresh(root: Path, dir_rel: str, engine_aware: bool = False) -> bool:
 	"""Frescura por meta de sesión: `annotate/_meta.json` con el prompt_version vigente.
 
@@ -159,9 +190,14 @@ def process_one(
 	stale_engine: bool = False,
 	from_phase: Optional[str] = None,
 	reason: Optional[str] = None,
+	action: Optional[str] = None,
 ) -> dict:
+	# MEM-010 F2b: un elemento emitido por el GATE (action definida) no pasa por
+	# el atajo legacy `_fresh` — el gate ya decidió; `rescore` entra por `score`.
+	if action is not None and action != "process" and not from_phase:
+		from_phase = "score" if action == "rescore" else None
 	# `--from` implica reproceso (MEM-009 §2.1): apuntar a una fase hecha la re-ejecuta.
-	if not force and not from_phase and _fresh(root, dir_rel, engine_aware=stale_engine):
+	if action is None and not force and not from_phase and _fresh(root, dir_rel, engine_aware=stale_engine):
 		return {"dir": dir_rel, "skipped": "fresh"}
 	if force:
 		# `--all` = fuerza total desde cero: borra el parcial (con `--from`, el
@@ -170,8 +206,26 @@ def process_one(
 	parts = Path(dir_rel).parts
 	source = parts[1] if len(parts) > 1 else "unknown"
 	session_id = _canonical_ids().get(dir_rel) or (parts[2] if len(parts) > 2 else dir_rel)
-	max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
+	run_id = None
+	if action is not None:
+		from red_pill.memento import gating
+
+		run_id = _run_id(gating.current_pipeline())
+	try:
+		max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
+	except Exception as e:
+		if run_id is not None:
+			from red_pill.memento import gating
+			from red_pill.memento.agentic.runner import _is_llm_connection_error
+
+			if not _is_llm_connection_error(e):
+				gating.mark_outcome(root, dir_rel, run_id=run_id, state="failed", outcome={"error": str(e)[:512]})
+		raise
 	n = len(list((root / dir_rel / "annotate").glob("*.md")))
+	if run_id is not None:
+		from red_pill.memento import gating
+
+		gating.mark_outcome(root, dir_rel, run_id=run_id, state="done", outcome={"status": "ok", "notas": n})
 	return {"dir": dir_rel, "anotaciones": n, "max_significance": round(float(max_sig), 2)}
 
 
@@ -193,14 +247,48 @@ def main() -> None:
 		help="Entra al pipeline en esa fase reutilizando el estado persistido (parcial o notas); degrada con aviso si faltan prerrequisitos.",
 	)
 	parser.add_argument("--reason", default=None, help="Motivo de la invocación (audit trail en _meta.json).")
+	parser.add_argument("--gate-migrate", action="store_true", help="Migración one-shot (MEM-010 F2b): completa manifest/métricas en metas legacy adoptables.")
+	parser.add_argument("--dry-run", action="store_true", help="Con --gate-migrate: solo censo, sin escribir.")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = args.root or get_memento_root()
 
 	if args.status:
-		print(json.dumps(status(root), indent=2, ensure_ascii=False))
+		out = status(root)
+		if _gate_enabled():
+			from red_pill.memento import gating
+
+			pipeline = gating.current_pipeline()
+			actions: dict = {}
+			reasons: dict = {}
+			for d in _sessions(root):
+				latest = (gating.read_gate(root, d).get("latest") or {})
+				if latest.get("to_fingerprint") == pipeline["manifest_hash"]:
+					key = str(latest.get("action") or "?")
+					actions[key] = actions.get(key, 0) + 1
+					if key == "skip":
+						reason = str(latest.get("reason") or "?")
+						reasons[reason] = reasons.get(reason, 0) + 1
+			out["gate"] = {"acciones": actions, "motivos_skip": dict(sorted(reasons.items(), key=lambda kv: -kv[1])[:10])}
+		print(json.dumps(out, indent=2, ensure_ascii=False))
+		return
+	if args.gate_migrate:
+		from red_pill.memento import gating
+
+		pipeline = gating.current_pipeline()
+		stats: dict = {"fresh": 0, "adopted": 0, "legacy-unknown": 0, "sin-meta": 0, "error": 0}
+		for d in _sessions(root):
+			try:
+				result = gating.migrate_session(root, d, pipeline=pipeline, write=not args.dry_run)
+			except Exception:
+				result = "error"
+			stats[result] = stats.get(result, 0) + 1
+		print(json.dumps({"dry_run": bool(args.dry_run), **stats}, ensure_ascii=False, indent=2))
 		return
 	if args.list:
+		if _gate_enabled():
+			print(json.dumps(_gate_sweep(root), ensure_ascii=False))
+			return
 		print(json.dumps([{"dir": d} for d in pending(root, force=args.all, stale_engine=args.stale_engine)], ensure_ascii=False))
 		return
 	raw = os.environ.get("RP_ELEMENT")
@@ -209,7 +297,15 @@ def main() -> None:
 		sys.exit(2)
 	el = json.loads(raw)
 	try:
-		res = process_one(root, str(el["dir"]), force=args.all, stale_engine=args.stale_engine, from_phase=args.from_phase, reason=args.reason)
+		res = process_one(
+			root,
+			str(el["dir"]),
+			force=args.all,
+			stale_engine=args.stale_engine,
+			from_phase=args.from_phase,
+			reason=args.reason,
+			action=el.get("action"),
+		)
 	except Exception as e:
 		from red_pill.memento.agentic.runner import _is_llm_connection_error
 

@@ -42,8 +42,13 @@ def pending_agentic(
 	import red_pill.config as cfg
 
 	annotate_version: Optional[str] = None
+	gate_pipeline: Optional[Dict[str, Any]] = None
 	if root is not None and bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)):
 		annotate_version = runtime.annotate_prompt_version()
+	if root is not None and bool(getattr(cfg, "MEMENTO_ANNOTATE_GATE", False)):
+		from red_pill.memento import gating
+
+		gate_pipeline = gating.current_pipeline()
 
 	pending = []
 	for source, sessions in registry.state["registry"].items():
@@ -56,7 +61,15 @@ def pending_agentic(
 			if not agentic:
 				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
 					continue  # ya destilada en disco, pero el marcado se perdió (crash)
-				if not force and root is not None and annotate_version is not None and _annotate_fresh(root, entry["dir"], annotate_version):
+				if not force and root is not None and gate_pipeline is not None:
+					# MEM-010 F2b: el nocturno CONSULTA el gate (solo lectura; el
+					# sweep del rebuild es quien sella) — skip/fast-path → no re-procesar.
+					from red_pill.memento import gating
+
+					gate_decision = gating.evaluate(root, entry["dir"], pipeline=gate_pipeline)
+					if gate_decision is None or gate_decision.get("action") == "skip":
+						continue
+				elif not force and root is not None and annotate_version is not None and _annotate_fresh(root, entry["dir"], annotate_version):
 					continue  # ya anotada desde raw (rebuild/nocturno) — no re-procesar
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
