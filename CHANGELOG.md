@@ -1,5 +1,16 @@
 ## Unreleased
 
+### 🧠 Recall — rescate por keyword alcanza miembros hubbed (2026-10-07)
+
+- **[FIX]** `MemoryManager._rerank_hybrid_mmr`: el rescate por palabras clave
+  (IDF sobre el memento) ya no aplica la exclusión estructural `hubbed=True`.
+  Sin ella, todo recall por nombre propio topaba con la exclusión D14 y caía
+  al top semántico genérico, aunque los hits fueran válidos (ids + IDF altos).
+  La pata semántica mantiene la exclusión (los miembros no entierran hubs).
+  Regresión: `tests/test_recall_keyword_rescue.py`. Evidencia: 6/6 top hits
+  de "Sofi" eran `hubbed:True`; `recall("Sofi")` pasa de 0 a 2 engramas de
+  la tribu (frankenswarm) en verificación in-process.
+
 ### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F3, 2026-10-06)
 
 - **[FEATURE]** Manifest estructurado del pipeline `annotate`
