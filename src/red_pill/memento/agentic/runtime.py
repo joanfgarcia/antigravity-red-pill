@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from . import prompts
 
@@ -119,6 +119,96 @@ def voice_v2_enabled() -> bool:
 	import red_pill.config as cfg
 
 	return bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", False))
+
+
+# ── MEM-010 F1: manifest estructurado del pipeline annotate ──────────────────
+# Capa NUEVA y aditiva: `annotate_prompt_version()` no cambia (compatibilidad
+# con las metas existentes). El manifest expone los componentes por separado
+# para el gating por predicados (RFC MEM-010 §3.1) y separa el contrato de
+# extracción del de scoring (rescore sin re-extraer).
+
+MANIFEST_SCHEMA = "gate-manifest-v1"
+
+
+def memento_dedup_threshold() -> float:
+	"""Umbral efectivo de dedup P1-A (fuente única para dedup y métrica)."""
+	import red_pill.config as cfg
+
+	return float(getattr(cfg, "MEMENTO_ANNOTATE_DEDUP_THRESHOLD", 0.6))
+
+
+def _sha_text(text: str) -> str:
+	import hashlib
+
+	return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _component_signature(prompt_id: str, static: Optional[Mapping[str, str]] = None) -> str:
+	"""Firma user+system de UN prompt (misma cobertura que el agregado)."""
+	by_id = {prompt_id: static} if static is not None else None
+	return prompts.stage_signature([prompt_id], static=by_id)
+
+
+def annotate_manifest() -> Dict[str, Any]:
+	"""Componentes del pipeline annotate por separado (MEM-010 §3.1), deterministas.
+
+	`extract_contract` agrupa lo que cambia el TEXTO extraído (prompts de
+	extracción, Bio, prompt de voz, vista del fragmento); `score_contract` lo que
+	solo afecta a puntuación/routing (scorer dual + umbrales) — `--from=score`
+	exige `extract_contract` intacto (D3 del RFC).
+	"""
+	import red_pill.config as cfg
+
+	work_scope, social_scope = annotate_scopes()
+	view = "|".join(fragment_view_settings())
+	bio = _sha_text(prompts.IDENTITY_BIO)
+	if voice_v2_enabled():
+		extract_work = _component_signature("annotate_work_user_v2", {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope})
+		extract_social = _component_signature("annotate_social_user_v2", {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope})
+		voice_prompt = _component_signature("voice_rewrite_user_v2", {"identity": prompts.IDENTITY_BIO})
+		dual = _component_signature("dual_score_user_v2", {"work_scope": work_scope, "social_scope": social_scope})
+	else:
+		extract_work = _component_signature("annotate_work_user", {"identity": prompts.IDENTITY_BIO})
+		extract_social = _component_signature("annotate_social_user", {"identity": prompts.IDENTITY_BIO})
+		voice_prompt = _component_signature("voice_rewrite_user", {"identity": prompts.IDENTITY_BIO})
+		dual = _component_signature("dual_score_user")
+	thresholds = {
+		"work": float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE_WORK", 0.6)),
+		"social": float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL", 0.5)),
+		"dead_zone": float(getattr(cfg, "MEMENTO_ANNOTATE_DEAD_ZONE", 0.05)),
+	}
+	components: Dict[str, Any] = {
+		"extract_work": extract_work,
+		"extract_social": extract_social,
+		"voice_rewrite_prompt": voice_prompt,
+		"voice_rewrite_enabled": bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_REWRITE", False)),
+		"dual_score": dual,
+		"bio": bio,
+		"work_scope": work_scope,
+		"social_scope": social_scope,
+		"fragment_view": view,
+		"dedup_policy": {"algo": "p1a-hash+tokens", "threshold": memento_dedup_threshold()},
+		"thresholds": thresholds,
+	}
+	extract_contract = _sha_text(
+		json.dumps(
+			{
+				"extract_work": extract_work,
+				"extract_social": extract_social,
+				"voice_rewrite_prompt": voice_prompt,
+				"bio": bio,
+				"fragment_view": view,
+			},
+			sort_keys=True,
+		)
+	)
+	score_contract = _sha_text(json.dumps({"dual_score": dual, "thresholds": thresholds}, sort_keys=True))
+	return {"schema": MANIFEST_SCHEMA, "components": components, "extract_contract": extract_contract, "score_contract": score_contract}
+
+
+def annotate_manifest_hash() -> str:
+	"""Hash agregado del manifest (índice del gate; NO sustituye al legacy)."""
+	return _sha_text(json.dumps(annotate_manifest(), sort_keys=True))
 
 
 def validate_prompt_version() -> str:

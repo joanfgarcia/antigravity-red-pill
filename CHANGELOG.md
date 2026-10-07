@@ -1,5 +1,60 @@
 ## Unreleased
 
+### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F3, 2026-10-06)
+
+- **[FEATURE]** Manifest estructurado del pipeline `annotate`
+  (`gate-manifest-v1`): componentes por separado + contratos partidos
+  `extract_contract`/`score_contract` (`annotate_manifest()` /
+  `annotate_manifest_hash()` en `runtime.py`). El fingerprint legacy
+  `annotate_prompt_version()` **no cambia** (verificado idéntico al del rebuild
+  vivo: `p1:49f12414…`), así que F1 no invalida ninguna sesión.
+- **[FEATURE]** Métricas por sesión al anotar (`annotate/_meta.json` + espejo
+  `_session.json`): `pct_gt_600`, `pct_primera_persona`, `near_dups` (umbral
+  efectivo guardado), `min_margin`, `bio_leaks` — `compute_note_metrics()`.
+- **[FEATURE]** `input_hash` normativo de la entrada (mismo cómputo que el
+  `memento_hash` del render: `compute_hash(extract_body(index.md))`) con
+  `input_hash_source`, más fallback defensivo por unidades.
+- **[CHANGE]** Umbral de dedup P1-A con fuente única
+  (`runtime.memento_dedup_threshold()`, config `MEMENTO_ANNOTATE_DEDUP_THRESHOLD`
+  default 0.6), usado tanto por el dedup como por la métrica `near_dups`.
+- **[FEATURE]** Motor de gating (`memento/gating.py`): decisión por sesión
+  (fast-path idempotente por firma+input, regla del parcial MEM-009, `failed`
+  terminal, deltas por manifest y predicados extract/voz/bio/scopes/dedup/scorer)
+  sellada en `_session.json` (`stages.gate`, upsert por `run_id`, cap 10);
+  `mark_outcome` cierra el estado por paso.
+- **[FEATURE]** CLI (`scripts/memento_annotate.py`): `--list` con
+  `MEMENTO_ANNOTATE_GATE=ON` emite `{dir, action}` (solo process/rescore/forced)
+  y sella decisiones; `--status` desglosa saltadas por razón; `--gate-migrate
+  [--dry-run]` adopta metas legacy de la versión vigente (manifest + métricas +
+  input_hash) y reporta `legacy-unknown`; el nocturno consulta el gate en solo
+  lectura (el sweep es quien sella).
+- **[CHANGE]** `record.py`: RMW serializado con `flock` por fichero + tmp único
+  (`mkstemp`); fin de las carreras de escritores medidas por el panel (12 hilos:
+  160/160 incrementos, cero crashes).
+- **[FEATURE]** Ledger de rebuilds (`state/rebuilds.json`, cap 10, modo 0600):
+  índice run→sesiones (`decisions`), counts por acción, cierre con señal
+  (`closed`/`closed-incomplete`/`aborted`, terminalidad primero) y saneado de
+  textos libres (scrub + basename + ANSI/control + caps 512/1024).
+- **[FEATURE]** Remediación de un run: `--rebuild-run <run_id> [--actions ...]`
+  re-sella el subconjunto como `forced` bajo un run nuevo y emite la lista
+  congelada; helper `scripts/memento_rebuild_run.py` (element_job con
+  `elements_command` custom) y `--runs` para consultar el ledger.
+- **[CHANGE]** Los elementos del job llevan `run_id`; el sweep mantiene su run
+  al día, cierra los obsoletos con la precedencia del RFC y re-emite fielmente
+  los pendientes (cubre `forced` entre re-invocaciones de `--list`).
+- **[FEATURE]** Backfill F4: `--backfill-run <job_id> [--checkpoint ckpt.json]`
+  reconstruye en el ledger un run ya ejecutado desde su log (`state/jobs/`) y
+  su checkpoint; lo no alcanzado queda `unknown` (dato ausente ≠ skip).
+- **[FIX]** Ronda adversarial de implementación (zero-trust, 5 lentes): input_hash
+  cambiado ya dispara `process` (re-render), deltas mixtos usan prioridad
+  process>rescore>skip, hardening de `_meta.json` (tmp único + lock) y composición
+  del gate bajo un solo lock, saneado en el punto único de sellado, guard
+  anti-traversal en `record_path`, validación de `run_id`/`--actions` (alias
+  processed/skipped/rescored), `--list --all` con gate fuerza todo y `--status`
+  cierra runs obsoletos. Suite completa: 2747 passed.
+- **[CHANGE]** Flags nuevos (RULE 4, default OFF): `MEMENTO_ANNOTATE_GATE`;
+  `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (default 0.6).
+
 ### 🎛️ Jobs — pin GPU sin fallback CPU (2026-10-05)
 
 - **[FEATURE]** `llm.device_fallback` en recipes → `RP_LLM_DEVICE_FALLBACK`: el

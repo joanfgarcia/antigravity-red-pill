@@ -78,6 +78,67 @@ def quality_flags(text: str) -> List[str]:
 	return flags
 
 
+# ── MEM-010 F1: métricas por sesión para el gating (RFC §3.2) ────────────────
+# Se computan SIEMPRE sobre las notas FINALES (post rewrite/dedup) y con el
+# umbral de dedup efectivo guardado junto a la métrica, para que vivo y
+# backfill comparen like-for-like (enmienda r3 del panel).
+
+_BIO_LEAK_PATTERNS = (
+	re.compile(r"\bcomo narradora\b", re.I),
+	re.compile(r"\bla narradora del b[úu]nker\b", re.I),
+	re.compile(r"\bel (?:operador|ingeniero) catal[áa]n\b", re.I),
+)
+
+
+def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: float) -> Dict[str, Any]:
+	"""Métricas de calidad de una sesión anotada (deterministas, sin IO)."""
+	texts = [str(a.get("text") or "") for a in annotations]
+	n = len(texts)
+	lens = [len(t) for t in texts]
+	toks = [_tokens(t + " " + str(a.get("title") or "")) for t, a in zip(texts, annotations)]
+	near_dups = 0
+	for i in range(len(toks)):
+		for j in range(i + 1, len(toks)):
+			a, b = toks[i], toks[j]
+			if a and b and len(a & b) / min(len(a), len(b)) > dedup_threshold:
+				near_dups += 1
+	margins = [
+		abs(float(a.get("work_score", 0.0) or 0.0) - float(a.get("social_score", 0.0) or 0.0))
+		for a in annotations
+		if "work_score" in a and "social_score" in a
+	]
+	return {
+		"notas": n,
+		"pct_gt_600": round(100 * sum(1 for x in lens if x > 600) / max(1, n), 1),
+		"pct_primera_persona": round(100 * sum(1 for t in texts if is_first_person(t)) / max(1, n), 1),
+		"near_dups": near_dups,
+		"dedup_threshold": float(dedup_threshold),
+		"min_margin": round(min(margins), 3) if margins else None,
+		"bio_leaks": sum(1 for t in texts if any(p.search(t) for p in _BIO_LEAK_PATTERNS)),
+	}
+
+
+def session_input_hash(root: Path, dir_rel: str, units: List[Any]) -> Tuple[Optional[str], str]:
+	"""Hash normativo de la ENTRADA de la sesión (MEM-010 §3.3) + su fuente.
+
+	Camino normativo: `compute_hash(extract_body(memento/index.md))` — el MISMO
+	cómputo que el `memento_hash` del render (§4.5.1). Fallback defensivo para
+	árboles sin index (no ocurre en el árbol real): digest estable de las
+	unidades leídas, con fuente distinguible para el gate.
+	"""
+	import hashlib
+
+	from red_pill.memento.render import compute_hash, extract_body
+
+	index = root / dir_rel / "memento" / "index.md"
+	if index.exists():
+		return compute_hash(extract_body(index.read_text(encoding="utf-8"))), "index"
+	if not units:
+		return None, "none"
+	payload = "\x1e".join(f"{u.key}:{compute_hash(u.content)}" for u in units)
+	return hashlib.sha256(payload.encode("utf-8")).hexdigest(), "units"
+
+
 def _normalize(text: str) -> str:
 	return re.sub(r"[^a-z0-9áéíóúüñ ]+", " ", text.lower()).strip()
 
@@ -564,7 +625,7 @@ def annotate_session(
 			logger.info("annotate %s: %d splits reanudados del parcial, %d extraídos", dir_rel, reused, extracted)
 		ordered = [idea for key in keys if key in fresh_splits for idea in fresh_splits[key]["ideas"]]
 		if extracted or partial["phases"]["extract"] != "done":
-			annotations = dedup_annotations([dict(i) for i in ordered])
+			annotations = dedup_annotations([dict(i) for i in ordered], threshold=runtime.memento_dedup_threshold())
 			partial["splits"] = fresh_splits
 			partial["annotations"] = annotations
 			partial["phases"] = {"extract": "done", "rewrite": "pending", "score": "pending"}
@@ -646,6 +707,7 @@ def annotate_session(
 		name = f"{a['nnn']}-{slug}.md"
 		(annotate_dir / name).write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
 		written.add(name)
+	input_hash, input_hash_source = session_input_hash(root, dir_rel, units)
 	meta = {
 		"session_id": session_id,
 		"source": source,
@@ -665,10 +727,16 @@ def annotate_session(
 		"from_phase": entry if from_phase else None,
 		"from_requested": from_phase,
 		"reason": reason,
+		# MEM-010 F1: manifest + métricas + identidad de entrada (gating).
+		"manifest": runtime.annotate_manifest(),
+		"manifest_hash": runtime.annotate_manifest_hash(),
+		"metrics": compute_note_metrics(annotations, dedup_threshold=runtime.memento_dedup_threshold()),
+		"input_hash": input_hash,
+		"input_hash_source": input_hash_source,
 	}
-	meta_tmp = (annotate_dir / "_meta.json").with_suffix(".json.tmp")
-	meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-	meta_tmp.replace(annotate_dir / "_meta.json")
+	from red_pill.memento.record import write_json_atomic
+
+	write_json_atomic(annotate_dir / "_meta.json", meta)
 	# Solo tras el `_meta` verificado: huérfanos fuera y parcial plegado.
 	for stale in annotate_dir.glob("*.md"):
 		if stale.name not in written:
