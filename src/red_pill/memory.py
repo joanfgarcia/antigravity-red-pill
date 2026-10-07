@@ -955,7 +955,11 @@ class MemoryManager:
 					qn = float(np.linalg.norm(q)) or 1.0
 					for rec in self.client.retrieve(collection_name=collection, ids=missing, with_payload=True, with_vectors=True):
 						pl = rec.payload or {}
-						if self._excluded_by(pl, structural_exclusions) or (
+						# El rescate por keyword es preciso (IDF sobre el memento): un hit directo
+						# debe alcanzar su engrama aunque sea miembro de un hub (D14);
+						# `hubbed` solo excluye en la pata semantica (los miembros entierran hubs).
+						rescue_exclusions = [e for e in structural_exclusions if getattr(e, "key", "") != "hubbed"]
+						if self._excluded_by(pl, rescue_exclusions) or (
 							not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2
 						):
 							continue
