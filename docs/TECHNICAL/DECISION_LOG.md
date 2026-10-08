@@ -1178,7 +1178,7 @@ stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
 
 ---
 
-## [AD-048] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
+## [AD-049] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
 
 **Date**: 2026-10-08
 
