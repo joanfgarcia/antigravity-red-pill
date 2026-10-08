@@ -4,14 +4,16 @@
 # watchdog por elemento, y un modelo que falla NO tumba el job: el wrapper
 # registra el fallo en failures.jsonl y sale con skip_exit_code (79, sin retry)
 # → la cola marca el elemento como saltado y sigue.
+# Portabilidad: sin rutas de usuario — todo se resuelve con $HOME en el sh -c
+# (el driver tokeniza con shlex y no expande ~; $HOME lo expande el shell).
 # Corre desde el worktree del piloto (código sin merge): PYTHONPATH=src.
 # SALIDA al desk: los datos medidos son nuestros; el repo lleva las TOOLS.
 source: element_job
 priority: 5
 title: Benchset local v1 — elenco prioritario (element_job, fail-soft)
 mission_id: benchset-v1
-elements_command: ["sh", "-c", 'cd /home/joan/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src /home/joan/.local/share/red-pill/llmtools-venv/bin/python scripts/bench_local.py --list-models']
-step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; cd /home/joan/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src /home/joan/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --element --out /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; if [ $rc -ne 0 ]; then mkdir -p /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; echo "$RP_ELEMENT rc=$rc" >> /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/failures.jsonl; exit 79; fi; exit 0']
+elements_command: ["sh", "-c", 'cd $HOME/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src $HOME/.local/share/red-pill/llmtools-venv/bin/python scripts/bench_local.py --list-models']
+step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; cd $HOME/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src $HOME/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --element --out $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; if [ $rc -ne 0 ]; then mkdir -p $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; echo "$RP_ELEMENT rc=$rc" >> $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/failures.jsonl; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single
