@@ -4,6 +4,38 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-048] Washout genérico de RhizoDB excluye los curados (miembros + hubs)
+**Date**: 2026-10-08
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/rhizodb-hardening`).
+**Context**: auditoría del paquete RhizoDB de Guillem + contraste con el código vivo.
+El washout nocturno genérico (`a_v < 0.1 ∧ s_v < 5.0` → borrado físico) mataba los
+miembros curados de social/story (`node_type=memento_engram` / `hubbed` / `origin=memento`)
+en ~15-25 noches sin recuperación, contradiciendo M9/AD-034 (eje propio
+`last_reinforced_at` → demote a 5a miembros / 10a hubs) y D16/D17 (solo los hubs
+estaban exentos del washout genérico). No existe re-ascensión automática para
+sellos ya ascendidos (`reinforce_refine` retorna `already_ascended`), así que la
+pérdida no era reversible. La investigación de docs/registry no encontró ninguna
+decisión que fijara un marco de semanas para los curados.
+**Decision**:
+- El washout genérico excluye los curados (`node_type=memento_engram`,
+  `origin=memento` o `hubbed=true`), igual que los hubs: su olvido sigue en
+  `erode_curated` (5a/10a, `last_reinforced_at`).
+- Flag explícito de reversión `RHIZODB_WASHOUT_SKIP_CURATED` (default ON).
+- Coeficientes del washout a config (`RHIZODB_WASHOUT_GAMMA`, `RHIZODB_S_MAX`,
+  `RHIZODB_PRUNE_MIN_ACTIVATION`, `RHIZODB_PRUNE_MAX_STABILITY_DAYS`,
+  `RHIZODB_WASHOUT_REFERENCE_DAYS`); scroll paginado (fin del tope de 10k puntos);
+  γ atenuada por el tiempo desde el último washout de la colección (cap
+  `reference_days`): una doble corrida no poda dos veces la misma franja.
+- Hardening del motor (`affect.py`): NaN/Inf → defaults, timestamps ISO/ms
+  coerced, `stability <= 0` → olvidado; scores >1 preservados (lentitud de los
+  curados, factor Memento 5×).
+**Por qué esto y no alternativas**: no bajar el marco temporal de los curados
+(no hay decisión documentada que lo fije en semanas; el contrato vivo es 5a/10a);
+no añadir re-ascensión automática (no existe hoy y complicaría los sellos); el
+flag permite volver al washout genérico sin revertir código.
+
+---
+
 ## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
 **Date**: 2026-09-27
 **Status**: IMPLEMENTADO — RFC-004 P1-P4 DONE (sidecar `redpill-laya-tag.service` desplegado 2026-09-28; flags OFF en prod por RULE 4). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).

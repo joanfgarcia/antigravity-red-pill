@@ -1,9 +1,30 @@
+import json
 import time
 from unittest.mock import MagicMock
 
 import pytest
 
+from red_pill.metabolism import maintenance as maint
 from red_pill.metabolism.sleep import run_rhizodb_washout_and_pruning
+
+
+def _mock_manager(points=None, scroll_pages=None):
+	mock_mem_mgr = MagicMock()
+	mock_client = mock_mem_mgr.client
+	mock_client.collection_exists.return_value = True
+	if scroll_pages is not None:
+		mock_client.scroll.side_effect = scroll_pages
+	else:
+		mock_client.scroll.return_value = (points or [], None)
+	return mock_mem_mgr, mock_client
+
+
+def _updated_ids(mock_client):
+	updated = []
+	for call in mock_client.batch_update_points.call_args_list:
+		for op in call[1]["update_operations"]:
+			updated.extend(op.set_payload.points)
+	return updated
 
 
 def test_run_rhizodb_washout_and_pruning():
@@ -60,3 +81,96 @@ def test_run_rhizodb_washout_and_pruning():
 	strong_op = next((op for op in ops if op.set_payload.points == ["strong_engram"]), None)
 	assert strong_op is not None
 	assert strong_op.set_payload.payload["reinforcement_score"] == pytest.approx(0.762, abs=0.01)
+
+
+def _point(point_id, score=0.8, stability=200.0, now=None):
+	p = MagicMock()
+	p.id = point_id
+	p.payload = {"reinforcement_score": score, "stability": stability, "immune": False, "last_recalled_at": now if now is not None else time.time()}
+	return p
+
+
+def test_run_rhizodb_washout_paginates_all_pages(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	now = time.time()
+	p1 = _point("p1", now=now)
+	p2 = _point("p2", now=now)
+	mock_mem_mgr, mock_client = _mock_manager(scroll_pages=[([p1], "page-2"), ([p2], None)])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	assert mock_client.scroll.call_count == 2
+	assert _updated_ids(mock_client) == ["p1", "p2"]
+
+
+def test_run_rhizodb_washout_uses_config_gamma(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint.cfg, "RHIZODB_WASHOUT_GAMMA", 0.5)
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	p = _point("strong")
+	mock_mem_mgr, mock_client = _mock_manager([p])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	ops = mock_client.batch_update_points.call_args[1]["update_operations"]
+	assert ops[0].set_payload.payload["reinforcement_score"] == pytest.approx(0.674, abs=0.01)
+
+
+def test_run_rhizodb_washout_attenuates_repeated_runs(monkeypatch, tmp_path):
+	state_path = tmp_path / "washout.json"
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: state_path)
+
+	now = time.time()
+	state_path.write_text(json.dumps({"social_memories": now - 43200.0}), encoding="utf-8")
+	p = _point("strong", now=now)
+	mock_mem_mgr, mock_client = _mock_manager([p])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	gamma = 0.85 ** 0.5
+	expected = round(gamma * 0.8 + (1.0 - gamma) * (200.0 / 365.0), 3)
+	ops = mock_client.batch_update_points.call_args[1]["update_operations"]
+	assert ops[0].set_payload.payload["reinforcement_score"] == pytest.approx(expected, abs=0.01)
+	saved = json.loads(state_path.read_text(encoding="utf-8"))
+	assert saved["social_memories"] > now - 60
+
+
+def test_run_rhizodb_washout_skips_curated_members(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	now = time.time()
+	member = _point("member", now=now)
+	member.payload.update({"node_type": "memento_engram", "origin": "memento", "hubbed": True})
+	origin_only = _point("origin-only", now=now)
+	origin_only.payload.update({"origin": "memento"})
+	hubbed_only = _point("hubbed-only", now=now)
+	hubbed_only.payload.update({"hubbed": True})
+	noise = _point("noise", score=0.09, stability=2.0, now=now)
+	mock_mem_mgr, mock_client = _mock_manager([member, origin_only, hubbed_only, noise])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	assert _updated_ids(mock_client) == []
+	deleted = mock_client.delete.call_args[1]["points_selector"].points
+	assert deleted == ["noise"]
+
+
+def test_run_rhizodb_washout_curated_exemption_can_be_disabled(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint.cfg, "RHIZODB_WASHOUT_SKIP_CURATED", False)
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	now = time.time()
+	curated = _point("curated", score=0.09, stability=2.0, now=now)
+	curated.payload["node_type"] = "memento_engram"
+	mock_mem_mgr, mock_client = _mock_manager([curated])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	deleted = mock_client.delete.call_args[1]["points_selector"].points
+	assert deleted == ["curated"]
