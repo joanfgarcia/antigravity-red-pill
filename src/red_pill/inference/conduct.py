@@ -6,10 +6,11 @@ sumen) ejecuta al modelo COMO PRODUCCIÓN: la conducta vive en el perfil ⊕ tas
 renderizado ni kwargs — así no vuelve a nacer la clase de caveat del
 Granite-4.2-thinking en un harness nuevo.
 
-- Camino llama-cpp-python: `apply_python()` (handlers de thinking +
-  chat_format correcto) + `sampling_kwargs()`.
-- Camino HTTP (RuntimeServer / llama-server): `request_kwargs()` — samplers,
-  max_tokens y `chat_template_kwargs` (`enable_thinking` / `reasoning_effort`).
+Caminos:
+- llama-cpp-python: `apply_python()` (handlers de thinking + chat_format
+correcto) + `sampling_kwargs()`.
+- HTTP (RuntimeServer / llama-server): `request_kwargs()` — samplers,
+max_tokens y `chat_template_kwargs` (`enable_thinking` / `reasoning_effort`).
 """
 
 from __future__ import annotations

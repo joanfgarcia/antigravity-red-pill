@@ -9,9 +9,9 @@ ternarios PTQ1_0/PQ2_0) se sirven con un `llama-server` dedicado:
 
 Garantías:
 - Gate `RuntimeRegistry.require()`: runtime declarado y no disponible → error
-  limpio con motivo (jamás fallback silencioso a stock).
-- Health real (/health) antes de devolver el control; si el proceso muere, el
-  error incluye la cola del log del servidor.
+limpio con motivo (jamás fallback silencioso a stock).
+- Health real (/health) antes de devolver el control; si el proceso muere,
+el error incluye la cola del log del servidor.
 - `stop()`/context manager abaten el proceso siempre (unload de VRAM).
 """
 
