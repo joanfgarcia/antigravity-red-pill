@@ -6,8 +6,15 @@
 # Un runtime declarado y no disponible es un FALLO LIMPIO — nunca fallback
 # silencioso a otro engine (`Q2_0` ternario en stock produce basura sin warning).
 #
+# ⚠️ AVISO DE CALIBRACIÓN: este fichero es un EJEMPLO. Las rutas, versiones,
+# flags de build y notas de `quirks` son del PUESTO DE REFERENCIA (RTX 5070
+# Laptop 8 GB, 2026-10-08). Cada equipo debe compilar/instalar sus engines y
+# ajustar aquí sus rutas y versiones reales; las medidas de contexto de `quirks`
+# se recalibran por equipo (no se copian).
+#
 # Este fichero se siembra copy-if-absent desde examples/ en install/update
-# (mismo patrón que task_profiles.yaml).
+# (mismo patrón que task_profiles.yaml). La config viva del puesto vive en
+# ~/.config/red-pill/runtimes.yaml — nunca se comitea.
 default_runtime: llama_cpp_stock
 
 runtimes:
@@ -36,5 +43,5 @@ runtimes:
       quant_types: ["f16", "q8_0", "q4_k_m", "k_quants", "PTQ1_0", "PQ2_0"]
       reasoning_kwargs: true
     quirks:
-      notes: "8 GB VRAM: -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
+      notes: "PUESTO DE REFERENCIA (recalibrar): 8 GB VRAM → -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
     status: active
