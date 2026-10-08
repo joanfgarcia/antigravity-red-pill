@@ -377,6 +377,22 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		import os
 		import shutil
 
+		# RFC-HARNESS-003: un perfil anclado a un runtime no-python NO se sirve
+		# por el camino stock. Runtime declarado y ausente → fallo limpio; y si
+		# está presente, este factory no lo sirve (el consumidor debe usar
+		# RuntimeServer, el servidor dedicado del runtime).
+		if os.path.sep not in model_name_or_path:
+			from red_pill.core.model_registry import ModelRegistry
+			from red_pill.core.runtime_registry import RuntimeRegistry
+
+			runtime_id = (ModelRegistry.get_profile(model_name_or_path) or {}).get("runtime")
+			if runtime_id:
+				RuntimeRegistry.require(runtime_id)
+				logger.error(
+					f"[LlamaCppInferenceProvider] '{model_name_or_path}' exige runtime '{runtime_id}' — usa RuntimeServer (servidor dedicado), no el camino stock."
+				)
+				return None
+
 		# 1. Locate runner
 		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 		runner_path = os.path.join(workspace, "sharing", "3rdparty", "llama_official", "build", "bin", "llama-cli")

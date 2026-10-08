@@ -37,6 +37,7 @@ from red_pill.core.paths import (
 	get_model_validation_path,
 	get_task_profiles_path,
 )
+from red_pill.core.runtime_registry import RuntimeRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,8 @@ class ResolvedModel:
 	mode: str = "curated"  # curated | custom | experimental
 	last_mode: str = "curated"  # para /status.last_mode
 	extra: Dict[str, Any] = field(default_factory=dict)
+	runtime_id: Optional[str] = None  # RFC-HARNESS-003: runtime anclado (None = stock)
+	runtime: Dict[str, Any] = field(default_factory=dict)  # resuelto de RuntimeRegistry
 
 	def resolved_n_ctx(self) -> int:
 		"""n_ctx efectivo del perfil resuelto (vram_tiers aplicado)."""
@@ -463,7 +466,25 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 	if "device_fallback" in body:
 		resolved.device_fallback = list(body["device_fallback"])
 
+	# RFC-HARNESS-003: anclaje de runtime del perfil. Informativo aquí; el gate
+	# de disponibilidad es require_runtime() antes de cargar el modelo.
+	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
+	if profile.get("runtime"):
+		resolved.runtime_id = str(profile["runtime"])
+		resolved.runtime = RuntimeRegistry.for_profile(profile)
+
 	return resolved
+
+
+def require_runtime(resolved: ResolvedModel) -> dict:
+	"""Gate de carga (RFC-HARNESS-003): runtime declarado ⇒ operativo o error.
+
+	Devuelve el runtime resuelto; {} si el perfil no declara anclaje. Falla
+	limpio (RuntimeUnavailableError) — nunca fallback silencioso a stock.
+	"""
+	if not resolved.runtime_id:
+		return {}
+	return RuntimeRegistry.require(resolved.runtime_id)
 
 
 def _resolve_experimental(exp: dict, body: dict) -> ResolvedModel:

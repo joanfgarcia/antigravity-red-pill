@@ -325,6 +325,43 @@ def handle_ide(args: argparse.Namespace) -> None:
 		print("Usage: red-pill ide [backend|status|test]")
 
 
+def handle_runtime(args: argparse.Namespace) -> None:
+	"""Registro de runtimes de inferencia (RFC-HARNESS-003): list / check."""
+	from red_pill.core.model_registry import ModelRegistry
+	from red_pill.core.paths import get_runtimes_path
+	from red_pill.core.runtime_registry import RuntimeRegistry
+
+	cmd = getattr(args, "runtime_cmd", None)
+
+	if cmd == "check":
+		profile_name = args.profile
+		profile = ModelRegistry.get_profile(profile_name)
+		if not profile:
+			print(f"⛔ Perfil '{profile_name}' no existe en model_profiles.yaml")
+			return
+		declared = bool(profile.get("runtime"))
+		runtime_id = profile.get("runtime") or RuntimeRegistry.default_id()
+		ok, reason = RuntimeRegistry.check_available(runtime_id)
+		tag = "declarado" if declared else "default"
+		if ok:
+			print(f"✅ '{profile_name}' → runtime '{runtime_id}' ({tag}) disponible")
+		else:
+			print(f"⛔ '{profile_name}' → runtime '{runtime_id}' ({tag}): {reason}")
+		return
+
+	# list (default)
+	runtimes = RuntimeRegistry.all()
+	if not runtimes:
+		print(f"🧩 Sin runtimes declarados en {get_runtimes_path()}")
+		return
+	print(f"🧩 Runtimes de inferencia ({len(runtimes)}) — default: {RuntimeRegistry.default_id()}")
+	for rid, rt in runtimes.items():
+		ok, reason = RuntimeRegistry.check_available(rid)
+		mark = "✅" if ok else "⛔"
+		tail = "" if ok else f"  — {reason}"
+		print(f"  {mark} {rid:<20} {str(rt.get('kind', '?')):<16} {rt.get('binary', '?')}{tail}")
+
+
 def handle_license(args: argparse.Namespace) -> None:
 	"""Compliance audit: license of every curated/cataloged model + context state."""
 	import json
@@ -1246,6 +1283,13 @@ def main() -> None:
 	license_parser = subparsers.add_parser("license", help="Compliance audit: licencias de modelos y contexto")
 	license_parser.add_argument("--json", action="store_true", help="Salida estructurada JSON para parseo agéntico")
 
+	# RFC-HARNESS-003: registro de runtimes de inferencia (múltiples llama.cpp)
+	runtime_parser = subparsers.add_parser("runtime", help="Registro de runtimes de inferencia (RFC-HARNESS-003)")
+	runtime_sub = runtime_parser.add_subparsers(dest="runtime_cmd")
+	runtime_sub.add_parser("list", help="Lista los runtimes declarados y su disponibilidad")
+	runtime_check = runtime_sub.add_parser("check", help="Resuelve el runtime de un perfil y comprueba disponibilidad")
+	runtime_check.add_argument("profile", help="Nombre del perfil (model_profiles.yaml)")
+
 	# Centralized Job Manager
 	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
 	job_sub = job_parser.add_subparsers(dest="job_cmd")
@@ -1633,6 +1677,9 @@ def main() -> None:
 			return
 		elif args.command == "license":
 			handle_license(args)
+			return
+		elif args.command == "runtime":
+			handle_runtime(args)
 			return
 		elif args.command == "job":
 			handle_job(args)
