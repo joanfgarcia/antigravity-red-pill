@@ -320,6 +320,8 @@ class RuntimeServer:
 		raise RuntimeServerError(f"timeout de arranque ({timeout or self.startup_timeout:.0f}s): {self._log_tail()}")
 
 	def _log_tail(self, lines: int = 20) -> str:
+		if self._log_path is None:
+			return "(log no disponible)"
 		try:
 			content = self._log_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()
 			return "\n".join(content[-lines:]) if content else "(sin log)"
@@ -399,7 +401,10 @@ class RuntimeServer:
 		)
 		try:
 			with urllib.request.urlopen(req, timeout=timeout) as resp:
-				return json.loads(resp.read().decode("utf-8"))
+				payload = json.loads(resp.read().decode("utf-8"))
+				if not isinstance(payload, dict):
+					raise RuntimeServerError("respuesta no-dict del servidor dedicado")
+				return payload
 		except urllib.error.HTTPError as e:
 			detail = e.read().decode("utf-8", errors="replace")[:500]
 			raise RuntimeServerError(f"HTTP {e.code} del servidor: {detail}") from e
@@ -407,6 +412,5 @@ class RuntimeServer:
 	def __enter__(self) -> "RuntimeServer":
 		return self.start()
 
-	def __exit__(self, *exc: Any) -> bool:
+	def __exit__(self, *exc: Any) -> None:
 		self.stop()
-		return False
