@@ -1143,3 +1143,51 @@ configurables.
 Un cambio se hace una vez y entra en la firma; la regeneración de artefactos
 stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
 --reconcile`), con refresco por cambio de cuerpo y nightly en paralelo.
+
+---
+
+## [AD-048] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
+
+**Date**: 2026-10-08
+
+### 1. The Problem
+Bonsai 2 27B (ternario PTQ1_0, 27B en ~5.95 GB) exige el fork PrismML de
+llama.cpp: stock rechaza sus tipos (y su `Q2_0` carga sin warning produciendo
+basura). El camino GGUF tenía UN binario hard-codeado (runner/providers/battle)
+y el daemon usa llama-cpp-python stock. Además, los harnesses legacy
+reinventaban el renderizado y volvían a romper modelos con thinking nativo
+(caveat Granite-4.2: pensamiento filtrándose a la respuesta medida).
+
+### 2. The Decision
+1. **Registro de runtimes** en config de instalación (`~/.config/red-pill/runtimes.yaml`,
+   seed-ejemplo en `examples/`): el perfil se ancla con `runtime: <id>`; runtime
+   declarado y ausente = **fallo limpio**, jamás fallback silencioso a stock.
+2. **Servidor dedicado** (`RuntimeServer`): llama-server del runtime anclado
+   (argv desde tiers + quirks), health real, unload de VRAM garantizado.
+3. **VRAM: swap-o-defer, nunca degradar** (decisión del operador): la
+   degradación CPU/parcial queda prohibida para modelos que caben; VRAM ocupada
+   → evict del residente vía proxy dual-bind (`/v1/unload`) o defer.
+4. **Plan de KV por calidad**: el contexto DESEADO manda; la KV cede
+   f16 → q8_0 → q4_0 con costes medidos por perfil (`kv_cache` +
+   `vram_footprint`; recalibrar por equipo).
+5. **Conducta unificada** (`inference/conduct`): perfil ⊕ task declaran
+   `sampling`/`reasoning_effort`; TODO runner consume la misma capa (python y
+   HTTP) — los probes se miden "como producción".
+6. **Repo↔puesto** (CONVENTIONS §10.7): ejemplos se calibran por equipo; la
+   config viva nunca se comitea.
+7. **Actualización de runtimes (ratificada)**: pin de commit + recipe de build +
+   smoke obligatorio (precedente `build-prism`).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Un harness adaptado por modelo (código) | rechazada | Multiplica runners y diverge (el caveat nació así); la adaptación es declarativa (perfil⊕task) + capa única |
+| Degradar a CPU/parcial cuando falte VRAM | rechazada (operador) | Medido muchas veces: tiempos inaceptables; solo último recurso si el modelo no cabe de ninguna manera |
+| Reducir contexto como primera degradación | rechazada | El contexto es el requisito; cede la calidad de KV |
+| Fallback silencioso a stock | prohibida | `Q2_0` en stock = basura sin warning |
+
+### 4. Rationale
+Piloto completo (cortes 1-4): 3 engines registrados (stock, fork PrismML,
+BitNet), Bonsai servido por su runtime con plan de KV (f16@24K verificado),
+matriz runtime×modelo bajo un solo harness — bonsai **3/3** y granite **3/3**
+tras unificar conducta (caveat muerto por construcción). 75/75 tests.

@@ -27,11 +27,14 @@ sys.path.insert(0, str(REPO))
 
 from model_battle_lib import Probe, format_summary, runner_for, write_jsonl  # noqa: E402
 
+from red_pill.core.model_runtime import extract_thinking  # noqa: E402
+
 
 def _strip_thinking(raw: str) -> str:
+	"""Separador canónico del repo (model_runtime.extract_thinking) + CLI marker."""
 	clean = re.sub(r"\[Start thinking\][\s\S]*?(?:\[End thinking\]|$)", "", raw, count=1)
-	clean = re.sub(r"<think>[\s\S]*?</think>", "", clean, count=1)
-	return clean
+	_, answer = extract_thinking(clean)
+	return answer
 
 
 def _first_json(raw: str):
@@ -89,7 +92,7 @@ PROBES = [
 ]
 
 MODELS = [
-	("bonsai_2_27b", dict(n_ctx=24576, extra_args=["--chat-template-kwargs", '{"reasoning_effort":"medium"}'])),
+	("bonsai_2_27b", dict(n_ctx=24576)),
 	("granite_4_2_8b", dict(n_ctx=8192)),
 ]
 

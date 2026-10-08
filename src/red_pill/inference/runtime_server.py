@@ -270,6 +270,8 @@ class RuntimeServer:
 		max_tokens: Optional[int] = None,
 		temperature: Optional[float] = None,
 		top_p: Optional[float] = None,
+		top_k: Optional[int] = None,
+		min_p: Optional[float] = None,
 		chat_template_kwargs: Optional[dict] = None,
 		timeout: float = 600.0,
 	) -> Dict[str, Any]:
@@ -283,6 +285,10 @@ class RuntimeServer:
 			body["temperature"] = temperature
 		if top_p is not None:
 			body["top_p"] = top_p
+		if top_k is not None:
+			body["top_k"] = top_k
+		if min_p is not None:
+			body["min_p"] = min_p
 		if chat_template_kwargs:
 			body["chat_template_kwargs"] = chat_template_kwargs
 		req = urllib.request.Request(

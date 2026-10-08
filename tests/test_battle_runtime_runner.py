@@ -53,6 +53,26 @@ def fake_server(monkeypatch):
 	return _FakeServer
 
 
+@pytest.fixture(autouse=True)
+def _patch_resolve(monkeypatch):
+	"""RuntimeBattleRunner resuelve la conducta vía model_runtime.resolve():
+	se inyecta un ResolvedModel fake (hermético, sin config real)."""
+	from types import SimpleNamespace
+
+	def _fake_resolve(body=None):
+		return SimpleNamespace(
+			profile_name=(body or {}).get("model", "fake"),
+			resolved_n_ctx=lambda: 24576,
+			temperature=1.0,
+			sampling={},
+			max_tokens=2048,
+			thinking="on",
+			reasoning_effort=None,
+		)
+
+	monkeypatch.setattr("red_pill.core.model_runtime.resolve", _fake_resolve)
+
+
 def _probe():
 	return mbl.Probe(
 		name="math",

@@ -48,8 +48,9 @@ class Probe:
 	user_message: str
 	# (raw_output: str) -> dict with at least {valid: bool, ...task-specific}
 	validator: Callable[[str], dict]
-	max_tokens: int = 450
-	temperature: float = 0.1
+	# None = "sin override": el runner aplica la conducta del modelo (perfil ⊕ task).
+	max_tokens: Optional[int] = None
+	temperature: Optional[float] = None
 
 
 @dataclass
@@ -74,7 +75,14 @@ class BattleRunner:
 	"""
 
 	def __init__(
-		self, model_name: str, gguf_path: str, chat_format: Optional[str] = None, n_ctx: int = 6144, n_gpu_layers: int = -1, use_mmap: bool = False
+		self,
+		model_name: str,
+		gguf_path: str,
+		chat_format: Optional[str] = None,
+		n_ctx: int = 6144,
+		n_gpu_layers: int = -1,
+		use_mmap: bool = False,
+		resolved: Optional[Any] = None,
 	):
 		from llama_cpp import Llama
 
@@ -83,24 +91,42 @@ class BattleRunner:
 		self.chat_format = chat_format
 		self.n_ctx = n_ctx
 		self.n_gpu_layers = n_gpu_layers
+		self.resolved = resolved
 		t0 = time.time()
 		kwargs = dict(model_path=gguf_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, verbose=False)
 		if chat_format:
 			kwargs["chat_format"] = chat_format
 		self.llm = Llama(**kwargs)
 		self.load_time_s = time.time() - t0
+		# RFC-HARNESS-003 corte 4: la conducta del modelo (handlers thinking,
+		# chat_format) se aplica UNA vez al cargar; los samplers por probe.
+		if self.resolved is not None:
+			from red_pill.inference import conduct
+
+			conduct.apply_python(self.llm, self.resolved)
 		self.results: list[BattleResult] = []
 
 	def run(self, probe: Probe) -> BattleResult:
 		t0 = time.time()
 		try:
+			kwargs: dict = {}
+			max_tokens = probe.max_tokens
+			if self.resolved is not None:
+				from red_pill.inference import conduct
+
+				conduct.apply_python(self.llm, self.resolved)
+				kwargs.update(conduct.sampling_kwargs(self.resolved, temperature=probe.temperature))
+				max_tokens = probe.max_tokens or self.resolved.max_tokens
+			elif probe.temperature is not None:
+				kwargs["temperature"] = probe.temperature
+			if max_tokens:
+				kwargs["max_tokens"] = max_tokens
 			out = self.llm.create_chat_completion(
 				messages=[
 					{"role": "system", "content": probe.system_prompt},
 					{"role": "user", "content": probe.user_message},
 				],
-				temperature=probe.temperature,
-				max_tokens=probe.max_tokens,
+				**kwargs,
 			)
 			raw = out["choices"][0]["message"]["content"]
 		except Exception as e:
@@ -197,11 +223,13 @@ class RuntimeBattleRunner:
 		extra_args: Optional[list[str]] = None,
 		unload_daemon: bool = True,
 	):
+		from red_pill.core import model_runtime as mr
 		from red_pill.inference.runtime_server import RuntimeServer
 
 		self.model_name = model_name
 		self.chat_format = None
-		self._server = RuntimeServer(model_name, ctx=n_ctx, extra_args=extra_args, unload_daemon=unload_daemon)
+		self.resolved = mr.resolve({"model": model_name})
+		self._server = RuntimeServer(model_name, ctx=n_ctx or self.resolved.resolved_n_ctx(), extra_args=extra_args, unload_daemon=unload_daemon)
 		t0 = time.time()
 		self._server.start()
 		self.load_time_s = time.time() - t0
@@ -212,13 +240,15 @@ class RuntimeBattleRunner:
 	def run(self, probe: Probe) -> BattleResult:
 		t0 = time.time()
 		try:
+			from red_pill.inference import conduct
+
+			kwargs = conduct.request_kwargs(self.resolved, temperature=probe.temperature, max_tokens=probe.max_tokens)
 			resp = self._server.chat(
 				messages=[
 					{"role": "system", "content": probe.system_prompt},
 					{"role": "user", "content": probe.user_message},
 				],
-				max_tokens=probe.max_tokens,
-				temperature=probe.temperature,
+				**kwargs,
 			)
 			raw = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
 		except Exception as e:
@@ -269,4 +299,11 @@ def runner_for(
 		gguf_path = profile.get("model_path")
 	if not gguf_path:
 		raise ValueError(f"sin gguf_path para '{model_name}' (perfil no resuelto)")
-	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=n_ctx or 6144, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap)
+	resolved = None
+	try:
+		from red_pill.core import model_runtime as mr
+
+		resolved = mr.resolve({"model": model_name})
+	except Exception as e:
+		print(f"[runner_for] conducta no resoluble para '{model_name}' ({e}) — camino crudo", flush=True)
+	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=n_ctx or 6144, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, resolved=resolved)
