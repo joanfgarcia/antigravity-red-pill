@@ -17,7 +17,7 @@ import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 # Single source of truth for the harness basenames. The profile paths in
 # ~/.config/red-pill/model_profiles.yaml are authoritative for resolution.

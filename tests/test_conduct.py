@@ -4,8 +4,6 @@ Herméticos: sin GPU ni config real — ResolvedModel construidos a mano y
 monkeypatch de ModelRegistry para la propagación del resolve.
 """
 
-import pytest
-
 from red_pill.core.model_runtime import ResolvedModel
 
 

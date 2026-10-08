@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -76,6 +77,26 @@ def _guard_python_path(models: list, allow_cpu: bool) -> None:
 			"[guard] llama-cpp-python SIN CUDA — el camino python iría en CPU (¿venv equivocado?). "
 			"Usa el venv CUDA (llmtools) o pasa --allow-cpu si es intencional."
 		)
+
+
+def bench_elements() -> list:
+	"""Elementos del MAP (element_job): modelo × variante.
+
+	Solo los modelos con thinking declarado aportan variante `off` extra (para
+	completar la parametrización del elenco); el resto corre una sola vez.
+	"""
+	from red_pill.core.model_registry import ModelRegistry
+
+	elements = []
+	for model in PRIORITY_ROSTER:
+		profile = ModelRegistry.get_profile(model) or {}
+		thinking = str(profile.get("thinking", "off")).lower()
+		if thinking and thinking != "off":
+			elements.append({"model": model, "thinking": "default"})
+			elements.append({"model": model, "thinking": "off"})
+		else:
+			elements.append({"model": model, "thinking": "default"})
+	return elements
 
 PRIORITY_ROSTER = [
 	"bonsai_2_27b",
@@ -253,9 +274,27 @@ def main() -> int:
 	ap.add_argument("--matrix", action="store_true", help="elenco prioritario completo")
 	ap.add_argument("--quick", action="store_true", help="solo needle 8k")
 	ap.add_argument("--thinking", choices=["default", "off", "on", "both"], default="default")
+	ap.add_argument("--list-models", action="store_true", help="Imprime el array JSON de elementos (modelo × variante) para element_job")
+	ap.add_argument("--element", action="store_true", help="Ejecuta UN elemento leído de RP_ELEMENT (env JSON)")
 	ap.add_argument("--allow-cpu", action="store_true", help="Permitir camino python en CPU (por defecto aborta)")
+	ap.add_argument("--no-isolate", action="store_true", help="(interno) no aislar cada modelo en su proceso")
 	ap.add_argument("--out", default=str(REPO / "bench_out"))
 	args = ap.parse_args()
+
+	if args.list_models:
+		print(json.dumps(bench_elements(), ensure_ascii=False))
+		return 0
+
+	thinking_mode = args.thinking
+	if args.element:
+		raw = os.environ.get("RP_ELEMENT") or ""
+		try:
+			element = json.loads(raw)
+		except Exception as e:
+			print(f"RP_ELEMENT inválido ({e}): {raw!r}", flush=True)
+			return 1
+		args.models = str(element.get("model") or "")
+		thinking_mode = str(element.get("thinking") or "default")
 
 	models = ([m.strip() for m in args.models.split(",") if m.strip()] if args.models else []) or (PRIORITY_ROSTER if args.matrix else [])
 	if not models:
@@ -263,12 +302,52 @@ def main() -> int:
 		return 1
 	_guard_python_path(models, args.allow_cpu)
 
+	if args.matrix and not args.no_isolate:
+		# Aislamiento por modelo: un proceso por modelo (contexto CUDA limpio).
+		# Sin esto, cargar varios modelos python en el mismo proceso acumula
+		# VRAM y el prefill largo aborta (VMM pool; job c87b2393, 2026-10-08).
+		import subprocess
+
+		rc_all = 0
+		for model in models:
+			cmd = [sys.executable, str(Path(__file__).resolve()), "--models", model, "--thinking", thinking_mode, "--out", args.out, "--no-isolate"]
+			if args.quick:
+				cmd.append("--quick")
+			print(f"\n===== aislado: {model} =====", flush=True)
+			rc_all |= subprocess.run(cmd, cwd=str(REPO)).returncode
+		return rc_all
+
+	out_dir = Path(args.out)
+	out_dir.mkdir(parents=True, exist_ok=True)
+	stamp = time.strftime("%Y-%m-%d")
+	md = out_dir / f"{stamp}-BENCHSET-{BENCHSET_VERSION}.md"
+	jsonl_path = md.with_suffix(".jsonl")
+
 	records = []
+	load_failures: list = []
 	for model in models:
 		try:
 			runner = runner_for(model)
 		except Exception as e:
 			print(f"[{model}] no se pudo levantar: {e}", flush=True)
+			load_failures.append(model)
+			with jsonl_path.open("a", encoding="utf-8") as f:
+				f.write(
+					json.dumps(
+						{
+							"benchset": BENCHSET_VERSION,
+							"model": model,
+							"variant": "default",
+							"task": "__load__",
+							"valid": False,
+							"latency_s": 0.0,
+							"load_s": 0.0,
+							"details": {"error": str(e)},
+						},
+						ensure_ascii=False,
+					)
+					+ "\n"
+				)
 			continue
 		try:
 			resolved = getattr(runner, "resolved", None)
@@ -279,7 +358,7 @@ def main() -> int:
 			if hasattr(runner, "llm") and ctx:
 				ctx = min(ctx, 16384)
 			probes = build_benchset(args.quick, ctx)
-			for mode in _variants_for(runner, args.thinking):
+			for mode in _variants_for(runner, thinking_mode):
 				_apply_thinking_variant(runner, mode)
 				label = f"{model}/{mode or 'default'}"
 				print(f"\n##### {label} (ctx={ctx}, kv={getattr(runner, 'kv_type', '?')}, load={runner.load_time_s:.1f}s) #####", flush=True)
@@ -287,26 +366,46 @@ def main() -> int:
 					res = runner.run(probe)
 					ok = res.validation.get("valid")
 					print(f"  [{probe.name}] {'✓' if ok else '✗'} {res.latency_s:.1f}s {res.validation}", flush=True)
-					records.append(
-						{
-							"benchset": BENCHSET_VERSION,
-							"model": model,
-							"variant": mode or "default",
-							"task": probe.name,
-							"valid": bool(ok),
-							"latency_s": round(res.latency_s, 2),
-							"load_s": round(runner.load_time_s, 2),
-							"details": res.validation,
-						}
-					)
+					record = {
+						"benchset": BENCHSET_VERSION,
+						"model": model,
+						"variant": mode or "default",
+						"task": probe.name,
+						"valid": bool(ok),
+						"latency_s": round(res.latency_s, 2),
+						"load_s": round(runner.load_time_s, 2),
+						"details": res.validation,
+					}
+					records.append(record)
+					# Escritura incremental: un abort no debe perder lo ya medido.
+					with jsonl_path.open("a", encoding="utf-8") as f:
+						f.write(json.dumps(record, ensure_ascii=False) + "\n")
 				runner.results.clear()
 		finally:
 			runner.close()
 
-	out_dir = Path(args.out)
-	out_dir.mkdir(parents=True, exist_ok=True)
-	stamp = time.strftime("%Y-%m-%d")
-	md = out_dir / f"{stamp}-BENCHSET-{BENCHSET_VERSION}.md"
+	def _record_key(r: dict):
+		return (r.get("model"), r.get("variant"), r.get("task"))
+
+	merged: list = []
+	if jsonl_path.exists():
+		for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+			line = line.strip()
+			if not line:
+				continue
+			try:
+				merged.append(json.loads(line))
+			except Exception:
+				pass
+	by_key = {_record_key(r): r for r in merged}
+	for r in records:
+		by_key[_record_key(r)] = r
+	all_records = sorted(by_key.values(), key=lambda r: (str(r.get("model")), str(r.get("variant")), str(r.get("task"))))
+	with jsonl_path.open("w", encoding="utf-8") as f:
+		for r in all_records:
+			f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+	tasks = sorted({r["task"] for r in all_records})
 	lines = [
 		f"# BENCHSET local {BENCHSET_VERSION} — {time.strftime('%Y-%m-%d %H:%M')}",
 		"",
@@ -314,12 +413,11 @@ def main() -> int:
 		"> recuperación en contexto largo, síntesis con hechos). Benchset sintético y",
 		"> FIJO — reproducible. Medidas del PUESTO DE REFERENCIA: recalibrar por equipo.",
 		"",
-		"| modelo/variante | " + " | ".join(sorted({r['task'] for r in records})) + " |",
-		"|---|" + "---|" * len({r["task"] for r in records}),
+		"| modelo/variante | " + " | ".join(tasks) + " |",
+		"|---|" + "---|" * len(tasks),
 	]
-	tasks = sorted({r["task"] for r in records})
 	by_label: dict = {}
-	for r in records:
+	for r in all_records:
 		by_label.setdefault(f"{r['model']}/{r['variant']}", {})[r["task"]] = r
 	for label, row in by_label.items():
 		cells = []
@@ -328,11 +426,8 @@ def main() -> int:
 			cells.append("—" if not r else ("✓" if r["valid"] else "✗") + f" {r['latency_s']:.0f}s")
 		lines.append(f"| {label} | " + " | ".join(cells) + " |")
 	md.write_text("\n".join(lines) + "\n", encoding="utf-8")
-	with md.with_suffix(".jsonl").open("w", encoding="utf-8") as f:
-		for r in records:
-			f.write(json.dumps(r, ensure_ascii=False) + "\n")
 	print(f"\n[out] {md}", flush=True)
-	return 0
+	return 2 if load_failures and not records else 0
 
 
 if __name__ == "__main__":

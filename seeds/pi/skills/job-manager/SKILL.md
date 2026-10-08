@@ -17,6 +17,7 @@ Este skill enseña al Agente a usar el gestor centralizado de trabajos de Red-Pi
 | Necesita respuesta AHORA en esta sesión (chat, lint rápido) | **NO es un job** — in-process: `GruOrchestrator.deploy_swarm()` (con `await` si esperas el resultado) |
 | Puede esperar al próximo minuto y sobrevivir a reinicios (entrenamiento, re-síntesis, flows largos, investigación) | **Job diferido** → esta skill |
 | Es una nota/exploración para el despertar autónomo ("investiga X") | **NO uses sources de drivers** — carril cognitivo: `enqueue_task(source="drive_evaluator", ...)` |
+| Es un **MAP sobre N elementos independientes** (modelos, ficheros, sesiones, benchmarks…) | **Granulariza**: `element_job` (`_TEMPLATE_element_job.yaml`) — UN step = UN elemento, checkpoint por elemento, fallo de elemento → `skip_exit_code` (registrar y seguir) |
 
 Regla de oro: por CLI **todo es diferido**. No existe `--mode` — un "inmediato" encolado sería mentira (esperaría al timer).
 

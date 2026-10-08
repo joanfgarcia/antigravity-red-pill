@@ -1,17 +1,21 @@
-# BENCHSET local v1 — elenco prioritario (RFC-HARNESS-003 corte 6).
+# BENCHSET local v1 — MAP por elemento (modelo × variante), fail-soft (RFC-HARNESS-003 corte 6).
 #
-# Corre desde el worktree del piloto (código aún sin merge): PYTHONPATH=src.
+# UN step = UN elemento (15): reanudable por frontera de elemento (pause/resume),
+# watchdog por elemento, y un modelo que falla NO tumba el job: el wrapper
+# registra el fallo en failures.jsonl y sale con skip_exit_code (79, sin retry)
+# → la cola marca el elemento como saltado y sigue.
+# Corre desde el worktree del piloto (código sin merge): PYTHONPATH=src.
 # SALIDA al desk: los datos medidos son nuestros; el repo lleva las TOOLS.
-# Daemon parado durante el bench (VRAM) y restaurado al salir — patrón de los
-# bake-offs (bakeoff_granite_42). El runner de la cola se autopausa con el sueño.
-source: script_job
+source: element_job
 priority: 5
-title: Benchset local v1 — elenco prioritario (thinking both)
+title: Benchset local v1 — elenco prioritario (element_job, fail-soft)
 mission_id: benchset-v1
-step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; cd /home/joan/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src /home/joan/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --matrix --thinking both --out /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; exit $rc']
+elements_command: ["sh", "-c", 'cd /home/joan/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src /home/joan/.local/share/red-pill/llmtools-venv/bin/python scripts/bench_local.py --list-models']
+step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; cd /home/joan/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src /home/joan/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --element --out /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; if [ $rc -ne 0 ]; then mkdir -p /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; echo "$RP_ELEMENT rc=$rc" >> /home/joan/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/failures.jsonl; exit 79; fi; exit 0']
+skip_exit_code: 79
 progress:
   mode: single
 control:
-  max_step_minutes: 300
+  max_step_minutes: 45
 preflight:
   memory_max: 16G
