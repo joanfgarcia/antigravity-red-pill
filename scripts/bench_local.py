@@ -273,6 +273,11 @@ def main() -> int:
 		try:
 			resolved = getattr(runner, "resolved", None)
 			ctx = getattr(runner, "ctx", None) or (resolved.resolved_n_ctx() if resolved is not None else None)
+			# Camino python (llama-cpp-python): cap de ctx a 16384 — espeja el
+			# serving real del daemon y evita picos de VRAM en prefill largo
+			# (abort del VMM pool observado en el job c87b2393, 2026-10-08).
+			if hasattr(runner, "llm") and ctx:
+				ctx = min(ctx, 16384)
 			probes = build_benchset(args.quick, ctx)
 			for mode in _variants_for(runner, args.thinking):
 				_apply_thinking_variant(runner, mode)
