@@ -1,6 +1,43 @@
 import math
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+
+def _safe_float(value: Any, default: float) -> float:
+	"""Guards payload numerics: NaN/Inf/garbage fall back to `default`."""
+	try:
+		result = float(value)
+	except (TypeError, ValueError):
+		return default
+	return result if math.isfinite(result) else default
+
+
+def _coerce_timestamp(value: Any, default: float) -> float:
+	"""Robust epoch-seconds coercion for payload timestamps.
+
+	Accepts int/float/str epochs and ISO-8601 strings, normalizes millisecond
+	epochs and falls back to `default` for anything corrupt (never raises).
+	"""
+	if isinstance(value, bool):
+		return default
+	ts: Optional[float] = None
+	if isinstance(value, (int, float)):
+		ts = float(value)
+	elif isinstance(value, str):
+		try:
+			ts = float(value)
+		except ValueError:
+			try:
+				from datetime import datetime
+
+				ts = datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+			except (ValueError, TypeError):
+				return default
+	if ts is None or not math.isfinite(ts):
+		return default
+	if abs(ts) >= 1e11:
+		ts /= 1000.0
+	return ts
 
 
 class MemoryEngine(ABC):
@@ -46,9 +83,9 @@ class FSRSEngine(MemoryEngine):
 		return math.exp(power)
 
 	def calculate_lazy_decay(self, payload: Dict[str, Any], current_time: float) -> Dict[str, Any]:
-		last_recalled = float(payload.get("last_recalled_at", current_time))
-		score = float(payload.get("reinforcement_score", 1.0))
-		stability = float(payload.get("stability", 1.0))  # S in days
+		last_recalled = _coerce_timestamp(payload.get("last_recalled_at"), current_time)
+		score = max(_safe_float(payload.get("reinforcement_score"), 1.0), 0.0)
+		stability = _safe_float(payload.get("stability"), 1.0)  # S in days
 
 		time_passed_seconds = max(0.0, current_time - last_recalled)
 		time_passed_days = time_passed_seconds / 86400.0
@@ -67,8 +104,9 @@ class FSRSEngine(MemoryEngine):
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
 		# Advanced FSRS typically updates Stability based on Retrieval (R)
 		# For now, we apply a simplistic stability increase based on the increment
-		score = float(payload.get("reinforcement_score", 1.0))
-		stability = float(payload.get("stability", 1.0))
+		score = max(_safe_float(payload.get("reinforcement_score"), 1.0), 0.0)
+		stability = _safe_float(payload.get("stability"), 1.0)
+		increment = _safe_float(increment, 0.0)
 
 		new_score = min(score + increment, 1.0)
 		# Increase stability (S) slightly upon retrieval (this delays future decay)
@@ -91,9 +129,9 @@ class BayesianEngine(MemoryEngine):
 		self.deletion_threshold = deletion_threshold
 
 	def calculate_lazy_decay(self, payload: Dict[str, Any], current_time: float) -> Dict[str, Any]:
-		alpha = float(payload.get("utility_alpha", 1.0))
-		beta = float(payload.get("utility_beta", 1.0))
-		last_recalled = float(payload.get("last_recalled_at", current_time))
+		alpha = max(0.0, _safe_float(payload.get("utility_alpha"), 1.0))
+		beta = max(0.0, _safe_float(payload.get("utility_beta"), 1.0))
+		last_recalled = _coerce_timestamp(payload.get("last_recalled_at"), current_time)
 
 		time_passed_seconds = max(0.0, current_time - last_recalled)
 		time_passed_days = time_passed_seconds / 86400.0
@@ -103,7 +141,8 @@ class BayesianEngine(MemoryEngine):
 		new_beta = beta + math.log1p(time_passed_days)
 
 		# Utility (Expected value): α / (α + β)
-		utility = alpha / (alpha + new_beta)
+		denominator = alpha + new_beta
+		utility = (alpha / denominator) if denominator > 0 else 0.0
 
 		# Normalize utility (which converges to 0.0 as β -> ∞) to the reinforcement_score scale
 		new_score = utility
@@ -117,8 +156,9 @@ class BayesianEngine(MemoryEngine):
 		return {}
 
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
-		alpha = float(payload.get("utility_alpha", 1.0))
-		beta = float(payload.get("utility_beta", 1.0))
+		alpha = max(0.0, _safe_float(payload.get("utility_alpha"), 1.0))
+		beta = max(0.0, _safe_float(payload.get("utility_beta"), 1.0))
+		increment = _safe_float(increment, 0.0)
 		content = payload.get("content", "")
 
 		# v6.3.8: Content Quality Gate (Anti-Noise Feedback Loop)
@@ -166,9 +206,12 @@ class RhizoDBEngine(MemoryEngine):
 		self.lambda_constant = -math.log(0.9)
 
 	def calculate_lazy_decay(self, payload: Dict[str, Any], current_time: float) -> Dict[str, Any]:
-		last_recalled = float(payload.get("last_recalled_at", current_time))
-		score = float(payload.get("reinforcement_score", 1.0))
-		stability = float(payload.get("stability", 1.0))
+		last_recalled = _coerce_timestamp(payload.get("last_recalled_at"), current_time)
+		score = max(_safe_float(payload.get("reinforcement_score"), 1.0), 0.0)
+		stability = _safe_float(payload.get("stability"), 1.0)
+
+		if stability <= 0:
+			return {"_delete": True, "score": 0.0, "stability": stability}
 
 		time_passed_seconds = max(0.0, current_time - last_recalled)
 		time_passed_days = time_passed_seconds / 86400.0
@@ -189,11 +232,11 @@ class RhizoDBEngine(MemoryEngine):
 		return {}
 
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
-		score = float(payload.get("reinforcement_score", 1.0))
-		stability = float(payload.get("stability", 1.0))
+		score = max(_safe_float(payload.get("reinforcement_score"), 1.0), 0.0)
+		stability = max(0.0, _safe_float(payload.get("stability"), 1.0))
 
 		# increment maps to alpha (external stimulation force)
-		alpha = max(0.0, min(increment, 1.0))
+		alpha = max(0.0, min(_safe_float(increment, 0.0), 1.0))
 
 		# 1. Asymptotic Saturated Activation Update
 		new_score = score + (1.0 - score) * alpha

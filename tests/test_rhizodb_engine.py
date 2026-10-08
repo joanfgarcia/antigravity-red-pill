@@ -1,4 +1,6 @@
 import math
+import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -196,3 +198,81 @@ def test_abstract_memory_engine_methods():
 	# Directly invoke the abstract methods to execute their pass statements
 	MemoryEngine.calculate_lazy_decay(None, {}, 0.0)
 	MemoryEngine.calculate_reinforcement(None, {}, 0.0)
+
+
+# 6. Payload hardening (NaN/Inf, corrupt/ISO/millisecond timestamps)
+def test_rhizodb_nonfinite_fields_fall_back_to_defaults():
+	engine = RhizoDBEngine()
+	now = time.time()
+	payload = {
+		"reinforcement_score": float("nan"),
+		"stability": float("inf"),
+		"last_recalled_at": now - 10.0 * 86400.0,
+	}
+	updates = engine.calculate_lazy_decay(payload, now)
+	# NaN score -> 1.0, Inf stability -> 1.0 day: e^(-lambda * 10/1)
+	assert updates["reinforcement_score"] == pytest.approx(math.exp(-engine.lambda_constant * 10.0), abs=0.01)
+
+
+def test_rhizodb_timestamps_iso_numeric_string_and_milliseconds():
+	engine = RhizoDBEngine()
+	now = time.time()
+	base = {"reinforcement_score": 1.0, "stability": 10.0}
+	iso = datetime.fromtimestamp(now - 10.0 * 86400.0, tz=timezone.utc).isoformat()
+	ms = (now - 10.0 * 86400.0) * 1000.0
+	for stamp in (iso, ms, str(now - 10.0 * 86400.0)):
+		updates = engine.calculate_lazy_decay({**base, "last_recalled_at": stamp}, now)
+		assert updates["reinforcement_score"] == pytest.approx(0.9, abs=0.01)
+
+
+def test_rhizodb_corrupt_timestamp_does_not_crash():
+	engine = RhizoDBEngine()
+	now = time.time()
+	base = {"reinforcement_score": 1.0, "stability": 10.0}
+	assert engine.calculate_lazy_decay({**base, "last_recalled_at": "not-a-date"}, now) == {}
+	assert engine.calculate_lazy_decay({**base, "last_recalled_at": None}, now) == {}
+	assert engine.calculate_lazy_decay({**base, "last_recalled_at": True}, now) == {}
+
+
+def test_rhizodb_negative_stability_is_forgotten():
+	engine = RhizoDBEngine()
+	now = time.time()
+	updates = engine.calculate_lazy_decay({"reinforcement_score": 0.8, "stability": -5.0, "last_recalled_at": now - 86400.0}, now)
+	assert updates.get("_delete") is True
+
+
+def test_rhizodb_curated_score_above_one_is_preserved():
+	engine = RhizoDBEngine()
+	now = time.time()
+	updates = engine.calculate_lazy_decay({"reinforcement_score": 5.0, "stability": 10.0, "last_recalled_at": now - 10.0 * 86400.0}, now)
+	assert updates["reinforcement_score"] == pytest.approx(4.5, abs=0.01)
+
+
+def test_rhizodb_reinforce_nonfinite_inputs():
+	engine = RhizoDBEngine()
+	updates = engine.calculate_reinforcement({"reinforcement_score": float("nan"), "stability": float("nan")}, increment=0.5)
+	# score NaN -> 1.0 (nothing left to reinforce), stability NaN -> 1.0 day
+	assert updates["reinforcement_score"] == 1.0
+	assert updates["stability"] == pytest.approx(19.2, abs=0.01)
+
+
+def test_fsrs_nan_stability_decays_instead_of_immortal():
+	engine = FSRSEngine()
+	now = time.time()
+	updates = engine.calculate_lazy_decay({"reinforcement_score": 0.8, "stability": float("nan"), "last_recalled_at": now - 10.0 * 86400.0}, now)
+	assert updates["reinforcement_score"] == pytest.approx(0.8 * math.exp(math.log(0.9) * 10.0), abs=0.01)
+
+
+def test_bayesian_nonfinite_inputs_fall_back():
+	engine = BayesianEngine()
+	now = time.time()
+	updates = engine.calculate_lazy_decay({"utility_alpha": float("nan"), "utility_beta": float("inf"), "last_recalled_at": now - 86400.0}, now)
+	# alpha NaN -> 1.0, beta Inf -> 1.0: beta_new = 1 + ln(2) -> utility = 1 / (2 + ln(2))
+	assert updates["reinforcement_score"] == pytest.approx(0.371, abs=0.01)
+
+
+def test_bayesian_zero_prior_does_not_divide_by_zero():
+	engine = BayesianEngine()
+	now = time.time()
+	updates = engine.calculate_lazy_decay({"utility_alpha": 0.0, "utility_beta": 0.0, "last_recalled_at": now}, now)
+	assert updates.get("_delete") is True
