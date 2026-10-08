@@ -13,7 +13,7 @@ priority: 5
 title: Benchset local v1 — elenco prioritario (element_job, fail-soft)
 mission_id: benchset-v1
 elements_command: ["sh", "-c", 'cd $HOME/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src $HOME/.local/share/red-pill/llmtools-venv/bin/python scripts/bench_local.py --list-models']
-step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; cd $HOME/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src $HOME/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --element --out $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; if [ $rc -ne 0 ]; then mkdir -p $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; echo "$RP_ELEMENT rc=$rc" >> $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/failures.jsonl; exit 79; fi; exit 0']
+step_command: ["sh", "-c", 'systemctl --user stop redpill-llm.service >/dev/null 2>&1; sleep 2; cd $HOME/Documents/IA/worktrees/red-pill/harness003-runtime && env PYTHONPATH=src $HOME/.local/share/red-pill/llmtools-venv/bin/python -u scripts/bench_local.py --element --out $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; rc=$?; systemctl --user start redpill-llm.service >/dev/null 2>&1; if [ $rc -ne 0 ]; then mkdir -p $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset; echo "$RP_ELEMENT rc=$rc" >> $HOME/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/failures.jsonl; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single

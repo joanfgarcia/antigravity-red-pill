@@ -78,6 +78,7 @@ class ResolvedModel:
 	profile_name: str
 	model_path: str
 	chat_format: Optional[str] = None  # None = template nativo del GGUF
+	chat_template_file: Optional[str] = None  # plantilla jinja del perfil (gana al template embebido)
 	minion_chat_format: Optional[str] = None
 	tool_format: str = "auto"
 	thinking: str = "off"
@@ -220,6 +221,7 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		profile_name=name,
 		model_path=_resolve_profile_file(profile, name),
 		chat_format=profile.get("chat_format"),
+		chat_template_file=profile.get("chat_template_file"),
 		minion_chat_format=profile.get("minion_chat_format"),
 		tool_format=_normalize_tool_format(profile.get("tool_format", "auto")),
 		thinking=thinking,

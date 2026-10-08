@@ -96,6 +96,12 @@ class BattleRunner:
 		kwargs = dict(model_path=gguf_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, verbose=False)
 		if chat_format:
 			kwargs["chat_format"] = chat_format
+		if resolved is not None:
+			from red_pill.core import model_runtime as mr
+
+			# MEM-009 D5: sin FA el scratch de prefill agota el headroom en estos
+			# perfiles (Failed to create llama_context); el perfil lo declara.
+			kwargs["flash_attn"] = mr.effective_flash_attn(resolved, "gpu")
 		self.llm = Llama(**kwargs)
 		self.load_time_s = time.time() - t0
 		# RFC-HARNESS-003 corte 4: la conducta del modelo (handlers thinking,

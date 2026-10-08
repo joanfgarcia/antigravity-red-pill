@@ -15,6 +15,7 @@ deciden qué modo pedir.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import red_pill.core.model_runtime as mr
@@ -120,6 +121,47 @@ def _native_chat_format(llm: Any) -> str:
 	return LLAMA_CPP_DEFAULT_FORMAT
 
 
+def register_file_template(llm: Any, resolved: mr.ResolvedModel) -> Optional[str]:
+	"""Registra el `chat_template_file` del perfil como handler (una vez por llm).
+
+	El template embebido del GGUF puede estar roto (jinja con `selectattr`, p.ej.
+	Mistral-Nemo mradermacher); el perfil declara su plantilla simple y aquí se
+	convierte en handler de llama-cpp-python — misma vía para daemon y runners.
+	"""
+	tpl_ref = getattr(resolved, "chat_template_file", None)
+	if not tpl_ref:
+		return None
+	name = f"profile-template-{resolved.profile_name}"
+	if getattr(llm, "_rp_file_template_registered", None) == name:
+		return name
+	try:
+		from llama_cpp.llama_chat_format import Jinja2ChatFormatter, register_chat_format
+
+		from red_pill.core.paths import get_bunker_root
+
+		tpl_path = Path(tpl_ref)
+		if not tpl_path.is_absolute():
+			tpl_path = get_bunker_root() / tpl_path
+		template = tpl_path.read_text(encoding="utf-8")
+		eos_id = llm.token_eos()
+		eos_str = llm._model.token_get_text(eos_id) if hasattr(llm._model, "token_get_text") else "<|im_end|>"
+
+		def fmt(*, messages: list, **kw: Any) -> Any:
+			return Jinja2ChatFormatter(template=template, eos_token=eos_str, bos_token="<s>", stop_token_ids=[eos_id])(messages=messages, **kw)
+
+		register_chat_format(name)(fmt)
+		llm._rp_file_template_registered = name
+		logger.info("chat handler '%s' registrado desde %s", name, tpl_path)
+		return name
+	except Exception as e:
+		if "already registered" in str(e):
+			# Registro global previo (mismo nombre, otro llm en el proceso): se reutiliza.
+			llm._rp_file_template_registered = name
+			return name
+		logger.error("no se pudo registrar el chat_template_file de '%s': %s", resolved.profile_name, e)
+		return None
+
+
 def apply_chat_handler(llm: Any, resolved: mr.ResolvedModel, body: Optional[Dict[str, Any]] = None) -> None:
 	"""Aplica el chat handler / chat_format correcto según la request.
 
@@ -140,6 +182,16 @@ def apply_chat_handler(llm: Any, resolved: mr.ResolvedModel, body: Optional[Dict
 	# model then answers in prose, or invents a tool and fabricates its output.
 	if wants_tools:
 		llm.chat_format = tool_chat_format(resolved.minion_chat_format, bool(resolved.extra.get("thinking_supported")), thinking)
+		return
+
+	# Override explícito del body, y luego la plantilla declarada por el perfil
+	# (chat_template_file): el template embebido roto no debe decidir nunca.
+	if body.get("chat_format"):
+		llm.chat_format = body["chat_format"]
+		return
+	file_handler = register_file_template(llm, resolved)
+	if file_handler:
+		llm.chat_format = file_handler
 		return
 
 	if handler_name and explicit is None and resolved.extra.get("thinking_supported"):

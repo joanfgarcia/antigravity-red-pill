@@ -87,6 +87,48 @@ class TestApplyPython:
 		assert kw["temperature"] == 0.3
 
 
+class TestFileTemplate:
+	def test_register_and_apply(self, monkeypatch, tmp_path):
+		from types import SimpleNamespace
+
+		import llama_cpp.llama_chat_format as lcf
+
+		from red_pill.inference import runtime as ir
+
+		registered = {}
+
+		def fake_register(name):
+			def deco(fn):
+				registered[name] = fn
+				return fn
+
+			return deco
+
+		monkeypatch.setattr(lcf, "register_chat_format", fake_register)
+		tpl = tmp_path / "simple.jinja"
+		tpl.write_text("{{ messages[0]['content'] }}", encoding="utf-8")
+		llm = SimpleNamespace(token_eos=lambda: 2, _model=SimpleNamespace(token_get_text=lambda i: "<|im_end|>"))
+		resolved = _resolved(chat_template_file=str(tpl))
+
+		name = ir.register_file_template(llm, resolved)
+		assert name == "profile-template-x"
+		assert name in registered
+
+		ir.apply_chat_handler(llm, resolved, {})
+		assert llm.chat_format == name
+
+		ir.apply_chat_handler(llm, resolved, {"chat_format": "chatml"})
+		assert llm.chat_format == "chatml"
+
+	def test_no_template_file_noop(self):
+		from types import SimpleNamespace
+
+		from red_pill.inference import runtime as ir
+
+		llm = SimpleNamespace()
+		assert ir.register_file_template(llm, _resolved()) is None
+
+
 class TestResolvePropagation:
 	def _setup(self, monkeypatch):
 		import red_pill.core.model_runtime as mr
@@ -103,6 +145,7 @@ class TestResolvePropagation:
 					"thinking": "on",
 					"reasoning_effort": "medium",
 					"sampling": {"top_p": 0.95},
+					"chat_template_file": "configs/chat_templates/probe.jinja",
 					"license": {
 						"id": "apache-2.0",
 						"commercial_ok": True,
@@ -121,6 +164,7 @@ class TestResolvePropagation:
 		resolved = mr.resolve({"model": "probe_model"})
 		assert resolved.reasoning_effort == "medium"
 		assert resolved.sampling == {"top_p": 0.95}
+		assert resolved.chat_template_file == "configs/chat_templates/probe.jinja"
 
 	def test_body_overrides_merge(self, monkeypatch):
 		mr = self._setup(monkeypatch)
