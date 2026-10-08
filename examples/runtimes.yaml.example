@@ -45,3 +45,13 @@ runtimes:
     quirks:
       notes: "PUESTO DE REFERENCIA (recalibrar): 8 GB VRAM → -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
     status: active
+
+  # ── Otro engine de familia distinta (ejemplo): BitNet b1.58 ─────────────
+  # Cualquier engine con build propio se registra igual y los perfiles se
+  # anclan con `runtime: <id>`. Las variantes por backend de un mismo engine
+  # (cuda/vulkan/cpu) hoy se documentan en el perfil como referencia
+  # calibrada del puesto (ver `falcon.backends` en model_profiles.yaml).
+  # llama_cpp_bitnet:
+  #   kind: llama_cpp_fork
+  #   binary: "3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli"
+  #   capabilities: {quant_types: ["i2_s", "tl1", "tl2"]}

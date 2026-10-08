@@ -180,3 +180,93 @@ def stop_daemon_if_active(unit: str = "redpill-llm.service") -> None:
 
 def start_daemon_if_inactive(unit: str = "redpill-llm.service") -> None:
 	os.system(f"systemctl --user start {unit} >/dev/null 2>&1")
+
+
+class RuntimeBattleRunner:
+	"""BattleRunner sobre el runtime anclado del perfil (RFC-HARNESS-003).
+
+	Sirve por el RuntimeServer dedicado (llama-server del runtime declarado —
+	p.ej. fork PrismML para ternarios) en vez de llama-cpp-python. Mismo
+	contrato que BattleRunner: run(probe) → BattleResult, run_all, close.
+	"""
+
+	def __init__(
+		self,
+		model_name: str,
+		n_ctx: Optional[int] = None,
+		extra_args: Optional[list[str]] = None,
+		unload_daemon: bool = True,
+	):
+		from red_pill.inference.runtime_server import RuntimeServer
+
+		self.model_name = model_name
+		self.chat_format = None
+		self._server = RuntimeServer(model_name, ctx=n_ctx, extra_args=extra_args, unload_daemon=unload_daemon)
+		t0 = time.time()
+		self._server.start()
+		self.load_time_s = time.time() - t0
+		self.kv_type = self._server.kv_type
+		self.ctx = self._server.ctx
+		self.results: list[BattleResult] = []
+
+	def run(self, probe: Probe) -> BattleResult:
+		t0 = time.time()
+		try:
+			resp = self._server.chat(
+				messages=[
+					{"role": "system", "content": probe.system_prompt},
+					{"role": "user", "content": probe.user_message},
+				],
+				max_tokens=probe.max_tokens,
+				temperature=probe.temperature,
+			)
+			raw = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+		except Exception as e:
+			raw = f"<<error: {e}>>"
+		dt = time.time() - t0
+		validation = {}
+		try:
+			validation = probe.validator(raw)
+		except Exception as e:
+			validation = {"valid": False, "error": f"validator crashed: {e}"}
+		res = BattleResult(model=self.model_name, probe_name=probe.name, latency_s=dt, raw_output=raw, validation=validation)
+		self.results.append(res)
+		return res
+
+	def run_all(self, probes: list[Probe]) -> list[BattleResult]:
+		print(f"\n##### {self.model_name} (runtime dedicado, kv={self.kv_type}, ctx={self.ctx}) #####", flush=True)
+		print(f"loaded in {self.load_time_s:.1f}s", flush=True)
+		for p in probes:
+			r = self.run(p)
+			print(BattleRunner._fmt_line(r), flush=True)
+		return self.results
+
+	def close(self) -> None:
+		self._server.stop()
+
+
+def runner_for(
+	model_name: str,
+	*,
+	gguf_path: Optional[str] = None,
+	n_ctx: Optional[int] = None,
+	chat_format: Optional[str] = None,
+	n_gpu_layers: int = -1,
+	use_mmap: bool = False,
+	extra_args: Optional[list[str]] = None,
+):
+	"""Factory runtime-aware (RFC-HARNESS-003): RuntimeBattleRunner para perfiles
+	con runtime declarado no-default; BattleRunner clásico (llama-cpp-python)
+	para el resto. El modelo no-default no tiene camino python (fallo limpio)."""
+	from red_pill.core.model_registry import ModelRegistry
+	from red_pill.core.runtime_registry import RuntimeRegistry
+
+	profile = ModelRegistry.get_profile(model_name) or {}
+	runtime_id = profile.get("runtime")
+	if runtime_id and runtime_id != RuntimeRegistry.default_id():
+		return RuntimeBattleRunner(model_name, n_ctx=n_ctx, extra_args=extra_args)
+	if not gguf_path:
+		gguf_path = profile.get("model_path")
+	if not gguf_path:
+		raise ValueError(f"sin gguf_path para '{model_name}' (perfil no resuelto)")
+	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=n_ctx or 6144, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap)
