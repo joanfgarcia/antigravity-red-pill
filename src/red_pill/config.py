@@ -318,6 +318,14 @@ class RedPillConfig(BaseSettings):
 	EMOTIONAL_SEED_FACTOR: float = 3.0
 	MAX_PROPAGATION_POINTS: int = 20
 	MAX_AXONS: int = 500
+	# RhizoDB washout (ciclo de sueño). `gamma` se atenúa por el tiempo
+	# transcurrido desde el último washout de la colección (cap: reference_days),
+	# de modo que una doble corrida no poda dos veces la misma franja temporal.
+	RHIZODB_WASHOUT_GAMMA: float = 0.85
+	RHIZODB_WASHOUT_REFERENCE_DAYS: float = 1.0
+	RHIZODB_S_MAX: float = 365.0
+	RHIZODB_PRUNE_MIN_ACTIVATION: float = 0.1
+	RHIZODB_PRUNE_MAX_STABILITY_DAYS: float = 5.0
 	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
 	# única: todo writer/merger que componga metadata deriva de aquí con margen
 	# (p. ej. situation_semaphore usa MAX_METADATA_STR - _META_MARGIN).
@@ -342,6 +350,27 @@ class RedPillConfig(BaseSettings):
 	def _validate_propagation_factor(cls, v: float) -> float:
 		if not (0 <= v <= 1.0):
 			raise ValueError(f"PROPAGATION_FACTOR must be between 0 and 1: {v}")
+		return v
+
+	@field_validator("RHIZODB_WASHOUT_GAMMA")
+	@classmethod
+	def _validate_rhizodb_washout_gamma(cls, v: float) -> float:
+		if not (0 < v <= 1.0):
+			raise ValueError(f"RHIZODB_WASHOUT_GAMMA must be in (0, 1]: {v}")
+		return v
+
+	@field_validator("RHIZODB_WASHOUT_REFERENCE_DAYS", "RHIZODB_S_MAX", "RHIZODB_PRUNE_MAX_STABILITY_DAYS")
+	@classmethod
+	def _validate_rhizodb_positive_days(cls, v: float) -> float:
+		if v <= 0:
+			raise ValueError(f"RhizoDB day-scales must be > 0: {v}")
+		return v
+
+	@field_validator("RHIZODB_PRUNE_MIN_ACTIVATION")
+	@classmethod
+	def _validate_rhizodb_prune_min_activation(cls, v: float) -> float:
+		if not (0 <= v <= 1.0):
+			raise ValueError(f"RHIZODB_PRUNE_MIN_ACTIVATION must be in [0, 1]: {v}")
 		return v
 
 	# -----------------------------------------------------------------------
