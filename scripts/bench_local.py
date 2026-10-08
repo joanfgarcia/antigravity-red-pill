@@ -5,18 +5,18 @@ Mide lo que de verdad usamos — tratamiento y síntesis de texto CON GARANTÍAS
 no IQ genérico. Todo el benchset es SINTÉTICO y FIJO (reproducible, sin datos
 privados): así cualquier equipo lo corre igual y las comparaciones son justas.
 
-- `contract_json_*`  : diálogo → engrama JSON estricto (prompt de producción
-                       distiller_v3_voice MODE B): clave JSON válida, taxonomía
-                       de emoción, categoría, lang, deixis (sin 2ª persona),
-                       entidades intactas (códigos/marcas) y relics VERBATIM.
-- `needle_<N>k`      : dato único dentro de un texto largo (seed fija) →
-                       recuperación fiel en contexto largo.
-- `synthesis_es`     : informe sintético con 8 hechos → resumen de 3 frases;
-                       mide cobertura de hechos, formato y brevedad.
+Tareas:
+- contract_json_*: diálogo → engrama JSON estricto (prompt de producción
+distiller_v3_voice MODE B): clave JSON válida, taxonomía de emoción,
+categoría, lang, deixis (sin 2ª persona), entidades intactas y relics VERBATIM.
+- needle_<N>k: dato único dentro de un texto largo (seed fija) → recuperación
+fiel en contexto largo.
+- synthesis_es: informe sintético con 8 hechos → resumen de 3 frases; mide
+cobertura de hechos, formato y brevedad.
 
-Uso:
-  PYTHONPATH=src python scripts/bench_local.py --models bonsai_2_27b,granite_4_2_8b --quick
-  PYTHONPATH=src python scripts/bench_local.py --matrix --thinking both
+Uso (venv con llama-cpp-python CUDA para modelos stock):
+PYTHONPATH=src python scripts/bench_local.py --models bonsai_2_27b --quick
+PYTHONPATH=src python scripts/bench_local.py --matrix --thinking both
 Salida: <out>/<fecha>-BENCHSET.md + .jsonl (medidas del PUESTO — recalibrar).
 """
 
