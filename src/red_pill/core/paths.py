@@ -447,6 +447,17 @@ def get_task_profiles_path() -> Path:
 	return get_config_dir() / "task_profiles.yaml"
 
 
+def get_runtimes_path() -> Path:
+	"""Ruta del registro de runtimes de inferencia ($XDG_CONFIG_HOME/red-pill/runtimes.yaml).
+
+	RFC-HARNESS-003: catálogo de engines instalados (stock, forks de llama.cpp,
+	bitnet, npu...) al que los perfiles de modelo se anclan vía `runtime: <id>`.
+	Se siembra (copy-if-absent) desde examples/runtimes.yaml.example en
+	install/update (mismo patrón que task_profiles).
+	"""
+	return get_config_dir() / "runtimes.yaml"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 
