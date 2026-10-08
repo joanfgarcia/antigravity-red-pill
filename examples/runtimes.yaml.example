@@ -46,12 +46,22 @@ runtimes:
       notes: "PUESTO DE REFERENCIA (recalibrar): 8 GB VRAM → -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
     status: active
 
-  # ── Otro engine de familia distinta (ejemplo): BitNet b1.58 ─────────────
-  # Cualquier engine con build propio se registra igual y los perfiles se
-  # anclan con `runtime: <id>`. Las variantes por backend de un mismo engine
-  # (cuda/vulkan/cpu) hoy se documentan en el perfil como referencia
-  # calibrada del puesto (ver `falcon.backends` en model_profiles.yaml).
+  # ── Otro engine con VARIANTES por backend (ejemplo): BitNet b1.58 ────────
+  # Un engine puede declarar `variants:` (cuda/vulkan/cpu…): cada variante su
+  # binario, `status` (verified|incompatible), `env` de ejecución, `quirks` y
+  # `measured` (del PUESTO DE REFERENCIA — recalibrar por equipo).
+  # `default_variant` marca la preferida; sin variante usable se sirve la
+  # entrada base (y el gate de disponibilidad falla con motivo claro).
   # llama_cpp_bitnet:
   #   kind: llama_cpp_fork
-  #   binary: "3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli"
-  #   capabilities: {quant_types: ["i2_s", "tl1", "tl2"]}
+  #   default_variant: cuda
+  #   variants:
+  #     cuda:
+  #       binary: "3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli"
+  #       status: verified
+  #     cpu:
+  #       binary: "3rdparty/BitNet-1.58b/build_vulkan/bin/llama-cli"
+  #       status: verified
+  #       quirks: {default_ngl: 0}
+  #     npu:
+  #       status: incompatible

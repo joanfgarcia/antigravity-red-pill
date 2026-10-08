@@ -341,8 +341,10 @@ def handle_runtime(args: argparse.Namespace) -> None:
 			return
 		declared = bool(profile.get("runtime"))
 		runtime_id = profile.get("runtime") or RuntimeRegistry.default_id()
+		rt = RuntimeRegistry.get(runtime_id)
+		variant = rt.get("variant")
 		ok, reason = RuntimeRegistry.check_available(runtime_id)
-		tag = "declarado" if declared else "default"
+		tag = ("declarado" if declared else "default") + (f", variante {variant}" if variant else "")
 		if ok:
 			print(f"✅ '{profile_name}' → runtime '{runtime_id}' ({tag}) disponible")
 		else:
@@ -376,7 +378,13 @@ def handle_runtime(args: argparse.Namespace) -> None:
 		ok, reason = RuntimeRegistry.check_available(rid)
 		mark = "✅" if ok else "⛔"
 		tail = "" if ok else f"  — {reason}"
-		print(f"  {mark} {rid:<20} {str(rt.get('kind', '?')):<16} {rt.get('binary', '?')}{tail}")
+		variants = RuntimeRegistry.variants(rid)
+		bin_field = rt.get("binary") or (f"({len(variants)} variantes)" if variants else "?")
+		print(f"  {mark} {rid:<20} {str(rt.get('kind', '?')):<16} {bin_field}{tail}")
+		for vid, v in variants.items():
+			vok = "✅" if v.get("available") else "⛔"
+			dmark = " (default)" if vid == rt.get("default_variant") else ""
+			print(f"      {vok} variante {vid}{dmark} — {v.get('binary') or '(sin binario)'}")
 
 	from red_pill.inference.runtime_server import running_servers
 

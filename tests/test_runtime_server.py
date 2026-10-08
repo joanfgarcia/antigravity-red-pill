@@ -45,9 +45,11 @@ class _FakeRuntimeRegistry:
 		"binary": "/fake/prism/llama-cli",
 	}
 	fail = False
+	require_calls = []
 
 	@classmethod
-	def require(cls, runtime_id):
+	def require(cls, runtime_id, variant=None):
+		cls.require_calls.append((runtime_id, variant))
 		if cls.fail:
 			from red_pill.core.runtime_registry import RuntimeUnavailableError
 
@@ -55,7 +57,8 @@ class _FakeRuntimeRegistry:
 		return dict(cls.runtime)
 
 	@classmethod
-	def for_profile(cls, profile):
+	def for_profile(cls, profile, variant=None):
+		cls.require_calls.append(("for_profile", variant))
 		return dict(cls.runtime)
 
 	@classmethod
@@ -88,6 +91,7 @@ def mod(monkeypatch):
 	monkeypatch.setattr(rs, "ModelRegistry", _FakeModelRegistry)
 	monkeypatch.setattr(rs, "RuntimeRegistry", _FakeRuntimeRegistry)
 	_FakeRuntimeRegistry.fail = False
+	_FakeRuntimeRegistry.require_calls = []
 	_FakeRuntimeRegistry.runtime = {
 		"id": "llama_cpp_prism",
 		"server": "/fake/prism/llama-server",
@@ -298,6 +302,41 @@ class TestStateRegistry:
 			assert state.exists()
 			srv.stop()
 			assert not state.exists()
+
+
+class TestVariantSelection:
+	def _fake_binary(self, tmp_path):
+		import os as _os
+
+		server = tmp_path / "fake-llama-server"
+		server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+		_os.chmod(server, 0o755)
+		_FakeRuntimeRegistry.runtime = {"id": "llama_cpp_prism", "server": str(server), "binary": str(server), "env": {"FOO": "1"}}
+
+	def test_variant_forwarded_to_registry(self, mod, tmp_path):
+		self._fake_binary(tmp_path)
+		srv = mod.RuntimeServer("bonsai_2_27b", variant="vulkan_radeon")
+		srv._resolve()
+		assert _FakeRuntimeRegistry.require_calls[-1] == ("llama_cpp_prism", "vulkan_radeon")
+
+	def test_runtime_env_passed_to_popen(self, mod, monkeypatch, tmp_path):
+		from unittest.mock import patch
+
+		self._fake_binary(tmp_path)
+		monkeypatch.setattr(mod, "get_data_dir", lambda: tmp_path)
+		monkeypatch.setattr(mod.RuntimeServer, "wait_ready", lambda self, timeout=None: None)
+		captured = {}
+
+		def _fake_popen(*a, **k):
+			captured.update(k)
+			return _FakeProc()
+
+		monkeypatch.setattr(mod.subprocess, "Popen", _fake_popen)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", return_value=8000):
+			srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+			srv.start()
+		assert captured["env"]["FOO"] == "1"
+		assert "PATH" in captured["env"]
 
 
 class _FakeHTTPResponse:

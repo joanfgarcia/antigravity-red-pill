@@ -131,3 +131,71 @@ class TestAvailability:
 		os.chmod(binary, 0o755)
 		rt = rr.RuntimeRegistry.require("llama_cpp_prism")
 		assert rt["id"] == "llama_cpp_prism"
+
+
+VARIANTS_YAML = """
+default_runtime: llama_cpp_stock
+runtimes:
+  engine_v:
+    kind: llama_cpp_fork
+    default_variant: cuda
+    variants:
+      cuda:
+        binary: "bin/cuda/llama-cli"
+        status: verified
+        env: {FOO: "1"}
+      vulkan:
+        binary: "bin/vulkan/llama-cli"
+        status: verified
+      npu:
+        status: incompatible
+"""
+
+
+class TestVariants:
+	def _setup(self, monkeypatch, tmp_path, make=()):
+		import red_pill.core.runtime_registry as rr
+
+		_patch_paths(monkeypatch, tmp_path, _write_registry(tmp_path, VARIANTS_YAML))
+		for rel in make:
+			p = tmp_path / rel
+			p.parent.mkdir(parents=True, exist_ok=True)
+			p.write_text("#!/bin/sh\n", encoding="utf-8")
+			os.chmod(p, 0o755)
+		return rr
+
+	def test_explicit_variant_wins(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path, make=("bin/vulkan/llama-cli",))
+		rt = rr.RuntimeRegistry.get("engine_v", "vulkan")
+		assert rt["variant"] == "vulkan"
+		assert rt["binary"].endswith("bin/vulkan/llama-cli")
+
+	def test_default_variant_when_usable_merges_fields(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path, make=("bin/cuda/llama-cli", "bin/vulkan/llama-cli"))
+		rt = rr.RuntimeRegistry.get("engine_v")
+		assert rt["variant"] == "cuda"
+		assert rt["env"] == {"FOO": "1"}
+
+	def test_auto_first_usable_when_default_missing(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path, make=("bin/vulkan/llama-cli",))
+		rt = rr.RuntimeRegistry.get("engine_v")
+		assert rt["variant"] == "vulkan"
+
+	def test_no_variant_usable_falls_back_to_default_for_clean_gate(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path)  # ningún binario
+		rt = rr.RuntimeRegistry.get("engine_v")
+		assert rt["variant"] == "cuda"  # best-effort; el gate falla con motivo
+		ok, reason = rr.RuntimeRegistry.check_available("engine_v")
+		assert not ok and "no existe" in reason
+
+	def test_unknown_variant_returns_base_entry(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path)
+		rt = rr.RuntimeRegistry.get("engine_v", "nope")
+		assert "variant" not in rt
+
+	def test_variants_listing_reports_availability(self, monkeypatch, tmp_path):
+		rr = self._setup(monkeypatch, tmp_path, make=("bin/cuda/llama-cli",))
+		vs = rr.RuntimeRegistry.variants("engine_v")
+		assert vs["cuda"]["available"] is True
+		assert vs["vulkan"]["available"] is False
+		assert vs["npu"]["available"] is False

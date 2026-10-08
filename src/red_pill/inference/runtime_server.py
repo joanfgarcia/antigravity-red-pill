@@ -119,6 +119,7 @@ class RuntimeServer:
 		*,
 		ctx: Optional[int] = None,
 		kv_type: Optional[str] = None,
+		variant: Optional[str] = None,
 		port: Optional[int] = None,
 		extra_args: Optional[List[str]] = None,
 		host: str = "127.0.0.1",
@@ -129,6 +130,7 @@ class RuntimeServer:
 		self.profile_name = profile_name
 		self.ctx = ctx
 		self.kv_type = kv_type
+		self.variant = variant
 		self.port = port
 		self.extra_args = list(extra_args or [])
 		self.host = host
@@ -152,9 +154,9 @@ class RuntimeServer:
 			raise RuntimeServerError(f"perfil '{self.profile_name}' no existe en model_profiles.yaml")
 		runtime_id = profile.get("runtime")
 		if runtime_id:
-			runtime = RuntimeRegistry.require(str(runtime_id))
+			runtime = RuntimeRegistry.require(str(runtime_id), variant=self.variant)
 		else:
-			runtime = RuntimeRegistry.for_profile(profile)
+			runtime = RuntimeRegistry.for_profile(profile, variant=self.variant)
 		server_binary = runtime.get("server") or runtime.get("binary")
 		if not server_binary or not os.access(server_binary, os.X_OK):
 			raise RuntimeUnavailableError(
@@ -220,10 +222,14 @@ class RuntimeServer:
 		log_dir.mkdir(parents=True, exist_ok=True)
 		self._log_path = log_dir / f"{self.profile_name}.log"
 		logger.info(f"[RUNTIME_SERVER] arrancando {self.profile_name}: {' '.join(cmd)}")
+		rt_env = {str(k): str(v) for k, v in (resolved["runtime"].get("env") or {}).items()}
+		env = {**os.environ, **rt_env}
 		with open(self._log_path, "a", encoding="utf-8") as logf:
-			logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | {self.profile_name} | {resolved['runtime'].get('id', 'stock')} =====\n")
+			variant = resolved["runtime"].get("variant")
+			head = resolved["runtime"].get("id", "stock") + (f" [{variant}]" if variant else "")
+			logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | {self.profile_name} | {head} =====\n")
 			logf.flush()
-			self._proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+			self._proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, start_new_session=True, env=env)
 		try:
 			self.wait_ready(self.startup_timeout)
 		except Exception:
@@ -325,6 +331,7 @@ class RuntimeServer:
 				"ctx": self.ctx,
 				"kv_type": self.kv_type,
 				"runtime": (resolved.get("runtime") or {}).get("id"),
+				"variant": (resolved.get("runtime") or {}).get("variant"),
 				"started_at": time.time(),
 				"log": str(self._log_path) if self._log_path else None,
 			}
