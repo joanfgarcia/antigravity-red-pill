@@ -65,6 +65,7 @@ class _FakeRuntimeRegistry:
 class _FakeModelRegistry:
 	profiles = {}
 	hardware = {"n_ctx": 24576, "n_gpu_layers": -1}
+	kv_plan = {}
 
 	@classmethod
 	def get_profile(cls, name):
@@ -73,6 +74,10 @@ class _FakeModelRegistry:
 	@classmethod
 	def get_resolved_hardware_affinity(cls, name):
 		return dict(cls.hardware)
+
+	@classmethod
+	def plan_kv_cache(cls, name, ctx=None, free_mb=None):
+		return dict(cls.kv_plan)
 
 
 @pytest.fixture
@@ -87,6 +92,7 @@ def mod(monkeypatch):
 		"server": "/fake/prism/llama-server",
 		"binary": "/fake/prism/llama-cli",
 	}
+	_FakeModelRegistry.kv_plan = {}
 	_FakeModelRegistry.profiles = {"bonsai_2_27b": {"model_path": __file__, "runtime": "llama_cpp_prism"}}
 	return rs
 
@@ -203,6 +209,44 @@ class TestVramGate:
 		monkeypatch.setattr(mod.urllib.request, "urlopen", boom)
 		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
 		assert srv._request_daemon_unload() is False
+
+
+class TestKvPlanIntegration:
+	def _fake_binary(self, tmp_path):
+		import os as _os
+
+		server = tmp_path / "fake-llama-server"
+		server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+		_os.chmod(server, 0o755)
+		_FakeRuntimeRegistry.runtime = {"id": "llama_cpp_prism", "server": str(server), "binary": str(server)}
+
+	def test_start_applies_kv_plan(self, mod, monkeypatch, tmp_path):
+		from unittest.mock import patch
+
+		self._fake_binary(tmp_path)
+		_FakeModelRegistry.kv_plan = {
+			"kv_type": "q8_0",
+			"ctx": 24576,
+			"required_mb": 6682,
+			"free_mb": 7000,
+			"fits": True,
+			"degraded": True,
+		}
+		monkeypatch.setattr(mod, "get_data_dir", lambda: tmp_path)
+		monkeypatch.setattr(mod.subprocess, "Popen", lambda *a, **k: _FakeProc())
+		monkeypatch.setattr(mod.RuntimeServer, "wait_ready", lambda self, timeout=None: None)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", return_value=8000):
+			srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+			srv.start()
+		assert srv.kv_type == "q8_0"
+		assert srv.ctx == 24576
+
+	def test_start_raises_when_no_kv_fits(self, mod, monkeypatch, tmp_path):
+		self._fake_binary(tmp_path)
+		_FakeModelRegistry.kv_plan = {"kv_type": None, "ctx": 65536, "free_mb": 5000, "fits": False, "degraded": False}
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		with pytest.raises(mod.RuntimeServerError, match="ningún KV cabe"):
+			srv.start()
 
 
 class _FakeHTTPResponse:

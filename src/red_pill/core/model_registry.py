@@ -207,6 +207,50 @@ class ModelRegistry:
 		return resolved
 
 	@classmethod
+	def plan_kv_cache(cls, profile_name: str, ctx: Optional[int] = None, free_mb: Optional[int] = None) -> dict:
+		"""Plan de KV por calidad (RFC-HARNESS-003 §2.7): conserva el contexto y
+		degrada la quantización de la KV para caber en la VRAM disponible.
+
+		Datos por perfil: `kv_cache.bytes_per_token_kib` (medido) y
+		`vram_footprint` (weights_mb/overhead_mb medidos). Sin esos datos → {}
+		(el caller decide: kv explícito o heurística). Devuelve
+		{kv_type, ctx, required_mb, free_mb, fits, degraded, tried}.
+		"""
+		profile = cls.get_profile(profile_name)
+		kv = profile.get("kv_cache") or {}
+		bpt = kv.get("bytes_per_token_kib") or {}
+		foot = profile.get("vram_footprint") or {}
+		if not kv or not bpt or not foot:
+			return {}
+		if ctx is None:
+			# El contexto DESEADO del perfil manda: se conserva y cede la KV
+			# (§2.7). La reducción de ctx por tier queda solo para perfiles sin
+			# datos de plan (paradigma legacy).
+			ctx = int((profile.get("hardware_affinity") or {}).get("n_ctx") or 8192)
+		if free_mb is None:
+			free_mb = VramProbe.get_free_mb()
+		base_mb = float(foot.get("weights_mb", 0)) + float(foot.get("overhead_mb", 0))
+		order = [kv.get("preferred", "f16")] + list(kv.get("fallbacks") or [])
+		tried = []
+		for q in order:
+			rate = bpt.get(q)
+			if not rate:
+				continue
+			required = int(base_mb + ctx * float(rate) / 1024)
+			tried.append({"kv_type": q, "required_mb": required})
+			if required <= free_mb:
+				return {
+					"kv_type": q,
+					"ctx": int(ctx),
+					"required_mb": required,
+					"free_mb": int(free_mb),
+					"fits": True,
+					"degraded": q != order[0],
+					"tried": tried,
+				}
+		return {"kv_type": None, "ctx": int(ctx), "free_mb": int(free_mb), "fits": False, "degraded": False, "tried": tried}
+
+	@classmethod
 	def get_max_load_time_s(cls, backend: str = "default") -> int:
 		"""Returns the maximum expected load time across all profiles for a given backend.
 

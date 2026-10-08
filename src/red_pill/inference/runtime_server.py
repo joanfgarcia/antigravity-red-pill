@@ -123,7 +123,29 @@ class RuntimeServer:
 		if self.is_running():
 			return self
 		resolved = self._resolve()
-		self._ensure_vram(resolved["model_path"])
+		plan = self._plan_kv()
+		if plan and not plan.get("fits") and self.unload_daemon:
+			logger.info(f"[RUNTIME_SERVER] ningún KV cabe ({plan.get('free_mb')} MB libres): pidiendo unload al daemon.")
+			self._request_daemon_unload()
+			plan = self._plan_kv()
+		if plan:
+			if not plan.get("fits"):
+				raise RuntimeServerError(
+					f"VRAM insuficiente para '{self.profile_name}': ningún KV cabe a ctx={plan['ctx']} "
+					f"con {plan['free_mb']} MB libres (ctx menor, liberar VRAM o unload_daemon)"
+				)
+			if self.ctx is None:
+				self.ctx = plan["ctx"]
+			if self.kv_type is None:
+				self.kv_type = plan["kv_type"]
+				if plan["degraded"]:
+					logger.info(
+						f"[RUNTIME_SERVER] KV degradada a {plan['kv_type']} para conservar ctx={plan['ctx']} "
+						f"({plan['required_mb']} ≤ {plan['free_mb']} MB)"
+					)
+			self._ensure_vram(resolved["model_path"], required_mb=plan["required_mb"])
+		else:
+			self._ensure_vram(resolved["model_path"])
 		if not self.port:
 			self.port = _free_port(self.host)
 		cmd = self._build_command(resolved)
@@ -142,19 +164,34 @@ class RuntimeServer:
 			raise
 		return self
 
-	def _ensure_vram(self, model_path: str) -> None:
+	def _plan_kv(self) -> dict:
+		"""Plan de KV por calidad del perfil (RFC-HARNESS-003 §2.7).
+
+		{} si el perfil no declara `kv_cache`/`vram_footprint` (el caller cae al
+		kv_type explícito o a la heurística de tamaño + margen).
+		"""
+		try:
+			return ModelRegistry.plan_kv_cache(self.profile_name, ctx=self.ctx)
+		except Exception as e:
+			logger.debug(f"[RUNTIME_SERVER] plan de KV no disponible: {e}")
+			return {}
+
+	def _ensure_vram(self, model_path: str, required_mb: Optional[int] = None) -> None:
 		"""Gate de VRAM (RFC-HARNESS-003 §4.2): swap o defer — NUNCA degradar.
 
 		Decisión del operador (2026-10-08): la degradación CPU/parcial queda
 		descartada para modelos que caben en VRAM (tiempos inaceptables). Si la
 		VRAM está ocupada: `unload_daemon=True` pide evict al proxy dual-bind y
 		reintenta; si aun así no cabe, falla limpio (el caller puede diferir).
+		`required_mb` (del plan de KV §2.7) manda si se aporta; si no, heurística
+		de tamaño de fichero + margen.
 		"""
 		try:
 			from red_pill.core.vram_probe import VramProbe
 		except Exception:
 			return  # sin probe no hay gate (no bloqueamos por un import)
-		required_mb = max(1024, int(os.path.getsize(model_path) / (1024 * 1024)) + self.vram_margin_mb)
+		if required_mb is None:
+			required_mb = max(1024, int(os.path.getsize(model_path) / (1024 * 1024)) + self.vram_margin_mb)
 		free_mb = VramProbe.get_free_mb()
 		if free_mb >= required_mb:
 			return
