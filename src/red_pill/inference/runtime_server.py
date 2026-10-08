@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
 import time
@@ -43,6 +44,72 @@ def _free_port(host: str = "127.0.0.1") -> int:
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.bind((host, 0))
 		return int(s.getsockname()[1])
+
+
+def _servers_state_dir() -> Path:
+	path = get_data_dir() / "runtime_servers"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def _pid_alive(pid: int) -> bool:
+	try:
+		os.kill(pid, 0)
+		return True
+	except OSError:
+		return False
+
+
+def running_servers() -> List[Dict[str, Any]]:
+	"""Servidores dedicados vivos según el registro de estado; limpia huérfanos."""
+	running: List[Dict[str, Any]] = []
+	for state in sorted(_servers_state_dir().glob("*.json")):
+		try:
+			info = json.loads(state.read_text(encoding="utf-8"))
+		except Exception:
+			state.unlink(missing_ok=True)
+			continue
+		pid = int(info.get("pid") or 0)
+		if pid and _pid_alive(pid):
+			info["_state_path"] = str(state)
+			running.append(info)
+		else:
+			state.unlink(missing_ok=True)
+	return running
+
+
+def stop_dedicated_servers(profile_name: Optional[str] = None, timeout: float = 10.0) -> int:
+	"""Abate servidores dedicados (todos o uno) — swap del daemon (RFC-HARNESS-003).
+
+	Espera a que mueran: la VRAM debe estar liberada de verdad antes de que el
+	caller re-mida/re-evalúe el tier. Devuelve cuántos paró.
+	"""
+	stopped = 0
+	for info in running_servers():
+		if profile_name and info.get("profile") != profile_name:
+			continue
+		pid = int(info.get("pid") or 0)
+		if pid:
+			try:
+				os.kill(pid, signal.SIGTERM)
+			except OSError:
+				pass
+			deadline = time.time() + timeout
+			while time.time() < deadline and _pid_alive(pid):
+				time.sleep(0.25)
+			if _pid_alive(pid):
+				try:
+					os.kill(pid, signal.SIGKILL)
+				except OSError:
+					pass
+		state_path = info.get("_state_path")
+		if state_path:
+			try:
+				Path(state_path).unlink(missing_ok=True)
+			except OSError:
+				pass
+		stopped += 1
+	return stopped
 
 
 class RuntimeServer:
@@ -162,6 +229,7 @@ class RuntimeServer:
 		except Exception:
 			self.stop()
 			raise
+		self._write_state(resolved)
 		return self
 
 	def _plan_kv(self) -> dict:
@@ -247,21 +315,41 @@ class RuntimeServer:
 		except Exception:
 			return "(log no disponible)"
 
+	def _write_state(self, resolved: Dict[str, Any]) -> None:
+		"""Registra el servidor vivo (pid/puerto/ctx) para descubrimiento y swap."""
+		try:
+			state = {
+				"profile": self.profile_name,
+				"pid": self._proc.pid if self._proc else None,
+				"port": self.port,
+				"ctx": self.ctx,
+				"kv_type": self.kv_type,
+				"runtime": (resolved.get("runtime") or {}).get("id"),
+				"started_at": time.time(),
+				"log": str(self._log_path) if self._log_path else None,
+			}
+			_servers_state_dir().joinpath(f"{self.profile_name}.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+		except Exception as e:
+			logger.warning(f"[RUNTIME_SERVER] no se pudo escribir el estado: {e}")
+
 	def stop(self, timeout: float = 15.0) -> None:
 		"""Abate el servidor (terminate → kill) — unload de VRAM garantizado."""
 		proc = self._proc
-		if proc is None:
-			return
+		if proc is not None:
+			try:
+				if proc.poll() is None:
+					proc.terminate()
+					try:
+						proc.wait(timeout=timeout)
+					except subprocess.TimeoutExpired:
+						proc.kill()
+						proc.wait(timeout=5)
+			finally:
+				self._proc = None
 		try:
-			if proc.poll() is None:
-				proc.terminate()
-				try:
-					proc.wait(timeout=timeout)
-				except subprocess.TimeoutExpired:
-					proc.kill()
-					proc.wait(timeout=5)
-		finally:
-			self._proc = None
+			(get_data_dir() / "runtime_servers" / f"{self.profile_name}.json").unlink(missing_ok=True)
+		except OSError:
+			pass
 
 	def chat(
 		self,

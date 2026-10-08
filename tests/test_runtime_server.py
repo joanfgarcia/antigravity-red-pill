@@ -18,6 +18,7 @@ class _FakeProc:
 		self.killed = False
 		self.waited = False
 		self.returncode = None
+		self.pid = os.getpid()
 
 	def poll(self):
 		if len(self.poll_sequence) > 1:
@@ -247,6 +248,56 @@ class TestKvPlanIntegration:
 		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
 		with pytest.raises(mod.RuntimeServerError, match="ningún KV cabe"):
 			srv.start()
+
+
+class TestStateRegistry:
+	def test_running_servers_filters_stale(self, mod, monkeypatch, tmp_path):
+		monkeypatch.setattr(mod, "get_data_dir", lambda: tmp_path)
+		state_dir = tmp_path / "runtime_servers"
+		state_dir.mkdir(parents=True, exist_ok=True)
+		(state_dir / "alive.json").write_text(json.dumps({"profile": "alive", "pid": os.getpid()}), encoding="utf-8")
+		dead = state_dir / "dead.json"
+		dead.write_text(json.dumps({"profile": "dead", "pid": 999999}), encoding="utf-8")
+
+		running = mod.running_servers()
+		assert [s["profile"] for s in running] == ["alive"]
+		assert not dead.exists()  # huérfano limpiado
+
+	def test_stop_dedicated_servers_kills_real_process(self, mod, monkeypatch, tmp_path):
+		import subprocess as sp
+
+		monkeypatch.setattr(mod, "get_data_dir", lambda: tmp_path)
+		state_dir = tmp_path / "runtime_servers"
+		state_dir.mkdir(parents=True, exist_ok=True)
+		proc = sp.Popen(["sleep", "30"])
+		try:
+			(state_dir / "victima.json").write_text(json.dumps({"profile": "victima", "pid": proc.pid}), encoding="utf-8")
+			stopped = mod.stop_dedicated_servers(profile_name="victima")
+			assert stopped == 1
+			proc.wait(timeout=5)
+			assert proc.poll() is not None
+			assert not (state_dir / "victima.json").exists()
+		finally:
+			if proc.poll() is None:
+				proc.kill()
+
+	def test_start_writes_state_and_stop_removes(self, mod, monkeypatch, tmp_path):
+		from unittest.mock import patch
+
+		server = tmp_path / "fake-llama-server"
+		server.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+		os.chmod(server, 0o755)
+		_FakeRuntimeRegistry.runtime = {"id": "llama_cpp_prism", "server": str(server), "binary": str(server)}
+		monkeypatch.setattr(mod, "get_data_dir", lambda: tmp_path)
+		monkeypatch.setattr(mod.subprocess, "Popen", lambda *a, **k: _FakeProc())
+		monkeypatch.setattr(mod.RuntimeServer, "wait_ready", lambda self, timeout=None: None)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", return_value=8000):
+			srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+			srv.start()
+			state = tmp_path / "runtime_servers" / "bonsai_2_27b.json"
+			assert state.exists()
+			srv.stop()
+			assert not state.exists()
 
 
 class _FakeHTTPResponse:

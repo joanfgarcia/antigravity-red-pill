@@ -349,6 +349,23 @@ def handle_runtime(args: argparse.Namespace) -> None:
 			print(f"⛔ '{profile_name}' → runtime '{runtime_id}' ({tag}): {reason}")
 		return
 
+	if cmd == "stop":
+		from red_pill.inference.runtime_server import running_servers, stop_dedicated_servers
+
+		if getattr(args, "all", False):
+			print(f"🛑 Servidores dedicados detenidos: {stop_dedicated_servers()}")
+		elif getattr(args, "profile", None):
+			stopped = stop_dedicated_servers(profile_name=args.profile)
+			if stopped:
+				print(f"🛑 '{args.profile}': {stopped} servidor(es) detenido(s)")
+			else:
+				print(f"(sin servidor vivo para '{args.profile}')")
+		else:
+			alive = running_servers()
+			names = ", ".join(str(s.get("profile")) for s in alive) or "(ninguno)"
+			print(f"Usa `<perfil>` o `--all`. Servidores vivos: {names}")
+		return
+
 	# list (default)
 	runtimes = RuntimeRegistry.all()
 	if not runtimes:
@@ -360,6 +377,14 @@ def handle_runtime(args: argparse.Namespace) -> None:
 		mark = "✅" if ok else "⛔"
 		tail = "" if ok else f"  — {reason}"
 		print(f"  {mark} {rid:<20} {str(rt.get('kind', '?')):<16} {rt.get('binary', '?')}{tail}")
+
+	from red_pill.inference.runtime_server import running_servers
+
+	alive = running_servers()
+	if alive:
+		print(f"🟢 Servidores dedicados vivos ({len(alive)}):")
+		for s in alive:
+			print(f"  {str(s.get('profile')):<20} pid={s.get('pid')} :{s.get('port')} ctx={s.get('ctx')} kv={s.get('kv_type')}")
 
 
 def handle_license(args: argparse.Namespace) -> None:
@@ -1289,6 +1314,9 @@ def main() -> None:
 	runtime_sub.add_parser("list", help="Lista los runtimes declarados y su disponibilidad")
 	runtime_check = runtime_sub.add_parser("check", help="Resuelve el runtime de un perfil y comprueba disponibilidad")
 	runtime_check.add_argument("profile", help="Nombre del perfil (model_profiles.yaml)")
+	runtime_stop = runtime_sub.add_parser("stop", help="Abate servidores dedicados (swap-o-defer, RFC-HARNESS-003)")
+	runtime_stop.add_argument("profile", nargs="?", help="Perfil cuyo servidor dedicado abatir")
+	runtime_stop.add_argument("--all", action="store_true", help="Abatir todos los servidores dedicados vivos")
 
 	# Centralized Job Manager
 	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")

@@ -217,6 +217,21 @@ class ModelManager:
 						continue
 					ngl = resolved.n_gpu_layers
 					if ngl == 0:
+						# Swap-o-defer (RFC-HARNESS-003): antes de degradar, pedir a los
+						# servidores dedicados (runtimes no-stock) que suelten la VRAM y
+						# re-evaluar el tier con la medida fresca. Sin servidores vivos o
+						# sin helper (repo viejo) → comportamiento previo intacto.
+						try:
+							from red_pill.inference.runtime_server import stop_dedicated_servers
+							_stopped = stop_dedicated_servers()
+							if _stopped:
+								logger.info(f"swap: {_stopped} servidor(es) dedicado(s) detenido(s); re-evaluando tier")
+								time.sleep(1.0)
+								resolved = mr.refresh_hardware_tier(resolved)
+								ngl = resolved.n_gpu_layers
+						except Exception as e:
+							logger.warning(f"swap: no se pudo liberar servidores dedicados: {e}")
+					if ngl == 0:
 						errors.append("gpu: insufficient free VRAM")
 						continue
 					self._load_in_process(resolved, resolved.n_ctx, ngl)
