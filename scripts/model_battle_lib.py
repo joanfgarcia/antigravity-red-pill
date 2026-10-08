@@ -229,7 +229,8 @@ class RuntimeBattleRunner:
 		self.model_name = model_name
 		self.chat_format = None
 		self.resolved = mr.resolve({"model": model_name})
-		self._server = RuntimeServer(model_name, ctx=n_ctx or self.resolved.resolved_n_ctx(), extra_args=extra_args, unload_daemon=unload_daemon)
+		# ctx=None → el plan del RuntimeServer decide (contexto deseado del perfil + KV adaptativa §2.7).
+		self._server = RuntimeServer(model_name, ctx=n_ctx, extra_args=extra_args, unload_daemon=unload_daemon)
 		t0 = time.time()
 		self._server.start()
 		self.load_time_s = time.time() - t0
@@ -251,6 +252,11 @@ class RuntimeBattleRunner:
 				**kwargs,
 			)
 			raw = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+			# El servidor HTTP separa la traza en `reasoning_content`: se
+			# recompone al formato canónico para métricas y validadores.
+			reasoning = (resp.get("choices") or [{}])[0].get("message", {}).get("reasoning_content") or ""
+			if reasoning:
+				raw = f"[Start thinking]{reasoning}[End thinking]\n{raw}"
 		except Exception as e:
 			raw = f"<<error: {e}>>"
 		dt = time.time() - t0
@@ -306,4 +312,5 @@ def runner_for(
 		resolved = mr.resolve({"model": model_name})
 	except Exception as e:
 		print(f"[runner_for] conducta no resoluble para '{model_name}' ({e}) — camino crudo", flush=True)
-	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=n_ctx or 6144, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, resolved=resolved)
+	stock_ctx = n_ctx or (resolved.resolved_n_ctx() if resolved is not None else 6144)
+	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=stock_ctx, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, resolved=resolved)
