@@ -184,6 +184,11 @@ class RuntimeServer:
 		]
 		if self.kv_type:
 			cmd += ["-ctk", self.kv_type, "-ctv", self.kv_type]
+		# Tope duro del thinking declarado por el perfil (no toca el contexto:
+		# acota la traza de razonamiento; la respuesta conserva su margen).
+		reasoning_budget = (resolved.get("profile") or {}).get("reasoning_budget")
+		if reasoning_budget:
+			cmd += ["--reasoning-budget", str(int(reasoning_budget))]
 		cmd += self.extra_args
 		return cmd
 

@@ -96,6 +96,7 @@ class ResolvedModel:
 	runtime_id: Optional[str] = None  # RFC-HARNESS-003: runtime anclado (None = stock)
 	runtime: Dict[str, Any] = field(default_factory=dict)  # resuelto de RuntimeRegistry
 	reasoning_effort: Optional[str] = None  # RFC-HARNESS-003 §2.9: esfuerzo declarado (medium/xhigh...)
+	reasoning_budget: Optional[int] = None  # tope DURO de tokens de thinking (no toca el contexto: acota la traza)
 	sampling: Dict[str, Any] = field(default_factory=dict)  # receta de samplers del modelo (top_p, top_k, min_p...)
 
 	def resolved_n_ctx(self) -> int:
@@ -232,6 +233,7 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		flash_attn=_normalize_flash_attn(profile.get("flash_attn")),
 		license=normalize_license(profile.get("license"), name),
 		reasoning_effort=profile.get("reasoning_effort"),
+		reasoning_budget=int(profile["reasoning_budget"]) if profile.get("reasoning_budget") else None,
 		sampling=dict(profile.get("sampling") or {}),
 		extra={"tier": tier, "thinking_supported": thinking != "off", "fa_capable": bool(profile.get("fa_capable"))},
 	)

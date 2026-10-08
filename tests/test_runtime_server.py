@@ -131,6 +131,13 @@ class TestBuildCommand:
 		cmd = srv._build_command(resolved)
 		assert cmd[-2:] == ["--reasoning-budget", "2048"]
 
+	def test_profile_reasoning_budget_flag(self, mod):
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		resolved = {"profile": {"reasoning_budget": 4096}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}
+		cmd = srv._build_command(resolved)
+		assert "--reasoning-budget" in cmd
+		assert cmd[cmd.index("--reasoning-budget") + 1] == "4096"
+
 
 class TestFailClean:
 	def test_unknown_profile_raises(self, mod):
