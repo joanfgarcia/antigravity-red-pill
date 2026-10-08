@@ -137,3 +137,40 @@ def test_run_rhizodb_washout_attenuates_repeated_runs(monkeypatch, tmp_path):
 	assert ops[0].set_payload.payload["reinforcement_score"] == pytest.approx(expected, abs=0.01)
 	saved = json.loads(state_path.read_text(encoding="utf-8"))
 	assert saved["social_memories"] > now - 60
+
+
+def test_run_rhizodb_washout_skips_curated_members(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	now = time.time()
+	member = _point("member", now=now)
+	member.payload.update({"node_type": "memento_engram", "origin": "memento", "hubbed": True})
+	origin_only = _point("origin-only", now=now)
+	origin_only.payload.update({"origin": "memento"})
+	hubbed_only = _point("hubbed-only", now=now)
+	hubbed_only.payload.update({"hubbed": True})
+	noise = _point("noise", score=0.09, stability=2.0, now=now)
+	mock_mem_mgr, mock_client = _mock_manager([member, origin_only, hubbed_only, noise])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	assert _updated_ids(mock_client) == []
+	deleted = mock_client.delete.call_args[1]["points_selector"].points
+	assert deleted == ["noise"]
+
+
+def test_run_rhizodb_washout_curated_exemption_can_be_disabled(monkeypatch, tmp_path):
+	monkeypatch.setattr(maint.cfg, "MEMORY_ENGINES", {"social_memories": "rhizodb"})
+	monkeypatch.setattr(maint.cfg, "RHIZODB_WASHOUT_SKIP_CURATED", False)
+	monkeypatch.setattr(maint, "_washout_state_path", lambda: tmp_path / "washout.json")
+
+	now = time.time()
+	curated = _point("curated", score=0.09, stability=2.0, now=now)
+	curated.payload["node_type"] = "memento_engram"
+	mock_mem_mgr, mock_client = _mock_manager([curated])
+
+	run_rhizodb_washout_and_pruning(mock_mem_mgr)
+
+	deleted = mock_client.delete.call_args[1]["points_selector"].points
+	assert deleted == ["curated"]

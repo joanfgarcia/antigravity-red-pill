@@ -326,6 +326,9 @@ class RedPillConfig(BaseSettings):
 	RHIZODB_S_MAX: float = 365.0
 	RHIZODB_PRUNE_MIN_ACTIVATION: float = 0.1
 	RHIZODB_PRUNE_MAX_STABILITY_DAYS: float = 5.0
+	# AD-048: el washout genérico no toca curados (memento_engram/origin=memento/
+	# hubbed): su olvido va por erode_curated (5a/10a). OFF = comportamiento previo.
+	RHIZODB_WASHOUT_SKIP_CURATED: bool = True
 	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
 	# única: todo writer/merger que componga metadata deriva de aquí con margen
 	# (p. ej. situation_semaphore usa MAX_METADATA_STR - _META_MARGIN).

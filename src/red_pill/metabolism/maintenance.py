@@ -191,6 +191,10 @@ def _finite(value: Any, default: float) -> float:
 	return result if math.isfinite(result) else default
 
 
+def _is_curated(payload: dict) -> bool:
+	return payload.get("node_type") == "memento_engram" or payload.get("origin") == "memento" or bool(payload.get("hubbed"))
+
+
 def _load_washout_state() -> dict:
 	try:
 		data = json.loads(_washout_state_path().read_text(encoding="utf-8"))
@@ -229,6 +233,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 	reference_days = _finite(getattr(cfg, "RHIZODB_WASHOUT_REFERENCE_DAYS", 1.0), 1.0)
 	if reference_days <= 0:
 		reference_days = 1.0
+	skip_curated = bool(getattr(cfg, "RHIZODB_WASHOUT_SKIP_CURATED", True))
 
 	# Find collections utilizing rhizodb
 	rhizodb_collections = [col for col, eng in cfg.MEMORY_ENGINES.items() if eng == "rhizodb"]
@@ -276,6 +281,12 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 				# piso propio). Sin esto, la poda genérica los mataría antes que a sus
 				# miembros y rompería Ariadne.
 				if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
+					continue
+
+				# AD-048: los MIEMBROS curados (memento_engram/hubbed) tampoco: su
+				# olvido es por eje propio (last_reinforced_at → demote 5a/10a,
+				# M9/AD-034), no por poda genérica (~15-25 noches).
+				if skip_curated and _is_curated(payload):
 					continue
 
 				# 1. Run lazy decay first to get current activation/score

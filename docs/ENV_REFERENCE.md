@@ -270,6 +270,7 @@ Plugins 05–10. Each is independently toggleable.
 | `RHIZODB_S_MAX` | `365.0` | Techo de estabilidad (días) del término `b(s_v)` del washout. |
 | `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Poda estructural: borra si `a_v` cae por debajo de este valor **y** `s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS`. |
 | `RHIZODB_PRUNE_MAX_STABILITY_DAYS` | `5.0` | Umbral de estabilidad (días) de la poda estructural. |
+| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por `erode_curated` (5a/10a). OFF = comportamiento previo a AD-048. |
 
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`
