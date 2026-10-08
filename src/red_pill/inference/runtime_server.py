@@ -56,6 +56,8 @@ class RuntimeServer:
 		extra_args: Optional[List[str]] = None,
 		host: str = "127.0.0.1",
 		startup_timeout: float = 180.0,
+		unload_daemon: bool = False,
+		vram_margin_mb: int = 1500,
 	):
 		self.profile_name = profile_name
 		self.ctx = ctx
@@ -64,6 +66,8 @@ class RuntimeServer:
 		self.extra_args = list(extra_args or [])
 		self.host = host
 		self.startup_timeout = startup_timeout
+		self.unload_daemon = unload_daemon
+		self.vram_margin_mb = vram_margin_mb
 		self._proc: Optional[subprocess.Popen] = None
 		self._log_path: Optional[Path] = None
 
@@ -119,6 +123,7 @@ class RuntimeServer:
 		if self.is_running():
 			return self
 		resolved = self._resolve()
+		self._ensure_vram(resolved["model_path"])
 		if not self.port:
 			self.port = _free_port(self.host)
 		cmd = self._build_command(resolved)
@@ -136,6 +141,53 @@ class RuntimeServer:
 			self.stop()
 			raise
 		return self
+
+	def _ensure_vram(self, model_path: str) -> None:
+		"""Gate de VRAM (RFC-HARNESS-003 §4.2): swap o defer — NUNCA degradar.
+
+		Decisión del operador (2026-10-08): la degradación CPU/parcial queda
+		descartada para modelos que caben en VRAM (tiempos inaceptables). Si la
+		VRAM está ocupada: `unload_daemon=True` pide evict al proxy dual-bind y
+		reintenta; si aun así no cabe, falla limpio (el caller puede diferir).
+		"""
+		try:
+			from red_pill.core.vram_probe import VramProbe
+		except Exception:
+			return  # sin probe no hay gate (no bloqueamos por un import)
+		required_mb = max(1024, int(os.path.getsize(model_path) / (1024 * 1024)) + self.vram_margin_mb)
+		free_mb = VramProbe.get_free_mb()
+		if free_mb >= required_mb:
+			return
+		if self.unload_daemon:
+			logger.info(f"[RUNTIME_SERVER] VRAM insuficiente ({free_mb}MB < {required_mb}MB): pidiendo unload al daemon.")
+			self._request_daemon_unload()
+			free_mb = VramProbe.get_free_mb()
+		if free_mb < required_mb:
+			hint = "" if self.unload_daemon else " (activa unload_daemon=True para swap con el daemon)"
+			raise RuntimeServerError(
+				f"VRAM insuficiente para '{self.profile_name}': {free_mb} MB libres < {required_mb} MB requeridos{hint}"
+			)
+
+	def _request_daemon_unload(self) -> bool:
+		"""Evict del modelo residente vía proxy dual-bind (/v1/unload, patrón script_job).
+
+		Sin degradación: el daemon recarga bajo demanda después. Proxy
+		inalcanzable o fallo → False (el gate decide con la medida fresca).
+		"""
+		try:
+			import red_pill.config as cfg
+
+			base = str(getattr(cfg, "DUAL_BIND_PROXY_URL", "") or "")
+			if not base:
+				return False
+			req = urllib.request.Request(f"{base.rstrip('/')}/v1/unload", method="POST")
+			with urllib.request.urlopen(req, timeout=5) as resp:
+				if resp.status == 200:
+					time.sleep(2.0)  # el driver CUDA no devuelve la memoria al instante
+					return True
+		except Exception as e:
+			logger.debug(f"[RUNTIME_SERVER] unload del daemon no disponible: {e}")
+		return False
 
 	def wait_ready(self, timeout: Optional[float] = None) -> None:
 		"""Health real: /health == 200 o muerte del proceso (con cola del log)."""

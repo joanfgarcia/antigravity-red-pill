@@ -167,6 +167,44 @@ class TestLifecycle:
 			srv.chat([{"role": "user", "content": "hola"}])
 
 
+class TestVramGate:
+	def test_raises_when_vram_insufficient_and_no_swap(self, mod):
+		from unittest.mock import patch
+
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", return_value=500):
+			with pytest.raises(mod.RuntimeServerError, match="VRAM insuficiente"):
+				srv._ensure_vram(__file__)
+
+	def test_swap_unloads_daemon_and_continues(self, mod, monkeypatch):
+		from unittest.mock import patch
+
+		called = []
+		monkeypatch.setattr(mod.RuntimeServer, "_request_daemon_unload", lambda self: called.append(1) or True)
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, unload_daemon=True)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", side_effect=[500, 8000]):
+			srv._ensure_vram(__file__)
+		assert called == [1]
+
+	def test_unload_not_called_when_vram_fits(self, mod, monkeypatch):
+		from unittest.mock import patch
+
+		called = []
+		monkeypatch.setattr(mod.RuntimeServer, "_request_daemon_unload", lambda self: called.append(1) or True)
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, unload_daemon=True)
+		with patch("red_pill.core.vram_probe.VramProbe.get_free_mb", return_value=8000):
+			srv._ensure_vram(__file__)
+		assert called == []
+
+	def test_request_daemon_unload_false_on_network_error(self, mod, monkeypatch):
+		def boom(req, timeout=None):
+			raise OSError("connection refused")
+
+		monkeypatch.setattr(mod.urllib.request, "urlopen", boom)
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		assert srv._request_daemon_unload() is False
+
+
 class _FakeHTTPResponse:
 	def __init__(self, payload):
 		self._payload = json.dumps(payload).encode("utf-8")
