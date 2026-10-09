@@ -482,6 +482,22 @@ class TestInterceptorRp:
 		assert result[0].type == "text"
 		assert "enriched prompt" in result[0].text
 
+	async def test_reminder_es_hook_aware_no_obliga_previous_response(self):
+		"""Regresión: el reminder runtime ordenaba pasar `previous_response` siempre,
+		contradiciendo el anchor de opencode (que pide solo `user_prompt`). Debe ser
+		neutral: ofrecer la variante sin hook sin exigirla en arneses con hook."""
+		from red_pill.mcp_server import handle_call_tool
+
+		with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+			result = await handle_call_tool("interceptor_rp", {"user_prompt": "hola"})
+		text = result[0].text
+		assert "sovereign_handshake" in text
+		assert "user_prompt" in text
+		assert "editor hook" in text
+		assert "opencode" in text
+		# Anti-patrón histórico: exigir previous_response de forma incondicional.
+		assert "this turn's response as `previous_response`" not in text
+
 	async def test_with_valid_previous_turn_enqueues_memory(self):
 		"""With previous_prompt + previous_response (>20 chars), auto-enqueues the previous turn."""
 		from red_pill.mcp_server import handle_call_tool

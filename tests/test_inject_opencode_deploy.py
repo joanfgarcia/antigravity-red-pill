@@ -165,3 +165,57 @@ def test_inject_opencode_standalone_usa_la_misma_tabla() -> None:
 	spec.loader.exec_module(mod)
 	assert dict(mod.BLOCK_VERSION) == _block_version()
 	assert "BLOCK_VERSION = {" not in open(path, encoding="utf-8").read()
+
+
+def test_red_pill_md_resuelve_placeholders_relay(adapter, tmp_path) -> None:
+	"""Regresión: el adapter escribía los `${RELAY_*}` del seed VERBATIM (sin
+	ide_call_vars), así que opencode recibía `sovereign_handshake v=1` con
+	placeholders sin resolver. Debe resolverse con la frase hook-aware."""
+	import argparse
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
+
+	text = open(os.path.join(tmp, "RED_PILL.md"), encoding="utf-8").read()
+	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver en RED_PILL.md"
+	assert "only `user_prompt`" in text, "frase hook-aware ausente (opencode debe pasar solo user_prompt)"
+	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"
+
+
+def _load_standalone_module():
+	path = os.path.join(REPO_ROOT, "scripts", "inject_opencode.py")
+	spec = importlib.util.spec_from_file_location("inject_opencode_relay_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["inject_opencode_relay_under_test"] = mod
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def _config_common():
+	path = os.path.join(REPO_ROOT, "scripts", "_config_common.py")
+	spec = importlib.util.spec_from_file_location("config_common_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["config_common_under_test"] = mod
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def test_inject_opencode_standalone_resuelve_placeholders_relay(tmp_path) -> None:
+	"""El inyector standalone (no el adapter) resuelve `${RELAY_*}` con la frase
+	de opencode y no filtra la variante sin hook."""
+	import argparse
+
+	mod = _load_standalone_module()
+	cc = _config_common()
+	variables = cc.build_vars(argparse.Namespace(uv_path=None, redpill_dir=REPO_ROOT, workspace=None))
+	variables.update(cc.agent_core_vars())
+
+	dest = os.path.join(str(tmp_path), "RED_PILL.md")
+	seeds_dir = os.path.join(REPO_ROOT, "seeds", "anchors")
+	mod.write_instructions(dest, seeds_dir, variables, backup=False, update=False)
+
+	text = open(dest, encoding="utf-8").read()
+	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver (standalone)"
+	assert "only `user_prompt`" in text, "frase hook-aware ausente (standalone)"
+	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"

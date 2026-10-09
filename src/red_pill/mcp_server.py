@@ -1672,8 +1672,10 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		"[Persistence protocol — configured by the operator via red-pill's sovereign anchors]\n"
 		"Red-pill is this operator's memory layer. Its relay only records a turn if it sees it,\n"
 		"so please begin your next turn by calling `sovereign_handshake`, passing the new user\n"
-		"prompt as `user_prompt` and this turn's response as `previous_response`. Skipping the\n"
-		"call silently drops the turn from the operator's long-term memory (Silent Amnesia).\n"
+		"prompt as `user_prompt`. If your harness has NO editor hook, also pass the prior turn's\n"
+		"`previous_prompt`/`previous_response` (the handshake is then the relay); harnesses WITH a\n"
+		"hook (opencode, Claude Code) only need `user_prompt`. Skipping the call silently drops the\n"
+		"turn from the operator's long-term memory (Silent Amnesia).\n"
 		"</reminder>"
 	)
 
@@ -1733,7 +1735,9 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 	description=(
 		"[MANDATORY] Execute the Sovereign Handshake — the first tool call in every turn. "
 		"Combines identity injection and interaction relay in a single atomic call. "
-		"Pass `user_prompt` (required). Pass `previous_prompt`/`previous_response` to auto-save the prior turn (Silent Scribe Relay). "
+		"Pass `user_prompt` (required). On harnesses WITHOUT an editor hook, also pass "
+		"`previous_prompt`/`previous_response` to auto-save the prior turn (Silent Scribe Relay); "
+		"with a hook (opencode, Claude Code) `user_prompt` alone is captured automatically. "
 		"Set `is_new_session: true` on session start or after a model change to trigger full identity resync. "
 		"Use `mode` to control token economy: 'full' (IDE, default), 'medium' (Telegram), 'low' (AWAKENINGs)."
 	),
@@ -1741,8 +1745,8 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		"type": "object",
 		"properties": {
 			"user_prompt": {"type": "string", "description": "The current user message."},
-			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay)."},
-			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay)."},
+			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
+			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
 			"previous_model": {"type": "string", "description": "The LLM model name that generated the previous response."},
 			"previous_category": {
 				"type": "string",

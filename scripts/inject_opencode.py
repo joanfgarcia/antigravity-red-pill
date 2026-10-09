@@ -97,7 +97,13 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 # Block versions too: single source in inject_anchor.BLOCK_VERSION (a local copy
 # drifted and kept re-splicing RED_PILL.md with stale `v=` markers).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inject_anchor import BLOCK_VERSION, remove_block, splice_block  # noqa: E402
+from inject_anchor import (  # noqa: E402
+	BLOCK_VERSION,
+	ide_call_vars,
+	ide_seed_path,
+	remove_block,
+	splice_block,
+)
 
 
 def _read_seed(seed_path: str) -> str:
@@ -109,9 +115,14 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 	"""Write RED_PILL.md with versioned anchor blocks. Returns count of changed blocks."""
 	anchor_names = ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]
 	changed = 0
+	# Per-IDE tool-call phrasing (${RELAY_CALL}/${WAKE_CALL}/${RELAY_INSTRUCTION}):
+	# opencode has an editor hook, so the anchor must say "passing only `user_prompt`".
+	# Without this the raw `${RELAY_*}` placeholders shipped verbatim into RED_PILL.md.
+	ide_vars = {**variables, **ide_call_vars("opencode")}
 
 	for anchor in anchor_names:
-		seed_path = os.path.join(seeds_dir, anchor + ".md")
+		# Per-IDE seed override (seeds/opencode/anchors/<anchor>.md) wins; else generic.
+		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
 		if not os.path.exists(seed_path):
 			# Fallback: try the consolidated RED_PILL.md seed
 			seed_path = os.path.join(seeds_dir, "..", "instructions", "RED_PILL.md")
@@ -129,7 +140,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 					block_text = m.group(0)
 					body_start = block_text.find("\n") + 1
 					body_end = block_text.rfind("\n")
-					body = block_text[body_start:body_end].strip()
+					body = subst(block_text[body_start:body_end].strip(), ide_vars)
 					status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 					if status not in ("unchanged",):
 						changed += 1
@@ -139,7 +150,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 			continue
 
 		raw = _read_seed(seed_path)
-		body = subst(raw, variables)
+		body = subst(raw, ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
 			changed += 1
