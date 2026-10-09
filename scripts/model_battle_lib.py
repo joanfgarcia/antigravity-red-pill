@@ -313,12 +313,18 @@ class FastFlowLMRunner:
 		log_dir.mkdir(parents=True, exist_ok=True)
 		self._log_path = log_dir / f"flm_{model_name}.log"
 		t0 = time.time()
-		with open(self._log_path, "a", encoding="utf-8") as logf:
-			logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | flm serve {self.model_tag} =====\n")
-			logf.flush()
-			self._proc = subprocess.Popen(["flm", "serve", self.model_tag], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+		self._proc = None
+		self._daemon_was_active = False
 		try:
+			self._daemon_was_active = os.system("systemctl --user is-active --quiet redpill-llm.service") == 0
+			if self._daemon_was_active:
+				stop_daemon_if_active()
+			with open(self._log_path, "a", encoding="utf-8") as logf:
+				logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | flm serve {self.model_tag} =====\n")
+				logf.flush()
+				self._proc = subprocess.Popen(["flm", "serve", self.model_tag], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
 			self._wait_ready(startup_timeout)
+			self._warmup()
 		except Exception:
 			self.close()
 			raise
@@ -339,6 +345,28 @@ class FastFlowLMRunner:
 			except Exception:
 				time.sleep(1.0)
 		raise RuntimeError(f"timeout esperando a flm serve ({timeout:.0f}s): {self._log_tail()}")
+
+	def _warmup(self) -> None:
+		"""Fuerza la carga real del modelo (flm sirve lazy en el primer request).
+
+		Sin warmup un fallo de asignación (XRT ENOMEM) se disfraza de probes
+		inválidos; con él, `load_time_s` es real y el error de arranque sale
+		con la cola del log.
+		"""
+		import urllib.request
+
+		body = {"model": self.model_tag, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 4}
+		req = urllib.request.Request(
+			f"{self.FLM_URL}/v1/chat/completions",
+			data=json.dumps(body).encode("utf-8"),
+			headers={"Content-Type": "application/json"},
+			method="POST",
+		)
+		try:
+			with urllib.request.urlopen(req, timeout=600) as resp:
+				resp.read()
+		except Exception as e:
+			raise RuntimeError(f"warmup de '{self.model_tag}' falló (carga del modelo): {e} — {self._log_tail()}") from e
 
 	def _log_tail(self, lines: int = 15) -> str:
 		try:
@@ -400,18 +428,20 @@ class FastFlowLMRunner:
 
 	def close(self) -> None:
 		proc = getattr(self, "_proc", None)
-		if proc is None:
-			return
-		try:
-			if proc.poll() is None:
-				proc.terminate()
-				try:
-					proc.wait(timeout=15)
-				except subprocess.TimeoutExpired:
-					proc.kill()
-					proc.wait(timeout=5)
-		finally:
-			self._proc = None
+		if proc is not None:
+			try:
+				if proc.poll() is None:
+					proc.terminate()
+					try:
+						proc.wait(timeout=15)
+					except subprocess.TimeoutExpired:
+						proc.kill()
+						proc.wait(timeout=5)
+			finally:
+				self._proc = None
+		if getattr(self, "_daemon_was_active", False):
+			self._daemon_was_active = False
+			start_daemon_if_inactive()
 
 
 def runner_for(
