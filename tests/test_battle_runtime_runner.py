@@ -166,3 +166,21 @@ class TestRunnerForFactory:
 		self._patch_registries(monkeypatch, {})
 		with pytest.raises(ValueError, match="sin gguf_path"):
 			mbl.runner_for("misterioso")
+
+
+class TestFastFlowLMRunnerArgs:
+	def _bare(self):
+		runner = mbl.FastFlowLMRunner.__new__(mbl.FastFlowLMRunner)
+		runner.model_tag = "gpt-oss:20b"
+		runner._serve_args = ["--ctx-len", "16384"]
+		runner._request_params = {"reasoning_effort": "low"}
+		return runner
+
+	def test_serve_argv_incluye_serve_args(self):
+		assert self._bare()._serve_argv() == ["flm", "serve", "gpt-oss:20b", "--ctx-len", "16384"]
+
+	def test_request_body_mergea_request_params(self):
+		body = self._bare()._request_body(_probe())
+		assert body["reasoning_effort"] == "low"
+		assert body["max_tokens"] == 128
+		assert body["messages"][1] == {"role": "user", "content": "user"}

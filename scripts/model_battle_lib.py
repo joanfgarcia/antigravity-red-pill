@@ -307,6 +307,8 @@ class FastFlowLMRunner:
 		self.model_tag = str(profile.get("model_tag") or "")
 		if not self.model_tag:
 			raise ValueError(f"perfil '{model_name}' sin model_tag para FastFlowLM")
+		self._serve_args = [str(a) for a in (profile.get("serve_args") or [])]
+		self._request_params = dict(profile.get("request_params") or {})
 		self.chat_format = None
 		self.resolved = None
 		log_dir = get_data_dir() / "runtime_servers"
@@ -320,9 +322,9 @@ class FastFlowLMRunner:
 			if self._daemon_was_active:
 				stop_daemon_if_active()
 			with open(self._log_path, "a", encoding="utf-8") as logf:
-				logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | flm serve {self.model_tag} =====\n")
+				logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | {' '.join(self._serve_argv())} =====\n")
 				logf.flush()
-				self._proc = subprocess.Popen(["flm", "serve", self.model_tag], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+				self._proc = subprocess.Popen(self._serve_argv(), stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
 			self._wait_ready(startup_timeout)
 			self._warmup()
 		except Exception:
@@ -330,6 +332,9 @@ class FastFlowLMRunner:
 			raise
 		self.load_time_s = time.time() - t0
 		self.results: list[BattleResult] = []
+
+	def _serve_argv(self) -> list[str]:
+		return ["flm", "serve", self.model_tag, *self._serve_args]
 
 	def _wait_ready(self, timeout: float) -> None:
 		import urllib.request
@@ -375,11 +380,7 @@ class FastFlowLMRunner:
 		except Exception:
 			return "(log no disponible)"
 
-	def run(self, probe: Probe) -> BattleResult:
-		import urllib.request
-
-		t0 = time.time()
-		decode_tps = None
+	def _request_body(self, probe: Probe) -> dict:
 		body = {
 			"model": self.model_tag,
 			"messages": [
@@ -389,6 +390,15 @@ class FastFlowLMRunner:
 			"max_tokens": probe.max_tokens or 512,
 			"temperature": probe.temperature if probe.temperature is not None else 0.7,
 		}
+		body.update(self._request_params)
+		return body
+
+	def run(self, probe: Probe) -> BattleResult:
+		import urllib.request
+
+		t0 = time.time()
+		decode_tps = None
+		body = self._request_body(probe)
 		try:
 			req = urllib.request.Request(
 				f"{self.FLM_URL}/v1/chat/completions",
