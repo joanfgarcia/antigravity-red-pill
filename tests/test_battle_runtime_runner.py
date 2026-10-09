@@ -146,6 +146,22 @@ class TestRunnerForFactory:
 		assert isinstance(runner, _Rec)
 		assert created == [("granite_4_2_8b", "/granite.gguf")]
 
+	def test_fastflowlm_runtime_uses_flm_runner(self, monkeypatch):
+		from red_pill.core.runtime_registry import RuntimeRegistry
+
+		self._patch_registries(monkeypatch, {"runtime": "fastflowlm", "model_tag": "gpt-oss:20b"})
+		monkeypatch.setattr(RuntimeRegistry, "get", lambda rid, variant=None: {"id": rid, "kind": "fastflowlm"})
+		created = []
+
+		class _Rec:
+			def __init__(self, name):
+				created.append(name)
+
+		monkeypatch.setattr(mbl, "FastFlowLMRunner", _Rec)
+		runner = mbl.runner_for("npu_gpt_oss_20b")
+		assert isinstance(runner, _Rec)
+		assert created == ["npu_gpt_oss_20b"]
+
 	def test_stock_profile_without_path_raises(self, monkeypatch):
 		self._patch_registries(monkeypatch, {})
 		with pytest.raises(ValueError, match="sin gguf_path"):

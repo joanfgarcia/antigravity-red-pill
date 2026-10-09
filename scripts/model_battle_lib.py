@@ -14,6 +14,7 @@ from __future__ import annotations
 import gc
 import json
 import os
+import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -287,6 +288,132 @@ class RuntimeBattleRunner:
 		self._server.stop()
 
 
+class FastFlowLMRunner:
+	"""Runner para el runtime FastFlowLM (NPU XDNA2) — mismo contrato que BattleRunner.
+
+	Sirve vía `flm serve <model_tag>` (OpenAI-compatible en :52625) y ejecuta los
+	mismos probes/validadores; registra el decode t/s que reporta FLM en la
+	validación (`decode_tps`).
+	"""
+
+	FLM_URL = "http://127.0.0.1:52625"
+
+	def __init__(self, model_name: str, startup_timeout: float = 240.0):
+		from red_pill.core.model_registry import ModelRegistry
+		from red_pill.core.paths import get_data_dir
+
+		profile = ModelRegistry.get_profile(model_name) or {}
+		self.model_name = model_name
+		self.model_tag = str(profile.get("model_tag") or "")
+		if not self.model_tag:
+			raise ValueError(f"perfil '{model_name}' sin model_tag para FastFlowLM")
+		self.chat_format = None
+		self.resolved = None
+		log_dir = get_data_dir() / "runtime_servers"
+		log_dir.mkdir(parents=True, exist_ok=True)
+		self._log_path = log_dir / f"flm_{model_name}.log"
+		t0 = time.time()
+		with open(self._log_path, "a", encoding="utf-8") as logf:
+			logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | flm serve {self.model_tag} =====\n")
+			logf.flush()
+			self._proc = subprocess.Popen(["flm", "serve", self.model_tag], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+		try:
+			self._wait_ready(startup_timeout)
+		except Exception:
+			self.close()
+			raise
+		self.load_time_s = time.time() - t0
+		self.results: list[BattleResult] = []
+
+	def _wait_ready(self, timeout: float) -> None:
+		import urllib.request
+
+		deadline = time.time() + timeout
+		while time.time() < deadline:
+			if self._proc.poll() is not None:
+				raise RuntimeError(f"flm serve murió durante el arranque (rc={self._proc.returncode}): {self._log_tail()}")
+			try:
+				with urllib.request.urlopen(f"{self.FLM_URL}/v1/models", timeout=2) as resp:
+					if resp.status == 200:
+						return
+			except Exception:
+				time.sleep(1.0)
+		raise RuntimeError(f"timeout esperando a flm serve ({timeout:.0f}s): {self._log_tail()}")
+
+	def _log_tail(self, lines: int = 15) -> str:
+		try:
+			content = self._log_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+			return "\n".join(content[-lines:]) if content else "(sin log)"
+		except Exception:
+			return "(log no disponible)"
+
+	def run(self, probe: Probe) -> BattleResult:
+		import urllib.request
+
+		t0 = time.time()
+		decode_tps = None
+		body = {
+			"model": self.model_tag,
+			"messages": [
+				{"role": "system", "content": probe.system_prompt},
+				{"role": "user", "content": probe.user_message},
+			],
+			"max_tokens": probe.max_tokens or 512,
+			"temperature": probe.temperature if probe.temperature is not None else 0.7,
+		}
+		try:
+			req = urllib.request.Request(
+				f"{self.FLM_URL}/v1/chat/completions",
+				data=json.dumps(body).encode("utf-8"),
+				headers={"Content-Type": "application/json"},
+				method="POST",
+			)
+			with urllib.request.urlopen(req, timeout=900) as resp:
+				data = json.loads(resp.read().decode("utf-8"))
+			msg = (data.get("choices") or [{}])[0].get("message", {})
+			raw = msg.get("content") or ""
+			reasoning = msg.get("reasoning_content") or ""
+			if reasoning:
+				raw = f"[Start thinking]{reasoning}[End thinking]\n{raw}"
+			decode_tps = (data.get("usage") or {}).get("decoding_speed_tps")
+		except Exception as e:
+			raw = f"<<error: {e}>>"
+		dt = time.time() - t0
+		validation: dict = {}
+		try:
+			validation = probe.validator(raw)
+		except Exception as e:
+			validation = {"valid": False, "error": f"validator crashed: {e}"}
+		if decode_tps is not None:
+			validation["decode_tps"] = round(float(decode_tps), 1)
+		res = BattleResult(model=self.model_name, probe_name=probe.name, latency_s=dt, raw_output=raw, validation=validation)
+		self.results.append(res)
+		return res
+
+	def run_all(self, probes: list[Probe]) -> list[BattleResult]:
+		print(f"\n##### {self.model_name} (runtime=fastflowlm, tag={self.model_tag}) #####", flush=True)
+		print(f"loaded in {self.load_time_s:.1f}s", flush=True)
+		for p in probes:
+			r = self.run(p)
+			print(BattleRunner._fmt_line(r), flush=True)
+		return self.results
+
+	def close(self) -> None:
+		proc = getattr(self, "_proc", None)
+		if proc is None:
+			return
+		try:
+			if proc.poll() is None:
+				proc.terminate()
+				try:
+					proc.wait(timeout=15)
+				except subprocess.TimeoutExpired:
+					proc.kill()
+					proc.wait(timeout=5)
+		finally:
+			self._proc = None
+
+
 def runner_for(
 	model_name: str,
 	*,
@@ -305,6 +432,10 @@ def runner_for(
 
 	profile = ModelRegistry.get_profile(model_name) or {}
 	runtime_id = profile.get("runtime")
+	if runtime_id:
+		runtime = RuntimeRegistry.get(str(runtime_id))
+		if (runtime or {}).get("kind") == "fastflowlm":
+			return FastFlowLMRunner(model_name)
 	if runtime_id and runtime_id != RuntimeRegistry.default_id():
 		return RuntimeBattleRunner(model_name, n_ctx=n_ctx, extra_args=extra_args)
 	if not gguf_path:
