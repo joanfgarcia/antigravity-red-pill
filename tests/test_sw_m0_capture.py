@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from red_pill.core.affinity import derive_affinity, parse_affinity
+from red_pill.core.affinity import canonize_affinity, derive_affinity, parse_affinity
 from red_pill.core.queue_manager import MemoryQueueManager
 
 
@@ -22,12 +22,36 @@ def queue(tmp_path):
 # ── Afinidad determinista ──────────────────────────────────────────────────
 
 
-def test_affinity_workdir_y_mission():
-	assert derive_affinity(workdir="/x/ia/sharing", mission_id="BIT-003") == ["ws:sharing", "mission:BIT-003"]
+def test_affinity_mision_y_campana():
+	# §3.3: orden campaña + misión; mission_id NOT NULL → siempre presente.
+	assert derive_affinity(mission_id="BIT-003", campaign_id="BIT") == ["campaign:BIT", "mission:BIT-003"]
 
 
 def test_affinity_explicito_y_dedup():
 	assert derive_affinity(workdir="/x/sharing", explicit=["ws:sharing", "rfc:BIT"]) == ["ws:sharing", "rfc:BIT"]
+
+
+def test_affinity_ws_solo_del_registro(tmp_path, monkeypatch):
+	# D17: `ws:` sale del registro de workspaces; un cwd fuera de todo workspace NO emite ws.
+	import red_pill.core.workspaces as ws
+
+	proj = tmp_path / "sharing"
+	proj.mkdir()
+	reg = tmp_path / "workspaces.yaml"
+	monkeypatch.setattr(ws, "registry_path", lambda: reg)
+	ws.save_registry(
+		ws.WorkspaceRegistry(
+			agent_core=tmp_path / "desk",
+			workspaces=[ws.Workspace(name="sharing", root=proj)],
+		)
+	)
+	assert derive_affinity(workdir=str(proj)) == ["ws:sharing"]
+	assert derive_affinity(workdir=str(tmp_path / "other")) == []  # sin registro, sin ws
+
+
+def test_canonize_affinity_d19():
+	# D19: lower/trim + sorted(dedup) — `BIT` vs `bit` no rompe el coro.
+	assert canonize_affinity([" WS:Sharing ", "mission:BIT", "mission:bit"]) == ["mission:bit", "ws:sharing"]
 
 
 def test_affinity_vacio_es_silent():
