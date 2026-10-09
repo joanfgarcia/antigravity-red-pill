@@ -174,6 +174,8 @@ class TestFastFlowLMRunnerArgs:
 		runner.model_tag = "gpt-oss:20b"
 		runner._serve_args = ["--ctx-len", "16384"]
 		runner._request_params = {"reasoning_effort": "low"}
+		runner._ctx_len = 16384
+		runner._max_tokens_budget = None
 		return runner
 
 	def test_serve_argv_incluye_serve_args(self):
@@ -184,3 +186,15 @@ class TestFastFlowLMRunnerArgs:
 		assert body["reasoning_effort"] == "low"
 		assert body["max_tokens"] == 128
 		assert body["messages"][1] == {"role": "user", "content": "user"}
+
+	def test_parse_ctx_len(self):
+		assert mbl.FastFlowLMRunner._parse_ctx_len(["--ctx-len", "16384"]) == 16384
+		assert mbl.FastFlowLMRunner._parse_ctx_len(["--pmode", "balanced"]) is None
+
+	def test_output_budget_acotado_por_ctx(self):
+		runner = self._bare()
+		runner._max_tokens_budget = 12288
+		short = mbl.Probe(name="s", system_prompt="s", user_message="u" * 400, validator=lambda raw: {}, max_tokens=6144, temperature=None)
+		assert runner._request_body(short)["max_tokens"] == 12288
+		long = mbl.Probe(name="l", system_prompt="s", user_message="u" * 60000, validator=lambda raw: {}, max_tokens=6144, temperature=None)
+		assert runner._request_body(long)["max_tokens"] == 16384 - (60001 // 4) - 256

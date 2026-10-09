@@ -309,6 +309,8 @@ class FastFlowLMRunner:
 			raise ValueError(f"perfil '{model_name}' sin model_tag para FastFlowLM")
 		self._serve_args = [str(a) for a in (profile.get("serve_args") or [])]
 		self._request_params = dict(profile.get("request_params") or {})
+		self._ctx_len = self._parse_ctx_len(self._serve_args)
+		self._max_tokens_budget = int(profile["output_budget"]) if profile.get("output_budget") else None
 		self.chat_format = None
 		self.resolved = None
 		log_dir = get_data_dir() / "runtime_servers"
@@ -335,6 +337,14 @@ class FastFlowLMRunner:
 
 	def _serve_argv(self) -> list[str]:
 		return ["flm", "serve", self.model_tag, *self._serve_args]
+
+	@staticmethod
+	def _parse_ctx_len(serve_args: list[str]) -> Optional[int]:
+		"""Techo de salida derivado de `--ctx-len` (None si no se declaró)."""
+		try:
+			return int(serve_args[serve_args.index("--ctx-len") + 1])
+		except (ValueError, IndexError):
+			return None
 
 	def _wait_ready(self, timeout: float) -> None:
 		import urllib.request
@@ -381,13 +391,17 @@ class FastFlowLMRunner:
 			return "(log no disponible)"
 
 	def _request_body(self, probe: Probe) -> dict:
+		budget = self._max_tokens_budget or probe.max_tokens or 512
+		if self._ctx_len:
+			prompt_tokens_est = (len(probe.system_prompt) + len(probe.user_message)) // 4
+			budget = min(budget, max(64, self._ctx_len - prompt_tokens_est - 256))
 		body = {
 			"model": self.model_tag,
 			"messages": [
 				{"role": "system", "content": probe.system_prompt},
 				{"role": "user", "content": probe.user_message},
 			],
-			"max_tokens": probe.max_tokens or 512,
+			"max_tokens": budget,
 			"temperature": probe.temperature if probe.temperature is not None else 0.7,
 		}
 		body.update(self._request_params)
