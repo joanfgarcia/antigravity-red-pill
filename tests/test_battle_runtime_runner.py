@@ -176,6 +176,7 @@ class TestFastFlowLMRunnerArgs:
 		runner._request_params = {"reasoning_effort": "low"}
 		runner._ctx_len = 16384
 		runner._max_tokens_budget = None
+		runner._two_phase = None
 		return runner
 
 	def test_serve_argv_incluye_serve_args(self):
@@ -198,3 +199,26 @@ class TestFastFlowLMRunnerArgs:
 		assert runner._request_body(short)["max_tokens"] == 12288
 		long = mbl.Probe(name="l", system_prompt="s", user_message="u" * 60000, validator=lambda raw: {}, max_tokens=6144, temperature=None)
 		assert runner._request_body(long)["max_tokens"] == 16384 - (60001 // 4) - 256
+
+	def test_extract_summary_bloque_y_truncado(self):
+		assert mbl.FastFlowLMRunner._extract_summary("x <resumen>uno dos tres</resumen> y", 2) == "uno dos"
+		assert mbl.FastFlowLMRunner._extract_summary("palabra " * 10, 3) == "palabra palabra palabra"
+
+	def test_two_phase_compone_resumen_y_respuesta(self):
+		runner = self._bare()
+		runner._two_phase = {"summary_words": 5}
+		calls = []
+
+		def fake_chat(body):
+			calls.append(body)
+			if len(calls) == 1:
+				return {"choices": [{"message": {"content": "bla <resumen>uno dos tres cuatro cinco seis</resumen> fin"}}]}
+			return {"choices": [{"message": {"content": "220"}}]}
+
+		runner._chat = fake_chat
+		data = runner._run_two_phase(_probe())
+		assert "<resumen>" in calls[0]["messages"][1]["content"]
+		assert "Razonamiento previo" in calls[1]["messages"][1]["content"]
+		assert "uno dos tres cuatro cinco" in calls[1]["messages"][1]["content"]
+		assert "seis" not in calls[1]["messages"][1]["content"]
+		assert data["choices"][0]["message"]["content"] == "220"

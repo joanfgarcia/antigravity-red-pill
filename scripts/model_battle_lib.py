@@ -311,6 +311,8 @@ class FastFlowLMRunner:
 		self._request_params = dict(profile.get("request_params") or {})
 		self._ctx_len = self._parse_ctx_len(self._serve_args)
 		self._max_tokens_budget = int(profile["output_budget"]) if profile.get("output_budget") else None
+		two_phase = profile.get("two_phase")
+		self._two_phase = dict(two_phase) if isinstance(two_phase, dict) else ({} if two_phase else None)
 		self.chat_format = None
 		self.resolved = None
 		log_dir = get_data_dir() / "runtime_servers"
@@ -407,21 +409,59 @@ class FastFlowLMRunner:
 		body.update(self._request_params)
 		return body
 
-	def run(self, probe: Probe) -> BattleResult:
+	def _chat(self, body: dict) -> dict:
 		import urllib.request
 
+		req = urllib.request.Request(
+			f"{self.FLM_URL}/v1/chat/completions",
+			data=json.dumps(body).encode("utf-8"),
+			headers={"Content-Type": "application/json"},
+			method="POST",
+		)
+		with urllib.request.urlopen(req, timeout=900) as resp:
+			return json.loads(resp.read().decode("utf-8"))
+
+	def _think_budget(self, probe: Probe) -> int:
+		budget = self._max_tokens_budget or 4096
+		if self._ctx_len:
+			prompt_tokens_est = (len(probe.system_prompt) + len(probe.user_message)) // 4
+			budget = min(budget, max(64, self._ctx_len - prompt_tokens_est - 256))
+		return budget
+
+	@staticmethod
+	def _extract_summary(text: str, words: int) -> str:
+		import re
+
+		m = re.search(r"<resumen>(.*?)</resumen>", text, flags=re.S)
+		summary = (m.group(1) if m else text[-1500:]).strip()
+		return " ".join(summary.split()[:words])
+
+	def _run_two_phase(self, probe: Probe) -> dict:
+		"""Prototipo THINK-KV-001: pensar (capado) → resumen fijo → respuesta fresca."""
+		words = int(self._two_phase.get("summary_words") or 200)
+		think_body = self._request_body(probe)
+		think_body["max_tokens"] = self._think_budget(probe)
+		think_body["messages"] = [
+			{"role": "system", "content": probe.system_prompt},
+			{"role": "user", "content": f"{probe.user_message}\n\nPiensa el problema con calma y, al terminar, escribe un resumen de tu razonamiento en ≤{words} palabras dentro de <resumen>...</resumen>."},
+		]
+		data_a = self._chat(think_body)
+		msg_a = (data_a.get("choices") or [{}])[0].get("message", {})
+		text_a = f"{msg_a.get('reasoning_content') or ''}\n{msg_a.get('content') or ''}"
+		summary = self._extract_summary(text_a, words)
+		answer_body = self._request_body(probe)
+		answer_body["messages"] = [
+			{"role": "system", "content": probe.system_prompt},
+			{"role": "user", "content": f"{probe.user_message}\n\n[Razonamiento previo, resumen]\n{summary}\n\nResponde ahora directamente a la tarea, con el formato pedido y sin razonar más."},
+		]
+		answer_body["max_tokens"] = min(answer_body["max_tokens"], 3072)
+		return self._chat(answer_body)
+
+	def run(self, probe: Probe) -> BattleResult:
 		t0 = time.time()
 		decode_tps = None
-		body = self._request_body(probe)
 		try:
-			req = urllib.request.Request(
-				f"{self.FLM_URL}/v1/chat/completions",
-				data=json.dumps(body).encode("utf-8"),
-				headers={"Content-Type": "application/json"},
-				method="POST",
-			)
-			with urllib.request.urlopen(req, timeout=900) as resp:
-				data = json.loads(resp.read().decode("utf-8"))
+			data = self._run_two_phase(probe) if self._two_phase is not None else self._chat(self._request_body(probe))
 			msg = (data.get("choices") or [{}])[0].get("message", {})
 			raw = msg.get("content") or ""
 			reasoning = msg.get("reasoning_content") or ""
