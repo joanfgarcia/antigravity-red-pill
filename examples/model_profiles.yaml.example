@@ -471,3 +471,59 @@ profiles:
   # Nota de anclaje de runtime (RFC-HARNESS-003): un perfil puede declarar
   # `runtime: <id>` (ver runtimes.yaml.example); sin campo, usa el default.
   # ===============================================================
+
+  # ===============================================================
+  # NPU (FastFlowLM / XDNA2) — EJEMPLOS (medidas del PUESTO DE REFERENCIA,
+  # 2026-10-09 — recalibrar por equipo)
+  # ---------------------------------------------------------------
+  # Campos específicos del runner FLM:
+  #   model_tag         tag del catálogo `flm` (p.ej. gpt-oss:20b)
+  #   serve_args        argumentos extra de `flm serve` (p.ej. --ctx-len; el
+  #                     server por defecto va a ~8K → subir para needles largos)
+  #   request_params    se fusionan en el body OpenAI (reasoning_effort,
+  #                     temperature…); gpt-oss honra reasoning_effort a veces
+  #   output_budget     tope de salida por perfil, ACOTADO al ctx servido
+  #                     (fórmula ctx−prompt−256: nunca desborda ni OOM por salida)
+  #   two_phase         {summary_words: N} — prototipo pensar→resumen fijo→
+  #                     responder (THINK-KV-001; no rindió en gpt-oss)
+  # Calidad medida (benchset v1): 9B 6/6 · 35B-MoE 5/6 · gemma4-12b 5/6
+  # (visión ✓) · gpt-oss 1/6 (thinking harmony se come la salida).
+  # Los modelos FLM persisten en ~/.config/flm/models (pull una vez).
+  # ===============================================================
+
+  npu_gpt_oss_20b:
+    model_path: ~/.config/flm/models/GPT-OSS-20B-NPU2
+    binary_type: fastflowlm
+    model_tag: gpt-oss:20b
+    runtime: "fastflowlm"
+    serve_args: ["--ctx-len", "16384"]
+    request_params: {reasoning_effort: low}
+    output_budget: 12288
+    temperature: 0.7
+    capabilities: ["reasoning", "logic", "multilingual", "npu"]
+    hardware_affinity:
+      backend: npu
+      device: /dev/accel/accel0
+      ram_gb: 14
+
+  npu_gemma4_12b:
+    model_path: ~/.config/flm/models/Gemma4-12B-NPU2
+    binary_type: fastflowlm
+    model_tag: gemma4-it:12b
+    runtime: "fastflowlm"
+    temperature: 0.7
+    capabilities: ["reasoning", "multilingual", "npu", "vision", "audio"]
+    hardware_affinity:
+      backend: npu
+      device: /dev/accel/accel0
+      ram_gb: 9
+
+  # Perfil sobre el runtime ggml-xdna (PoC — NO acelera; ver runtimes.yaml.example).
+  # Sirve para medir CALIDAD del path/kernels, no rendimiento.
+  llama_32_xdna:
+    model_path: "models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    binary_type: "gguf"
+    runtime: "llama_cpp_xdna"
+    device_fallback: ["npu", "cpu"]
+    temperature: 0.3
+    capabilities: ["logic", "npu", "xdna-poc"]

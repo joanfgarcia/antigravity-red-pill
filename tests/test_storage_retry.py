@@ -107,6 +107,7 @@ def test_decorator_exponential_backoff_waits(no_sleep):
 	def op():
 		raise ResponseHandlingException(Exception("timeout"))
 
+	no_sleep.clear()  # ignora sleeps de otros hilos registrados antes de esta prueba
 	with pytest.raises(ResponseHandlingException):
 		op()
 	assert no_sleep == [0.5, 1.0]

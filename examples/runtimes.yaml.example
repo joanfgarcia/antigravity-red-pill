@@ -46,6 +46,53 @@ runtimes:
       notes: "PUESTO DE REFERENCIA (recalibrar): 8 GB VRAM → -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
     status: active
 
+  # FastFlowLM (FLM) — runtime NPU-first oficial AMD (XDNA2: Strix/Halo/Kraken).
+  # Sirve por `flm serve <model_tag>` (OpenAI-compatible en :52625); el modelo
+  # carga lazy en el primer request. UN modelo a la vez: las peticiones se
+  # encolan y cambiar de modelo = recarga (13-79 s según tamaño). Runtime MIT
+  # (org ROCm); kernels/modelos curados q4nx (catálogo cerrado, ver docs FLM).
+  fastflowlm:
+    kind: fastflowlm
+    description: "FastFlowLM — NPU Ryzen AI (XDNA2), kernels fusionados por modelo"
+    binary: "flm"
+    server: "flm serve"
+    capabilities:
+      backends: ["npu"]
+      quant_types: ["q4nx (propietario)"]
+      vision: true
+      audio: true
+    quirks:
+      notes: "PUESTO DE REFERENCIA (recalibrar): gpt-oss:20b 19.5 t/s · 35B-A3B 14.5-17.6 · 9B 5.6 · 27B 1.6/2.8 (MTP) · gemma4-12b 5-6.5 (2026-10-09). Server default ctx ~8K → perfiles que necesiten más: serve_args: ['--ctx-len','16384']. Modelos en ~/.config/flm/models (pull una vez; pulls largos → job de la cola)."
+    status: active
+
+  # llama.cpp con backend ggml-xdna (PoC NPU XDNA2 vía XRT + xclbins mlir-aie).
+  # REQUIERE: XRT ≥2.21.75 (libxrt2 + libxrt-npu2 + libxrt-utils + libxrt-dev),
+  # xclbins compilados (mlir-aie + Peano; uno por dimensión K del modelo) y
+  # memlock unlimited. El backend solo acelera MUL_MAT; el resto va a CPU.
+  llama_cpp_xdna:
+    kind: llama_cpp_fork
+    description: "llama.cpp fork con backend ggml-xdna (OllamaAMDNPU) — PoC NPU"
+    binary: "~/opt/llama.cpp-xdna/build/bin/llama-cli"
+    server: "~/opt/llama.cpp-xdna/build/bin/llama-server"
+    build:
+      flags: ["GGML_XDNA=ON", "GGML_BACKEND_DL=ON", "GGML_NATIVE=OFF", "BUILD_SHARED_LIBS=ON"]
+      requires: ["XRT >= 2.21.75", "xclbins mlir-aie (K por modelo)", "memlock unlimited"]
+    env:
+      # Slots de xclbin (una entrada por K del modelo) + librería del backend.
+      # Nota: en config viva usa rutas ABSOLUTAS (el env no expande ~).
+      GGML_BACKEND_PATH: "~/opt/llama.cpp-xdna/build/bin/libggml-xdna.so"
+      GGML_XDNA_XCLBIN_PATH: "~/opt/xclbin-prefill/k3072_n128_prefill.xclbin"
+      GGML_XDNA_INSTR_PATH: "~/opt/xclbin-prefill/k3072_n128_prefill.txt"
+      GGML_XDNA_TILE_M: "128"
+      GGML_XDNA_TILE_K: "3072"
+      GGML_XDNA_TILE_N: "128"
+    capabilities:
+      backends: ["npu", "cpu"]
+      quant_types: ["f16", "q8_0", "q4_k_m", "k_quants"]
+    quirks:
+      notes: "PoC 2026-10-09 (Halo): cadena completa OK pero NO acelera — 3B XDNA 111.8pp/31.0tg vs CPU 144.5/29.2; kernels de PREFILL (decode NPU ~0.65 t/s DMA-limited, no se usa) → el path consume CPU y encima es más lento. Reproducible: mlir-aie+Peano → xclbins → cmake GGML_XDNA=ON."
+    status: experimental
+
   # ── Otro engine con VARIANTES por backend (ejemplo): BitNet b1.58 ────────
   # Un engine puede declarar `variants:` (cuda/vulkan/cpu…): cada variante su
   # binario, `status` (verified|incompatible), `env` de ejecución, `quirks` y

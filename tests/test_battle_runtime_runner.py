@@ -166,3 +166,59 @@ class TestRunnerForFactory:
 		self._patch_registries(monkeypatch, {})
 		with pytest.raises(ValueError, match="sin gguf_path"):
 			mbl.runner_for("misterioso")
+
+
+class TestFastFlowLMRunnerArgs:
+	def _bare(self):
+		runner = mbl.FastFlowLMRunner.__new__(mbl.FastFlowLMRunner)
+		runner.model_tag = "gpt-oss:20b"
+		runner._serve_args = ["--ctx-len", "16384"]
+		runner._request_params = {"reasoning_effort": "low"}
+		runner._ctx_len = 16384
+		runner._max_tokens_budget = None
+		runner._two_phase = None
+		return runner
+
+	def test_serve_argv_incluye_serve_args(self):
+		assert self._bare()._serve_argv() == ["flm", "serve", "gpt-oss:20b", "--ctx-len", "16384"]
+
+	def test_request_body_mergea_request_params(self):
+		body = self._bare()._request_body(_probe())
+		assert body["reasoning_effort"] == "low"
+		assert body["max_tokens"] == 128
+		assert body["messages"][1] == {"role": "user", "content": "user"}
+
+	def test_parse_ctx_len(self):
+		assert mbl.FastFlowLMRunner._parse_ctx_len(["--ctx-len", "16384"]) == 16384
+		assert mbl.FastFlowLMRunner._parse_ctx_len(["--pmode", "balanced"]) is None
+
+	def test_output_budget_acotado_por_ctx(self):
+		runner = self._bare()
+		runner._max_tokens_budget = 12288
+		short = mbl.Probe(name="s", system_prompt="s", user_message="u" * 400, validator=lambda raw: {}, max_tokens=6144, temperature=None)
+		assert runner._request_body(short)["max_tokens"] == 12288
+		long = mbl.Probe(name="l", system_prompt="s", user_message="u" * 60000, validator=lambda raw: {}, max_tokens=6144, temperature=None)
+		assert runner._request_body(long)["max_tokens"] == 16384 - (60001 // 4) - 256
+
+	def test_extract_summary_bloque_y_truncado(self):
+		assert mbl.FastFlowLMRunner._extract_summary("x <resumen>uno dos tres</resumen> y", 2) == "uno dos"
+		assert mbl.FastFlowLMRunner._extract_summary("palabra " * 10, 3) == "palabra palabra palabra"
+
+	def test_two_phase_compone_resumen_y_respuesta(self):
+		runner = self._bare()
+		runner._two_phase = {"summary_words": 5}
+		calls = []
+
+		def fake_chat(body):
+			calls.append(body)
+			if len(calls) == 1:
+				return {"choices": [{"message": {"content": "bla <resumen>uno dos tres cuatro cinco seis</resumen> fin"}}]}
+			return {"choices": [{"message": {"content": "220"}}]}
+
+		runner._chat = fake_chat
+		data = runner._run_two_phase(_probe())
+		assert "<resumen>" in calls[0]["messages"][1]["content"]
+		assert "Razonamiento previo" in calls[1]["messages"][1]["content"]
+		assert "uno dos tres cuatro cinco" in calls[1]["messages"][1]["content"]
+		assert "seis" not in calls[1]["messages"][1]["content"]
+		assert data["choices"][0]["message"]["content"] == "220"

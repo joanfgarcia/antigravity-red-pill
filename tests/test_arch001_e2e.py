@@ -118,7 +118,9 @@ def _build_worker_env(tmp_path, monkeypatch):
 
 @pytest.fixture
 def worker_env(tmp_path, monkeypatch):
-	return _build_worker_env(tmp_path, monkeypatch)
+	worker, db_path, recording = _build_worker_env(tmp_path, monkeypatch)
+	yield worker, db_path, recording
+	worker.stop()
 
 
 def _conn(db_path: Path):
@@ -146,7 +148,10 @@ def test_e2e_worker_constructed_with_antigravity_strategy(tmp_path, monkeypatch)
 	monkeypatch.setenv("AUTONOMOUS_AGY_ENABLED", "true")
 	cfg.get_config.cache_clear()
 	worker, _, _ = _build_worker_env(tmp_path, monkeypatch)
-	assert isinstance(worker._strategy, AntigravityPulseStrategy)
+	try:
+		assert isinstance(worker._strategy, AntigravityPulseStrategy)
+	finally:
+		worker.stop()
 
 
 def test_e2e_worker_without_antigravity_needs_uses_null_strategy(worker_env):

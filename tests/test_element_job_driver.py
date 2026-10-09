@@ -217,6 +217,22 @@ def test_build_argv_con_y_sin_systemd(tmp_path):
 	assert argv == ["echo", "process"]
 
 
+def test_build_argv_honra_preflight_memory_max(tmp_path):
+	driver = _bind(ElementJobDriver())
+	driver._has_systemd = staticmethod(lambda: True)
+	payload = _payload()
+	payload["preflight"] = {"memory_max": "28G"}
+	with patch("red_pill.jobs.drivers.element.subprocess.run") as run:
+		run.return_value.returncode = 3
+		argv = driver._build_argv(payload, str(tmp_path))
+	assert "MemoryMax=28G" in argv
+	payload["preflight"] = {}
+	with patch("red_pill.jobs.drivers.element.subprocess.run") as run:
+		run.return_value.returncode = 3
+		argv = driver._build_argv(payload, str(tmp_path))
+	assert "MemoryMax=10G" in argv
+
+
 def test_build_env_expone_elemento_y_codigos():
 	driver = _bind(ElementJobDriver())
 	env = driver._build_env(_payload(), "/tmp", "el-elem", 3)

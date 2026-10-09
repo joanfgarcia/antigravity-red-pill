@@ -307,23 +307,46 @@ class FastFlowLMRunner:
 		self.model_tag = str(profile.get("model_tag") or "")
 		if not self.model_tag:
 			raise ValueError(f"perfil '{model_name}' sin model_tag para FastFlowLM")
+		self._serve_args = [str(a) for a in (profile.get("serve_args") or [])]
+		self._request_params = dict(profile.get("request_params") or {})
+		self._ctx_len = self._parse_ctx_len(self._serve_args)
+		self._max_tokens_budget = int(profile["output_budget"]) if profile.get("output_budget") else None
+		two_phase = profile.get("two_phase")
+		self._two_phase = dict(two_phase) if isinstance(two_phase, dict) else ({} if two_phase else None)
 		self.chat_format = None
 		self.resolved = None
 		log_dir = get_data_dir() / "runtime_servers"
 		log_dir.mkdir(parents=True, exist_ok=True)
 		self._log_path = log_dir / f"flm_{model_name}.log"
 		t0 = time.time()
-		with open(self._log_path, "a", encoding="utf-8") as logf:
-			logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | flm serve {self.model_tag} =====\n")
-			logf.flush()
-			self._proc = subprocess.Popen(["flm", "serve", self.model_tag], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+		self._proc = None
+		self._daemon_was_active = False
 		try:
+			self._daemon_was_active = os.system("systemctl --user is-active --quiet redpill-llm.service") == 0
+			if self._daemon_was_active:
+				stop_daemon_if_active()
+			with open(self._log_path, "a", encoding="utf-8") as logf:
+				logf.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} | {' '.join(self._serve_argv())} =====\n")
+				logf.flush()
+				self._proc = subprocess.Popen(self._serve_argv(), stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
 			self._wait_ready(startup_timeout)
+			self._warmup()
 		except Exception:
 			self.close()
 			raise
 		self.load_time_s = time.time() - t0
 		self.results: list[BattleResult] = []
+
+	def _serve_argv(self) -> list[str]:
+		return ["flm", "serve", self.model_tag, *self._serve_args]
+
+	@staticmethod
+	def _parse_ctx_len(serve_args: list[str]) -> Optional[int]:
+		"""Techo de salida derivado de `--ctx-len` (None si no se declaró)."""
+		try:
+			return int(serve_args[serve_args.index("--ctx-len") + 1])
+		except (ValueError, IndexError):
+			return None
 
 	def _wait_ready(self, timeout: float) -> None:
 		import urllib.request
@@ -340,6 +363,28 @@ class FastFlowLMRunner:
 				time.sleep(1.0)
 		raise RuntimeError(f"timeout esperando a flm serve ({timeout:.0f}s): {self._log_tail()}")
 
+	def _warmup(self) -> None:
+		"""Fuerza la carga real del modelo (flm sirve lazy en el primer request).
+
+		Sin warmup un fallo de asignación (XRT ENOMEM) se disfraza de probes
+		inválidos; con él, `load_time_s` es real y el error de arranque sale
+		con la cola del log.
+		"""
+		import urllib.request
+
+		body = {"model": self.model_tag, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 4}
+		req = urllib.request.Request(
+			f"{self.FLM_URL}/v1/chat/completions",
+			data=json.dumps(body).encode("utf-8"),
+			headers={"Content-Type": "application/json"},
+			method="POST",
+		)
+		try:
+			with urllib.request.urlopen(req, timeout=600) as resp:
+				resp.read()
+		except Exception as e:
+			raise RuntimeError(f"warmup de '{self.model_tag}' falló (carga del modelo): {e} — {self._log_tail()}") from e
+
 	def _log_tail(self, lines: int = 15) -> str:
 		try:
 			content = self._log_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()
@@ -347,29 +392,76 @@ class FastFlowLMRunner:
 		except Exception:
 			return "(log no disponible)"
 
-	def run(self, probe: Probe) -> BattleResult:
-		import urllib.request
-
-		t0 = time.time()
-		decode_tps = None
+	def _request_body(self, probe: Probe) -> dict:
+		budget = self._max_tokens_budget or probe.max_tokens or 512
+		if self._ctx_len:
+			prompt_tokens_est = (len(probe.system_prompt) + len(probe.user_message)) // 4
+			budget = min(budget, max(64, self._ctx_len - prompt_tokens_est - 256))
 		body = {
 			"model": self.model_tag,
 			"messages": [
 				{"role": "system", "content": probe.system_prompt},
 				{"role": "user", "content": probe.user_message},
 			],
-			"max_tokens": probe.max_tokens or 512,
+			"max_tokens": budget,
 			"temperature": probe.temperature if probe.temperature is not None else 0.7,
 		}
+		body.update(self._request_params)
+		return body
+
+	def _chat(self, body: dict) -> dict:
+		import urllib.request
+
+		req = urllib.request.Request(
+			f"{self.FLM_URL}/v1/chat/completions",
+			data=json.dumps(body).encode("utf-8"),
+			headers={"Content-Type": "application/json"},
+			method="POST",
+		)
+		with urllib.request.urlopen(req, timeout=900) as resp:
+			return json.loads(resp.read().decode("utf-8"))
+
+	def _think_budget(self, probe: Probe) -> int:
+		budget = self._max_tokens_budget or 4096
+		if self._ctx_len:
+			prompt_tokens_est = (len(probe.system_prompt) + len(probe.user_message)) // 4
+			budget = min(budget, max(64, self._ctx_len - prompt_tokens_est - 256))
+		return budget
+
+	@staticmethod
+	def _extract_summary(text: str, words: int) -> str:
+		import re
+
+		m = re.search(r"<resumen>(.*?)</resumen>", text, flags=re.S)
+		summary = (m.group(1) if m else text[-1500:]).strip()
+		return " ".join(summary.split()[:words])
+
+	def _run_two_phase(self, probe: Probe) -> dict:
+		"""Prototipo THINK-KV-001: pensar (capado) → resumen fijo → respuesta fresca."""
+		words = int(self._two_phase.get("summary_words") or 200)
+		think_body = self._request_body(probe)
+		think_body["max_tokens"] = self._think_budget(probe)
+		think_body["messages"] = [
+			{"role": "system", "content": probe.system_prompt},
+			{"role": "user", "content": f"{probe.user_message}\n\nPiensa el problema con calma y, al terminar, escribe un resumen de tu razonamiento en ≤{words} palabras dentro de <resumen>...</resumen>."},
+		]
+		data_a = self._chat(think_body)
+		msg_a = (data_a.get("choices") or [{}])[0].get("message", {})
+		text_a = f"{msg_a.get('reasoning_content') or ''}\n{msg_a.get('content') or ''}"
+		summary = self._extract_summary(text_a, words)
+		answer_body = self._request_body(probe)
+		answer_body["messages"] = [
+			{"role": "system", "content": probe.system_prompt},
+			{"role": "user", "content": f"{probe.user_message}\n\n[Razonamiento previo, resumen]\n{summary}\n\nResponde ahora directamente a la tarea, con el formato pedido y sin razonar más."},
+		]
+		answer_body["max_tokens"] = min(answer_body["max_tokens"], 3072)
+		return self._chat(answer_body)
+
+	def run(self, probe: Probe) -> BattleResult:
+		t0 = time.time()
+		decode_tps = None
 		try:
-			req = urllib.request.Request(
-				f"{self.FLM_URL}/v1/chat/completions",
-				data=json.dumps(body).encode("utf-8"),
-				headers={"Content-Type": "application/json"},
-				method="POST",
-			)
-			with urllib.request.urlopen(req, timeout=900) as resp:
-				data = json.loads(resp.read().decode("utf-8"))
+			data = self._run_two_phase(probe) if self._two_phase is not None else self._chat(self._request_body(probe))
 			msg = (data.get("choices") or [{}])[0].get("message", {})
 			raw = msg.get("content") or ""
 			reasoning = msg.get("reasoning_content") or ""
@@ -400,18 +492,20 @@ class FastFlowLMRunner:
 
 	def close(self) -> None:
 		proc = getattr(self, "_proc", None)
-		if proc is None:
-			return
-		try:
-			if proc.poll() is None:
-				proc.terminate()
-				try:
-					proc.wait(timeout=15)
-				except subprocess.TimeoutExpired:
-					proc.kill()
-					proc.wait(timeout=5)
-		finally:
-			self._proc = None
+		if proc is not None:
+			try:
+				if proc.poll() is None:
+					proc.terminate()
+					try:
+						proc.wait(timeout=15)
+					except subprocess.TimeoutExpired:
+						proc.kill()
+						proc.wait(timeout=5)
+			finally:
+				self._proc = None
+		if getattr(self, "_daemon_was_active", False):
+			self._daemon_was_active = False
+			start_daemon_if_inactive()
 
 
 def runner_for(

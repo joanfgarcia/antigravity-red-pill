@@ -94,12 +94,17 @@ class TestHeartbeatLease:
 		worker._lease_lock = threading.Lock()
 		worker._lease_touch = time.monotonic()  # fresh
 		worker.update_heartbeat = MagicMock()
-		monkeypatch.setattr(worker_module.time, "sleep", lambda s: (_ for _ in ()).throw(SystemExit))
+		worker._heartbeat_stop = threading.Event()
 
-		# Run one iteration — it should beat (fresh lease) then raise SystemExit
-		# from the sleep to stop the loop.
-		with pytest.raises(SystemExit):
-			worker._heartbeat_thread_main()
+		# Stop after the first iteration: the wait signals the event and returns,
+		# so the loop beats once (fresh lease) and then exits cleanly.
+		def _stop_on_wait(_timeout):
+			worker._heartbeat_stop.set()
+			return True
+
+		monkeypatch.setattr(worker._heartbeat_stop, "wait", _stop_on_wait)
+
+		worker._heartbeat_thread_main()
 		worker.update_heartbeat.assert_called_once()
 
 	def test_heartbeat_thread_silent_when_lease_expired(self, mock_db, monkeypatch):
@@ -109,11 +114,37 @@ class TestHeartbeatLease:
 		worker._lease_lock = threading.Lock()
 		worker._lease_touch = time.monotonic() - 10_000  # stale (> 900s lease)
 		worker.update_heartbeat = MagicMock()
-		monkeypatch.setattr(worker_module.time, "sleep", lambda s: (_ for _ in ()).throw(SystemExit))
+		worker._heartbeat_stop = threading.Event()
 
-		with pytest.raises(SystemExit):
-			worker._heartbeat_thread_main()
+		def _stop_on_wait(_timeout):
+			worker._heartbeat_stop.set()
+			return True
+
+		monkeypatch.setattr(worker._heartbeat_stop, "wait", _stop_on_wait)
+
+		worker._heartbeat_thread_main()
 		worker.update_heartbeat.assert_not_called()
+
+	def test_stop_joins_background_thread(self):
+		"""stop() signals the daemon and joins it: no leaked thread (CI hermetic)."""
+		import threading
+
+		worker = IDEWorker.__new__(IDEWorker)
+		worker._heartbeat_stop = threading.Event()
+		worker._heartbeat_thread = threading.Thread(
+			target=lambda: worker._heartbeat_stop.wait(30), name="heartbeat-daemon", daemon=True
+		)
+		worker._heartbeat_thread.start()
+		assert worker._heartbeat_thread.is_alive()
+
+		worker.stop(timeout=5)
+
+		assert not worker._heartbeat_thread.is_alive()
+
+	def test_stop_is_noop_without_thread(self):
+		"""stop() tolerates workers built without __init__ (idempotent, no attrs)."""
+		worker = IDEWorker.__new__(IDEWorker)
+		worker.stop()  # must not raise
 
 
 class _CommitTrackingConn:

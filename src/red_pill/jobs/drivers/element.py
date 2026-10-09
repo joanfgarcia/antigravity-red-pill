@@ -296,7 +296,8 @@ class ElementJobDriver(ResumableJobDriver):
 			argv[0] = os.path.abspath(candidate)
 		if not self._has_systemd():
 			return argv
-		scope = ["systemd-run", "--user", "--scope", "--quiet", f"--unit=redpill-job-{self.short_id}", "-p", "MemoryMax=10G"]
+		memory_max = (payload.get("preflight") or {}).get("memory_max", "10G")
+		scope = ["systemd-run", "--user", "--scope", "--quiet", f"--unit=redpill-job-{self.short_id}", "-p", f"MemoryMax={memory_max}"]
 		if self.step_timeout_s:
 			scope += ["-p", f"RuntimeMaxSec={int(self.step_timeout_s)}"]
 		self._clear_stale_scope()
