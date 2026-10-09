@@ -37,6 +37,7 @@ from red_pill.core.paths import (
 	get_model_validation_path,
 	get_task_profiles_path,
 )
+from red_pill.core.runtime_registry import RuntimeRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class ResolvedModel:
 	profile_name: str
 	model_path: str
 	chat_format: Optional[str] = None  # None = template nativo del GGUF
+	chat_template_file: Optional[str] = None  # plantilla jinja del perfil (gana al template embebido)
 	minion_chat_format: Optional[str] = None
 	tool_format: str = "auto"
 	thinking: str = "off"
@@ -92,6 +94,11 @@ class ResolvedModel:
 	mode: str = "curated"  # curated | custom | experimental
 	last_mode: str = "curated"  # para /status.last_mode
 	extra: Dict[str, Any] = field(default_factory=dict)
+	runtime_id: Optional[str] = None  # RFC-HARNESS-003: runtime anclado (None = stock)
+	runtime: Dict[str, Any] = field(default_factory=dict)  # resuelto de RuntimeRegistry
+	reasoning_effort: Optional[str] = None  # RFC-HARNESS-003 §2.9: esfuerzo declarado (medium/xhigh...)
+	reasoning_budget: Optional[int] = None  # tope DURO de tokens de thinking (no toca el contexto: acota la traza)
+	sampling: Dict[str, Any] = field(default_factory=dict)  # receta de samplers del modelo (top_p, top_k, min_p...)
 
 	def resolved_n_ctx(self) -> int:
 		"""n_ctx efectivo del perfil resuelto (vram_tiers aplicado)."""
@@ -214,6 +221,7 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		profile_name=name,
 		model_path=_resolve_profile_file(profile, name),
 		chat_format=profile.get("chat_format"),
+		chat_template_file=profile.get("chat_template_file"),
 		minion_chat_format=profile.get("minion_chat_format"),
 		tool_format=_normalize_tool_format(profile.get("tool_format", "auto")),
 		thinking=thinking,
@@ -226,6 +234,9 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		n_gpu_layers=int(tier.get("n_gpu_layers") or -1),
 		flash_attn=_normalize_flash_attn(profile.get("flash_attn")),
 		license=normalize_license(profile.get("license"), name),
+		reasoning_effort=profile.get("reasoning_effort"),
+		reasoning_budget=int(profile["reasoning_budget"]) if profile.get("reasoning_budget") else None,
+		sampling=dict(profile.get("sampling") or {}),
 		extra={"tier": tier, "thinking_supported": thinking != "off", "fa_capable": bool(profile.get("fa_capable"))},
 	)
 
@@ -462,8 +473,30 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 		resolved.chat_format = body["chat_format"]
 	if "device_fallback" in body:
 		resolved.device_fallback = list(body["device_fallback"])
+	if "reasoning_effort" in body:
+		resolved.reasoning_effort = body["reasoning_effort"]
+	if "sampling" in body:
+		resolved.sampling = {**(resolved.sampling or {}), **dict(body["sampling"] or {})}
+
+	# RFC-HARNESS-003: anclaje de runtime del perfil. Informativo aquí; el gate
+	# de disponibilidad es require_runtime() antes de cargar el modelo.
+	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
+	if profile.get("runtime"):
+		resolved.runtime_id = str(profile["runtime"])
+		resolved.runtime = RuntimeRegistry.for_profile(profile)
 
 	return resolved
+
+
+def require_runtime(resolved: ResolvedModel) -> dict:
+	"""Gate de carga (RFC-HARNESS-003): runtime declarado ⇒ operativo o error.
+
+	Devuelve el runtime resuelto; {} si el perfil no declara anclaje. Falla
+	limpio (RuntimeUnavailableError) — nunca fallback silencioso a stock.
+	"""
+	if not resolved.runtime_id:
+		return {}
+	return RuntimeRegistry.require(resolved.runtime_id)
 
 
 def _resolve_experimental(exp: dict, body: dict) -> ResolvedModel:
@@ -612,6 +645,9 @@ def _resolve_task(task_id: str, body: dict, enforce_model: Optional[str] = None)
 		resolved.temperature = float(chosen.get("temperature") or task.get("temperature") or resolved.temperature)
 		resolved.max_tokens = int(chosen.get("max_tokens") or task.get("max_tokens") or resolved.max_tokens)
 		resolved.thinking = _normalize_thinking(chosen.get("thinking") or task.get("thinking") or resolved.thinking)
+		# Conducta extendida (corte 4): candidato > tarea > perfil, igual que el resto.
+		resolved.reasoning_effort = chosen.get("reasoning_effort") or task.get("reasoning_effort") or resolved.reasoning_effort
+		resolved.sampling = {**(resolved.sampling or {}), **(task.get("sampling") or {}), **(chosen.get("sampling") or {})}
 		# Protección de curado: si la tarea pidió un modo de RAZONAMIENTO pero
 		# el candidato elegido no razona (thinking_supported=False), degradar al
 		# thinking del MODELO (off) en vez de intentar un handler inexistente.
@@ -793,12 +829,16 @@ def resolve_task_conduct(task_id: str) -> dict:
 	temperature = float(task.get("temperature") or 0.3)
 	max_tokens = int(task.get("max_tokens") or 4096)
 	thinking = _normalize_thinking(task.get("thinking", "off"))
+	reasoning_effort = task.get("reasoning_effort")
+	sampling = dict(task.get("sampling") or {})
 	if chosen is not None:
 		profile_name = chosen.get("profile") or ""
 		prompt_file = chosen.get("prompt_file") or prompt_file
 		temperature = float(chosen.get("temperature") or temperature)
 		max_tokens = int(chosen.get("max_tokens") or max_tokens)
 		thinking = _normalize_thinking(chosen.get("thinking") or task.get("thinking") or thinking)
+		reasoning_effort = chosen.get("reasoning_effort") or reasoning_effort
+		sampling.update(chosen.get("sampling") or {})
 	return {
 		"task": task_id,
 		"profile": profile_name,
@@ -806,6 +846,8 @@ def resolve_task_conduct(task_id: str) -> dict:
 		"temperature": temperature,
 		"max_tokens": max_tokens,
 		"thinking": thinking,
+		"reasoning_effort": reasoning_effort,
+		"sampling": sampling,
 	}
 
 

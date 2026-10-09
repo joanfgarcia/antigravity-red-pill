@@ -120,7 +120,7 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 - Author: Jorge Augusto Guberte (São Paulo, Brazil)
 - Title: *RhizoDB: A Bounded Activation-Flow Architecture for Graph-Based Memory Systems for Agentic AI* (Technical Report, June 2026)
 - DOI: 10.5281/zenodo.20695703
-- Mathematical integration: Implements asymptotic saturated activation updates ($a_v(t+1) = a_v(t) + (1 - a_v(t)) \cdot \alpha$), bounded stability learning ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$), sleep cycle washout ($a_v \leftarrow \gamma \cdot a_v + b(s_v)$), and structural pruning for weak engrams ($a_v < 0.1 \land s_v < 5.0$).
+- Mathematical integration: Implements asymptotic saturated activation updates ($a_v(t+1) = a_v(t) + (1 - a_v(t)) \cdot \alpha$), bounded stability learning ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$), sleep cycle washout ($a_v \leftarrow \gamma \cdot a_v + b(s_v)$), and structural pruning for weak engrams ($a_v < 0.1 \land s_v < 5.0$). Curated engrams (`memento_engram`/`hubbed`) and hubs are exempt from the generic washout — they forget on their own axis (5y/10y demote, AD-048).
 
 > **The B760 Protocol does not invent its memory mechanics. It applies established cognitive science to the problem of AI session continuity.**
 > *Here is the science behind the art.*

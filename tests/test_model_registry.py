@@ -186,3 +186,75 @@ class TestGetProfileByCapability:
 		name, profile = mr.ModelRegistry.get_profile_by_capability("anything")
 		assert name == ""
 		assert profile == {}
+
+
+# ── Tests: plan de KV por calidad (RFC-HARNESS-003 §2.7) ─────────────────────
+
+
+class TestKvPlan:
+	def setup_method(self):
+		import red_pill.core.model_registry as mr
+
+		mr.ModelRegistry._profiles_cache = None
+
+	def _setup(self):
+		import red_pill.core.model_registry as mr
+
+		mr.ModelRegistry._profiles_cache = {
+			"bonsai": {
+				"kv_cache": {
+					"preferred": "f16",
+					"fallbacks": ["q8_0", "q4_0"],
+					"bytes_per_token_kib": {"f16": 64, "q8_0": 34, "q4_0": 18},
+				},
+				"vram_footprint": {"weights_mb": 5536, "overhead_mb": 330},
+				"hardware_affinity": {"n_ctx": 24576},
+			}
+		}
+
+	def test_f16_kept_when_it_fits(self):
+		self._setup()
+		import red_pill.core.model_registry as mr
+
+		plan = mr.ModelRegistry.plan_kv_cache("bonsai", ctx=24576, free_mb=8000)
+		assert plan["kv_type"] == "f16"
+		assert plan["fits"] and not plan["degraded"]
+		assert plan["required_mb"] == 5536 + 330 + 1536
+
+	def test_degrades_to_q8_conserving_ctx(self):
+		self._setup()
+		import red_pill.core.model_registry as mr
+
+		plan = mr.ModelRegistry.plan_kv_cache("bonsai", ctx=24576, free_mb=7000)
+		assert plan["kv_type"] == "q8_0"
+		assert plan["fits"] and plan["degraded"]
+		assert plan["ctx"] == 24576  # el contexto se conserva; cede la KV
+
+	def test_degrades_to_q4_for_64k_ctx(self):
+		self._setup()
+		import red_pill.core.model_registry as mr
+
+		plan = mr.ModelRegistry.plan_kv_cache("bonsai", ctx=65536, free_mb=7200)
+		assert plan["kv_type"] == "q4_0"
+		assert plan["fits"]
+
+	def test_none_fits_reports_clean(self):
+		self._setup()
+		import red_pill.core.model_registry as mr
+
+		plan = mr.ModelRegistry.plan_kv_cache("bonsai", ctx=65536, free_mb=5000)
+		assert plan["fits"] is False
+		assert plan["kv_type"] is None
+
+	def test_no_kv_data_returns_empty(self):
+		import red_pill.core.model_registry as mr
+
+		mr.ModelRegistry._profiles_cache = {"x": {"hardware_affinity": {}}}
+		assert mr.ModelRegistry.plan_kv_cache("x", ctx=8192, free_mb=8000) == {}
+
+	def test_default_ctx_is_the_desired_profile_context(self):
+		self._setup()
+		import red_pill.core.model_registry as mr
+
+		plan = mr.ModelRegistry.plan_kv_cache("bonsai", free_mb=8000)
+		assert plan["ctx"] == 24576  # el contexto deseado manda; la KV cede

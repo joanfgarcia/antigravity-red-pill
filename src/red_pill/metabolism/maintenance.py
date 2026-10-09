@@ -4,8 +4,12 @@ Extracted from sleep.py per ADR-SLEEP-001. CPU-only housekeeping — no LLM, no 
 (so the sleep orchestrator can run these even while the GPU is committed to training).
 """
 
+import json
 import logging
+import math
+import os
 import time
+from typing import Any
 
 import red_pill.config as cfg
 
@@ -173,19 +177,67 @@ def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_
 	return report
 
 
+def _washout_state_path():
+	from red_pill.core.paths import get_state_dir
+
+	return get_state_dir() / "rhizodb_washout_state.json"
+
+
+def _finite(value: Any, default: float) -> float:
+	try:
+		result = float(value)
+	except (TypeError, ValueError):
+		return default
+	return result if math.isfinite(result) else default
+
+
+def _is_curated(payload: dict) -> bool:
+	return payload.get("node_type") == "memento_engram" or payload.get("origin") == "memento" or bool(payload.get("hubbed"))
+
+
+def _load_washout_state() -> dict:
+	try:
+		data = json.loads(_washout_state_path().read_text(encoding="utf-8"))
+	except Exception:
+		return {}
+	return data if isinstance(data, dict) else {}
+
+
+def _save_washout_state(state: dict) -> None:
+	try:
+		path = _washout_state_path()
+		tmp = path.with_suffix(".json.tmp")
+		tmp.write_text(json.dumps(state), encoding="utf-8")
+		os.replace(tmp, path)
+	except Exception as e:
+		logger.debug(f"[SLEEP ENGINE] No se pudo persistir el estado del washout de RhizoDB: {e}")
+
+
 def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 	"""
 	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
-	Washout formula: a_v = gamma * a_v + b(s_v)
-	Pruning rule: delete if a_v < 0.1 and s_v < 5.0 (days)
+	Washout formula: a_v = gamma(t) * a_v + (1 - gamma(t)) * b(s_v)
+	Pruning rule: delete if a_v < RHIZODB_PRUNE_MIN_ACTIVATION and s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS.
+	gamma(t) attenuates with the days elapsed since this collection's last washout
+	(capped at RHIZODB_WASHOUT_REFERENCE_DAYS): a repeated run never prunes the same
+	time span twice, and a missed sleep never compounds punishment. All coefficients are config-driven.
 	"""
 	client = memory_manager.client
 	now = time.time()
-	gamma = 0.85
-	S_max = 365.0
+	gamma_base = min(max(_finite(getattr(cfg, "RHIZODB_WASHOUT_GAMMA", 0.85), 0.85), 0.0), 1.0)
+	s_max = _finite(getattr(cfg, "RHIZODB_S_MAX", 365.0), 365.0)
+	if s_max <= 0:
+		s_max = 365.0
+	prune_min_activation = _finite(getattr(cfg, "RHIZODB_PRUNE_MIN_ACTIVATION", 0.1), 0.1)
+	prune_max_stability_days = _finite(getattr(cfg, "RHIZODB_PRUNE_MAX_STABILITY_DAYS", 5.0), 5.0)
+	reference_days = _finite(getattr(cfg, "RHIZODB_WASHOUT_REFERENCE_DAYS", 1.0), 1.0)
+	if reference_days <= 0:
+		reference_days = 1.0
+	skip_curated = bool(getattr(cfg, "RHIZODB_WASHOUT_SKIP_CURATED", True))
 
 	# Find collections utilizing rhizodb
 	rhizodb_collections = [col for col, eng in cfg.MEMORY_ENGINES.items() if eng == "rhizodb"]
+	washout_state = _load_washout_state()
 
 	for collection in rhizodb_collections:
 		if not client.collection_exists(collection):
@@ -197,59 +249,75 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 
 		engine = get_memory_engine("rhizodb")
 
-		try:
-			# Scroll to get all points (limit=10000 to cover all social/story memories)
-			scroll_res = client.scroll(collection_name=collection, limit=10000, with_payload=True)
-			if isinstance(scroll_res, tuple) and len(scroll_res) == 2:
-				points = scroll_res[0]
-			else:
-				points = scroll_res if isinstance(scroll_res, list) else []
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Failed to fetch points for rhizodb processing in {collection}: {e}")
-			continue
-
-		if not points:
-			continue
+		last_washout = washout_state.get(collection)
+		elapsed_days = (now - last_washout) / 86400.0 if isinstance(last_washout, (int, float)) and math.isfinite(last_washout) else None
+		gamma = gamma_base if elapsed_days is None else gamma_base ** min(max(elapsed_days, 0.0) / reference_days, 1.0)
 
 		update_operations = []
 		points_to_delete = []
+		offset = None
+		scrolled = False
 
-		for p in points:
-			payload = p.payload or {}
-			if payload.get("immune"):
-				continue
-
-			# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
-			# anclan el hilo y tienen erosión hub-específica (erode_curated, con
-			# piso propio). Sin esto, la poda genérica los mataría antes que a sus
-			# miembros y rompería Ariadne.
-			if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
-				continue
-
-			# 1. Run lazy decay first to get current activation/score
-			decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
-
-			# If lazy decay wants to delete it
-			if decay_updates.get("_delete"):
-				points_to_delete.append(p.id)
-				continue
-
-			score = float(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)))
-			stability = float(payload.get("stability", 1.0))
-
-			# 2. Apply Washout: a_v = gamma * a_v + b(s_v)
-			# b(s_v) = (1 - gamma) * (stability / S_max)
-			b_sv = (1.0 - gamma) * (stability / S_max)
-			new_score = round(gamma * score + b_sv, 3)
-
-			# 3. Structural Pruning (Poda): delete if a_v < 0.1 and s_v < 5.0
-			if new_score < 0.1 and stability < 5.0:
-				points_to_delete.append(p.id)
-				logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
+		while True:
+			try:
+				scroll_res = client.scroll(collection_name=collection, limit=1000, offset=offset, with_payload=True)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to fetch points for rhizodb processing in {collection}: {e}")
+				break
+			if isinstance(scroll_res, tuple) and len(scroll_res) == 2:
+				points, offset = scroll_res
 			else:
-				# Otherwise, update score and commit time
-				update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
-				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+				points = scroll_res if isinstance(scroll_res, list) else []
+				offset = None
+			scrolled = True
+
+			for p in points:
+				payload = p.payload or {}
+				if payload.get("immune"):
+					continue
+
+				# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
+				# anclan el hilo y tienen erosión hub-específica (erode_curated, con
+				# piso propio). Sin esto, la poda genérica los mataría antes que a sus
+				# miembros y rompería Ariadne.
+				if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
+					continue
+
+				# AD-048: los MIEMBROS curados (memento_engram/hubbed) tampoco: su
+				# olvido es por eje propio (last_reinforced_at → demote 5a/10a,
+				# M9/AD-034), no por poda genérica (~15-25 noches).
+				if skip_curated and _is_curated(payload):
+					continue
+
+				# 1. Run lazy decay first to get current activation/score
+				decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
+
+				# If lazy decay wants to delete it
+				if decay_updates.get("_delete"):
+					points_to_delete.append(p.id)
+					continue
+
+				score = max(_finite(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)), 1.0), 0.0)
+				stability = _finite(payload.get("stability", 1.0), 1.0)
+				if stability <= 0:
+					stability = 1.0
+
+				# 2. Apply Washout: a_v = gamma * a_v + b(s_v)
+				# b(s_v) = (1 - gamma) * (stability / S_max)
+				b_sv = (1.0 - gamma) * (stability / s_max)
+				new_score = round(gamma * score + b_sv, 3)
+
+				# 3. Structural Pruning (Poda): delete if below the configured activation/stability floor
+				if new_score < prune_min_activation and stability < prune_max_stability_days:
+					points_to_delete.append(p.id)
+					logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
+				else:
+					# Otherwise, update score and commit time
+					update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
+					update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+
+			if not points or offset is None:
+				break
 
 		# Execute updates and deletions
 		if update_operations:
@@ -264,6 +332,11 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+
+		if scrolled:
+			washout_state[collection] = now
+
+	_save_washout_state(washout_state)
 
 
 def purge_empty_engrams(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:

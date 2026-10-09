@@ -4,6 +4,38 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-048] Washout genérico de RhizoDB excluye los curados (miembros + hubs)
+**Date**: 2026-10-08
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/rhizodb-hardening`).
+**Context**: auditoría del paquete RhizoDB de Guillem + contraste con el código vivo.
+El washout nocturno genérico (`a_v < 0.1 ∧ s_v < 5.0` → borrado físico) mataba los
+miembros curados de social/story (`node_type=memento_engram` / `hubbed` / `origin=memento`)
+en ~15-25 noches sin recuperación, contradiciendo M9/AD-034 (eje propio
+`last_reinforced_at` → demote a 5a miembros / 10a hubs) y D16/D17 (solo los hubs
+estaban exentos del washout genérico). No existe re-ascensión automática para
+sellos ya ascendidos (`reinforce_refine` retorna `already_ascended`), así que la
+pérdida no era reversible. La investigación de docs/registry no encontró ninguna
+decisión que fijara un marco de semanas para los curados.
+**Decision**:
+- El washout genérico excluye los curados (`node_type=memento_engram`,
+  `origin=memento` o `hubbed=true`), igual que los hubs: su olvido sigue en
+  `erode_curated` (5a/10a, `last_reinforced_at`).
+- Flag explícito de reversión `RHIZODB_WASHOUT_SKIP_CURATED` (default ON).
+- Coeficientes del washout a config (`RHIZODB_WASHOUT_GAMMA`, `RHIZODB_S_MAX`,
+  `RHIZODB_PRUNE_MIN_ACTIVATION`, `RHIZODB_PRUNE_MAX_STABILITY_DAYS`,
+  `RHIZODB_WASHOUT_REFERENCE_DAYS`); scroll paginado (fin del tope de 10k puntos);
+  γ atenuada por el tiempo desde el último washout de la colección (cap
+  `reference_days`): una doble corrida no poda dos veces la misma franja.
+- Hardening del motor (`affect.py`): NaN/Inf → defaults, timestamps ISO/ms
+  coerced, `stability <= 0` → olvidado; scores >1 preservados (lentitud de los
+  curados, factor Memento 5×).
+**Por qué esto y no alternativas**: no bajar el marco temporal de los curados
+(no hay decisión documentada que lo fije en semanas; el contrato vivo es 5a/10a);
+no añadir re-ascensión automática (no existe hoy y complicaría los sellos); el
+flag permite volver al washout genérico sin revertir código.
+
+---
+
 ## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
 **Date**: 2026-09-27
 **Status**: IMPLEMENTADO — RFC-004 P1-P4 DONE (sidecar `redpill-laya-tag.service` desplegado 2026-09-28; flags OFF en prod por RULE 4). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).
@@ -1143,3 +1175,51 @@ configurables.
 Un cambio se hace una vez y entra en la firma; la regeneración de artefactos
 stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
 --reconcile`), con refresco por cambio de cuerpo y nightly en paralelo.
+
+---
+
+## [AD-049] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
+
+**Date**: 2026-10-08
+
+### 1. The Problem
+Bonsai 2 27B (ternario PTQ1_0, 27B en ~5.95 GB) exige el fork PrismML de
+llama.cpp: stock rechaza sus tipos (y su `Q2_0` carga sin warning produciendo
+basura). El camino GGUF tenía UN binario hard-codeado (runner/providers/battle)
+y el daemon usa llama-cpp-python stock. Además, los harnesses legacy
+reinventaban el renderizado y volvían a romper modelos con thinking nativo
+(caveat Granite-4.2: pensamiento filtrándose a la respuesta medida).
+
+### 2. The Decision
+1. **Registro de runtimes** en config de instalación (`~/.config/red-pill/runtimes.yaml`,
+   seed-ejemplo en `examples/`): el perfil se ancla con `runtime: <id>`; runtime
+   declarado y ausente = **fallo limpio**, jamás fallback silencioso a stock.
+2. **Servidor dedicado** (`RuntimeServer`): llama-server del runtime anclado
+   (argv desde tiers + quirks), health real, unload de VRAM garantizado.
+3. **VRAM: swap-o-defer, nunca degradar** (decisión del operador): la
+   degradación CPU/parcial queda prohibida para modelos que caben; VRAM ocupada
+   → evict del residente vía proxy dual-bind (`/v1/unload`) o defer.
+4. **Plan de KV por calidad**: el contexto DESEADO manda; la KV cede
+   f16 → q8_0 → q4_0 con costes medidos por perfil (`kv_cache` +
+   `vram_footprint`; recalibrar por equipo).
+5. **Conducta unificada** (`inference/conduct`): perfil ⊕ task declaran
+   `sampling`/`reasoning_effort`; TODO runner consume la misma capa (python y
+   HTTP) — los probes se miden "como producción".
+6. **Repo↔puesto** (CONVENTIONS §10.7): ejemplos se calibran por equipo; la
+   config viva nunca se comitea.
+7. **Actualización de runtimes (ratificada)**: pin de commit + recipe de build +
+   smoke obligatorio (precedente `build-prism`).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Un harness adaptado por modelo (código) | rechazada | Multiplica runners y diverge (el caveat nació así); la adaptación es declarativa (perfil⊕task) + capa única |
+| Degradar a CPU/parcial cuando falte VRAM | rechazada (operador) | Medido muchas veces: tiempos inaceptables; solo último recurso si el modelo no cabe de ninguna manera |
+| Reducir contexto como primera degradación | rechazada | El contexto es el requisito; cede la calidad de KV |
+| Fallback silencioso a stock | prohibida | `Q2_0` en stock = basura sin warning |
+
+### 4. Rationale
+Piloto completo (cortes 1-4): 3 engines registrados (stock, fork PrismML,
+BitNet), Bonsai servido por su runtime con plan de KV (f16@24K verificado),
+matriz runtime×modelo bajo un solo harness — bonsai **3/3** y granite **3/3**
+tras unificar conducta (caveat muerto por construcción). 75/75 tests.

@@ -34,7 +34,7 @@ During idle time, the system invokes the profile carrying the `distillation` cap
     3. **Hygiene** — purges empty/whitespace engrams (zero recall value), re-stitching the `prev/next_raw_parent` temporal chain around each victim first; inherited-immunity fragment shrapnel is purged, deliberate immune empties and **murky pointers** (see §3.3) are only reported.
     4. **AxonWeaver** — weaves cross-collection synaptic axons (see §3.2). CPU-only; runs after Hygiene so it never weaves what is about to vanish.
     5. **Erosion** — Bayesian hub erosion (deletion threshold = the engine's own, single source of truth; see AD-023).
-    6. **Washout** — RhizoDB washout/pruning for rhizome collections.
+    6. **Washout** — RhizoDB washout/pruning for rhizome collections. Curated engrams (`memento_engram`/`hubbed`) and hubs are exempt from the generic washout: their forgetting runs on their own axis (`last_reinforced_at` → 5y/10y demote, AD-048).
     7. **Revision** (`requires_gpu`, born dark) — batch re-classification of legacy engrams (Track R2): dry-run marks `revision_would_move_to`; execute moves leaf engrams preserving their ID and rewiring reciprocal axons. Hubs are flagged, never moved.
     8. **Evolution** — self-evolution bookkeeping.
     Because each phase declares whether it needs the GPU, the runner defers **only** the GPU-heavy phases when the card is committed (e.g. training) — emitting a benign, non-escalating `vram_busy` *status* signal that self-clears on the next successful cycle — while the CPU-only maintenance phases still run. Implementation lives in `metabolism/phases/` over the focused modules (`chunker`, `categorizer`, `distiller`, `ephemeral_server`, `thread_weaver`, `maintenance`, `axons`, `revision`).

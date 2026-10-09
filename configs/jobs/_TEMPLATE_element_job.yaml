@@ -11,6 +11,10 @@
 #     elemento (job_pause/job_resume en la frontera del elemento).
 #   - Watchdog: max_step_minutes mata el step (cgroup, hijos CUDA incluidos) si un
 #     elemento cuelga → JobStepTimeout. defer_exit_code / pause_exit_code señalan.
+#   - Fail-soft (job_dag_execution §2): un elemento INDEPENDIENTE que falla se
+#     REGISTRA (p. ej. failures.jsonl) y se sale con skip_exit_code → la cola lo
+#     marca saltado y SIGUE con el resto. Dependencia dura entre elementos →
+#     fallo normal (el job para).
 source: element_job
 priority: 5
 seed: true

@@ -445,3 +445,29 @@ profiles:
         - min_free_gb: 7.0
           n_gpu_layers: -1
           n_ctx: 32768
+
+  # ===============================================================
+  # ESQUEMA: plan de KV por calidad (RFC-HARNESS-003 §2.7)
+  # ---------------------------------------------------------------
+  # Un perfil puede declarar la calibración MEDIDA de su equipo:
+  #   kv_cache.bytes_per_token_kib: coste de KV por token y calidad — se mide
+  #     cargando el modelo y anotando el KV buffer del equipo (NO copiar de otro).
+  #   vram_footprint: pesos reales en VRAM + overhead (workspaces) del equipo.
+  # El resolver conserva `hardware_affinity.n_ctx` (contexto deseado) y elige la
+  # mejor KV que quepa (f16 → q8_0 → q4_0); sin estos datos cae al paradigma
+  # legacy (tiers de n_ctx por VRAM libre).
+  #
+  # Ejemplo (valores del PUESTO DE REFERENCIA — RECALIBRAR por equipo):
+  #   perfil_ejemplo:
+  #     model_path: "/ruta/al/modelo.gguf"
+  #     kv_cache:
+  #       preferred: f16
+  #       fallbacks: ["q8_0", "q4_0"]
+  #       bytes_per_token_kib: {f16: 64, q8_0: 34, q4_0: 18}
+  #     vram_footprint:
+  #       weights_mb: 5536
+  #       overhead_mb: 330
+  #
+  # Nota de anclaje de runtime (RFC-HARNESS-003): un perfil puede declarar
+  # `runtime: <id>` (ver runtimes.yaml.example); sin campo, usa el default.
+  # ===============================================================

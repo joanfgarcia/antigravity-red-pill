@@ -262,6 +262,16 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_REALTIME_TAG_BUDGET_S` | `20` | Presupuesto agregado de etiquetado por drenaje (cota N×timeout). |
 | `LAYA_TAG_SOCKET` | `""` | Ruta del socket UDS del sidecar (vacío → `$XDG_RUNTIME_DIR/red-pill/laya_tag.sock`). |
 
+### RhizoDB washout (ciclo de sueño)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `RHIZODB_WASHOUT_GAMMA` | `0.85` | Retención del washout (`a_v ← γ·a_v + (1−γ)·b(s_v)`). γ se atenúa por el tiempo transcurrido desde el último washout de la colección. |
+| `RHIZODB_WASHOUT_REFERENCE_DAYS` | `1.0` | Ventana de referencia de la atenuación (cap): una doble corrida el mismo día no poda dos veces la misma franja temporal. |
+| `RHIZODB_S_MAX` | `365.0` | Techo de estabilidad (días) del término `b(s_v)` del washout. |
+| `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Poda estructural: borra si `a_v` cae por debajo de este valor **y** `s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS`. |
+| `RHIZODB_PRUNE_MAX_STABILITY_DAYS` | `5.0` | Umbral de estabilidad (días) de la poda estructural. |
+| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por `erode_curated` (5a/10a). OFF = comportamiento previo a AD-048. |
+
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`
 > (`http://localhost:8760/v1/chat/completions`); availability is probed at

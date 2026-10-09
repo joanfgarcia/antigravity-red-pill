@@ -12,4 +12,12 @@ mediante el Centralized Job Manager**, no a pelo en un `nohup`/`&`:
 
 La única excepción es una tarea que necesita respuesta AHORA en la sesión (chat, lint rápido) — esa va in-process, nunca como job (skill `job-manager` §1).
 
+## 2. Granularidad obligatoria (resiliencia de etapas)
+Todo job con etapas/elementos diferenciables (bucles sobre modelos, ficheros, tests…) se modela granularizado — nunca un single-step con el bucle dentro:
+
+1. **UN step = UN elemento**: `element_job` para listas MAP; `dag_job` con fan-out para árboles con dependencias.
+2. **Elemento independiente que falla → registrar y CONTINUAR** (fail-soft): anota el fallo (p. ej. `failures.jsonl`) y sale con `skip_exit_code` → la cola lo marca saltado y sigue. Un benchmark caído no invalida los demás.
+3. **Dependencia dura → parar**: si la etapa siguiente necesita el resultado correcto de la anterior, el fallo corta (RuntimeError/JobStepTimeout), no se salta.
+4. **Anti-patrón** (incidente 2026-10-08, job `c87b2393`): bucle de 12 modelos en un `script_job` single-step — un abort tiró 3 intentos y perdió lo medido. Con `element_job` + checkpoint por elemento, el fallo cuesta UN elemento.
+
 </constraint>

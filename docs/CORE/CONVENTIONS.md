@@ -352,6 +352,34 @@ it. Therefore:
 
 ---
 
+## 10.7 Repo ↔ Installed Configuration (calibration)
+
+This repo carries **conventions, schema and examples**; each machine carries its own
+**calibrated values**. The failure mode this rule prevents: committing one box's
+numbers (paths, context ranges, VRAM footprints) as if they were universal.
+
+1. **Examples are seeds with reference-post values — calibrate per machine.** Files in
+   `examples/` (`runtimes.yaml`, `model_profiles.yaml`, `task_profiles.yaml`…) ship
+   real-looking values from the reference post: binary paths, engine versions, build
+   flags, measured costs (`kv_cache.bytes_per_token_kib`, `vram_footprint`, context
+   ranges). Every installation MUST adjust paths/versions to its own setup and
+   **re-measure** costs on its own hardware. A measurement is only valid for the
+   machine it was taken on.
+2. **Live configuration lives in the installation**, following the seed schema:
+   `~/.config/red-pill/` (model profiles, runtimes registry, task curation) and
+   `~/.local/share/red-pill/` (models, state, engine logs). It is **never committed**
+   to this repo; the copy-if-absent seed mechanism covers fresh installs.
+3. **No machine-measured values in code.** If a number depends on the hardware (VRAM
+   footprint, tok/s, safe context), it belongs in the installation profile — or in
+   docs/examples only when explicitly marked as a *reference-post* measurement.
+4. **Runtime affinity is a declared field, not an assumption.** A profile anchors its
+   engine with `runtime: <id>` (see `examples/runtimes.yaml.example`; profiles without
+   the field use the default). A declared runtime that is missing or broken **fails
+   clean** — never a silent fallback to another engine (`Q2_0` ternary on stock
+   llama.cpp loads without warning and produces garbage).
+
+---
+
 ## 11. Why This Matters for Agents
 
 An AI agent working on this codebase without this document would likely:

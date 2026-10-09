@@ -1,0 +1,67 @@
+# runtimes.yaml — registro de engines de inferencia local (RFC-HARNESS-003).
+#
+# Los perfiles de modelo (`model_profiles.yaml`) se anclan a un engine con
+# `runtime: <id>`; sin campo, aplica `default_runtime`. `binary`/`server`
+# aceptan ruta relativa (al bunker root, p.ej. el repo) o ~/absoluta.
+# Un runtime declarado y no disponible es un FALLO LIMPIO — nunca fallback
+# silencioso a otro engine (`Q2_0` ternario en stock produce basura sin warning).
+#
+# ⚠️ AVISO DE CALIBRACIÓN: este fichero es un EJEMPLO. Las rutas, versiones,
+# flags de build y notas de `quirks` son del PUESTO DE REFERENCIA (RTX 5070
+# Laptop 8 GB, 2026-10-08). Cada equipo debe compilar/instalar sus engines y
+# ajustar aquí sus rutas y versiones reales; las medidas de contexto de `quirks`
+# se recalibran por equipo (no se copian).
+#
+# Este fichero se siembra copy-if-absent desde examples/ en install/update
+# (mismo patrón que task_profiles.yaml). La config viva del puesto vive en
+# ~/.config/red-pill/runtimes.yaml — nunca se comitea.
+default_runtime: llama_cpp_stock
+
+runtimes:
+  # Pipeline clásico: binario oficial + llama-cpp-python del daemon.
+  llama_cpp_stock:
+    kind: llama_cpp
+    description: "llama.cpp oficial (stock) — quant types estándar (K-quants, Q8, F16)"
+    binary: "3rdparty/llama_official/build/bin/llama-cli"
+    server: "3rdparty/llama_official/build/bin/llama-server"
+    capabilities:
+      quant_types: ["f16", "q8_0", "q4_k_m", "k_quants", "legacy_quants"]
+    status: active
+
+  # Fork PrismML: kernels ternarios (PTQ1_0/PQ2_0) + transform de Hadamard.
+  # REQUIERE build propio (stock rechaza PTQ1_0/PQ2_0; Q2_0 en stock = basura).
+  llama_cpp_prism:
+    kind: llama_cpp_fork
+    description: "Fork PrismML — ternarios Bonsai 2 (PTQ1_0 1.75 bpw / PQ2_0 2.13 bpw)"
+    binary: "~/opt/llama.cpp-prism/build/bin/llama-cli"
+    server: "~/opt/llama.cpp-prism/build/bin/llama-server"
+    version: "b1-4fbda12 (rama prism)"
+    build:
+      cuda_arch: "120a-real"
+      flags: ["GGML_CUDA=ON", "GGML_CUDA_FA_ALL_QUANTS=ON"]
+    capabilities:
+      quant_types: ["f16", "q8_0", "q4_k_m", "k_quants", "PTQ1_0", "PQ2_0"]
+      reasoning_kwargs: true
+    quirks:
+      notes: "PUESTO DE REFERENCIA (recalibrar): 8 GB VRAM → -np 1; ctx verificado f16 24K / q8_0 32K / q4_0 64K (2026-10-08)"
+    status: active
+
+  # ── Otro engine con VARIANTES por backend (ejemplo): BitNet b1.58 ────────
+  # Un engine puede declarar `variants:` (cuda/vulkan/cpu…): cada variante su
+  # binario, `status` (verified|incompatible), `env` de ejecución, `quirks` y
+  # `measured` (del PUESTO DE REFERENCIA — recalibrar por equipo).
+  # `default_variant` marca la preferida; sin variante usable se sirve la
+  # entrada base (y el gate de disponibilidad falla con motivo claro).
+  # llama_cpp_bitnet:
+  #   kind: llama_cpp_fork
+  #   default_variant: cuda
+  #   variants:
+  #     cuda:
+  #       binary: "3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli"
+  #       status: verified
+  #     cpu:
+  #       binary: "3rdparty/BitNet-1.58b/build_vulkan/bin/llama-cli"
+  #       status: verified
+  #       quirks: {default_ngl: 0}
+  #     npu:
+  #       status: incompatible

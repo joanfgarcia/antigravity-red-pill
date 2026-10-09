@@ -55,6 +55,10 @@
 # Para tareas MULTI-etapa o con checkpoint granular, usa un dag_job (skill `dag`)
 # en vez de este recipe: árbol de etapas, `job_pause`/`job_resume`/
 # `job_transfer`, `requires_gpu` por etapa.
+# ⚠️ GRANULARIDAD (job_dag_execution §2): si el step contiene un BUCLE sobre
+# elementos independientes (modelos, ficheros, tests…), usa `element_job`
+# (`_TEMPLATE_element_job.yaml`): UN step = UN elemento, checkpoint por elemento
+# y fail-soft (`skip_exit_code` tras registrar el fallo).
 source: script_job
 priority: 5                    # entero, mayor = más urgente (default 5)
 title: <Descripción del trabajo>
