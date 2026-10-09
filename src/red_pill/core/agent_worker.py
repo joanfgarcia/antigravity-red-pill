@@ -382,6 +382,7 @@ class IDEWorker:
 		# the thread stops beating → real offline is still detected.
 		self._lease_lock = threading.Lock()
 		self._lease_touch = time.monotonic()
+		self._heartbeat_stop = threading.Event()
 		self._heartbeat_thread = threading.Thread(
 			target=self._heartbeat_thread_main,
 			name="heartbeat-daemon",
@@ -494,18 +495,30 @@ class IDEWorker:
 		"""Daemon thread: update system_health while the process lives and the
 		lease is fresh. Falls silent when the main loop is dead (lease expired) so
 		real offline is detectable. Uses its own connection to avoid sharing the
-		pulse's write transaction (D23)."""
+		pulse's write transaction (D23). Sleeps via `_heartbeat_stop.wait` so
+		`stop()` joins it promptly (hermetic tests; no busy-spin when time.sleep
+		is monkeypatched elsewhere)."""
 		lease = cfg.get_config().HEARTBEAT_LEASE
-		while True:
+		while not self._heartbeat_stop.is_set():
 			try:
 				with self._lease_lock:
 					fresh = (time.monotonic() - self._lease_touch) < lease
 				if fresh:
 					self.update_heartbeat()
-				time.sleep(20)
 			except Exception as e:
 				logger.warning(f"[IDEWorker] Heartbeat thread error: {e}")
-				time.sleep(20)
+			self._heartbeat_stop.wait(20)
+
+	def stop(self, timeout: float = 5.0) -> None:
+		"""Señala al heartbeat daemon que salga y lo junta. Aditivo: los
+		daemons mueren con el proceso en producción; esto es para shutdown
+		limpio y para que los tests no filtren hilos (suite hermética)."""
+		stop_event = getattr(self, "_heartbeat_stop", None)
+		if stop_event is not None:
+			stop_event.set()
+		th = getattr(self, "_heartbeat_thread", None)
+		if th is not None and th.is_alive():
+			th.join(timeout=timeout)
 
 	def run(self):
 		logger.info("Red-Pill Agent Worker started.")

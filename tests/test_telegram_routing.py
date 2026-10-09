@@ -254,3 +254,4 @@ class TestD5LocalGuard:
 		assert all(t.backend != "local" for t in built["cascade"])
 		assert len(built["cascade"]) == 1
 		assert worker._bridge_telegram is not None
+		worker.stop()
