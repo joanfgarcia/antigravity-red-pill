@@ -14,6 +14,8 @@ MODEL=$(printf '%s' "${RP_ELEMENT:-}" | "$FORGE/venv/bin/python" -c 'import sys,
 
 case "$MODEL" in
 	kokoro_voice|chatterbox_voice) PY="$FORGE/venv-tts/bin/python" ;;
+	moss_sfx) PY="$FORGE/venv-moss/bin/python" ;;
+	dasheng_scene) PY="$FORGE/venv-dasheng/bin/python" ;;
 	*) PY="$FORGE/venv/bin/python" ;;
 esac
 

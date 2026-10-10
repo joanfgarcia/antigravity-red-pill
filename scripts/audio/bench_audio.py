@@ -43,17 +43,17 @@ MODELS = {
 		"license": "mit",
 		"note": "Chatterbox 0.5B — TTS con clonación/emoción (exaggeration).",
 	},
-	"ace_step_music": {
-		"backend": "ace_step",
-		"kinds": ["music"],
-		"license": "mit",
-		"note": "ACE-Step 1.5 base (2B) — música con voz, 50+ idiomas. El XL (4B) no cabe en 8 GB.",
-	},
-	"audioldm2_sfx": {
-		"backend": "audioldm2",
+	"moss_sfx": {
+		"backend": "moss",
 		"kinds": ["sfx"],
-		"license": "cc-by-nc-4.0",
-		"note": "AudioLDM2 (cvssp/audioldm2) — SFX/ambiente, 16kHz. Ungated. (Stable Audio Open es mejor pero está gated: requiere HF_TOKEN + aceptar licencia).",
+		"license": "apache-2.0",
+		"note": "MOSS-SoundEffect v2.0 (1.3B DiT+DAC+Qwen3) — SFX/ambiente: naturaleza, animales, urbano. 48 kHz.",
+	},
+	"dasheng_scene": {
+		"backend": "dasheng",
+		"kinds": ["scene"],
+		"license": "apache-2.0",
+		"note": "Dasheng-AudioGen (~6GB, Qwen3-1.7B+DiT) — escena mixta: voz+música+SFX+ambiente en 16 kHz.",
 	},
 }
 
@@ -121,73 +121,57 @@ def _gen_chatterbox(piece, size_hint=None):
 	return wav.squeeze(0).numpy() if hasattr(wav, "squeeze") else wav, _CHATTERBOX.sr
 
 
-def _gen_ace_step(piece, size_hint=None):
-	from diffusers import AceStepPipeline
+def _gen_moss(piece, size_hint=None):
+	import os
 
-	global _ACE
-	if "_ACE" not in globals():
+	os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")  # evita compile/Triton en sm_120
+	from moss_soundeffect_v2 import MossSoundEffectPipeline
+
+	global _MOSS
+	if "_MOSS" not in globals():
 		import torch
 
-		# diffusers sólo publica checkpoints XL (4B): con offload por componentes
-		# hace OOM en 8 GB → offload SECUENCIAL (mueve submódulos bajo demanda).
-		_ACE = AceStepPipeline.from_pretrained(
-			"ACE-Step/acestep-v15-xl-turbo-diffusers",
-			torch_dtype=torch.bfloat16,
-			low_cpu_mem_usage=False,  # evita meta tensors (offload secuencial los necesita reales)
+		# 8 GB: cargar en CPU y activar la gestión de VRAM por etapa del engine
+		# DiffSynth (onload/offload de text_encoder/DiT/VAE según la unidad).
+		_MOSS = MossSoundEffectPipeline.from_pretrained(
+			"OpenMOSS-Team/MOSS-SoundEffect-v2.0", torch_dtype=torch.bfloat16, device="cpu"
 		)
-		_ACE.enable_sequential_cpu_offload()
-	out = _ACE(
+		try:
+			_MOSS.engine.enable_cpu_offload()
+		except Exception:
+			_MOSS.engine.vram_management_enabled = True
+		_MOSS.engine.device = "cuda"
+	audio = _MOSS(
 		prompt=piece["prompt"],
-		lyrics=piece.get("lyrics", "") or "",
-		audio_duration=float(piece.get("duration", 15)),
-		num_inference_steps=8,  # turbo: guidance queda ignorado
-	)
-	return out.audios[0], _ACE.sample_rate
-
-
-def _gen_audioldm2(piece, size_hint=None):
-	import torch
-	from diffusers import AudioLDM2Pipeline
-
-	global _ALD2
-	if "_ALD2" not in globals():
-		_ALD2 = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16)
-		_ALD2.enable_model_cpu_offload()
-	out = _ALD2(
-		prompt=piece["prompt"],
-		audio_length_in_s=float(piece.get("duration", 10)),
+		seconds=float(piece.get("duration", 10)),
 		num_inference_steps=100,
-		generator=torch.Generator("cuda").manual_seed(42),
+		cfg_scale=4.0,
 	)
-	return out.audios[0], 16000
+	a = audio[0] if hasattr(audio, "ndim") and audio.ndim == 3 else audio
+	sr = getattr(_MOSS, "sampling_rate", None) or getattr(getattr(_MOSS, "vae", None), "sampling_rate", 48000)
+	return a, int(sr)
 
 
-def _gen_stable_audio(piece, size_hint=None):
+def _gen_dasheng(piece, size_hint=None):
 	import torch
-	from diffusers import StableAudioPipeline
+	from transformers import AutoModel
 
-	global _SA
-	if "_SA" not in globals():
-		_SA = StableAudioPipeline.from_pretrained(
-			"stabilityai/stable-audio-open-1.0", torch_dtype=torch.float16
-		)
-		_SA.enable_model_cpu_offload()
-	out = _SA(
-		prompt=piece["prompt"],
-		audio_end_in_s=float(piece.get("duration", 10)),
-		num_inference_steps=100,
-		generator=torch.Generator("cuda").manual_seed(42),
-	)
-	sr = getattr(_SA.vae, "sampling_rate", None) or getattr(getattr(_SA.vae, "config", None), "sampling_rate", 44100)
-	return out.audios[0], int(sr)
+	global _DSG
+	if "_DSG" not in globals():
+		_DSG = AutoModel.from_pretrained(
+			"mispeech/Dasheng-AudioGen", trust_remote_code=True, dtype=torch.bfloat16
+		).cuda()
+	kw = {k: piece[k] for k in ("caption", "speech", "asr", "sfx", "music", "env") if piece.get(k)}
+	prompt = _DSG.compose_prompt(**kw)
+	audio = _DSG.generate(prompt, num_steps=25, guidance_scale=5.0)
+	return audio, 16000
 
 
 _DISPATCH = {
 	"kokoro": _gen_kokoro,
 	"chatterbox": _gen_chatterbox,
-	"ace_step": _gen_ace_step,
-	"audioldm2": _gen_audioldm2,
-	"stable_audio": _gen_stable_audio,
+	"moss": _gen_moss,
+	"dasheng": _gen_dasheng,
 }
 
 

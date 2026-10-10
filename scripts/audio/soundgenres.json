@@ -67,5 +67,31 @@
 			"prompt": "Busy city street ambience, distant traffic, footsteps on pavement, indistinct crowd chatter, urban field recording",
 			"duration": 10
 		}
+	],
+	"scene": [
+		{
+			"id": "forest_dawn",
+			"caption": "A serene forest at dawn, many songbirds singing, gentle light",
+			"sfx": "songbirds singing, a distant cuckoo",
+			"env": "light wind through the leaves"
+		},
+		{
+			"id": "storm_night",
+			"caption": "A rolling thunderstorm at night in a mountain forest",
+			"sfx": "sharp thunder cracks",
+			"env": "heavy rain and wind in the trees"
+		},
+		{
+			"id": "jazz_club",
+			"caption": "A cozy jazz club late at night",
+			"music": "smooth solo saxophone with upright bass",
+			"env": "intimate club ambience, low chatter"
+		},
+		{
+			"id": "city_rain",
+			"caption": "A rainy evening in a busy city",
+			"sfx": "rain and splashing puddles",
+			"env": "distant traffic and footsteps"
+		}
 	]
 }
