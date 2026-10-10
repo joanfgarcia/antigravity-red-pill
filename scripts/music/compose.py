@@ -69,6 +69,18 @@ def _proc(home: Path, sf2: Path, out_base: Path, mid: Path) -> Path:
 	return out_wav
 
 
+def _default_sf2() -> str:
+	"""Soundfont por defecto: MUSIC_SF2 > MuseScore_General > GeneralUser GS > TimGM6mb."""
+	env = os.environ.get("MUSIC_SF2")
+	if env:
+		return env
+	base = Path.home() / ".local" / "share" / "red-pill" / "soundfonts"
+	for c in (base / "MuseScore_General.sf2", base / "GeneralUser-GS.sf2", Path("/usr/share/sounds/sf2/TimGM6mb.sf2")):
+		if c.exists():
+			return str(c)
+	return "/usr/share/sounds/sf2/TimGM6mb.sf2"
+
+
 def compose_midi(spec: dict, mid_path: Path) -> None:
 	import mido
 
@@ -80,16 +92,19 @@ def compose_midi(spec: dict, mid_path: Path) -> None:
 
 	ticks = 480
 	mid = mido.MidiFile(ticks_per_beat=ticks)
-	def _track(name, channel):
+
+	def _track(name, channel, program):
 		t = mido.MidiTrack()
 		t.append(mido.MetaMessage("track_name", name=name, time=0))
-		t.append(mido.Message("program_change", channel=channel, program=0, time=0))
+		t.append(mido.Message("program_change", channel=channel, program=program, time=0))
 		return t
 
-	chords = _track("chords", 0)
-	bass = _track("bass", 1)
-	drums = _track("drums", 9)
-	melody = _track("melody", 2)
+	# Programas GM: E.Piano (4), Strings pad (48), E.Bass (33), Flute (73).
+	chords = _track("chords_epiano", 0, 4)
+	pad = _track("pad_strings", 3, 48)
+	bass = _track("bass", 1, 33)
+	melody = _track("lead_flute", 2, 73)
+	drums = _track("drums", 9, 0)
 	meta = mido.MidiTrack()
 	meta.append(mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo)))
 	meta.append(mido.MetaMessage("time_signature", numerator=4, denominator=4))
@@ -99,38 +114,53 @@ def compose_midi(spec: dict, mid_path: Path) -> None:
 	for bar in range(bars):
 		roman = prog[bar % len(prog)]
 		triad = ROMAN.get(roman, (0, 4, 7))
-		# Chords: tríada sostenida por compás (octava 3).
+		# Chords (E.Piano): tríada por compás, ligero arpegio en la 2ª mitad.
 		for s in triad:
-			chords.append(mido.Message("note_on", channel=0, note=_note(key, s, 3), velocity=70, time=0))
-		chords.append(mido.Message("note_off", channel=0, note=_note(key, triad[0], 3), time=ticks * beats_per_bar))
+			chords.append(mido.Message("note_on", channel=0, note=_note(key, s, 3), velocity=68, time=0))
+		chords.append(mido.Message("note_off", channel=0, note=_note(key, triad[0], 3), time=ticks * 2))
 		for s in triad[1:]:
 			chords.append(mido.Message("note_off", channel=0, note=_note(key, s, 3), time=0))
-		# Bass: raíz en negras.
+		for s in triad:
+			chords.append(mido.Message("note_on", channel=0, note=_note(key, s, 3), velocity=60, time=0))
+		chords.append(mido.Message("note_off", channel=0, note=_note(key, triad[0], 3), time=ticks * 2))
+		for s in triad[1:]:
+			chords.append(mido.Message("note_off", channel=0, note=_note(key, s, 3), time=0))
+		# Pad (Strings): tríada sostenida todo el compás, octava 4.
+		for s in triad:
+			pad.append(mido.Message("note_on", channel=3, note=_note(key, s, 4), velocity=45, time=0))
+		pad.append(mido.Message("note_off", channel=3, note=_note(key, triad[0], 4), time=ticks * beats_per_bar))
+		for s in triad[1:]:
+			pad.append(mido.Message("note_off", channel=3, note=_note(key, s, 4), time=0))
+		# Bass: raíz + quinta en negras.
 		root = _note(key, triad[0], 2)
+		fifth = _note(key, triad[0] + 7, 2)
 		for b in range(beats_per_bar):
-			bass.append(mido.Message("note_on", channel=1, note=root, velocity=80, time=0))
-			bass.append(mido.Message("note_off", channel=1, note=root, time=ticks))
-		# Drums GM: bombo 36 (1,3), caja 38 (2,4), hi-hat 42 corcheas.
+			n = root if b % 2 == 0 else fifth
+			bass.append(mido.Message("note_on", channel=1, note=n, velocity=82, time=0))
+			bass.append(mido.Message("note_off", channel=1, note=n, time=ticks - 20))
+			bass.append(mido.Message("note_on", channel=1, note=root, velocity=40, time=0))
+			bass.append(mido.Message("note_off", channel=1, note=root, time=20))
+		# Drums GM: bombo 36, caja 38, hi-hat 42, ride 51.
 		for b in range(beats_per_bar * 2):
-			beats = b // 2
-			drums.append(mido.Message("note_on", channel=9, note=42, velocity=60, time=0))
+			beat = b // 2
+			drums.append(mido.Message("note_on", channel=9, note=42, velocity=58, time=0))
 			drums.append(mido.Message("note_off", channel=9, note=42, time=hh - 10))
-			if beats == 0 or beats == 2:
-				drums.append(mido.Message("note_on", channel=9, note=36, velocity=100, time=0))
+			if beat in (0, 2):
+				drums.append(mido.Message("note_on", channel=9, note=36, velocity=102, time=0))
 				drums.append(mido.Message("note_off", channel=9, note=36, time=10))
-			if beats == 1 or beats == 3:
-				drums.append(mido.Message("note_on", channel=9, note=38, velocity=95, time=0))
+			if beat in (1, 3):
+				drums.append(mido.Message("note_on", channel=9, note=38, velocity=96, time=0))
 				drums.append(mido.Message("note_off", channel=9, note=38, time=10))
 			drums.append(mido.Message("note_off", channel=9, note=42, time=10))
-		# Melody: notas de la escala sobre el acorde (patrón simple en corcheas).
-		scale = [MAJOR[(i) % 7] + 12 * (i // 7) for i in range(8)]
+		# Melody (Flute): escala sobre el acorde.
+		scale = [MAJOR[i % 7] + 12 * (i // 7) for i in range(8)]
 		for i in range(beats_per_bar):
-			s = scale[(bar + i) % len(scale)]
+			s = scale[(bar * 3 + i) % len(scale)]
 			n = _note(key, s, 5)
-			melody.append(mido.Message("note_on", channel=2, note=n, velocity=75, time=0))
+			melody.append(mido.Message("note_on", channel=2, note=n, velocity=78, time=0))
 			melody.append(mido.Message("note_off", channel=2, note=n, time=ticks))
 
-	mid.tracks.extend([meta, chords, bass, drums, melody])
+	mid.tracks.extend([meta, chords, pad, bass, drums, melody])
 	mid_path.parent.mkdir(parents=True, exist_ok=True)
 	mid.save(str(mid_path))
 
@@ -162,7 +192,7 @@ def main() -> int:
 	ap.add_argument("--spec")
 	ap.add_argument("--llm-prompt")
 	ap.add_argument("--out", default="out/song")
-	ap.add_argument("--sf2", default=os.environ.get("MUSIC_SF2", "/usr/share/sounds/sf2/TimGM6mb.sf2"))
+	ap.add_argument("--sf2", default=_default_sf2())
 	args = ap.parse_args()
 
 	import shutil

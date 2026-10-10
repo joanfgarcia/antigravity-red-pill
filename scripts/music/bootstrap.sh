@@ -28,6 +28,8 @@ echo "-- mido (autoría MIDI)"
 
 echo "-- ardour-mcp (MIT; control del DAW por OSC) [opcional, no aborta]"
 "$UV" pip install --python "$VPY" "git+https://github.com/raibid-entertainment/ardour-mcp" 2>&1 | tail -3 || echo "   (ardour-mcp no instalado; se puede añadir luego)"
+# ardour-mcp 0.0.1 usa la API antigua del SDK (Server.call_tool); mcp>=1.x la rompe.
+"$UV" pip install --python "$VPY" "mcp==0.9.1" 2>&1 | tail -1
 
 echo "-- detección de binarios del sistema"
 for b in fluidsynth ardour lmms; do
