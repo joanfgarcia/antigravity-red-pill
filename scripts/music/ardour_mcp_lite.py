@@ -133,10 +133,23 @@ def master_gain(gain_db: float) -> str:
 
 
 @mcp.tool()
-def add_track(kind: str = "audio", count: int = 1) -> str:
-	"""Crea pistas nuevas. kind='audio'|'midi'."""
-	_send("/add_midi_track" if kind == "midi" else "/add_audio_track", int(count))
-	return f"added {count} {kind}"
+def access_action(action_name: str, key_pressed: int = 0) -> str:
+	"""Ejecuta una acción de menú de Ardour por nombre (p. ej. 'Editor/undo', 'Editor/toggle-mixer').
+	OJO: las acciones que abren diálogo (p. ej. Add Track/Bus) NO crean pista de forma desatendida."""
+	_send("/access_action", action_name, int(key_pressed))
+	return f"action {action_name}"
+
+
+@mcp.tool()
+def undo() -> str:
+	"""Deshace la última acción."""
+	_send("/undo")
+	return "ok"
+
+
+# NOTA: Ardour NO expone OSC para crear pistas (acción "Add Track/Bus" = diálogo
+# interactivo) ni para el tempo global (tempo-map). Sí: transporte, marcadores,
+# mezcla, master, undo, loop, jump y /access_action (acciones de menú).
 
 
 @mcp.tool()
