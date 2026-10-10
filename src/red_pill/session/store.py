@@ -1,7 +1,7 @@
 """`session.db` — reloj global de turnos + registro de sesiones (Alma y Coro).
 
-Fase 0a: versión MÍNIMA pero con el esquema ratificado (RFC_CONSCIENCIA_MULTISESION
-§5). El registro (`session_registry`) es el tablón: una fila por `originator`
+Fase 0a: versión MÍNIMA pero con el esquema ratificado (ver DECISION_LOG).
+El registro (`session_registry`) es el tablón: una fila por `originator`
 (leg, `provider:session_id`), con su alma (`continuity_id`), misión, rol y linaje.
 El reloj (`global_turn_seq`) da monotonicidad a los turnos (que `memory_queue.id`
 no puede, por el dedup que devuelve ids existentes).

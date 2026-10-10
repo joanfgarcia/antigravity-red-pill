@@ -1,8 +1,8 @@
 """Subsistema de sesiones (Alma y Coro).
 
 `identity` (puro: emisión de alma + resolución de misión + tag `<session>`) y
-`store` (`session.db`: reloj global + registro de sesiones). Ver
-RFC_ALMA_Y_CORO / RFC_CONSCIENCIA_MULTISESION (desk) para el diseño.
+`store` (`session.db`: reloj global + registro de sesiones). El diseño ratificado
+vive en el DECISION_LOG del repo.
 """
 
 from red_pill.session.identity import (
