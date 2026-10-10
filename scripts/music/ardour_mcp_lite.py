@@ -80,10 +80,56 @@ def goto_start() -> str:
 
 
 @mcp.tool()
-def set_tempo(bpm: float) -> str:
-	"""Fija el tempo en BPM."""
-	_send("/set_tempo", float(bpm))
-	return f"tempo={bpm}"
+def set_transport_speed(speed: float) -> str:
+	"""Velocidad de reproducción (float -8.0..8.0; 1.0 = normal). Ardour OSC sí lo soporta."""
+	_send("/set_transport_speed", float(speed))
+	return f"speed={speed}"
+
+
+@mcp.tool()
+def jump_seconds(seconds: float) -> str:
+	"""Salta el playhead ± segundos (float)."""
+	_send("/jump_seconds", float(seconds))
+	return "ok"
+
+
+@mcp.tool()
+def next_marker() -> str:
+	"""Playhead al siguiente marcador."""
+	_send("/next_marker")
+	return "ok"
+
+
+@mcp.tool()
+def prev_marker() -> str:
+	"""Playhead al marcador anterior."""
+	_send("/prev_marker")
+	return "ok"
+
+
+@mcp.tool()
+def locate_marker(name: str) -> str:
+	"""Localiza por nombre de marcador (Ardour 6+)."""
+	_send("/marker", name)
+	return "ok"
+
+
+@mcp.tool()
+def loop_toggle() -> str:
+	"""Activa/desactiva el modo loop."""
+	_send("/loop_toggle")
+	return "ok"
+
+
+@mcp.tool()
+def master_gain(gain_db: float) -> str:
+	"""Fija la ganancia del máster (dB)."""
+	_send("/master/gain", float(gain_db))
+	return "ok"
+
+
+# NOTA: Ardour NO expone un comando OSC de tempo global (el tempo es un tempo-map
+# con marcadores). Usa la escotilla `osc` si necesitas `Editor/set-tempo-from-edit-range`.
 
 
 @mcp.tool()
