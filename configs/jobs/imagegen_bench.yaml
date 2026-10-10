@@ -1,0 +1,25 @@
+# ImageGen A/B — clasificación de modelos texto→imagen por TIPO DE ARTE.
+#
+# UN step = UN modelo (element_job, fail-soft): un modelo que falla se REGISTRA
+# en failures.jsonl y sale con skip_exit_code (79) → la cola lo marca saltado y
+# SIGUE con el resto (no descartamos ninguno: los 3 se conservan en el catálogo).
+# Reanudable por frontera de elemento; watchdog por elemento.
+#
+# Requiere haber corrido antes configs/jobs/imagegen_setup.yaml (misma venv).
+# Portabilidad: sin rutas de usuario salvo $HOME/XDG (el shell expande las ${VAR:-def}).
+# SALIDA: hits medidos y PNG → desk (notes); el repo lleva las TOOLS.
+source: element_job
+priority: 3
+title: ImageGen A/B — 3 modelos × 6 géneros (element_job, fail-soft)
+mission_id: imagegen-ab
+elements_command: ["sh", "-c", '"${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python scripts/imagegen/bench_imagegen.py --list-models']
+step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-10-imagegen-ab"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python -u scripts/imagegen/bench_imagegen.py --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 90
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 16G

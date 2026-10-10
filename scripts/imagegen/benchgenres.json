@@ -1,0 +1,38 @@
+{
+	"version": "v1",
+	"size": 1024,
+	"seeds": [42],
+	"note": "Matriz fija de TIPOS DE ARTE. Congelada por versión para reproducibilidad: si cambia un prompt, nace v2.",
+	"genres": [
+		{
+			"id": "photo_portrait",
+			"label": "Fotorrealismo / retrato",
+			"prompt": "Editorial close-up portrait of an elderly fisherman, weathered skin with deep character lines, salt-and-pepper beard, wearing a worn wool sweater. Soft overcast window light from the left, shallow depth of field, 85mm lens, natural color grading, highly detailed skin texture."
+		},
+		{
+			"id": "typography",
+			"label": "Tipografía (texto legible en imagen)",
+			"prompt": "A minimalist vintage travel poster for the city of Lisbon. Large bold legible sans-serif text reading \"LISBOA\" across the top and the smaller line \"the city of seven hills\" below. Flat illustration of yellow trams and terracotta rooftops, azulejo blue accents, cream paper background. Crisp, correctly spelled lettering."
+		},
+		{
+			"id": "illustration",
+			"label": "Ilustración / arte estilizado",
+			"prompt": "A cozy fantasy bookshop nestled inside the trunk of a giant oak tree at dusk, glowing warm lanterns, spiral wooden staircase, shelves of colorful books, a small cat sleeping on the counter. Whimsical storybook illustration, soft painterly style, rich warm palette, highly detailed."
+		},
+		{
+			"id": "landscape",
+			"label": "Paisaje / entorno",
+			"prompt": "A vast alpine valley at golden hour, a glacial turquoise lake reflecting snow-capped peaks, pine forest in the foreground, dramatic god rays through drifting mist. Cinematic wide landscape photography, deep depth of field, high dynamic range, ultra detailed."
+		},
+		{
+			"id": "product",
+			"label": "Producto / estudio",
+			"prompt": "A sleek matte-black wireless earbud case resting on a polished dark stone pedestal, dramatic studio rim lighting, subtle reflections, minimal deep charcoal background, water droplets on the surface. Commercial product photography, macro detail, high-end advertising look."
+		},
+		{
+			"id": "concept",
+			"label": "Concepto / abstracto",
+			"prompt": "A surreal conceptual scene: a lone human figure standing on a floating staircase made of glowing circuit traces that dissolves into a starfield, one half of the sky in warm amber and the other in cold teal, thin geometric light rays. Cinematic, symbolic, high detail, dramatic scale."
+		}
+	]
+}
