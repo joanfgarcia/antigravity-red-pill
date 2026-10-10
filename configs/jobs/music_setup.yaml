@@ -1,0 +1,12 @@
+# Music setup — provisiona el runtime de música simbólica (venv + mido + ardour-mcp).
+# Detecta fluidsynth/ardour (no los instala: son del sistema, requieren sudo).
+source: script_job
+priority: 5
+title: Music setup — venv mido + ardour-mcp (detecta fluidsynth/ardour)
+step_command: ["sh", "-c", 'bash scripts/music/bootstrap.sh']
+progress:
+  mode: single
+control:
+  max_step_minutes: 15
+preflight:
+  memory_max: 8G
