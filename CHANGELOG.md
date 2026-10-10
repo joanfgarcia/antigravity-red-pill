@@ -1,5 +1,27 @@
 ## Unreleased
 
+### 🎨 ImageGen — banco A/B de generación de imagen local (2026-10-10)
+
+- **[FEATURE]** `scripts/imagegen/`: harness para correr y **clasificar por tipo
+  de arte** modelos texto→imagen locales en GPUs de consumo (8 GB), hermano de
+  `bench_local.py` (RFC-HARNESS-003).
+  - `bootstrap.sh` — runtime **por-máquina** con rutas configurables
+    (`IMAGE_FORGE_HOME`, `REDPILL_IMAGE_MODELS_DIR`); no versiona terceros.
+  - `bench_imagegen.py` — element_job (UN modelo = UN step, fail-soft), matriz
+    fija géneros × seeds, métricas tiempo/VRAM y PNG reanudable por género.
+  - `compat_image_studio.py` — shim para `image-studio/backend_gpu` bajo
+    torch≥2.10 + gemlite 0.6.x (reconstruye capas gemlite y carga `state_dict`
+    en bloque; sin tocar el repo de terceros).
+  - `benchgenres.json` — 6 tipos de arte (fotorrealismo, tipografía,
+    ilustración, paisaje, producto, concepto).
+- **[FEATURE]** Recetas `configs/jobs/imagegen_setup.yaml` (script_job) e
+  `imagegen_bench.yaml` (element_job).
+- **[FIX]** Path ternario en Blackwell **sm_120**: torch 2.10+cu128 + gemlite
+  0.6.0 + `backend_gpu` (`Flux2KleinPipeline`/`ZImagePipeline` en diffusers main).
+- **Verificado** en RTX 5070 Laptop sm_120: FLUX.2 klein 4B (4-bit, 8.6 s/img,
+  2.4 GB), Z-Image-Turbo 6B y Bonsai Image 4B ternario (gemlite INT2, 6.2 s/img,
+  6.7 GB). Los tres **Apache-2.0**.
+
 ### 🧠 Recall — rescate por keyword alcanza miembros hubbed (2026-10-07)
 
 - **[FIX]** `MemoryManager._rerank_hybrid_mmr`: el rescate por palabras clave
