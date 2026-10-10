@@ -112,3 +112,31 @@ runtimes:
   #       quirks: {default_ngl: 0}
   #     npu:
   #       status: incompatible
+
+  # ── Media generativa (RFC-HARNESS-004) ───────────────────────────────────
+  # Pipelines de imagen/audio (diffusers o backend propio) sobre un venv con
+  # torch cu128. El "cómo" concreto (venv, entrypoint, dispatcher) vive en la
+  # RECETA (configs/jobs/*.yaml + scripts/<área>/), no en el modelo.
+  diffusers_cuda:
+    kind: diffusers
+    description: "diffusers (imagen/audio de onda) — torch cu128 en venv dedicado"
+    venv: "~/opt/image-forge/venv"        # o ~/opt/audio-forge/venv
+    capabilities:
+      modalities: ["image", "audio"]
+    status: active
+
+  pipeline_custom:
+    kind: pipeline_custom
+    description: "Backend de repo propio (image-studio/backend_gpu, MOSS-TTS, Dasheng) + dispatcher de venvs"
+    venv: "~/opt/audio-forge/venv-moss"
+    dispatcher: "scripts/audio/run_element.sh"
+    capabilities:
+      modalities: ["image", "audio"]
+    status: active
+
+  # NO es un engine de modelo: marca una RECETA (cadena de herramientas).
+  symbolic_chain:
+    kind: symbolic_chain
+    description: "Receta simbólica (mido + FluidSynth + soundfont [+ DAW]) — NO es engine de modelo"
+    recipe: "configs/jobs/music_demo.yaml"
+    status: active

@@ -1,0 +1,167 @@
+# SEED FILE - Do not commit actual local profiles here.
+# Copy this file to ~/.config/red-pill/media_profiles.yaml during setup.
+#
+# media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
+#
+# Define qué ES cada modelo de imagen/audio (declarativo). El CÓMO se ejecuta
+# (runtime, venv, pipeline de herramientas) vive en las RECETAS
+# (configs/jobs/*.yaml + scripts/<área>/), NO aquí.
+#
+# ── Dos esquemas de elenco (RFC-HARNESS-004) ──────────────────────────────
+#   1) LLM (texto)        -> model_profiles.yaml  (llama.cpp; sin cambios)
+#   2) Media generativa   -> ESTE fichero          (imagen + audio de onda)
+#   3) Tool-chains        -> NO son modelos: son RECETAS (configs/jobs/).
+#
+# ── Discriminador ─────────────────────────────────────────────────────────
+#   modality: image | audio
+#   task:     text2image | tts | sfx | music | scene
+#   capabilities: clasificación por TIPO DE ARTE / TIPO DE SONIDO (roles).
+#
+# ⚠️ AVISO: EJEMPLO del PUESTO DE REFERENCIA (RTX 5070 Laptop 8 GB, sm_120,
+# 2026-10-10). VRAM/tiempos son de ese puesto — recalibrar por equipo.
+# La config viva (~/.config/red-pill/media_profiles.yaml) NO se comitea.
+
+media_profiles:
+  # ── IMAGEN ────────────────────────────────────────────────────────────
+  flux2_klein:
+    modality: image
+    task: text2image
+    pipeline: Flux2KleinPipeline           # clase diffusers (o backend propio)
+    runtime: diffusers_cuda
+    weights: "black-forest-labs/FLUX.2-klein-4B"
+    quant: { scheme: bnb4, dtype: bfloat16 }
+    sampler: { steps: 4, guidance: 1.0, size: 1024 }
+    vram_footprint: { peak_mb: 2456 }
+    capabilities: ["photorealism", "concept", "landscape", "fast"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
+    notes: "Base FP del que se destila Bonsai. 4-bit NF4 + offload en 8 GB."
+
+  zimage_turbo:
+    modality: image
+    task: text2image
+    pipeline: ZImagePipeline
+    runtime: diffusers_cuda
+    weights: "Tongyi-MAI/Z-Image-Turbo"
+    quant: { scheme: seqoff, dtype: bfloat16 }
+    sampler: { steps: 9, guidance: 0.0, size: 1024 }
+    vram_footprint: { peak_mb: 2448 }
+    capabilities: ["typography", "product", "photorealism"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo"
+    notes: "Rey de la tipografía (texto legible). En 8 GB, offload secuencial (lento)."
+
+  bonsai_ternary:
+    modality: image
+    task: text2image
+    pipeline: GpuPipeline                  # image-studio/backend_gpu (gemlite INT2)
+    runtime: pipeline_custom
+    weights: "prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
+    quant: { scheme: gemlite_int2, dtype: bfloat16 }
+    sampler: { steps: 4, guidance: 1.0, size: 1024 }
+    vram_footprint: { peak_mb: 6721 }
+    capabilities: ["photorealism", "illustration", "ternary"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
+    notes: "Ternario 1.58-bit (transformer 1.5 GB). Requiere shim torch>=2.10 (compat_image_studio.py)."
+
+  # ── AUDIO ─────────────────────────────────────────────────────────────
+  kokoro_voice:
+    modality: audio
+    task: tts
+    pipeline: KPipeline                    # kokoro
+    runtime: pipeline_custom               # venv-tts
+    weights: "hexgrad/Kokoro-82M"
+    quant: { scheme: fp32, dtype: float32 }
+    sampler: { voices: 54, sr: 24000 }
+    vram_footprint: { peak_mb: 800 }
+    capabilities: ["narration", "multilingual", "fast"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/hexgrad/Kokoro-82M"
+    notes: "82M; corre en CPU. Sin clonación. EN necesita en_core_web_sm."
+
+  chatterbox_voice:
+    modality: audio
+    task: tts
+    pipeline: ChatterboxTTS
+    runtime: pipeline_custom
+    weights: "ResembleAI/chatterbox"
+    quant: { scheme: fp16, dtype: float16 }
+    sampler: { sr: 24000, exaggeration: 0.5 }
+    vram_footprint: { peak_mb: 3350 }
+    capabilities: ["cloning", "emotion", "multilingual"]
+    license:
+      id: "mit"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://github.com/resemble-ai/chatterbox"
+    notes: "Clonación (~5 s) + emoción. Watermarker perth → onnxruntime + pkg_resources."
+
+  moss_sfx:
+    modality: audio
+    task: sfx
+    pipeline: MossSoundEffectPipeline
+    runtime: pipeline_custom               # venv-moss (repo MOSS-TTS)
+    weights: "OpenMOSS-Team/MOSS-SoundEffect-v2.0"
+    quant: { scheme: bf16, dtype: bfloat16 }
+    sampler: { steps: 100, cfg_scale: 4.0, seconds_max: 30, sr: 48000 }
+    vram_footprint: { peak_mb: 7400 }
+    capabilities: ["environment", "animals", "urban", "foley"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect-v2.0"
+    notes: "1.3B DiT + Qwen3 encoder. En 8 GB, OOM por defecto (necesita offload/cuantizar el encoder)."
+
+  dasheng_scene:
+    modality: audio
+    task: scene
+    pipeline: DashengAudioGen
+    runtime: pipeline_custom               # venv-dasheng (trust_remote_code)
+    weights: "mispeech/Dasheng-AudioGen"
+    quant: { scheme: bf16, dtype: bfloat16 }
+    sampler: { steps: 25, guidance_scale: 5.0, sr: 16000 }
+    vram_footprint: { peak_mb: 7400 }
+    capabilities: ["mixed_scene", "music", "sfx", "speech", "environment"]
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/mispeech/Dasheng-AudioGen"
+    notes: "Escena mixta (voz+música+SFX+ambiente). transformers<5. En 8 GB, justo (offload)."
+
+# ── TOOL-CHAINS (NO son modelos) ──────────────────────────────────────────
+# La música SIMBÓLICA no tiene "modelo": es una receta. Vive en configs/jobs/.
+# Ejemplos:
+#   configs/jobs/music_demo.yaml   -> LLM -> MIDI (mido) -> FluidSynth -> WAV
+#   configs/jobs/music_setup.yaml  -> venv + ardour-mcp (control del DAW por MCP)
+#   configs/jobs/imagegen_*.yaml   -> element_job fail-soft (UN modelo = UN step)
+#   configs/jobs/audio_*.yaml      -> element_job + dispatcher de venvs (run_element.sh)
+tool_chains: {}
