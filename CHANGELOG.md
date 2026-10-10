@@ -1,5 +1,24 @@
 ## Unreleased
 
+### 🔊 AudioGen — banco A/B de audio generativo local (2026-10-10)
+
+- **[FEATURE]** `scripts/audio/`: harness para correr y clasificar modelos de
+  audio locales por eje (**voz / música / SFX**), hermano de `scripts/imagegen/`.
+  - `bootstrap.sh` — **dos** venvs (los stacks TTS y difusión chocan): `venv`
+    (diffusers main, torch cu128) y `venv-tts` (kokoro, chatterbox-tts).
+  - `bench_audio.py` — element_job (UN motor = UN step, fail-soft), WAV +
+    `metrics.jsonl` reanudable por pieza.
+  - `run_element.sh` — dispatcher de venv por motor.
+  - `soundgenres.json` — matriz fija (voz en/es, música, 5 SFX incl. pájaros/viento).
+- **[FIX]** Coherencia de toolchain en sm_120: torch 2.10 ↔ torchaudio 2.10 ↔
+  torchvision 0.25; reforzar torch cu128 tras instalar chatterbox (traía 2.6+cu124);
+  `en_core_web_sm` (kokoro EN), `onnxruntime`+`setuptools<81` (watermarker de perth).
+- **Verificado** voz (6/6): Kokoro-82M (Apache-2.0, ~800 MB, 2.6-4.8 s) y
+  Chatterbox (MIT, ~3.3 GB) a 24 kHz, con español.
+- **Bloqueado**: música (ACE-Step diffusers sólo XL 4B, no cabe en 8 GB) y
+  SFX (Stable Audio Open *gated* → requiere HF_TOKEN; AudioLDM2 incompatible
+  con transformers 5 / diffusers 0.29).
+
 ### 🧠 Recall — rescate por keyword alcanza miembros hubbed (2026-10-07)
 
 - **[FIX]** `MemoryManager._rerank_hybrid_mmr`: el rescate por palabras clave
