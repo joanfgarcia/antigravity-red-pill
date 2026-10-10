@@ -26,20 +26,47 @@
 
 - **[FEATURE]** `scripts/audio/`: harness para correr y clasificar modelos de
   audio locales por eje (**voz / música / SFX**), hermano de `scripts/imagegen/`.
-  - `bootstrap.sh` — **dos** venvs (los stacks TTS y difusión chocan): `venv`
-    (diffusers main, torch cu128) y `venv-tts` (kokoro, chatterbox-tts).
+  - `bootstrap.sh` — **cuatro** venvs (los stacks chocan): `venv` (diffusers
+    main, torch cu128), `venv-tts` (kokoro, chatterbox-tts), `venv-moss`
+    (MOSS-SoundEffect) y `venv-dasheng` (Dasheng-AudioGen).
   - `bench_audio.py` — element_job (UN motor = UN step, fail-soft), WAV +
-    `metrics.jsonl` reanudable por pieza.
-  - `run_element.sh` — dispatcher de venv por motor.
-  - `soundgenres.json` — matriz fija (voz en/es, música, 5 SFX incl. pájaros/viento).
+    `metrics.jsonl` reanudable por pieza; `run_element.sh` despacha el venv por motor.
+  - `soundgenres.json` — matriz fija (voz en/es, música, 5 SFX incl. pájaros/viento, escena).
 - **[FIX]** Coherencia de toolchain en sm_120: torch 2.10 ↔ torchaudio 2.10 ↔
-  torchvision 0.25; reforzar torch cu128 tras instalar chatterbox (traía 2.6+cu124);
-  `en_core_web_sm` (kokoro EN), `onnxruntime`+`setuptools<81` (watermarker de perth).
+  torchvision 0.25; reforzar torch cu128 tras chatterbox (traía 2.6+cu124);
+  `en_core_web_sm` (kokoro EN), `onnxruntime` + shim `pkg_resources` (perth).
 - **Verificado** voz (6/6): Kokoro-82M (Apache-2.0, ~800 MB, 2.6-4.8 s) y
   Chatterbox (MIT, ~3.3 GB) a 24 kHz, con español.
-- **Bloqueado**: música (ACE-Step diffusers sólo XL 4B, no cabe en 8 GB) y
-  SFX (Stable Audio Open *gated* → requiere HF_TOKEN; AudioLDM2 incompatible
-  con transformers 5 / diffusers 0.29).
+- **SFX/música abiertos que NO caben en 8 GB**: MOSS-SoundEffect v2.0 y
+  Dasheng-AudioGen (ambos **Apache-2.0**) instalan y cargan, pero superan la VRAM
+  (7.5 GB útiles). Descartados por licencia: Stable Audio Open (community/gated),
+  AudioLDM2/AudioX/MMAudio/Woosh (CC-BY-NC).
+
+### 🎵 MusicGen — cadena de música simbólica 100% libre (2026-10-10)
+
+- **[FEATURE]** `scripts/music/`: música **sin modelos de onda ni GPU** —
+  `compose.py` (LLM → MIDI vía `mido` → WAV vía **FluidSynth** + soundfont libre).
+  El LLM local (:8760) devuelve el arreglo (tempo/clave/progresión) en JSON.
+- **[FEATURE]** `scripts/music/ardour_mcp_lite.py` — servidor **MCP** (FastMCP,
+  `mcp<2`) que controla **Ardour** (GPL) por OSC: transporte, marcadores, mezcla,
+  undo, `/access_action` y escotilla `osc` cruda. El `ardour-mcp` upstream usa el
+  SDK MCP antiguo (protocolo 2024-11-05) y no conecta con clientes modernos.
+- **[FIX]** Límites OSC de Ardour (no nuestros): sin tempo global (tempo-map) ni
+  creación de pistas (diálogo "Add Track/Bus").
+- **Verificado** en la sesión del operador: marcador + transporte end-to-end.
+
+### 🗂️ Elenco media — 2 esquemas + tool-chains como recetas (RFC-HARNESS-004)
+
+- **[FEATURE]** `examples/media_profiles.yaml.example` — elenco de **media
+  generativa** (imagen + audio de onda) con `modality`/`task`, `pipeline`,
+  `quant`, `sampler`, `capabilities` (tipo de arte/sonido) y `license`.
+- **[FEATURE]** `examples/runtimes.yaml.example` — nuevos `kind: diffusers` /
+  `pipeline_custom` / `symbolic_chain`.
+- **Decisión**: el elenco se parte en **LLM** (`model_profiles.yaml`, sin cambios)
+  y **media generativa** (`media_profiles.yaml`); los **tool-chains** (música
+  simbólica, DAW) son **recetas** (`configs/jobs/`), no modelos.
+- **[FIX]** `prepare_certification.sh` aborta si el digest saldría vacío (antes
+  generaba digests vacíos en silencio cuando `git ls-files` no devolvía nada).
 
 ### 🧠 Recall — rescate por keyword alcanza miembros hubbed (2026-10-07)
 
