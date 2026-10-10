@@ -1,5 +1,6 @@
-# SEED FILE - Do not commit actual local profiles here.
-# Copy this file to ~/.config/red-pill/media_profiles.yaml during setup.
+# ⚠️ EJEMPLO / ESPECIFICACIÓN — el loader aún NO está cableado (RFC-HARNESS-004 §9).
+# Cuando se implemente (resolver + seed), se sembrará a
+# ~/.config/red-pill/media_profiles.yaml como model_profiles/task_profiles.
 #
 # media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
 #
@@ -114,7 +115,7 @@ media_profiles:
       id: "mit"
       commercial_ok: true
       redistribution_ok: true
-      attribution_required: false
+      attribution_required: true
       share_alike: false
       source: "https://github.com/resemble-ai/chatterbox"
     notes: "Clonación (~5 s) + emoción. Watermarker perth → onnxruntime + pkg_resources."

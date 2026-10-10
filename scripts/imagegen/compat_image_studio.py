@@ -1,11 +1,11 @@
 """compat_image_studio.py — shim para image-studio/backend_gpu con torch>=2.10.
 
-El código de Prism ML (`pipeline_gpu._load_gemlite_layers_from_state`) mueve los
-tensores gemlite capa a capa con `gl.W_q = gl.W_q.to(device)`; bajo torch>=2.10
-eso revienta — asignar un Tensor (no-Parameter) a un slot `Parameter` exige
-Parameter o None. Sustituimos SÓLO esa función por una equivalente que mueve el
-módulo con `nn.Module.to()` (respeta Parameters/Buffers), sin tocar el repo de
-terceros (que vive clonado en $IMAGE_FORGE_HOME/image-studio).
+El `pipeline_gpu._load_gemlite_transformer` de Prism ML carga el transformer
+gemlite con un hack por-capa que bajo torch>=2.10 revienta (asigna un Tensor a un
+slot `Parameter`) y asume un registro de buffers distinto al de gemlite 0.6.x.
+Sustituimos SÓLO esa función por una equivalente que intercambia las capas con el
+ctor de gemlite 0.6 (que pre-registra los buffers) y carga el `state_dict` en
+bloque, sin tocar el repo de terceros (clonado en $IMAGE_FORGE_HOME/image-studio).
 
 Se aplica de forma idempotente antes de construir `GpuPipeline`.
 """
@@ -15,49 +15,9 @@ from __future__ import annotations
 _GEMLITE_LAYER_KEYS = ("W_q", "bias", "scales", "zeros", "metadata", "orig_shape")
 
 
-def _load_layers_fixed(model, state, *, bits, group_size, device, DType, GemLiteLinearTriton):
-	import torch
-	import torch.nn as nn
-
-	buckets: dict = {}
-	remainder: dict = {}
-	for k, v in state.items():
-		fqn, _, leaf = k.rpartition(".")
-		if leaf in _GEMLITE_LAYER_KEYS and fqn:
-			buckets.setdefault(fqn, {})[leaf] = v
-		else:
-			remainder[k] = v
-
-	n = 0
-	dev = torch.device(device)
-	for fqn, layer_state in buckets.items():
-		parent_fqn, _, child_name = fqn.rpartition(".")
-		parent = model.get_submodule(parent_fqn) if parent_fqn else model
-		child = getattr(parent, child_name)
-		if not isinstance(child, nn.Linear):
-			raise RuntimeError(f"gemlite keys en {fqn} pero el módulo es {type(child).__name__}")
-		gl = GemLiteLinearTriton(
-			W_nbits=bits,
-			group_size=group_size,
-			in_features=child.in_features,
-			out_features=child.out_features,
-			input_dtype=DType.FP16,
-			output_dtype=DType.FP16,
-		)
-		gl.load_state_dict(dict(layer_state))
-		gl = gl.to(dev)  # mueve Parameters/Buffers correctamente (torch>=2.10 estricto)
-		gl.device = dev
-		setattr(parent, child_name, gl)
-		n += 1
-	return n, remainder
-
-
 def apply(pipeline_gpu_module) -> bool:
-	"""Monkeypatch idempotente. Bajo torch>=2.10 + gemlite 0.6.x sustituye:
-	- `_load_gemlite_layers_from_state` (assignment falla),
-	- `_load_gemlite_transformer` (el hack per-layer ya no aplica: gemlite 0.6
-	  pre-registra W_q/scales/zeros/metadata/orig_shape/meta_scale como buffers).
-	"""
+	"""Monkeypatch idempotente de `_load_gemlite_transformer` (gemlite 0.6.x
+	pre-registra W_q/scales/zeros/metadata/orig_shape/meta_scale como buffers)."""
 	if getattr(pipeline_gpu_module, "_redpill_gemlite_compat2", False):
 		return True
 	if not hasattr(pipeline_gpu_module, "_load_gemlite_transformer"):

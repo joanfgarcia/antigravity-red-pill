@@ -151,7 +151,6 @@ def compose_midi(spec: dict, mid_path: Path) -> None:
 			if beat in (1, 3):
 				drums.append(mido.Message("note_on", channel=9, note=38, velocity=96, time=0))
 				drums.append(mido.Message("note_off", channel=9, note=38, time=10))
-			drums.append(mido.Message("note_off", channel=9, note=42, time=10))
 		# Melody (Flute): escala sobre el acorde.
 		scale = [MAJOR[i % 7] + 12 * (i // 7) for i in range(8)]
 		for i in range(beats_per_bar):
@@ -168,9 +167,11 @@ def compose_midi(spec: dict, mid_path: Path) -> None:
 def _llm_spec(prompt: str) -> dict:
 	"""Pide a un LLM local (endpoint red-pill, OpenAI-compatible) un JSON de arreglo."""
 	url = os.environ.get("REDPILL_LLM_URL", "http://localhost:8760").rstrip("/")
+	# RULE 5 (PROMPT-001): el system prompt es un RECURSO declarado, no un string inline.
+	system = (Path(__file__).resolve().parent / "prompts" / "composer_system.txt").read_text(encoding="utf-8").strip()
 	req_body = json.dumps({
 		"messages": [
-			{"role": "system", "content": "Eres un compositor. Devuelve SOLO un JSON con claves: tempo(int), key(nota en LETRA INGLESA, EJ 'C','A','F#'), progression(lista de grados romanos entre I,ii,iii,IV,V,vi o i,iv,v,vi), bars(int). Sin texto extra, sin markdown."},
+			{"role": "system", "content": system},
 			{"role": "user", "content": prompt},
 		],
 		"temperature": 0.7, "max_tokens": 256,

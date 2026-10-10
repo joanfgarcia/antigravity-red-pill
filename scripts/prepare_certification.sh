@@ -55,7 +55,7 @@ generate_digest() {
 
 	for f in "${matched_files[@]}"; do
 		echo -e "\n\n===== FILE: $f =====\n" >> "$output_file"
-		sed -E 's/(ghp_[A-Za-z0-9]+|gho_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)/[REDACTED_GH_TOKEN]/g' "$f" >> "$output_file"
+		sed -E 's/(gh[pousr]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16})/[REDACTED_SECRET]/g' "$f" >> "$output_file"
 	done
 }
 

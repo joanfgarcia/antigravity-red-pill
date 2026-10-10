@@ -198,10 +198,12 @@ def _run_model(model_id: str, bench: dict, out_dir: Path, only: set | None) -> i
 	gen = _DISPATCH[cfg["backend"]]
 	load_s = None
 	n_ok = 0
+	n_skip = 0
 	for p in pieces:
 		wav = out_dir / f"{model_id}__{p['id']}.wav"
 		if wav.exists():
 			print(f"  [skip] {wav.name}", flush=True)
+			n_skip += 1
 			continue
 		try:
 			if torch.cuda.is_available():
@@ -225,7 +227,8 @@ def _run_model(model_id: str, bench: dict, out_dir: Path, only: set | None) -> i
 			print(f"  [{p['id']}] FALLO: {e}", flush=True)
 			with metrics.open("a", encoding="utf-8") as f:
 				f.write(json.dumps({"model": model_id, "piece": p["id"], "error": str(e)}, ensure_ascii=False) + "\n")
-	return 0 if n_ok > 0 else 1
+	# Viable si algo salió o ya existía (resume); si NADA, falla.
+	return 0 if (n_ok + n_skip) > 0 else 1
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────

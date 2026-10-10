@@ -150,6 +150,7 @@ def _load(model_id: str):
 			pipe = _load_diffusers_4bit(cls, cfg["hf_id"])
 			if pipe is not None:
 				return "diffusers", pipe
+			print("  [quant] bnb4 no disponible → fallback bf16 + offload secuencial (más lento)", flush=True)
 		pipe = cls.from_pretrained(cfg["hf_id"], torch_dtype=torch.bfloat16)
 		if quant == "bf16":
 			pipe.to("cuda")
@@ -207,7 +208,7 @@ def _load_bonsai(cfg: dict):
 			return False
 		if any(d.glob("qmodel*")) or (d / "quantization_config.json").is_file():
 			arch = str(_read_json(d / "config.json").get("architectures", ""))
-			return "Mistral" in arch or "Qwen" in arch or True
+			return "Mistral" in arch or "Qwen" in arch  # discriminante (excluye el transformer Flux2)
 		return False
 
 	def _resolve(env_key: str, detector) -> Path:
@@ -292,12 +293,14 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 	print(f"  load {load_s:.1f}s", flush=True)
 
 	n_ok = 0
+	n_skip = 0
 	for genre in genres:
 		gid = genre["id"]
 		for seed in seeds:
 			png = out_dir / f"{model_id}__{gid}__s{seed}.png"
 			if png.exists():
 				print(f"  [skip] {png.name}", flush=True)
+				n_skip += 1
 				continue
 			try:
 				torch.cuda.reset_peak_memory_stats()
@@ -326,8 +329,8 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 				print(f"  [{gid} s{seed}] FALLO: {e}", flush=True)
 				with metrics.open("a", encoding="utf-8") as f:
 					f.write(json.dumps({"model": model_id, "genre": gid, "seed": seed, "error": str(e)}, ensure_ascii=False) + "\n")
-	# Elemento viable si al menos un género salió; si NADA salió (p.ej. OOM de 8 GB), falla.
-	return 0 if n_ok > 0 else 1
+	# Elemento viable si algo salió o ya existía (resume); si NADA (p.ej. OOM de 8 GB), falla.
+	return 0 if (n_ok + n_skip) > 0 else 1
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
