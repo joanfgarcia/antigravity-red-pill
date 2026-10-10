@@ -14,11 +14,11 @@ import subprocess
 logger = logging.getLogger("inject_antigravity")
 
 INJECT_ROOT = os.path.dirname(__file__)
-SCRIPTS_ROOT = os.path.join(INJECT_ROOT, "..")
+SCRIPTS_ROOT = os.path.join(INJECT_ROOT, "..", "..")
 
 
 def inject(args: argparse.Namespace) -> int:
-	redpill_dir = getattr(args, "redpill_dir", None) or os.path.join(INJECT_ROOT, "..", "..")
+	redpill_dir = getattr(args, "redpill_dir", None) or os.path.join(INJECT_ROOT, "..", "..", "..")
 	redpill_dir = os.path.abspath(redpill_dir)
 	uv = getattr(args, "uv_path", None) or "uv"
 	changed = 0

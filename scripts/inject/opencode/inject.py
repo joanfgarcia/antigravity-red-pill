@@ -7,6 +7,7 @@ and skills in a single pass.  Guest principle: merge, never overwrite.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import os
@@ -55,7 +56,7 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 		except Exception as exc:
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}
-	merged = _deep_merge(existing, template)
+	merged = _deep_merge(copy.deepcopy(existing), template)
 	if merged == existing and existing:
 		logger.info(f"  {config_path}: sin cambios")
 		return False
