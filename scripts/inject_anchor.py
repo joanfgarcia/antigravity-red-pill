@@ -122,12 +122,14 @@ def ide_call_vars(ide):
 	`<api>` tool + an `action` argument (the flat name is not a tool for them).
 	opencode does NOT prefix MCP tools — they appear under their resource
 	group names (bunker_memory_api, swarm_orchestrator_api, etc.)."""
-	# Antigravity has NO editor hooks — the handshake itself is the relay.
+	# Antigravity has NO editor hooks — the handshake itself is the relay, and the
+	# MODEL is the persistence carrier: debe devolver `continuity_id`/`mission_id`
+	# del último `<session/>` que haya visto (sin hook no hay bridge que la capture).
 	if ide == "antigravity":
 		return {
 			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
-			"RELAY_INSTRUCTION": "Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook — the handshake is the persistence relay).",
+			"RELAY_INSTRUCTION": "Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook — the handshake is the persistence relay). Also pass `originator` (\"antigravity\") and, when you have seen them in a previous response's `<session …/>` tag, echo back `continuity_id` and `mission_id` so the alma survives without a hook.",
 		}
 	# Pi has NO MCP and NO handshake tool: the harness extension IS the relay (identity
 	# on session_start/model_select/session_compact, per-turn RAG, agent_end scribe).

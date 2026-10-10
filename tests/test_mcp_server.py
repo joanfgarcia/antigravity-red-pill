@@ -519,6 +519,8 @@ class TestInterceptorRp:
 			"assistant",
 			category="mixed",
 			model=None,
+			originator=None,
+			session_id=None,
 		)
 		assert result[0].type == "text"
 
@@ -593,6 +595,8 @@ class TestInterceptorRp:
 			"assistant",
 			category="mixed",
 			model=None,
+			originator=None,
+			session_id=None,
 		)
 
 	async def test_enqueue_failure_does_not_crash_pipeline(self):
@@ -621,6 +625,196 @@ class TestInterceptorRp:
 		with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, side_effect=RuntimeError("crash")):
 			result = await handle_call_tool("interceptor_rp", {"user_prompt": "my raw prompt"})
 		assert "my raw prompt" in result[0].text
+
+
+class TestSovereignHandshakeIdentity:
+	"""Alma y Coro (Fase 0a): A1 (firma), A2 (misión por defecto), F5 (emisión
+	del alma + tag `<session>`). Se aísla del pipeline real de interceptores."""
+
+	@staticmethod
+	async def _handshake(arguments, interceptor_text="ok"):
+		from types import SimpleNamespace
+
+		from red_pill.mcp_server import handle_call_tool
+
+		async def _fake_interceptor(args):
+			return [SimpleNamespace(text=interceptor_text)]
+
+		with patch("red_pill.mcp_server.handle_interceptor_rp", new=_fake_interceptor):
+			return await handle_call_tool("sovereign_handshake", arguments)
+
+	async def test_schema_incluye_campos_de_identidad(self):
+		from red_pill.registry import registry
+
+		tool = next(t for t in registry.get_tools() if t.name == "sovereign_handshake")
+		props = tool.inputSchema["properties"]
+		for field in ("continuity_id", "mission_id", "campaign_id", "lineage_id", "role", "affinity", "originator"):
+			assert field in props
+		assert props["role"]["enum"] == ["orchestrator", "task", "spawn"]
+
+	async def test_emite_alma_y_tag_session(self):
+		from unittest.mock import patch as _patch
+
+		with _patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
+			with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
+				result = await self._handshake({"user_prompt": "hola"})
+		text = result[0].text
+		assert "<session " in text
+		assert 'continuity_id="' in text
+		assert 'mission="mission:adhoc-' in text  # A2 sin repo ni mission_id
+		assert 'leg="unknown"' in text  # llamante sin cuerpo
+		assert text.count("<session") == 1
+
+	async def test_bridge_resuelve_originator_y_workspace(self):
+		"""El bridge del harness (hook) suple originator + workspace cuando el
+		handshake no los pasa: A2 usa la rama del WORKSPACE, no la del kernel."""
+		from unittest.mock import patch as _patch
+
+		seen = {}
+
+		def _fake_branch(workdir=None):
+			seen["workdir"] = workdir
+			return "feat/bridge"
+
+		bridge = {"originator": "opencode:sid-1", "workdir": "/ws/bridge"}
+		with _patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with _patch("red_pill.mcp_server._current_git_branch", side_effect=_fake_branch):
+				result = await self._handshake({"user_prompt": "hola"})
+		text = result[0].text
+		assert 'leg="opencode:sid-1"' in text
+		assert 'mission="repo:feat/bridge"' in text
+		assert seen.get("workdir") == "/ws/bridge"
+
+	async def test_originator_explicito_deriva_provider_del_bridge(self):
+		"""Con originator explícito el bridge NO se ignora: se consulta para el
+		workspace, restringido al provider derivado del originator (sin bleed)."""
+		from unittest.mock import patch as _patch
+
+		with _patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}) as _bridge:
+			with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
+				result = await self._handshake({"user_prompt": "x", "originator": "claude_code:s9"})
+		assert 'leg="claude_code:s9"' in result[0].text
+		assert _bridge.call_args.args == ("claude_code",)
+
+	async def test_primer_enlace_gana_tag_refleja_alma_persistida(self):
+		"""Un continuity_id explícito DISTINTO con cuerpo ya atado: gana el primero
+		y el tag muestra el alma REAL persistida (no la del argumento)."""
+		first = await self._handshake({"user_prompt": "a", "originator": "opencode:link1"})
+		import re
+
+		alma = re.search(r'continuity_id="([^"]+)"', first[0].text).group(1)
+		second = await self._handshake(
+			{"user_prompt": "b", "originator": "opencode:link1", "continuity_id": "otra-alma-distinta"}
+		)
+		alma2 = re.search(r'continuity_id="([^"]+)"', second[0].text).group(1)
+		assert alma2 == alma
+		assert "otra-alma-distinta" not in second[0].text
+
+	async def test_originator_desnudo_no_escribe_registro(self):
+		"""Un cuerpo desnudo (sin `:id`) NO ata alma: evita colapsar sesiones
+		(p.ej. antigravity sin id nativo) en una sola fila."""
+		from red_pill.session.store import SessionRegistry
+
+		await self._handshake({"user_prompt": "x", "originator": "antigravity"})
+		assert SessionRegistry().get_by_originator("antigravity") is None
+
+	async def test_mision_por_defecto_repo_rama(self):
+		from unittest.mock import patch as _patch
+
+		with _patch("red_pill.mcp_server._current_git_branch", return_value="feat/x"):
+			result = await self._handshake({"user_prompt": "hola"})
+		assert 'mission="repo:feat/x"' in result[0].text
+
+	async def test_recupera_el_alma_por_originator(self):
+		r1 = await self._handshake({"user_prompt": "primero", "originator": "claude_code:s1"})
+		r2 = await self._handshake({"user_prompt": "segundo", "originator": "claude_code:s1"})
+		import re
+
+		cid1 = re.search(r'continuity_id="([^"]+)"', r1[0].text).group(1)
+		cid2 = re.search(r'continuity_id="([^"]+)"', r2[0].text).group(1)
+		assert cid1 and cid1 == cid2  # mismo cuerpo → mismo alma
+
+	async def test_id_explicito_no_emite_nuevo(self):
+		result = await self._handshake({"user_prompt": "x", "continuity_id": "alma-known"})
+		assert 'continuity_id="alma-known"' in result[0].text
+
+	async def test_llamante_legacy_role_task(self):
+		from red_pill.mcp_server import _resolve_session_identity
+
+		with patch("red_pill.mcp_server._current_git_branch", return_value=None):
+			ident = await _resolve_session_identity({"user_prompt": "legacy"})
+		assert ident["role"] == "task"
+		assert ident["mission_id"].startswith("mission:adhoc-")
+
+	async def test_relay_propaga_originator_al_sink(self):
+		from types import SimpleNamespace
+
+		from red_pill.mcp_server import handle_call_tool
+
+		captured = {}
+
+		async def _spy(args):
+			captured.update(args)
+			return [SimpleNamespace(text="ok")]
+
+		with patch("red_pill.mcp_server.handle_interceptor_rp", new=_spy):
+			await handle_call_tool(
+				"sovereign_handshake",
+				{"user_prompt": "hola", "originator": "claude_code:s1"},
+			)
+		assert captured.get("originator") == "claude_code:s1"
+
+
+class TestHarnessBridge:
+	"""Unidad del bridge: fresco gana, TTL anti-stale, filtro por provider."""
+
+	def _write(self, state, prov, session_id, updated_at, workdir=""):
+		import json as _json
+
+		(state / f"{prov}_session.json").write_text(
+			_json.dumps({"provider": prov, "session_id": session_id, "workdir": workdir, "updated_at": updated_at})
+		)
+
+	def _read(self, state, provider=None, ttl=10**12):
+		from unittest.mock import patch as _patch
+
+		from red_pill import mcp_server
+
+		with _patch("red_pill.core.paths.get_state_dir", return_value=state):
+			with _patch("red_pill.mcp_server._bridge_ttl_s", return_value=ttl):
+				return mcp_server._harness_bridge(provider)
+
+	async def test_freshest_bridge_wins(self, tmp_path):
+		import time as _time
+
+		now = _time.time()
+		self._write(tmp_path, "opencode", "o1", now - 100, "/ws/o")
+		self._write(tmp_path, "claude_code", "c1", now - 5, "/ws/c")
+		assert self._read(tmp_path) == {"originator": "claude_code:c1", "workdir": "/ws/c"}
+
+	async def test_stale_bridge_ignored(self, tmp_path):
+		self._write(tmp_path, "opencode", "o1", 1, "/ws/o")  # updated_at=1 → rancio
+		assert self._read(tmp_path, ttl=10) == {"originator": "", "workdir": ""}
+
+	async def test_provider_filter(self, tmp_path):
+		import time as _time
+
+		now = _time.time()
+		self._write(tmp_path, "opencode", "o1", now, "/ws/o")
+		self._write(tmp_path, "claude_code", "c1", now - 1, "/ws/c")
+		assert self._read(tmp_path, provider="opencode") == {"originator": "opencode:o1", "workdir": "/ws/o"}
+
+	async def test_malformed_bridge_degrades(self, tmp_path):
+		(tmp_path / "opencode_session.json").write_text("no json")
+		assert self._read(tmp_path) == {"originator": "", "workdir": ""}
+
+	async def test_bridge_without_timestamp_is_ignored(self, tmp_path):
+		import json as _json
+
+		(tmp_path / "opencode_session.json").write_text(
+			_json.dumps({"provider": "opencode", "session_id": "o1", "workdir": "/ws/o"})
+		)
+		assert self._read(tmp_path) == {"originator": "", "workdir": ""}
 
 
 class TestMainBlock:

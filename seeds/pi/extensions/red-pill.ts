@@ -142,6 +142,25 @@ async function recall(query: string, collection: string, limit: number): Promise
 	}
 }
 
+/** Sovereign Handshake (F5) por el cliente MCP compartido: emite/recupera el alma
+ * (`continuity_id`) y ata `pi:<session_id> ↔ alma` en session_registry (el resolver
+ * Python es el único escritor autoritativo). Solo se invoca en pérdida de contexto
+ * (start/modelo/compact), no por turno. NO carga identidad (`is_new_session:false`):
+ * la identidad la sirve `runWake`. Best-effort: nunca tira el turno. */
+async function handshake(sessionId: string, userPrompt: string): Promise<void> {
+	try {
+		const client = await getMcpClient();
+		await client.callTool("sovereign_handshake", {
+			user_prompt: (userPrompt || "(session wake)").slice(0, 1500),
+			mode: "low",
+			is_new_session: false,
+			originator: sessionId ? `pi:${sessionId}` : "pi",
+		});
+	} catch {
+		/* best-effort: un fallo del handshake nunca debe romper el turno */
+	}
+}
+
 /** Silent Scribe Relay: queue the completed turn straight into `memory_queue`
  * (like the Claude Code Stop hook and the opencode scribe plugin), instead of
  * spawning Python. Raw insert — the queue worker filters tooling noise at the
@@ -174,7 +193,7 @@ function relay(prevPrompt: string, prevResponse: string, model: string, sessionI
 					"pending",
 					Date.now() / 1000,
 					"mixed",
-					"pi",
+					sessionId ? `pi:${sessionId}` : "pi",
 					model || null,
 				];
 				if (cols.has("content_hash")) {
@@ -276,6 +295,10 @@ export default function (pi: ExtensionAPI) {
 			chunks.push(`[BÚNKER IDENTIDAD — resync completo]\n${pendingIdentity}`);
 			needFull = false;
 			pendingIdentity = null;
+			// F5: en pérdida de contexto, el handshake MCP emite/recupera el alma y
+			// ata `pi:<session_id> ↔ alma` en session_registry (el resolver Python es
+			// el único escritor autoritativo). El texto de identidad no se inyecta.
+			void handshake(sessionIdOf(ctx), prompt);
 		}
 
 		// LIGHT siempre: RAG liviano (equivale al pipeline del interceptor)
@@ -299,9 +322,11 @@ export default function (pi: ExtensionAPI) {
 	// Respuesta = SOLO bloques de texto del assistant (message_end, no streaming;
 	// gana el último no vacío). Thinking y tool calls quedan fuera.
 	pi.on("message_end", async (event) => {
-		if ((event.message as any)?.role !== "assistant") return;
-		const text = assistantTextOf([event.message as any]);
-		if (text) turnResponse = text;
+		const msg = (event.message as any) ?? {};
+		if (msg?.role === "assistant") {
+			const text = assistantTextOf([msg]);
+			if (text) turnResponse = text;
+		}
 	});
 
 	// Boundary final CON outcome: guarda solo turnos COMPLETADOS (salta abort/error).

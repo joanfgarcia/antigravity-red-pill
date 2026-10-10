@@ -58,6 +58,28 @@ def redpill_server(uv_path, redpill_dir):
 
 
 # ── Merge logic: assert some servers, skip-if-exists for the rest ─────────────
+def _harness_for(config_file):
+	"""Arnés que corresponde a una config MCP destino (para `REDPILL_HARNESS`):
+	el servidor MCP corre con cwd=kernel, así que necesita saber su arnés para
+	resolver el bridge de sesión (Alma y Coro A1/A2) sin confundir IDEs. Se compara
+	por basename (no substring): `saoudrizwan.claude-dev` (Cline) NO es Claude Code."""
+	low = config_file.lower()
+	base = os.path.basename(low)
+	if config_file.endswith(".mcp.json") or base in (".claude.json", "claude_desktop_config.json"):
+		return "claude_code"
+	if ".gemini" in low or "antigravity" in low:
+		return "antigravity"
+	return None
+
+
+def _with_harness(defn, config_file):
+	"""Clona el def del servidor añadiendo `env.REDPILL_HARNESS` según el destino."""
+	harness = _harness_for(config_file)
+	if not harness or not isinstance(defn, dict):
+		return defn
+	return {**defn, "env": {**(defn.get("env") or {}), "REDPILL_HARNESS": harness}}
+
+
 def inject(config_file, servers, assert_names=frozenset(), update=False, backup=True):
 	"""Merge `servers` (name -> definition) into config_file's mcpServers.
 	- assert_names: always written (RedPill-Kernel self-heal).
@@ -80,7 +102,7 @@ def inject(config_file, servers, assert_names=frozenset(), update=False, backup=
 		if exists and not force:
 			skipped.append(name)
 			continue
-		mcps[name] = defn
+		mcps[name] = _with_harness(defn, config_file) if name == "RedPill-Kernel" else defn
 		(updated if exists else added).append(name)
 
 	if not added and not updated:

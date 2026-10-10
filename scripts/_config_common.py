@@ -56,6 +56,8 @@ def build_vars(args):
 	# have no business touching bunker.db (see seeds/opencode/plugins).
 	queue_db = os.path.join(_data_dir(), "queue", "bunker_queue.db")
 	state_dir = os.path.join(_data_dir(), "state")
+	# session.db (Alma y Coro): junto a bunker_queue.db (ver paths.get_session_db).
+	session_db = os.path.join(_data_dir(), "queue", "session.db")
 	uv_bin = getattr(args, "uv_path", None) or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
 	redpill_dir = getattr(args, "redpill_dir", None) or ""
 	# La norma de invocación del CLI red-pill: el binario NO está en el PATH
@@ -75,6 +77,7 @@ def build_vars(args):
 		"WORKSPACE": os.path.expanduser(args.workspace) if getattr(args, "workspace", None) else "",
 		"BUNKER_DB": bunker_db,
 		"QUEUE_DB": queue_db,
+		"SESSION_DB": session_db,
 		"STATE_DIR": state_dir,
 	}
 
@@ -114,7 +117,7 @@ def strip_jsonc_comments(text):
 
 # ── Agent_Core / transversal vars (red-pill .env, with fallbacks) ─────────────
 def parse_env_file(path):
-	vals = {}
+	vals: dict[str, str] = {}
 	if not os.path.exists(path):
 		return vals
 	with open(path, encoding="utf-8") as f:

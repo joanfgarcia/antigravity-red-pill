@@ -26,6 +26,7 @@ swallowed and we exit 0 — the hook never blocks the IDE turn.
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 PROVIDER = "claude_code"
@@ -40,12 +41,43 @@ def _live_dir() -> Path:
 	return base / "red-pill" / "state" / "sessions" / "live"
 
 
+def _bridge_path() -> Path:
+	"""${STATE_DIR}/claude_code_session.json — lo lee `_harness_bridge` (MCP)."""
+	xdg = os.environ.get("XDG_DATA_HOME")
+	base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+	return base / "red-pill" / "state" / "claude_code_session.json"
+
+
 def _safe(token: str) -> str:
 	return token.strip().replace("/", "_").replace("__", "_")
 
 
 def _phase(payload: dict) -> str:
 	return "end" if payload.get("hook_event_name") in END_EVENTS else "start"
+
+
+def _write_bridge(session_id: str, cwd: str) -> None:
+	"""Escribe el bridge del arnés al INICIO del turno (Alma y Coro A1/A2): el
+	servidor MCP corre con cwd=kernel y necesita session_id + workspace del agente.
+	CRÍTICO que sea en `UserPromptSubmit` (no sólo en Stop): si sólo se escribiera
+	al final, el primer turno de una sesión nueva resolvería el bridge de la
+	sesión anterior. Best-effort (nunca rompe el turno)."""
+	try:
+		payload = json.dumps(
+			{
+				"provider": PROVIDER,
+				"session_id": session_id,
+				"workdir": (cwd or "").strip(),
+				"updated_at": time.time(),
+			}
+		)
+		path = _bridge_path()
+		path.parent.mkdir(parents=True, exist_ok=True)
+		tmp = path.with_suffix(".json.tmp")
+		tmp.write_text(payload, encoding="utf-8")
+		os.replace(tmp, path)
+	except Exception:
+		pass
 
 
 def _run() -> None:
@@ -58,9 +90,15 @@ def _run() -> None:
 	session_id = payload.get("session_id")
 	if not isinstance(session_id, str) or not session_id.strip():
 		return
+	phase = _phase(payload)
 	live = _live_dir()
 	live.mkdir(parents=True, exist_ok=True)
-	(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.{_phase(payload)}").touch(exist_ok=True)
+	(live / f"{_safe(PROVIDER)}__{_safe(session_id)}.{phase}").touch(exist_ok=True)
+	# El bridge sólo se refresca al INICIO del turno (sesión activa); en los
+	# eventos de cierre no se reescribe (evita dejar una sesión muerta como fresca).
+	if phase == "start":
+		cwd = payload.get("cwd")
+		_write_bridge(session_id, cwd if isinstance(cwd, str) else "")
 
 
 def main() -> int:
