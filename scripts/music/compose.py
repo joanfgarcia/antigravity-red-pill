@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -36,6 +37,22 @@ from pathlib import Path
 SEMITONES = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5,
 	"F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
 MAJOR = [0, 2, 4, 5, 7, 9, 11]
+_ES = {"do": "C", "re": "D", "mi": "E", "fa": "F", "sol": "G", "la": "A", "si": "B"}
+
+
+def _norm_key(k: str) -> str:
+	"""Normaliza la clave a una nota en letra inglesa (acepta 'La', 'Am', 'C#', 'Sol')."""
+	if not k:
+		return "C"
+	low = k.strip().lower()
+	for es, en in _ES.items():
+		if low.startswith(es):
+			k = en + k[len(es):]
+			break
+	m = re.match(r"([A-Ga-g])([#b]?)", k)
+	root = (m.group(1).upper() + m.group(2)) if m else "C"
+	return root if root in SEMITONES else "C"
+
 # Progresiones por grado (0-based) → semitonos de la tríada sobre la tónica.
 ROMAN = {"I": (0, 4, 7), "ii": (2, 5, 9), "iii": (4, 7, 11), "IV": (5, 9, 12),
 	"V": (7, 11, 14), "vi": (9, 12, 16), "iv": (5, 8, 12), "i": (0, 3, 7), "v": (7, 10, 14)}
@@ -56,7 +73,7 @@ def compose_midi(spec: dict, mid_path: Path) -> None:
 	import mido
 
 	tempo = int(spec.get("tempo", 100))
-	key = spec.get("key", "C")
+	key = _norm_key(spec.get("key", "C"))
 	prog = spec.get("progression", ["I", "V", "vi", "IV"]) or ["I", "V", "vi", "IV"]
 	bars = int(spec.get("bars", 8))
 	beats_per_bar = 4
@@ -123,7 +140,7 @@ def _llm_spec(prompt: str) -> dict:
 	url = os.environ.get("REDPILL_LLM_URL", "http://localhost:8760").rstrip("/")
 	req_body = json.dumps({
 		"messages": [
-			{"role": "system", "content": "Eres un compositor. Devuelve SOLO un JSON con claves: tempo(int), key(EJ 'C','Am'), progression(lista de grados romanos), bars(int). Sin texto extra."},
+			{"role": "system", "content": "Eres un compositor. Devuelve SOLO un JSON con claves: tempo(int), key(nota en LETRA INGLESA, EJ 'C','A','F#'), progression(lista de grados romanos entre I,ii,iii,IV,V,vi o i,iv,v,vi), bars(int). Sin texto extra, sin markdown."},
 			{"role": "user", "content": prompt},
 		],
 		"temperature": 0.7, "max_tokens": 256,
