@@ -6,6 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
 
+# Guard: debe ser un working tree de git con ficheros trackeados. Sin esto, si
+# 'git ls-files' no devuelve nada (repo sin índice, dir no-git, copia recién
+# creada) el script escribía digests VACÍOS (solo cabecera) y salía con 0 —
+# fallo SILENCIOSO que contamina auditorías. Mejor abortar.
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	echo "ERROR: '$ROOT_DIR' no es un working tree de git; 'git ls-files' no devolverá nada." >&2
+	exit 1
+fi
+
 CORE_OUTPUT="RED_PILL_DIGEST_CORE.txt"
 TESTS_OUTPUT="RED_PILL_DIGEST_TESTS.txt"
 LORE_OUTPUT="RED_PILL_DIGEST_LORE.txt"
@@ -38,6 +47,12 @@ generate_digest() {
 	
 	echo -e "\n================================================================================\n" >> "$output_file"
 	
+	if [ ${#matched_files[@]} -eq 0 ]; then
+		echo "ERROR: '$output_file' saldría VACÍO (git ls-files no devolvió ficheros para su conjunto). Abortando." >&2
+		rm -f "$output_file"
+		exit 1
+	fi
+
 	for f in "${matched_files[@]}"; do
 		echo -e "\n\n===== FILE: $f =====\n" >> "$output_file"
 		sed -E 's/(ghp_[A-Za-z0-9]+|gho_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)/[REDACTED_GH_TOKEN]/g' "$f" >> "$output_file"
