@@ -74,7 +74,9 @@ def derive_affinity(
 
 	Orden de merge (§3.3): `campaña + misión + explícita + ws`.
 	- `explicit`: afinidades ya etiquetadas (env `AFFINITY`, frontmatter, payload).
-	- `mission_id`: misión en curso → `mission:<id>`.
+	- `mission_id`: misión en curso → `mission:<id>`. Si el id ya viene con el
+		scope `mission:` (p.ej. `mission:adhoc-<fecha>`), NO se re-prefija (evita
+		`mission:mission:…`).
 	- `campaign_id`: campaña (cruce de proyectos) → `campaign:<id>`.
 	- `workdir`: CWD del IDE / `manifest.workdir` → `ws:<workspace>` resuelto
 		contra el registro (D17); omitido si no pertenece a ningún workspace.
@@ -88,7 +90,7 @@ def derive_affinity(
 		out.append(f"campaign:{cid}")
 	mid = str(mission_id).strip() if mission_id else ""
 	if mid:
-		out.append(f"mission:{mid}")
+		out.append(mid if mid.startswith("mission:") else f"mission:{mid}")
 	if explicit:
 		out.extend(str(a).strip() for a in explicit if str(a).strip())
 	ws = resolve_workspace(workdir)

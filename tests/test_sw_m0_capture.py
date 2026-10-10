@@ -27,6 +27,13 @@ def test_affinity_mision_y_campana():
 	assert derive_affinity(mission_id="BIT-003", campaign_id="BIT") == ["campaign:BIT", "mission:BIT-003"]
 
 
+def test_affinity_mission_scoped_no_dobla_prefijo():
+	# Un mission_id ya con scope `mission:` (p.ej. la efímera) no se re-prefija.
+	assert derive_affinity(mission_id="mission:adhoc-2026-10-10") == ["mission:adhoc-2026-10-10"]
+	# `repo:<rama>` conserva el namespace `mission:` (§3.3).
+	assert derive_affinity(mission_id="repo:main") == ["mission:repo:main"]
+
+
 def test_affinity_explicito_y_dedup():
 	assert derive_affinity(workdir="/x/sharing", explicit=["ws:sharing", "rfc:BIT"]) == ["ws:sharing", "rfc:BIT"]
 
