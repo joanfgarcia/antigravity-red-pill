@@ -1,8 +1,10 @@
 import asyncio
+import json
 import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -1594,6 +1596,10 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 				"enum": ["full", "medium", "low"],
 				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
 			},
+			"originator": {
+				"type": "string",
+				"description": "El cuerpo: `proveedor:id-nativo`. Identifica la sesión de origen para el sink de memoria (opcional).",
+			},
 		},
 		"required": ["user_prompt"],
 	},
@@ -1659,7 +1665,21 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			# Only enqueue with a real prompt: an assistant-only fragment is not a
 			# turn (bridge turns are persisted by their transport relay).
 			if clean_p and (len(clean_p) > 20 or len(clean_r) > 20):
-				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
+				relay_originator = str(arguments.get("originator") or "").strip() or None
+				relay_session_id = (
+					relay_originator.split(":", 1)[1]
+					if relay_originator and ":" in relay_originator
+					else None
+				)
+				MemoryQueueManager().enqueue_memory(
+					clean_p,
+					clean_r,
+					"assistant",
+					category=prev_cat,
+					model=prev_mod,
+					originator=relay_originator,
+					session_id=relay_session_id,
+				)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
 				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")
@@ -1672,8 +1692,10 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		"[Persistence protocol — configured by the operator via red-pill's sovereign anchors]\n"
 		"Red-pill is this operator's memory layer. Its relay only records a turn if it sees it,\n"
 		"so please begin your next turn by calling `sovereign_handshake`, passing the new user\n"
-		"prompt as `user_prompt` and this turn's response as `previous_response`. Skipping the\n"
-		"call silently drops the turn from the operator's long-term memory (Silent Amnesia).\n"
+		"prompt as `user_prompt`. If your harness has NO editor hook, also pass the prior turn's\n"
+		"`previous_prompt`/`previous_response` (the handshake is then the relay); harnesses WITH a\n"
+		"hook (opencode, Claude Code) only need `user_prompt`. Skipping the call silently drops the\n"
+		"turn from the operator's long-term memory (Silent Amnesia).\n"
 		"</reminder>"
 	)
 
@@ -1728,12 +1750,192 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"FAILED to configure interceptor: {e}")]
 
 
+_BRANCH_CACHE: Dict[str, Any] = {"dir": None, "branch": None, "at": 0.0}
+
+
+def _current_git_branch(workdir: Optional[str] = None) -> Optional[str]:
+	"""Rama git del workspace del agente (best-effort, A2: `repo:<rama>`) con caché.
+
+	El MCP corre con cwd = checkout del kernel (`uv --directory ${REDPILL_DIR}`),
+	que NO es el workspace del agente; `workdir` llega del bridge del harness
+	(opencode_session.json / claude_code_session.json), de `REDPILL_WORKSPACE` o del cwd.
+	La caché evita un subprocess por turno (solo se re-resuelve al cambiar de dir
+	o tras 60s). None si no hay repo.
+	"""
+	workdir = os.path.abspath(workdir or os.getcwd())
+	if not os.path.isdir(workdir):
+		return None  # un workdir no-directorio (bridge corrupto) no debe ir a `git -C`
+	now = time.time()
+	if _BRANCH_CACHE["dir"] == workdir and now - float(_BRANCH_CACHE["at"]) < 60.0:
+		cached = _BRANCH_CACHE["branch"]
+		return cached if isinstance(cached, str) else None
+	branch: Optional[str]
+	try:
+		out = subprocess.run(
+			["git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD"],
+			capture_output=True,
+			text=True,
+			timeout=2.0,
+		)
+		raw = out.stdout.strip()
+		branch = raw if out.returncode == 0 and raw and raw != "HEAD" else None
+	except Exception:
+		branch = None
+	_BRANCH_CACHE.update({"dir": workdir, "branch": branch, "at": now})
+	return branch
+
+
+def _bridge_ttl_s() -> float:
+	"""TTL del bridge del harness (anti-stale); `REDPILL_BRIDGE_TTL_S` lo sobreescribe."""
+	try:
+		return float(os.getenv("REDPILL_BRIDGE_TTL_S", "43200"))
+	except Exception:
+		return 43200.0
+
+
+def _bridge_entry(data: Any, prov: str, now: float, ttl: float) -> Optional[Dict[str, str]]:
+	"""Valida un JSON de bridge: `{originator, workdir}` o None (malformado/rancio)."""
+	if not isinstance(data, dict):
+		return None
+	try:
+		updated = float(data.get("updated_at") or 0.0)
+	except Exception:
+		updated = 0.0
+	if updated <= 0.0 or now - updated > ttl:
+		return None  # sin marca temporal o rancio: nunca reencarnar en alma vieja
+	session_id = str(data.get("session_id") or "").strip()
+	workdir = str(data.get("workdir") or "").strip()
+	entry_prov = str(data.get("provider") or prov).strip() or prov
+	originator = f"{entry_prov}:{session_id}" if session_id else ""
+	if originator or workdir:
+		return {"originator": originator, "workdir": workdir}
+	return None
+
+
+def _harness_bridge(provider: Optional[str] = None) -> Dict[str, str]:
+	"""Bridge del harness (Alma y Coro, A1/A2): `{originator, workdir}`.
+
+	El hook del arnés escribe en el STATE_DIR un JSON con lo único que conoce y
+	el servidor (cwd=kernel) no: `session_id` + (best-effort) `workdir`. Sin
+	`provider` se prueba el bridge de opencode y el de claude_code y gana el MÁS
+	RECIENTE (`updated_at`) — así, con dos IDEs vivos, se resuelve el que acaba de
+	escribir por este prompt, no uno fijo. Con `provider` se restringe a ese.
+	El handshake con `originator` explícito o `REDPILL_ORIGINATOR` gana siempre y
+	ni siquiera consulta el bridge. Nunca lanza: un fallo degrada a sin-bridge.
+	"""
+	from red_pill.core.paths import get_state_dir
+
+	state = get_state_dir()
+	now = time.time()
+	ttl = _bridge_ttl_s()
+	providers = (provider,) if provider else ("opencode", "claude_code")
+	best: Optional[tuple[float, Dict[str, str]]] = None
+	for prov in providers:
+		try:
+			data = json.loads((state / f"{prov}_session.json").read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		entry = _bridge_entry(data, prov, now, ttl)
+		updated = float(data.get("updated_at") or 0.0) if isinstance(data, dict) else 0.0
+		if entry and (best is None or updated > best[0]):
+			best = (updated, entry)
+	return best[1] if best else {"originator": "", "workdir": ""}
+
+
+async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]:
+	"""Resuelve cuerpo (originator), alma, misión, rol y afinidad (A1/A2/F5).
+
+	- `originator`: del argumento o de `REDPILL_ORIGINATOR`; puede quedar vacío
+		(llamante legacy sin identidad → se emite igual el tag con `leg=unknown`).
+	- `continuity_id`: del argumento; si no, se RECUPERA del registro por
+		originator; si no hay, se EMITE una nueva (emitir ≠ hidratar).
+	- `mission_id`: cascada A2 (`param → repo:<rama> → mission:adhoc-<fecha>`).
+	- `role`: por defecto 'task'. `affinity`: resolver compartido + canonizada.
+	Nunca lanza: un fallo de identidad no debe tumbar el turno.
+	"""
+	from red_pill.core.affinity import derive_affinity
+	from red_pill.session import new_continuity_id, resolve_default_mission
+	from red_pill.session.store import SessionRegistry
+
+	# Cuerpo: arg → env → bridge del arnés. El arnés se identifica por
+	# `REDPILL_HARNESS` (fijado en la config MCP) o por el prefijo del originator;
+	# así el bridge NO se confunde entre IDEs simultáneos (dos servidores MCP
+	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
+	# aunque el originator venga explícito.
+	explicit_originator = str(
+		arguments.get("originator") or os.getenv("REDPILL_ORIGINATOR") or ""
+	).strip() or None
+	harness = os.getenv("REDPILL_HARNESS") or (explicit_originator.split(":", 1)[0] if explicit_originator else None)
+	bridge = _harness_bridge(harness)
+	originator = explicit_originator or (bridge["originator"] or None)
+	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
+	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
+	continuity_id = str(arguments.get("continuity_id") or "").strip() or None
+	campaign_id = str(arguments.get("campaign_id") or "").strip() or None
+	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
+	branch = await asyncio.to_thread(_current_git_branch, workspace)
+	mission_id = resolve_default_mission(arguments.get("mission_id"), branch=branch)
+	role = str(arguments.get("role") or "task").strip() or "task"
+
+	try:
+		affinity = derive_affinity(
+			workdir=workspace,
+			mission_id=mission_id,
+			explicit=arguments.get("affinity"),
+			campaign_id=campaign_id,
+		)
+	except Exception:
+		affinity = list(arguments.get("affinity") or [])
+
+	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
+	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
+	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
+	linkable = bool(originator and ":" in originator)
+	try:
+		registry_obj = SessionRegistry()
+		existing = registry_obj.get_by_originator(originator) if (linkable and originator) else None
+		if not continuity_id:
+			if existing and existing.get("continuity_id"):
+				continuity_id = existing["continuity_id"]
+			else:
+				continuity_id = new_continuity_id()
+		if linkable and originator:
+			registry_obj.upsert_session(
+				originator=originator,
+				continuity_id=continuity_id,
+				mission_id=mission_id,
+				campaign_id=campaign_id,
+				role=role,
+				lineage_id=arguments.get("lineage_id"),
+				affinity=affinity,
+			)
+			# El alma EMITIDA debe ser la PERSISTIDA (primer enlace gana): si la fila
+			# conservó otra alma, el tag refleja la real, no la del argumento.
+			persisted = registry_obj.get_by_originator(originator)
+			if persisted and persisted.get("continuity_id"):
+				continuity_id = persisted["continuity_id"]
+	except Exception as e:
+		logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
+		if not continuity_id:
+			continuity_id = new_continuity_id()
+
+	return {
+		"originator": originator,
+		"continuity_id": continuity_id,
+		"mission_id": mission_id,
+		"role": role,
+		"affinity": affinity,
+	}
+
+
 @registry.register(
 	name="sovereign_handshake",
 	description=(
 		"[MANDATORY] Execute the Sovereign Handshake — the first tool call in every turn. "
 		"Combines identity injection and interaction relay in a single atomic call. "
-		"Pass `user_prompt` (required). Pass `previous_prompt`/`previous_response` to auto-save the prior turn (Silent Scribe Relay). "
+		"Pass `user_prompt` (required). On harnesses WITHOUT an editor hook, also pass "
+		"`previous_prompt`/`previous_response` to auto-save the prior turn (Silent Scribe Relay); "
+		"with a hook (opencode, Claude Code) `user_prompt` alone is captured automatically. "
 		"Set `is_new_session: true` on session start or after a model change to trigger full identity resync. "
 		"Use `mode` to control token economy: 'full' (IDE, default), 'medium' (Telegram), 'low' (AWAKENINGs)."
 	),
@@ -1741,8 +1943,8 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		"type": "object",
 		"properties": {
 			"user_prompt": {"type": "string", "description": "The current user message."},
-			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay)."},
-			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay)."},
+			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
+			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
 			"previous_model": {"type": "string", "description": "The LLM model name that generated the previous response."},
 			"previous_category": {
 				"type": "string",
@@ -1758,14 +1960,44 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 				"enum": ["full", "medium", "low"],
 				"description": "Identity loading depth. 'full' (default): complete directives + plugins. 'medium': reduced payload. 'low': minimal bootstrap.",
 			},
+			"continuity_id": {
+				"type": "string",
+				"description": "El alma de esta sesión (UUIDv7). Pásala si la conoces (p.ej. la viste en el tag `<session …/>` o la recuperas tras una compactación). Si se omite, el handshake la emite/recupera.",
+			},
+			"mission_id": {
+				"type": "string",
+				"description": "La tarea/misión (`<scope>:<id>`). Si se omite, el handshake resuelve la misión por defecto (job → `repo:<rama>` → `mission:adhoc-<fecha>`).",
+			},
+			"campaign_id": {"type": "string", "description": "Marco estratégico (opcional, nullable)."},
+			"lineage_id": {
+				"type": "string",
+				"description": "Etiqueta de linaje (opcional; la asigna quien engendra, no tiene por qué ser el `continuity_id` del padre).",
+			},
+			"role": {
+				"type": "string",
+				"enum": ["orchestrator", "task", "spawn"],
+				"description": "Rol en el coro. Por defecto 'task'.",
+			},
+			"affinity": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "Afinidad explícita (se canoniza: lower/trim + sorted/dedup). Si se omite, se deriva.",
+			},
+			"originator": {
+				"type": "string",
+				"description": "El cuerpo: `proveedor:id-nativo` (p.ej. `claude_code:<session_id>`). Identifica al arnés/sesión que llama. Si se omite, se lee de `REDPILL_ORIGINATOR`.",
+			},
 		},
 		"required": ["user_prompt"],
 	},
 )
 async def handle_sovereign_handshake(arguments: Dict[str, Any]):
-	"""Atomic Sovereign Handshake: interceptor_rp + optional refresh_session_context."""
+	"""Atomic Sovereign Handshake: identity + interceptor_rp + optional refresh."""
 	mode = arguments.get("mode", "full")
 	is_new_session = arguments.get("is_new_session", False)
+
+	# ── Phase 0: Identidad (A1/A2/F5) — cuerpo, alma y misión ──
+	identity = await _resolve_session_identity(arguments)
 
 	outputs: List[str] = []
 
@@ -1790,6 +2022,11 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 		for key in ("previous_prompt", "previous_response", "previous_category", "previous_model"):
 			if key in arguments:
 				interceptor_args[key] = arguments[key]
+		# `originator` compuesto: el sink de memoria lo recibe desde el bridge
+		# del arnés (p.ej. telegram/opencode). En opencode el hook JS escribe el
+		# turno directamente; aquí solo se propaga si el llamante lo aporta.
+		if identity.get("originator"):
+			interceptor_args["originator"] = identity["originator"]
 
 		interceptor_result = await handle_interceptor_rp(interceptor_args)
 		for item in interceptor_result:
@@ -1799,7 +2036,16 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 		outputs.append(f"[HANDSHAKE] Interceptor pipeline failed: {e}")
 		logger.error(f"Sovereign Handshake — interceptor_rp failed: {e}")
 
-	return [types.TextContent(type="text", text="\n\n".join(outputs))]
+	from red_pill.session import decorate_with_session_tag
+
+	joined = "\n\n".join(outputs)
+	decorated = decorate_with_session_tag(
+		joined,
+		continuity_id=identity["continuity_id"],
+		originator=identity.get("originator"),
+		mission_id=identity.get("mission_id"),
+	)
+	return [types.TextContent(type="text", text=decorated)]
 
 
 @server.list_tools()

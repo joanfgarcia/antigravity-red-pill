@@ -66,11 +66,17 @@
  * Runtime: Bun — uses bun:sqlite.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 const QUEUE_DB = "${QUEUE_DB}";
 const STATE_DIR = "${STATE_DIR}";
 const ORIGINATOR = "opencode";
+// El cuerpo es compuesto (`opencode:<session_id>`): identifica la sesión nativa.
+// ORIGINATOR se conserva para el nombre de los ficheros de latido.
+function compositeOriginator(sessionId) {
+  return sessionId ? `${ORIGINATOR}:${sessionId}` : ORIGINATOR;
+}
 // Apaga SOLO la captura (el bridge ya relaya el turno). El latido sigue: una
 // sesión sin captura (p.ej. Telegram) sigue viva y debe verse en el tablón.
 const CAPTURE_DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
@@ -103,6 +109,42 @@ function touchLiveness(sessionId, phase) {
   } catch (_) {}
 }
 
+// ── HARNESS BRIDGE (Alma y Coro, A1/A2) ─────────────────────────────────────
+// El servidor MCP corre con cwd = kernel (uv --directory ${REDPILL_DIR}), así
+// que no puede derivar ni originator ni `ws:`/`repo:` del workspace del agente.
+// Este fichero JSON enlaza la única verdad que el hook SÍ conoce: sessionId y
+// (best-effort) cwd. `_resolve_session_identity` lo lee cuando el handshake no
+// pasa originator → `opencode:<session_id>` real + rama del workspace.
+const BRIDGE_PATH = `${STATE_DIR}/opencode_session.json`;
+
+// Directorio del workspace que opencode pasa al plugin (PluginInput.directory en
+// v1 / ctx.directory en v2). El server MCP corre con cwd=kernel, así que este es
+// el único modo de que A2 derive `repo:<rama>` del workspace REAL del agente.
+let harnessCwd = "";
+
+function writeBridge(sessionId, cwdHint) {
+  if (!sessionId || childSessions.has(sessionId) || !STATE_DIR || STATE_DIR.includes("${")) return;
+  try {
+    const payload = {
+      provider: "opencode",
+      session_id: String(sessionId),
+      workdir: String(cwdHint || harnessCwd || "").trim(),
+      updated_at: Date.now() / 1000,
+    };
+    const tmp = `${BRIDGE_PATH}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(payload));
+    renameSync(tmp, BRIDGE_PATH);
+  } catch (_) {}
+}
+
+function pluckCwd() {
+  for (const arg of arguments) {
+    const v = arg?.cwd || arg?.workspaceDirectory || arg?.workspace;
+    if (typeof v === "string" && v) return v;
+  }
+  return "";
+}
+
 function hasQueue(db) {
   const row = db
     .query("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_queue'")
@@ -118,24 +160,51 @@ function queueColumns(db) {
   }
 }
 
+function contentHash(a, b) {
+  try {
+    return createHash("sha256").update(`${a || ""}\u0000${b || ""}`).digest("hex");
+  } catch (_) {
+    return null;
+  }
+}
+
 function writeInteraction(db, prompt, response, model, sessionId, cols) {
   if (!prompt && !response) return;
   // Full text on purpose: truncating here would silently mutilate the engram
   // downstream. Noise trimming is the worker's job, at the single drain point.
   // session_id se captura cuando el esquema lo lleva (single-writer); la afinidad
-  // del cwd se retiró (AD-034).
+  // del cwd se retiró (AD-034). El originator es compuesto (`opencode:<session>`):
+  // el tablón y Memento necesitan el cuerpo, no solo el proveedor.
+  // content_hash cierra la dedup ciega del worker (las filas del hook deben
+  // deduplicarse como las del relay) — mismo digest que enqueue_memory.
+  const originator = compositeOriginator(sessionId);
+  const hash = cols.has("content_hash") ? contentHash(prompt, response) : null;
   if (cols.has("session_id") && cols.has("affinity")) {
+    if (hash) {
+      const stmt = db.prepare(
+        "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, session_id, affinity, content_hash) " +
+          "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?, ?, ?)"
+      );
+      stmt.run(prompt || "", response || "", Date.now() / 1000, originator, model || null, sessionId || null, null, hash);
+    } else {
+      const stmt = db.prepare(
+        "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, session_id, affinity) " +
+          "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?, ?)"
+      );
+      stmt.run(prompt || "", response || "", Date.now() / 1000, originator, model || null, sessionId || null, null);
+    }
+  } else if (hash) {
     const stmt = db.prepare(
-      "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, session_id, affinity) " +
-        "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?, ?)"
+      "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash) " +
+        "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?)"
     );
-    stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null, sessionId || null, null);
+    stmt.run(prompt || "", response || "", Date.now() / 1000, originator, model || null, hash);
   } else {
     const stmt = db.prepare(
       "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) " +
         "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)"
     );
-    stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null);
+    stmt.run(prompt || "", response || "", Date.now() / 1000, originator, model || null);
   }
 }
 
@@ -146,6 +215,7 @@ async function initStore() {
     const { Database } = await import("bun:sqlite");
     const db = new Database(QUEUE_DB);
     db.exec("PRAGMA journal_mode=WAL");
+    db.exec("PRAGMA busy_timeout=5000");
     if (!hasQueue(db)) {
       console.error("[RedPillScribe] memory_queue missing; run the red-pill kernel once. Capture disabled.");
       db.close();
@@ -223,6 +293,9 @@ export default {
   id: "redpill-scribe",
 
   async setup(ctx) {
+    // Workspace del agente (A2): ctx.directory puede no existir en versiones
+    // antiguas; best-effort.
+    if (typeof ctx?.directory === "string" && ctx.directory) harnessCwd = ctx.directory;
     // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
     // minions), el bridge ya relaya el turno a la cola: el plugin no captura
     // (no duplica ni guarda el prompt envuelto sin respuesta), pero sí late.
@@ -231,7 +304,10 @@ export default {
     await ctx.session.hook("prompt", (event) => {
       const sessionId = event?.sessionID;
       const text = event?.prompt?.text;
-      if (sessionId) touchLiveness(sessionId, "start");
+      if (sessionId) {
+        touchLiveness(sessionId, "start");
+        writeBridge(sessionId, pluckCwd(event, event?.data));
+      }
       if (sessionId && text && !CAPTURE_DISABLED) {
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
@@ -259,7 +335,12 @@ export default {
     };
   },
 
-  async server() {
+  async server(input) {
+    // Workspace del agente (A2): PluginInput.directory/worktree (v1). El server
+    // MCP corre con cwd=checkout del kernel, así que esto alimenta el bridge.
+    if (typeof input?.directory === "string" && input.directory) harnessCwd = input.directory;
+    else if (typeof input?.worktree === "string" && input.worktree) harnessCwd = input.worktree;
+    else if (typeof input?.app?.path?.cwd === "string" && input.app.path.cwd) harnessCwd = input.app.path.cwd;
     // Sin captura no se crea state: los hooks de captura quedan inertes
     // (`!state`) y solo se marca el latido.
     return {
@@ -277,7 +358,10 @@ export default {
 
       "chat.message": async (input, output) => {
         const { sessionID } = input;
-        if (sessionID) touchLiveness(sessionID, "start");
+        if (sessionID) {
+          touchLiveness(sessionID, "start");
+          writeBridge(sessionID, pluckCwd(input, output));
+        }
         if (CAPTURE_DISABLED) return;
         const parts = output.parts || [];
         const textParts = parts
@@ -320,13 +404,12 @@ export default {
 
         if (event.type === "message.part.updated") {
           const part = event.properties?.part;
-          if (part?.type === "text" && part?.text && part?.sessionID) {
-            const state = sessions.get(part.sessionID);
-            if (!state) return;
+          if (!part?.sessionID) return;
+          const state = sessions.get(part.sessionID);
+          if (!state) return;
 
-            if (!state.userMsgIDs.has(part.messageID)) {
-              state.response += part.text;
-            }
+          if (part.type === "text" && part?.text && !state.userMsgIDs.has(part.messageID)) {
+            state.response += part.text;
           }
           return;
         }

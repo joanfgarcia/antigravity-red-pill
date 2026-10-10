@@ -85,6 +85,7 @@ def build_sandbox(workdir: str, plugin_src: str) -> tuple[str, str, str]:
 	with open(plugin_src, encoding="utf-8") as f:
 		code = f.read()
 	code = code.replace("${QUEUE_DB}", queue_db)
+	code = code.replace("${SESSION_DB}", os.path.join(workdir, "session.db"))
 	code = code.replace("${STATE_DIR}", os.path.join(workdir, "state"))
 	with open(os.path.join(plugins, "redpill-scribe.js"), "w", encoding="utf-8") as f:
 		f.write(code)

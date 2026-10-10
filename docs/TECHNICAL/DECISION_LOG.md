@@ -1223,3 +1223,55 @@ Piloto completo (cortes 1-4): 3 engines registrados (stock, fork PrismML,
 BitNet), Bonsai servido por su runtime con plan de KV (f16@24K verificado),
 matriz runtime×modelo bajo un solo harness — bonsai **3/3** y granite **3/3**
 tras unificar conducta (caveat muerto por construcción). 75/75 tests.
+
+---
+
+## [AD-050] Alma y Coro Fase 0a — identidad de sesión (alma/cuerpo/misión) y paridad de arneses
+
+**Date**: 2026-10-10
+
+### 1. The Problem
+Cada arnés (opencode, claude_code, pi, antigravity) capturaba turnos sin una
+identidad de sesión estable y unificada. El "alma" (F5) era **inerte en opencode**:
+el handshake no recibía `originator`, así que el registro nunca se escribía. Y el
+enlace `originator↔alma` lo hacían los hooks (varios escritores), lo que era
+**redundante y spoofeable**: un tag `<session/>` forjado en un tool result podía
+secuestrar el alma. A2 (`repo:<rama>`) resolvía la rama del checkout del kernel
+(el MCP corre con `cwd` = kernel), no la del workspace del agente.
+
+### 2. The Decision
+1. **Modelo de identidad.** Cuerpo = `originator` (`provider:id-nativo`); alma =
+   `continuity_id` (UUIDv7, ordenable); misión = `mission_id` (NOT NULL,
+   gramática `<scope>:<id>`: `repo:<rama>`, `mission:adhoc-<fecha>`, `telegram:…`);
+   `campaign_id` (nullable), `lineage_id`, `role` (`orchestrator|task|spawn`).
+2. **`session.db` = tablón.** `SessionRegistry` (`session_registry` + reloj
+   `global_turn_seq`). **Único escritor autoritativo del alma = el resolver del
+   handshake** (Python), que corre cada turno. Política **atómica "primer enlace
+   gana por cuerpo"** (`ON CONFLICT … SET continuity_id = existing`); el tag
+   emitido refleja el alma persistida.
+3. **Puente del arnés.** El hook escribe `<provider>_session.json`
+   (`session_id` + `workdir` + `updated_at`) **al inicio del turno** (nunca en
+   Stop); el MCP lo lee **restringido por `REDPILL_HARNESS`** (fijado en la config
+   MCP) o por el prefijo del `originator` → sin bleed entre IDEs simultáneos.
+   TTL anti-stale (12h). El `originator` explícito/env gana siempre.
+4. **Paridad.** opencode (plugin JS + bridge), claude_code (hooks + bridge en
+   `UserPromptSubmit`), pi (handshake MCP `is_new_session:false` en pérdida de
+   contexto), antigravity (relay MCP; el modelo devuelve el alma vista). Se
+   **retira el link en los hooks** (un solo escritor).
+5. **A2.** `repo:<rama>` se resuelve del **workspace** del agente (`git -C` fuera
+   del event loop, con caché); fallback `mission:adhoc-<fecha>`.
+6. **Tag `<session/>`** saneado (`<>"`/espacios) e idempotente.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Enlace en los hooks (varios escritores) | retirada | Redundante con el resolver y **spoofeable** (tag forjado en tool result) |
+| `originator` fijado por env estático | rechazada | No conoce el `session_id` dinámico |
+| Bridge por sesión (no por proveedor) | diferida a 0b | La colisión entre sesiones top-level concurrentes es rara y auto-sanable |
+| Re-prefijar `mission:` a un id ya con scope | corregida | Producía `mission:mission:adhoc-…` |
+
+### 4. Rationale
+Validado por un panel adversarial de 5 rondas (veredicto final **PASS**, sin
+CRITICAL/HIGH). El núcleo verificado en vivo: el handshake emite
+`leg="opencode:<session_id>"` real y escribe `session_registry`; el bridge lo
+escribe el plugin nuevo. Suite completa verde.

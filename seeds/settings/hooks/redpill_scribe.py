@@ -50,6 +50,11 @@ STATE_DIR = _data_dir() / "scribe-state"
 LIVE_DIR = _data_dir() / "state" / "sessions" / "live"
 
 
+def _composite_originator(session_id: str) -> str:
+	"""Cuerpo compuesto `claude_code:<session_id>` (el originator es la sesión nativa)."""
+	return ORIGINATOR if not session_id else f"{ORIGINATOR}:{session_id}"
+
+
 def _touch_liveness(session_id: str, phase: str) -> None:
 	"""Marca el latido de sesión (RFC-DESPERTAR-001, P4). Fichero vacío, non-fatal."""
 	if not session_id:
@@ -79,11 +84,8 @@ def _has_tool_result(content) -> bool:
 	return isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
 
 
-def _parse_transcript(path: str):
-	"""Return (user_prompt, agent_response, model, marker) for the last turn.
-
-	marker = uuid of the last assistant entry, used for dedup.
-	"""
+def _load_entries(path: str) -> list:
+	"""Carga las entradas JSONL del transcript (cadena principal, sin sidechains)."""
 	entries = []
 	with open(path, encoding="utf-8") as f:
 		for raw in f:
@@ -96,10 +98,19 @@ def _parse_transcript(path: str):
 				continue
 			if not isinstance(obj, dict):
 				continue
-			# Main chain only — ignore subagent sidechains and meta entries.
 			if obj.get("isSidechain") or obj.get("isMeta"):
 				continue
 			entries.append(obj)
+	return entries
+
+
+def _parse_transcript(path: str, entries: list | None = None):
+	"""Return (user_prompt, agent_response, model, marker) for the last turn.
+
+	marker = uuid of the last assistant entry, used for dedup.
+	"""
+	if entries is None:
+		entries = _load_entries(path)
 
 	# Find the last genuine user prompt (typed text, not a tool_result turn).
 	last_user_idx = None
@@ -181,7 +192,7 @@ def _write(user_prompt: str, agent_response: str, model, session_id: str = ""):
 
 		fields = ["prompt", "response", "role", "status", "created_at", "category", "originator", "model"]
 		placeholders = ["?", "?", "'assistant'", "'pending'", "?", "'mixed'", "?", "?"]
-		values = [user_prompt, agent_response, time.time(), ORIGINATOR, model]
+		values = [user_prompt, agent_response, time.time(), _composite_originator(session_id), model]
 		if has_hash:
 			fields.append("content_hash")
 			placeholders.append("?")
@@ -217,7 +228,8 @@ def _run() -> None:
 	if not isinstance(transcript_path, str) or not os.path.isfile(transcript_path):
 		return
 
-	parsed = _parse_transcript(transcript_path)
+	entries = _load_entries(transcript_path)
+	parsed = _parse_transcript(transcript_path, entries)
 	if not parsed:
 		return
 	user_prompt, agent_response, model, marker = parsed

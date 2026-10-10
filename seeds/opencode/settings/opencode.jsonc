@@ -5,6 +5,9 @@
     "RedPill-Kernel": {
       "type": "local",
       "command": ["${UV}", "--directory", "${REDPILL_DIR}", "run", "python", "${REDPILL_DIR}/src/red_pill/mcp_server.py"],
+      "environment": {
+        "REDPILL_HARNESS": "opencode"
+      },
       "enabled": true
     }
   },

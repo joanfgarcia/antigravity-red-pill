@@ -7,6 +7,7 @@ and skills in a single pass.  Guest principle: merge, never overwrite.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import os
@@ -55,7 +56,7 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 		except Exception as exc:
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}
-	merged = _deep_merge(existing, template)
+	merged = _deep_merge(copy.deepcopy(existing), template)
 	if merged == existing and existing:
 		logger.info(f"  {config_path}: sin cambios")
 		return False
@@ -73,15 +74,20 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
 	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
-	from inject_anchor import BLOCK_VERSION, splice_block  # noqa: E402
+	from inject_anchor import BLOCK_VERSION, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
+
+	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
+	# Sin esto los `${RELAY_*}` del seed llegaban literales a RED_PILL.md.
+	ide_vars = {**variables, **ide_call_vars("opencode")}
 
 	changed = 0
 	for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]:
-		seed_path = os.path.join(seeds_dir, anchor + ".md")
+		# Override per-IDE (seeds/opencode/anchors/<anchor>.md) si existe; si no, genérico.
+		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
 		if not os.path.exists(seed_path):
 			logger.warning(f"Seed not found: {seed_path}")
 			continue
-		body = subst(_read_seed(seed_path), variables)
+		body = subst(_read_seed(seed_path), ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
 			changed += 1

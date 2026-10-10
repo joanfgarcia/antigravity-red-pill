@@ -240,6 +240,19 @@ def get_models_dir() -> Path:
 	return path
 
 
+def get_session_db() -> Path:
+	"""Ruta de `session.db`, la BD propia del subsistema de sesiones.
+
+	Contiene `global_turn_seq` (reloj global de turnos) y `session_registry`
+	(el tablón: quién/qué misión está viva ahora). Vive junto a
+	`bunker_queue.db` (mismo directorio de cola, XDG); la memoria, los jobs y
+	los eventos de interacción siguen en `bunker_queue.db`. No se crea aquí:
+	el `SessionRegistry` es quien inicializa esquema y directorio, para que un
+	simple resolutor de ruta nunca fabrique estado (una ruta no debe tener efectos).
+	"""
+	return get_queue_dir() / "session.db"
+
+
 def get_queue_dir() -> Path:
 	path = get_data_dir() / "queue"
 	path.mkdir(parents=True, exist_ok=True)
