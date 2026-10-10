@@ -31,6 +31,11 @@ echo "-- ardour-mcp (MIT; control del DAW por OSC) [opcional, no aborta]"
 # ardour-mcp 0.0.1 usa la API antigua del SDK (Server.call_tool); mcp>=1.x la rompe.
 "$UV" pip install --python "$VPY" "mcp==0.9.1" 2>&1 | tail -1
 
+echo "-- venv-mcp (SDK MCP MODERNO) para ardour_mcp_lite.py"
+VENV_MCP="$FORGE_HOME/venv-mcp"
+[ -x "$VENV_MCP/bin/python" ] || "$UV" venv "$VENV_MCP" --python "$PY_VER"
+"$UV" pip install --python "$VENV_MCP/bin/python" "mcp<2" python-osc 2>&1 | tail -1
+
 echo "-- detección de binarios del sistema"
 for b in fluidsynth ardour lmms; do
 	if command -v "$b" >/dev/null 2>&1; then
