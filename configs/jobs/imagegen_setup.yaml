@@ -1,0 +1,16 @@
+# ImageGen setup — provisiona el runtime de generación de imagen (por-máquina).
+#
+# Instala en ${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}: venv uv (py3.12),
+# torch cu128 (Blackwell sm_120), diffusers (main) + gemlite + hqq, y clona
+# image-studio/backend_gpu. Termina con un smoke test CUDA.
+# Lo instalado NO se versiona (terceros/por-máquina); el script SÍ vive en el repo.
+source: script_job
+priority: 6
+title: ImageGen setup — venv diffusers+gemlite (sm_120) y backend_gpu
+step_command: ["sh", "-c", 'bash scripts/imagegen/bootstrap.sh']
+progress:
+  mode: single
+control:
+  max_step_minutes: 40
+preflight:
+  memory_max: 12G
