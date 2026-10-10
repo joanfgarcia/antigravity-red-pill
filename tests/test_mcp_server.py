@@ -817,6 +817,49 @@ class TestHarnessBridge:
 		assert self._read(tmp_path) == {"originator": "", "workdir": ""}
 
 
+class TestGitBranch:
+	"""`_current_git_branch`: rama del WORKSPACE (git -C), caché y guarda isdir."""
+
+	def _repo(self, tmp_path, branch):
+		import subprocess
+
+		subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+		subprocess.run(["git", "config", "user.email", "t@t"], cwd=tmp_path, check=True)
+		subprocess.run(["git", "config", "user.name", "t"], cwd=tmp_path, check=True)
+		(tmp_path / "f").write_text("x")
+		subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+		subprocess.run(["git", "commit", "-qm", "init"], cwd=tmp_path, check=True)
+		subprocess.run(["git", "checkout", "-q", "-b", branch], cwd=tmp_path, check=True)
+		return tmp_path
+
+	async def test_branch_del_workdir(self, tmp_path):
+		from red_pill import mcp_server
+
+		repo = self._repo(tmp_path, "feat/x")
+		assert mcp_server._current_git_branch(str(repo)) == "feat/x"
+
+	async def test_dir_inexistente_none(self, tmp_path):
+		from red_pill import mcp_server
+
+		assert mcp_server._current_git_branch(str(tmp_path / "nope")) is None
+
+	async def test_dir_sin_repo_none(self, tmp_path):
+		from red_pill import mcp_server
+
+		assert mcp_server._current_git_branch(str(tmp_path)) is None
+
+	async def test_cache_evita_reconsultar(self, tmp_path):
+		import subprocess
+
+		from red_pill import mcp_server
+
+		repo = self._repo(tmp_path, "cache/base")
+		assert mcp_server._current_git_branch(str(repo)) == "cache/base"
+		# Cambiar de rama NO se refleja dentro de la ventana de caché (60s).
+		subprocess.run(["git", "checkout", "-q", "-b", "cache/otra"], cwd=repo, check=True)
+		assert mcp_server._current_git_branch(str(repo)) == "cache/base"
+
+
 class TestMainBlock:
 	async def test_main_function_is_callable(self):
 		from red_pill.mcp_server import main

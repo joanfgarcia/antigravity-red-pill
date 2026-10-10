@@ -219,3 +219,41 @@ def test_inject_opencode_standalone_resuelve_placeholders_relay(tmp_path) -> Non
 	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver (standalone)"
 	assert "only `user_prompt`" in text, "frase hook-aware ausente (standalone)"
 	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"
+
+
+# ── _merge_config: merge sobre config EXISTENTE (regresión de aliasing) ──────
+def test_merge_config_escribe_sobre_existente(adapter, tmp_path) -> None:
+	"""Regresión: `_deep_merge` mutaba y devolvía `existing`, así que
+	`merged == existing` era siempre True → NUNCA escribía sobre una config ya
+	existente (el reseed no aplicaba cambios)."""
+	import json
+
+	cfg = os.path.join(str(tmp_path), "opencode.jsonc")
+	with open(cfg, "w", encoding="utf-8") as f:
+		json.dump({"model": "OLD", "mcp": {"X": {"command": "z"}}}, f)
+
+	template = {"model": "NEW", "mcp": {"RedPill-Kernel": {"environment": {"REDPILL_HARNESS": "opencode"}}}}
+	changed = adapter._merge_config(cfg, template, backup=False)
+
+	assert changed is True, "no escribió sobre config existente"
+	merged = json.load(open(cfg, encoding="utf-8"))
+	assert merged["model"] == "NEW"  # valor actualizado
+	assert merged["mcp"]["X"] == {"command": "z"}  # clave ajena preservada
+	assert merged["mcp"]["RedPill-Kernel"]["environment"]["REDPILL_HARNESS"] == "opencode"
+
+
+def test_merge_config_idempotente(adapter, tmp_path) -> None:
+	cfg = os.path.join(str(tmp_path), "opencode.jsonc")
+	template = {"model": "NEW", "mcp": {"RedPill-Kernel": {"environment": {"REDPILL_HARNESS": "opencode"}}}}
+	assert adapter._merge_config(cfg, template, backup=False) is True  # primera (crea)
+	before = open(cfg, encoding="utf-8").read()
+	assert adapter._merge_config(cfg, template, backup=False) is False  # segunda: sin cambios
+	assert open(cfg, encoding="utf-8").read() == before
+
+
+def test_merge_config_no_muta_el_template(adapter, tmp_path) -> None:
+	"""El merge no debe mutar el template (se comparte entre destinos)."""
+	template = {"a": {"b": 1}}
+	cfg = os.path.join(str(tmp_path), "c.jsonc")
+	adapter._merge_config(cfg, template, backup=False)
+	assert template == {"a": {"b": 1}}, "el template fue mutado por el merge"
