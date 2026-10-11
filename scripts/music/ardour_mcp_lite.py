@@ -10,8 +10,8 @@ OSC de Ardour.
 Requisitos: Ardour corriendo con OSC activo (servidor 3819, feedback 3820).
 
 Config por entorno:
-  ARDOUR_OSC_HOST (def 127.0.0.1), ARDOUR_OSC_PORT (def 3819),
-  ARDOUR_OSC_FEEDBACK_PORT (def 3820).
+		ARDOUR_OSC_HOST (def 127.0.0.1), ARDOUR_OSC_PORT (def 3819),
+		ARDOUR_OSC_FEEDBACK_PORT (def 3820).
 """
 
 from __future__ import annotations

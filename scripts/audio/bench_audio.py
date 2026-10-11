@@ -6,17 +6,17 @@ genera WAV, mide tiempo/VRAM/duración y guarda `metrics.jsonl`. Reanudable por
 pieza (si el WAV existe, se salta). Fail-soft lo gestiona el element_job.
 
 Motores (dispatch por id):
-  - kokoro_voice      : KPipeline (kokoro) — TTS Apache-2.0, 54 voces
-  - chatterbox_voice  : ChatterboxTTS    — TTS MIT, emoción/clonación
-  - ace_step_music    : AceStepPipeline  (diffusers) — música MIT, con voz
-  - stable_audio_sfx  : StableAudioPipeline (diffusers) — SFX/ambiente
+		- kokoro_voice      : KPipeline (kokoro) — TTS Apache-2.0, 54 voces
+		- chatterbox_voice  : ChatterboxTTS    — TTS MIT, emoción/clonación
+		- ace_step_music    : AceStepPipeline  (diffusers) — música MIT, con voz
+		- stable_audio_sfx  : StableAudioPipeline (diffusers) — SFX/ambiente
 
 Rutas configurables: AUDIO_FORGE_HOME (def ~/opt/audio-forge), HF_HOME.
 
 Uso (normalmente vía element_job; manual para debug):
-  python bench_audio.py --list-models
-  python bench_audio.py --element                       # lee RP_ELEMENT
-  python bench_audio.py --models kokoro_voice --pieces en_news
+		python bench_audio.py --list-models
+		python bench_audio.py --element                       # lee RP_ELEMENT
+		python bench_audio.py --models kokoro_voice --pieces en_news
 """
 
 from __future__ import annotations
@@ -89,7 +89,6 @@ def _save_wav(path: Path, audio, sr: int) -> None:
 
 # ── carga/generación por motor ──────────────────────────────────────────────
 def _gen_kokoro(piece, size_hint=None):
-	from kokoro import KPipeline
 	import numpy as np
 
 	pipe = _kokoro_pipeline(piece["lang"])

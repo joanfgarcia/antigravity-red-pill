@@ -6,20 +6,20 @@ renderizándolo con **FluidSynth** + un **soundfont libre** (SF2). No requiere
 GPU ni modelos de onda: pesa KB y corre en CPU.
 
 Cadena:
-  1. `--llm-prompt "..."`  → pide a un LLM local (endpoint red-pill) un JSON de
-     arreglo musical (tempo/clave/progresión/barras).
-  2. `--spec spec.json`    → usa un arreglo dado.
-  3. `--demo`              → arreglo fijo (para probar el pipeline).
-  → `compose_midi(spec)` (mido) → `<out>.mid`
-  → `fluidsynth -ni <sf2> <out>.mid -F <out>.wav -r 44100`
+		1. `--llm-prompt "..."`  → pide a un LLM local (endpoint red-pill) un JSON de
+					arreglo musical (tempo/clave/progresión/barras).
+		2. `--spec spec.json`    → usa un arreglo dado.
+		3. `--demo`              → arreglo fijo (para probar el pipeline).
+		→ `compose_midi(spec)` (mido) → `<out>.mid`
+		→ `fluidsynth -ni <sf2> <out>.mid -F <out>.wav -r 44100`
 
 Rutas configurables: MUSIC_FORGE_HOME (def ~/opt/music-forge), MUSIC_SF2
 (def /usr/share/sounds/sf2/TimGM6mb.sf2), REDPILL_LLM_URL (def http://localhost:8760).
 
 Uso:
-  python compose.py --demo --out out/song
-  python compose.py --spec arreglo.json --out out/song
-  python compose.py --llm-prompt "lofi hip hop relajante en Do mayor" --out out/song
+		python compose.py --demo --out out/song
+		python compose.py --spec arreglo.json --out out/song
+		python compose.py --llm-prompt "lofi hip hop relajante en Do mayor" --out out/song
 """
 
 from __future__ import annotations

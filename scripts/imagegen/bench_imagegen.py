@@ -10,19 +10,19 @@ Reanudable por género: si el PNG del par (modelo, género, seed) ya existe, se
 salta (idempotente). Fail-soft lo gestiona el element_job (skip_exit_code).
 
 Backends (dispatch por id):
-  - flux2_klein    : Flux2KleinPipeline (diffusers) — FLUX.2 klein 4B (Apache-2.0)
-  - zimage_turbo   : ZImagePipeline    (diffusers) — Z-Image-Turbo 6B (Apache-2.0)
-  - bonsai_ternary : GpuPipeline (image-studio/backend_gpu, gemlite INT2) — Bonsai 4B (Apache-2.0)
+		- flux2_klein    : Flux2KleinPipeline (diffusers) — FLUX.2 klein 4B (Apache-2.0)
+		- zimage_turbo   : ZImagePipeline    (diffusers) — Z-Image-Turbo 6B (Apache-2.0)
+		- bonsai_ternary : GpuPipeline (image-studio/backend_gpu, gemlite INT2) — Bonsai 4B (Apache-2.0)
 
 Rutas configurables (opción por defecto del puesto, override por entorno):
-  IMAGE_FORGE_HOME          (def ~/opt/image-forge)  — venv + repo image-studio + caches
-  REDPILL_IMAGE_MODELS_DIR  (def $XDG_DATA_HOME/red-pill/models/image)
-  HF_HOME                   (def $IMAGE_FORGE_HOME/hf-cache)
+		IMAGE_FORGE_HOME          (def ~/opt/image-forge)  — venv + repo image-studio + caches
+		REDPILL_IMAGE_MODELS_DIR  (def $XDG_DATA_HOME/red-pill/models/image)
+		HF_HOME                   (def $IMAGE_FORGE_HOME/hf-cache)
 
 Uso manual (lo normal es que lo invoque el element_job):
-  python bench_imagegen.py --list-models
-  python bench_imagegen.py --element                       # lee RP_ELEMENT
-  python bench_imagegen.py --models flux2_klein --genres photo_portrait --seeds 42
+		python bench_imagegen.py --list-models
+		python bench_imagegen.py --element                       # lee RP_ELEMENT
+		python bench_imagegen.py --models flux2_klein --genres photo_portrait --seeds 42
 """
 
 from __future__ import annotations

@@ -40,7 +40,6 @@ def _load_gemlite_transformer_fixed(path, *, device="cuda:0"):
 	from pathlib import Path
 
 	import torch
-
 	from gemlite.core import DType, GemLiteLinearTriton, set_packing_bitwidth
 
 	path = Path(path)
