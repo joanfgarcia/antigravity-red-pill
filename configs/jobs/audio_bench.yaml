@@ -1,0 +1,23 @@
+# AudioGen A/B — clasificación de modelos de audio local (voz / música / SFX).
+#
+# UN step = UN motor (element_job, fail-soft): un motor que falla se REGISTRA
+# en failures.jsonl y sale con skip_exit_code (79) → la cola sigue con el resto.
+# Reanudable por frontera de elemento; watchdog por elemento.
+#
+# Requiere haber corrido antes configs/jobs/audio_setup.yaml (misma venv).
+# SALIDA: WAV + metrics.jsonl → desk (notes); el repo lleva las TOOLS.
+source: element_job
+priority: 3
+title: AudioGen A/B — voz+música+SFX (element_job, fail-soft)
+mission_id: audiogen-ab
+elements_command: ["sh", "-c", '"${AUDIO_FORGE_HOME:-$HOME/opt/audio-forge}"/venv/bin/python scripts/audio/bench_audio.py --list-models']
+step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-10-audiogen-ab"; mkdir -p "$OUT"; sh scripts/audio/run_element.sh; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 90
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 6000
+  memory_max: 16G

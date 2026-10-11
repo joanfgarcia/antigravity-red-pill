@@ -1,0 +1,13 @@
+# Music demo — renderiza una pieza de prueba: MIDI (mido) → WAV (FluidSynth).
+# Requiere `fluidsynth` instalado (sudo apt install fluidsynth). Salida al desk.
+source: script_job
+priority: 4
+title: Music demo — LLM/MIDI → FluidSynth → WAV
+mission_id: musicgen
+step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-10-musicgen"; mkdir -p "$OUT"; "${MUSIC_FORGE_HOME:-$HOME/opt/music-forge}"/venv/bin/python scripts/music/compose.py --demo --out "$OUT/demo"']
+progress:
+  mode: single
+control:
+  max_step_minutes: 15
+preflight:
+  memory_max: 8G

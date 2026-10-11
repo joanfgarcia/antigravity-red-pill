@@ -1,0 +1,97 @@
+{
+	"version": "v1",
+	"note": "Matriz fija de sonidos por eje. Congelada por versión (reproducible).",
+	"voice": [
+		{
+			"id": "en_news",
+			"lang": "a",
+			"voice": "af_heart",
+			"text": "Good evening. Tonight we review three surprising results from the local cluster: a ternary language model, a low-bit image generator, and a tiny speech synthesizer that runs on a laptop graphics card. All of it, entirely offline."
+		},
+		{
+			"id": "en_story",
+			"lang": "a",
+			"voice": "am_michael",
+			"text": "The old netrunner leaned back, watching the rain trace silver lines down the window. Somewhere past the firewall, a new mind was waking up, and for the first time in years, she smiled."
+		},
+		{
+			"id": "es_review",
+			"lang": "e",
+			"voice": "ef_dora",
+			"text": "Buenas noches. Esta noche repasamos tres resultados sorprendentes del clúster local: un modelo ternario de lenguaje, un generador de imágenes de bajo bit y un sintetizador de voz diminuto. Todo, completamente offline."
+		}
+	],
+	"music": [
+		{
+			"id": "lofi_study",
+			"prompt": "Warm lo-fi hip hop beat, mellow Rhodes piano, soft vinyl crackle, laid-back drums at 85 BPM, relaxing study vibe",
+			"lyrics": "",
+			"duration": 15
+		},
+		{
+			"id": "cinematic_epic",
+			"prompt": "Epic cinematic orchestral trailer, powerful drums, soaring strings, brass swells, building tension, heroic and dramatic",
+			"lyrics": "",
+			"duration": 15
+		},
+		{
+			"id": "pop_es",
+			"prompt": "Upbeat Spanish pop song, acoustic guitar, bright synths, catchy rhythm, warm summer feel",
+			"lyrics": "[verse]\nLa ciudad se enciende despacio\nlas luces dibujan el mar\n[chorus]\nY bailamos sin mirar el reloj\nhasta que amanezca otra vez",
+			"duration": 20
+		}
+	],
+	"sfx": [
+		{
+			"id": "birds_dawn",
+			"prompt": "Dawn chorus in a temperate forest, many songbirds singing, distant cuckoo, gentle breeze in the leaves, nature field recording",
+			"duration": 10
+		},
+		{
+			"id": "wind_forest",
+			"prompt": "Strong wind blowing through pine trees, rustling branches, deep gusts, open mountain ridge ambience",
+			"duration": 10
+		},
+		{
+			"id": "rain_window",
+			"prompt": "Steady rain hitting a window pane, occasional soft thunder far away, cozy indoor ambience",
+			"duration": 10
+		},
+		{
+			"id": "thunderstorm",
+			"prompt": "A powerful thunderstorm, heavy rain, sharp thunder cracks, rumbling low end, dramatic weather field recording",
+			"duration": 12
+		},
+		{
+			"id": "city_street",
+			"prompt": "Busy city street ambience, distant traffic, footsteps on pavement, indistinct crowd chatter, urban field recording",
+			"duration": 10
+		}
+	],
+	"scene": [
+		{
+			"id": "forest_dawn",
+			"caption": "A serene forest at dawn, many songbirds singing, gentle light",
+			"sfx": "songbirds singing, a distant cuckoo",
+			"env": "light wind through the leaves"
+		},
+		{
+			"id": "storm_night",
+			"caption": "A rolling thunderstorm at night in a mountain forest",
+			"sfx": "sharp thunder cracks",
+			"env": "heavy rain and wind in the trees"
+		},
+		{
+			"id": "jazz_club",
+			"caption": "A cozy jazz club late at night",
+			"music": "smooth solo saxophone with upright bass",
+			"env": "intimate club ambience, low chatter"
+		},
+		{
+			"id": "city_rain",
+			"caption": "A rainy evening in a busy city",
+			"sfx": "rain and splashing puddles",
+			"env": "distant traffic and footsteps"
+		}
+	]
+}
