@@ -16,16 +16,19 @@ import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 
-def erode_work_hubs(memory_manager) -> None:
+def erode_work_hubs(memory_manager) -> dict:
 	"""
 	Applies Bayesian erosion to old/unreferenced synthesis hubs in work_memories.
 	Hubs that haven't been recalled/referenced in the last cycle have their
 	utility_beta increased (reducing utility score) and their intensity decayed.
+
+	Devuelve `{"eroded": N, "decayed": M}` para que la fase reporte producción
+	real (hubs borrados + hubs decaídos) en vez de un contador vacío.
 	"""
 	client = memory_manager.client
 	collection = "work_memories"
 	if not client.collection_exists(collection):
-		return
+		return {"eroded": 0, "decayed": 0}
 
 	from qdrant_client import models as qm
 
@@ -43,10 +46,10 @@ def erode_work_hubs(memory_manager) -> None:
 			hubs = scroll_res if isinstance(scroll_res, list) else []
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to fetch hubs for erosion: {e}")
-		return
+		return {"eroded": 0, "decayed": 0}
 
 	if not hubs or not isinstance(hubs, list):
-		return
+		return {"eroded": 0, "decayed": 0}
 
 	now = time.time()
 	update_operations = []
@@ -104,6 +107,8 @@ def erode_work_hubs(memory_manager) -> None:
 			logger.info(f"[SLEEP ENGINE] Erode hubs: deleted {len(points_to_delete)} hubs in work_memories.")
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
+
+	return {"eroded": len(points_to_delete), "decayed": len(update_operations)}
 
 
 def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:
@@ -213,7 +218,7 @@ def _save_washout_state(state: dict) -> None:
 		logger.debug(f"[SLEEP ENGINE] No se pudo persistir el estado del washout de RhizoDB: {e}")
 
 
-def run_rhizodb_washout_and_pruning(memory_manager) -> None:
+def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 	"""
 	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
 	Washout formula: a_v = gamma(t) * a_v + (1 - gamma(t)) * b(s_v)
@@ -221,6 +226,8 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 	gamma(t) attenuates with the days elapsed since this collection's last washout
 	(capped at RHIZODB_WASHOUT_REFERENCE_DAYS): a repeated run never prunes the same
 	time span twice, and a missed sleep never compounds punishment. All coefficients are config-driven.
+
+	Devuelve `{"pruned": N, "washed": M}` para que la fase reporte producción real.
 	"""
 	client = memory_manager.client
 	now = time.time()
@@ -238,6 +245,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 	# Find collections utilizing rhizodb
 	rhizodb_collections = [col for col, eng in cfg.MEMORY_ENGINES.items() if eng == "rhizodb"]
 	washout_state = _load_washout_state()
+	totals = {"pruned": 0, "washed": 0}
 
 	for collection in rhizodb_collections:
 		if not client.collection_exists(collection):
@@ -323,6 +331,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 		if update_operations:
 			try:
 				client.batch_update_points(collection_name=collection, update_operations=update_operations)
+				totals["washed"] += len(update_operations)
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to update washout payloads in {collection}: {e}")
 
@@ -330,6 +339,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 			try:
 				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
 				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
+				totals["pruned"] += len(points_to_delete)
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
 
@@ -337,6 +347,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 			washout_state[collection] = now
 
 	_save_washout_state(washout_state)
+	return totals
 
 
 def purge_empty_engrams(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:

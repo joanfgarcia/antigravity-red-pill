@@ -123,7 +123,7 @@ def finalize_sleep_cycle(ctx: SleepContext, mode: str = "lazy") -> int:
 	"""
 	total_phases = len(SLEEP_PHASES)
 	ctx.update_status("idle", status="cycle_completed", phase_index=total_phases, total_phases=total_phases)
-	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {ctx.total_processed} engrams synaptically woven. ===")
+	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {ctx.total_processed} engram ops ({ctx.metrics}). ===")
 	try:
 		from red_pill.core.notifier import SovereignNotifier
 
@@ -146,7 +146,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	Each phase self-guards; GPU-heavy phases self-defer (setting ctx.deferred and
 	emitting a benign vram_busy status signal) when the card is committed to
 	training, while CPU-only maintenance phases still run. Returns the number of
-	engrams consolidated this cycle.
+	engram-level operations the cycle performed (hubs written, chunks promoted,
+	empties purged, axons woven, hubs eroded/demoted, points pruned/washed).
 	"""
 	logger.info("=== LAZARUS PULSE: Initiating Synaptic Dreaming (NREM/REM) ===")
 	ctx = SleepContext(memory_manager=memory_manager, mode=mode)

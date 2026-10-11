@@ -4,6 +4,35 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-051] El ciclo de sueño reporta producción real (contador de engramas vestigial)
+**Date**: 2026-10-11
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/sleep-cycle-real-engram-counter`).
+**Context**: el resumen del ciclo nocturno reportaba `(0 engramas)` **todas** las
+noches. Diagnóstico: tras retirar la ingesta legacy `interaction_memories → work/social`
+(v8.0.0, AD-034 single-writer), `SleepContext.total_processed` quedó **vestigial** —
+ninguna fase lo incrementaba (el incremento vivía en el drenaje retirado). El número no
+medía "poco trabajo": medía **nada**, y contradecía la realidad (esa misma noche el pase
+agéntico de Memento ascendió 181 notas a `work_memories`, invisibles al resumen).
+**Decision**:
+- `SleepContext` gana `metrics: dict` + `record(phase, produced, **detail)`; `total_processed`
+  pasa a ser la suma real de la producción por fase (se persiste en `sleep_phase_status.json`
+  y cruza etapas del DAG).
+- Cada fase reporta su producción: hubs escritos (consolidation), chunks promovidos
+  (orphan_promotion), vacíos purgados (hygiene), axones tejidos/reparados (axon_weaver),
+  hubs erosionados/decaídos/demotados (erosion), puntos podados/lavados (washout),
+  reclasificados (revision), artefactos publicados (operator_profile/recent_activity).
+  `erode_work_hubs` y `run_rhizodb_washout_and_pruning` devuelven sus conteos.
+- El `finalize` compone un desglose por fase + las **ascensiones estáticas de Memento**
+  (persistidas por `memento_agentic.py` en `memento_agentic_state.json`, ventana 12h).
+- Se retira el número muerto de los `summary` y del log `LAZARUS PULSE`; la unidad pasa a
+  "ops" (operaciones sobre engramas), no "engramas" — mezclar altas y olvidos en un único
+  número sería igual de engañoso, de ahí el desglose.
+**Alternatives**: (a) borrar el log — deja el resumen sin señal de volumen; (b) reconectar
+el contador al pipeline real — elegida, con desglose; (c) contar engramas nuevos de Qdrant
+por fecha — indirecto y frágil por zona horaria.
+
+---
+
 ## [AD-048] Washout genérico de RhizoDB excluye los curados (miembros + hubs)
 **Date**: 2026-10-08
 **Status**: ACCEPTED & IMPLEMENTED (rama `fix/rhizodb-hardening`).

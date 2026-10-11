@@ -15,9 +15,11 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +56,32 @@ def _checkpoint_path() -> Optional[Path]:
 	"""Checkpoint del modo bounded: lo inyecta el ScriptJobDriver como RP_CHECKPOINT_FILE."""
 	raw = os.environ.get("RP_CHECKPOINT_FILE")
 	return Path(raw) if raw else None
+
+
+def _write_run_state(stats: dict) -> None:
+	"""Persiste la producción del pase agéntico (best-effort).
+
+	El `sleep/finalize` del nightly lee `static_ascended` de aquí para que el
+	resumen del ciclo no oculte lo que Memento SÍ ingresó (las ascensiones
+	estáticas no pasan por las fases de metabolismo). Sin fichero o ilegible, el
+	finalize simplemente lo omite.
+	"""
+	try:
+		from red_pill.core.paths import get_state_dir
+
+		payload = {
+			"ran_at": time.time(),
+			"processed": int(stats.get("processed", 0) or 0),
+			"failed": int(stats.get("failed", 0) or 0),
+			"would_ingest": int(stats.get("would_ingest", 0) or 0),
+			"static_ascended": int(stats.get("static_ascended", 0) or 0),
+		}
+		path = get_state_dir() / "memento_agentic_state.json"
+		tmp = path.with_suffix(path.suffix + ".tmp")
+		tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+		tmp.replace(path)
+	except Exception as e:  # nunca romper el pase por telemetría
+		logger.warning(f"No se pudo escribir el estado del pase agéntico: {e}")
 
 
 def main() -> None:
@@ -121,9 +149,11 @@ def main() -> None:
 
 	if not targets:
 		logger.info("Agentic pass: nothing pending.")
+		_write_run_state({"processed": 0, "failed": 0, "would_ingest": 0, "static_ascended": 0})
 		return
 	if not llm_available():
 		logger.warning("Local LLM not available — agentic pass deferred to next cycle.")
+		_write_run_state({"processed": 0, "failed": 0, "would_ingest": 0, "static_ascended": 0})
 		return
 
 	# Con --target el progreso lo lleva el checkpoint del job DAG fan-out, no el
@@ -133,8 +163,10 @@ def main() -> None:
 	registry.save()
 	logger.info(
 		f"Agentic pass complete: {stats['processed']} session(s) distilled+refined, "
-		f"{stats['failed']} failed, shadow would-ingest {stats['would_ingest']}/{stats['processed']}."
+		f"{stats['failed']} failed, shadow would-ingest {stats['would_ingest']}/{stats['processed']}, "
+		f"static ascensions {stats.get('static_ascended', 0)}."
 	)
+	_write_run_state(stats)
 	# Deferral declarativo (regla job_dag_execution, 2026-09-08): si el LLM local
 	# se cayó (3+ fallos consecutivos de conexión) o no se procesó nada por LLM
 	# caído, salir con RP_DEFER_EXIT_CODE para que el driver marque JobDeferred y

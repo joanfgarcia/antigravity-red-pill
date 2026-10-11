@@ -20,13 +20,17 @@ from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 logger = logging.getLogger(__name__)
 
 
-def _run_hub_and_thread(memory_manager) -> None:
+def _run_hub_and_thread(memory_manager) -> tuple[dict, dict]:
 	"""Síntesis de hubs + micro-hilo de Ariadna sobre los engramas existentes.
 
 	Ambos trazados con sus propios flags (SW_HUBS_ENABLED / SW_THREAD_ENABLED);
 	no-op secuencial si están off. `SW_HUBS_MAX_SESSIONS_PER_CYCLE` acota el
 	backfill (0 = sin tope); idempotente por `hub_input_hash`.
+
+	Devuelve (hub_stats, thread_stats) para que la fase reporte su producción
+	real (hubs escritos, enlaces de hilo) en vez del contador vestigial.
 	"""
+	empty = {"enabled": False}
 	try:
 		from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
 		from red_pill.metabolism.thread_synthesis import weave_member_threads
@@ -36,8 +40,10 @@ def _run_hub_and_thread(memory_manager) -> None:
 		thread_stats = weave_member_threads(memory_manager)
 		if hub_stats.get("enabled") or thread_stats.get("enabled"):
 			logger.info(f"[SLEEP ENGINE] Hubs: {hub_stats} · Thread: {thread_stats}")
+		return hub_stats, thread_stats
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Hub/thread synthesis failed: {e}")
+		return empty, empty
 
 
 class HubSynthesisPhase(SleepPhase):
@@ -68,4 +74,9 @@ class HubSynthesisPhase(SleepPhase):
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to start ephemeral server: {e}")
 				return
-		_run_hub_and_thread(memory_manager)
+		hub_stats, thread_stats = _run_hub_and_thread(memory_manager)
+		# Producción real: cada hub es un engrama nuevo; cada enlace es una
+		# mutación de payload sobre un miembro (detalle, no unidad).
+		hubs = int((hub_stats or {}).get("hubs_written", 0) or 0)
+		links = int((thread_stats or {}).get("links", 0) or 0)
+		ctx.record(self.name, hubs, hubs=hubs, thread_links=links)

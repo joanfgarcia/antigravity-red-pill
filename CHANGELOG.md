@@ -1,5 +1,25 @@
 ## Unreleased
 
+### 🌙 Ciclo de sueño — contador real de producción (2026-10-11)
+
+- **[FIX]** El resumen del sueño reportaba `(0 engramas)` todas las noches: el
+  contador `SleepContext.total_processed` quedó **vestigial** tras retirar la
+  ingesta legacy `interaction_memories → work/social` (v8.0.0) — ninguna fase
+  lo incrementaba. Ahora cada fase registra su **producción real** vía
+  `SleepContext.record()`: hubs escritos (consolidation), chunks promovidos
+  (orphan-promotion), vacíos purgados (hygiene), axones tejidos/reparados
+  (axon-weaver), hubs erosionados/decaídos/demotados (erosion), puntos
+  podados/lavados (washout), reclasificados (revision), y artefactos publicados
+  (operator-profile/recent-activity). `erode_work_hubs` y
+  `run_rhizodb_washout_and_pruning` ahora devuelven sus conteos.
+- **[FEATURE]** El `finalize` compone un **desglose honesto** por fase y suma las
+  **ascensiones estáticas de Memento** (persistidas por `memento_agentic.py` en
+  `memento_agentic_state.json`, ventana 12h) — así el ciclo no oculta lo que el
+  pase Memento sí ingresó. El log `LAZARUS PULSE` y el `summary` de cada fase
+  dejan de imprimir el número muerto.
+- **[TEST]** Cobertura de `record`/persistencia de métricas, `_read_state`,
+  `_format_metrics`, `_read_memento_ascended` y el resumen del finalize.
+
 ### 🎨 ImageGen — banco A/B de generación de imagen local (2026-10-10)
 
 - **[FEATURE]** `scripts/imagegen/`: harness para correr y **clasificar por tipo

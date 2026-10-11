@@ -22,9 +22,13 @@ class OrphanPromotionPhase(SleepPhase):
 
 	def execute(self, ctx: SleepContext) -> None:
 		try:
-			promote_orphan_chunks(ctx.memory_manager)
+			report = promote_orphan_chunks(ctx.memory_manager) or {}
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run orphan-chunk promotion: {e}")
+			return
+		promoted = sum(int((r or {}).get("hubless_parents_promoted", 0) or 0) for r in report.values() if isinstance(r, dict))
+		flagged = sum(int((r or {}).get("multi_chunk_flagged", 0) or 0) for r in report.values() if isinstance(r, dict))
+		ctx.record(self.name, promoted, promoted=promoted, flagged=flagged)
 
 
 class ErosionPhase(SleepPhase):
@@ -33,16 +37,21 @@ class ErosionPhase(SleepPhase):
 		return "erosion"
 
 	def execute(self, ctx: SleepContext) -> None:
+		eroded = decayed = demoted = 0
 		try:
-			erode_work_hubs(ctx.memory_manager)
+			stats = erode_work_hubs(ctx.memory_manager) or {}
+			eroded = int(stats.get("eroded", 0) or 0)
+			decayed = int(stats.get("decayed", 0) or 0)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
 		try:
-			stats = erode_curated(ctx.memory_manager)
-			if stats.get("enabled"):
-				logger.info(f"[SLEEP ENGINE] Curated demote: {stats}")
+			curated = erode_curated(ctx.memory_manager)
+			if curated.get("enabled"):
+				logger.info(f"[SLEEP ENGINE] Curated demote: {curated}")
+			demoted = int(curated.get("demoted", 0) or 0)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run curated demote: {e}")
+		ctx.record(self.name, eroded + decayed + demoted, eroded=eroded, decayed=decayed, demoted=demoted)
 
 
 class WashoutPhase(SleepPhase):
@@ -52,6 +61,10 @@ class WashoutPhase(SleepPhase):
 
 	def execute(self, ctx: SleepContext) -> None:
 		try:
-			run_rhizodb_washout_and_pruning(ctx.memory_manager)
+			stats = run_rhizodb_washout_and_pruning(ctx.memory_manager) or {}
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run RhizoDB washout and pruning: {e}")
+			return
+		pruned = int(stats.get("pruned", 0) or 0)
+		washed = int(stats.get("washed", 0) or 0)
+		ctx.record(self.name, pruned + washed, pruned=pruned, washed=washed)
