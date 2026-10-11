@@ -44,6 +44,16 @@ class AxonWeaverPhase(SleepPhase):
 			f"{sum(rejected) / len(rejected):.2f}" if rejected else "n/a",
 		)
 
+		# Producción real: cada axón tejido/reparado es una arista nueva o
+		# restaurada entre engramas. `candidates` es detalle (evaluados).
+		ctx.record(
+			self.name,
+			int(stats.get("axons_woven", 0) or 0) + int(stats.get("axons_repaired", 0) or 0),
+			woven=int(stats.get("axons_woven", 0) or 0),
+			repaired=int(stats.get("axons_repaired", 0) or 0),
+			candidates=int(stats.get("candidates_evaluated", 0) or 0),
+		)
+
 		effective_runs = int(load_axon_state().get("completed_runs", 0))
 		if stats["candidates_evaluated"] > 0:
 			state = load_axon_state()

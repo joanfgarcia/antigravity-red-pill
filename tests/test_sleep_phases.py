@@ -29,6 +29,41 @@ def test_is_enabled_default_and_disabled():
 	assert phase.is_enabled({"sleep_phases": {"erosion": {"enabled": True}}}) is True
 
 
+# ── SleepContext.record: producción real ──────────────────────────────────────
+
+
+def test_record_accumulates_total_and_metrics():
+	ctx = SleepContext(memory_manager=MagicMock())
+	ctx.record("consolidation", 3, hubs=3, thread_links=7)
+	ctx.record("hygiene", 2, purged=2)
+	assert ctx.total_processed == 5
+	assert ctx.metrics["consolidation"] == 3
+	assert ctx.metrics["consolidation.hubs"] == 3
+	assert ctx.metrics["consolidation.thread_links"] == 7
+	assert ctx.metrics["hygiene"] == 2
+
+
+def test_record_ignores_non_numeric():
+	ctx = SleepContext(memory_manager=MagicMock())
+	ctx.record("erosion", "boom", decayed="nope")
+	assert ctx.total_processed == 0
+	assert ctx.metrics["erosion"] == 0
+	assert "erosion.decayed" not in ctx.metrics
+
+
+def test_update_status_persists_metrics(monkeypatch, tmp_path):
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	ctx = SleepContext(memory_manager=MagicMock())
+	ctx.record("axon_weaver", 8, woven=8)
+	ctx.update_status("axon_weaver", status="completed")
+	import json
+
+	data = json.loads((tmp_path / "sleep_phase_status.json").read_text(encoding="utf-8"))
+	assert data["total_processed"] == 8
+	assert data["metrics"]["axon_weaver"] == 8
+	assert data["metrics"]["axon_weaver.woven"] == 8
+
+
 # ── CPU-only phases delegate and swallow errors ────────────────────────────────
 
 
@@ -110,7 +145,7 @@ def test_runner_clears_vram_busy_on_real_cycle():
 	mgr = MagicMock()
 	with (
 		patch(f"{CONS}._check_llm_available", return_value=True),
-		patch(f"{CONS}._run_hub_and_thread") as hubs,
+		patch(f"{CONS}._run_hub_and_thread", return_value=({"hubs_written": 0}, {"links": 0})) as hubs,
 		patch(f"{MAINT}.erode_work_hubs"),
 		patch(f"{MAINT}.run_rhizodb_washout_and_pruning"),
 		patch(f"{EVO}.IdentityEvaluator.evaluate_set_point"),

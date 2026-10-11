@@ -11,8 +11,8 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,12 @@ class SleepContext:
 	memory_manager: Any
 	mode: str = "lazy"
 	total_processed: int = 0
+	# Producción real por fase (engram-level ops: hubs escritos, chunks promovidos,
+	# vacíos purgados, axones tejidos, hubs erosionados/borrados…). Clave = nombre
+	# de fase; sub-métricas con `fase.sub` (no se suman al total, son detalle).
+	# `total_processed` es la suma de los valores de fase. Sustituye al contador
+	# vestigial que la retirada de la ingesta legacy (v8.0.0) dejó clavado en 0.
+	metrics: Dict[str, int] = field(default_factory=dict)
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
 	# Consolidation drain cutoff (epoch seconds). 0 = unset → the phase captures it
 	# at execute() start. The dag_job sleep recipe pins it at job start (first
@@ -39,6 +45,27 @@ class SleepContext:
 	# inyecta el dag_job (SleepPhaseMinion); las fases
 	# pesadas (drenaje de consolidación) la invocan en cada frontera de batch.
 	pause_probe: Any = None
+
+	def record(self, phase: str, produced: int = 0, **detail: int) -> None:
+		"""Registra la producción real de una fase.
+
+		`produced` = nº de mutaciones sobre engramas (se acumula en `total_processed`
+		y en `metrics[phase]`). Los `detail` extra se guardan como `fase.sub`
+		(p.ej. `consolidation.hubs`), sin inflar el total: son desglose, no unidades.
+		Best-effort: un valor no numérico jamás tumba la fase.
+		"""
+		try:
+			produced = int(produced)
+		except (TypeError, ValueError):
+			produced = 0
+		if produced:
+			self.total_processed += produced
+		self.metrics[phase] = self.metrics.get(phase, 0) + produced
+		for key, value in detail.items():
+			try:
+				self.metrics[f"{phase}.{key}"] = int(value)
+			except (TypeError, ValueError):
+				continue
 
 	def update_status(
 		self,
@@ -71,6 +98,7 @@ class SleepContext:
 				"phase_index": phase_index,
 				"total_phases": total_phases,
 				"total_processed": self.total_processed,
+				"metrics": self.metrics,
 				"deferred": self.deferred,
 				"updated_at": time.time(),
 			}

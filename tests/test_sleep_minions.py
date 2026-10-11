@@ -182,3 +182,93 @@ def test_read_total_processed_fichero_invalido(monkeypatch, tmp_path):
 	from red_pill.swarm.agents.sleep_minions import _read_total_processed
 
 	assert _read_total_processed() == 0
+
+
+# ── _read_state / métricas ────────────────────────────────────────────────────
+
+
+def test_read_state_returns_metrics(monkeypatch, tmp_path):
+	(tmp_path / "sleep_phase_status.json").write_text(
+		json.dumps({"total_processed": 12, "metrics": {"axon_weaver": 8, "axon_weaver.woven": 8}, "status": "running"}),
+		encoding="utf-8",
+	)
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	from red_pill.swarm.agents.sleep_minions import _read_state
+
+	total, metrics = _read_state()
+	assert total == 12
+	assert metrics["axon_weaver"] == 8
+
+
+def test_read_state_resets_on_cycle_completed(monkeypatch, tmp_path):
+	(tmp_path / "sleep_phase_status.json").write_text(
+		json.dumps({"total_processed": 99, "metrics": {"erosion": 5}, "status": "cycle_completed"}),
+		encoding="utf-8",
+	)
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	from red_pill.swarm.agents.sleep_minions import _read_state
+
+	assert _read_state() == (0, {})
+
+
+def test_format_metrics_skips_subkeys_and_zeros():
+	from red_pill.swarm.agents.sleep_minions import _format_metrics
+
+	out = _format_metrics({"consolidation": 2, "consolidation.hubs": 2, "hygiene": 0, "erosion": 5})
+	assert out == "erosion=5 · consolidation=2"
+
+
+# ── _read_memento_ascended ────────────────────────────────────────────────────
+
+
+def test_read_memento_ascended_fresh(monkeypatch, tmp_path):
+	import time
+
+	(tmp_path / "memento_agentic_state.json").write_text(json.dumps({"ran_at": time.time(), "static_ascended": 181}), encoding="utf-8")
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	from red_pill.swarm.agents.sleep_minions import _read_memento_ascended
+
+	assert _read_memento_ascended() == 181
+
+
+def test_read_memento_ascended_stale(monkeypatch, tmp_path):
+	import time
+
+	(tmp_path / "memento_agentic_state.json").write_text(json.dumps({"ran_at": time.time() - 24 * 3600, "static_ascended": 181}), encoding="utf-8")
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	from red_pill.swarm.agents.sleep_minions import _read_memento_ascended
+
+	assert _read_memento_ascended() == 0
+
+
+def test_read_memento_ascended_missing(monkeypatch, tmp_path):
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	from red_pill.swarm.agents.sleep_minions import _read_memento_ascended
+
+	assert _read_memento_ascended() == 0
+
+
+# ── finalize: resumen honesto ─────────────────────────────────────────────────
+
+
+def test_finalize_summary_reports_breakdown_and_memento(monkeypatch, tmp_path):
+	import time
+
+	(tmp_path / "memento_agentic_state.json").write_text(json.dumps({"ran_at": time.time(), "static_ascended": 181}), encoding="utf-8")
+	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
+	monkeypatch.setattr("red_pill.memory.MemoryManager", lambda: _FakeMM())
+
+	# SleepContext REAL (no se parchea): queremos que `record` acumule de verdad.
+	def _finalize(ctx, mode="lazy"):
+		ctx.record("axon_weaver", 8)
+		ctx.record("erosion", 5)
+		return ctx.total_processed
+
+	monkeypatch.setattr("red_pill.metabolism.sleep.finalize_sleep_cycle", _finalize)
+
+	res = _run(SleepFinalizeMinion().execute(""))
+	assert res["status"] == "success"
+	assert res["total_processed"] == 13
+	assert res["memento_ascended"] == 181
+	assert "13 ops" in res["summary"]
+	assert "memento ascendidos=181" in res["summary"]

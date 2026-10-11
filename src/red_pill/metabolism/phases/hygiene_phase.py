@@ -24,6 +24,9 @@ class HygienePhase(SleepPhase):
 			logger.debug("[HYGIENE] Skipped (SLEEP_PLUGIN_HYGIENE=False)")
 			return
 		try:
-			purge_empty_engrams(ctx.memory_manager)
+			report = purge_empty_engrams(ctx.memory_manager) or {}
 		except Exception as e:
 			logger.error(f"[HYGIENE] Failed to run empty-engram purge: {e}")
+			return
+		purged = sum(int((r or {}).get("empty_purged", 0) or 0) for r in report.values() if isinstance(r, dict))
+		ctx.record(self.name, purged, purged=purged)

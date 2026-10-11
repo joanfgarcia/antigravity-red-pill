@@ -96,5 +96,6 @@ class OperatorProfilePhase(SleepPhase):
 
 			publish(PROFILE_PATH, profile)
 			logger.info(f"[{TAG}] Written: '{profile[:120]}'")
+			ctx.record(self.name, 1, published=1)
 		except Exception as e:
 			logger.error(f"[{TAG}] Cycle failed: {e}")

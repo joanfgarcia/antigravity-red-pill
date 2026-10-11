@@ -21,3 +21,7 @@ class EvolutionPhase(SleepPhase):
 			IdentityEvaluator.evaluate_set_point(ctx.memory_manager)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Personality evolution failed: {e}")
+			return
+		# No muta engramas: recalcula el set-point. Se cuenta como 1 evaluación
+		# (detalle), no como unidad de engrama.
+		ctx.record(self.name, 0, evaluated=1)

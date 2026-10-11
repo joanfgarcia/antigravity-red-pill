@@ -43,3 +43,5 @@ class RevisionPhase(SleepPhase):
 			stats["axons_rewired"],
 			stats["llm_failures"],
 		)
+		moved = int(stats.get("moved", 0) or 0)
+		ctx.record(self.name, moved, moved=moved, hubs_flagged=int(stats.get("hubs_flagged", 0) or 0))

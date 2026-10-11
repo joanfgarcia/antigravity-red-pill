@@ -89,5 +89,6 @@ class RecentActivityPhase(SleepPhase):
 
 			publish(ACTIVITY_PATH, summary)
 			logger.info(f"[{TAG}] Written ({len(summary)} chars): '{summary[:120]}...'")
+			ctx.record(self.name, 1, published=1)
 		except Exception as e:
 			logger.error(f"[{TAG}] Cycle failed: {e}")
