@@ -21,11 +21,14 @@ class LogRotationPlugin(JanitorPlugin):
 		max_size_bytes = plugin_cfg.get("max_size_bytes", 10 * 1024 * 1024)
 		days_to_keep = plugin_cfg.get("days_to_keep", 7)
 
+		from red_pill.core.paths import get_agent_dir, get_daemon_persistent_dir
+
+		_daemon, _agent = get_daemon_persistent_dir(), get_agent_dir()
 		targets = [
-			Path.home() / ".local/share/red-pill/daemon/output.log",
-			Path.home() / ".local/share/red-pill/daemon/error.log",
-			Path.home() / ".agent/bunker_daemon.log",
-			Path.home() / ".agent/bunker_daemon_error.log",
+			_daemon / "output.log",
+			_daemon / "error.log",
+			_agent / "bunker_daemon.log",
+			_agent / "bunker_daemon_error.log",
 		]
 		rotated_count = 0
 		purged_count = 0

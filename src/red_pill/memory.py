@@ -959,9 +959,7 @@ class MemoryManager:
 						# debe alcanzar su engrama aunque sea miembro de un hub (D14);
 						# `hubbed` solo excluye en la pata semantica (los miembros entierran hubs).
 						rescue_exclusions = [e for e in structural_exclusions if getattr(e, "key", "") != "hubbed"]
-						if self._excluded_by(pl, rescue_exclusions) or (
-							not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2
-						):
+						if self._excluded_by(pl, rescue_exclusions) or (not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2):
 							continue
 						vec: Any = rec.vector if not isinstance(rec.vector, dict) else next(iter(rec.vector.values()), None)
 						v = np.asarray(vec, dtype=float) if vec is not None else None
@@ -1364,7 +1362,9 @@ class MemoryManager:
 					logger.error(f"Failed to wipe {path}: {e}")
 
 		# 3. Wipe generic metabolism state file
-		metabolism_file = os.path.expanduser("~/.red_pill_metabolism")
+		from red_pill.core.paths import get_metabolism_flag_path
+
+		metabolism_file = str(get_metabolism_flag_path())
 		if os.path.exists(metabolism_file):
 			try:
 				os.remove(metabolism_file)

@@ -22,7 +22,9 @@ class BitNetRunner:
 	@classmethod
 	def auto_detect(cls, workspace=None):
 		"""Factory: auto-detect best available build (CUDA > CPU)."""
-		workspace = workspace or os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		from red_pill.core.paths import get_workspace_root
+
+		workspace = workspace or str(get_workspace_root())
 		bitnet_root = os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b")
 		model_path = os.path.join(bitnet_root, "models", "Falcon3-10B-Instruct-1.58bit", "ggml-model-i2_s.gguf")
 

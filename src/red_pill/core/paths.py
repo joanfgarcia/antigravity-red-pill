@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -503,6 +504,33 @@ def get_forge_home(area: str) -> Path:
 	"""
 	env = os.environ.get(f"{area.upper()}_FORGE_HOME")
 	return Path(os.path.expanduser(env)) if env else Path.home() / "opt" / f"{area}-forge"
+
+
+def get_workspace_root() -> Path:
+	"""Raíz del workspace (`$WORKSPACE_ROOT`, default `~/Documents/IA`)."""
+	env = os.getenv("WORKSPACE_ROOT")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "Documents" / "IA"
+
+
+def get_xdg_data_home() -> Path:
+	"""Base XDG de datos (`$XDG_DATA_HOME`, default `~/.local/share`)."""
+	env = os.getenv("XDG_DATA_HOME")
+	return Path(env) if env else Path.home() / ".local" / "share"
+
+
+def get_uv_bin() -> str:
+	"""Binario `uv` (en el PATH o `~/.local/bin/uv`)."""
+	return shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+
+
+def get_metabolism_flag_path() -> Path:
+	"""Fichero de estado del metabolismo (`~/.red_pill_metabolism`)."""
+	return Path.home() / ".red_pill_metabolism"
+
+
+def get_systemd_user_dir() -> Path:
+	"""Directorio de unidades systemd de usuario (`~/.config/systemd/user`)."""
+	return Path.home() / ".config" / "systemd" / "user"
 
 
 def get_model_validation_path() -> Path:

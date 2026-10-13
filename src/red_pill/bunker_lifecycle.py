@@ -620,7 +620,9 @@ def bunker_update() -> None:
 		print("1. No Git repository detected. Skipping code synchronization.")
 
 	print("2. Aligning virtual environment dependencies via uv...")
-	uv_bin = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+	from red_pill.core.paths import get_uv_bin
+
+	uv_bin = get_uv_bin()
 	uv_ran = False
 	if uv_bin and os.path.exists(uv_bin):
 		res = subprocess.run([uv_bin, "sync", "--frozen"], cwd=str(project_root), capture_output=True, text=True)
@@ -687,7 +689,9 @@ def bunker_update() -> None:
 	# install_neo; mirror that here so `update` also refreshes them.
 	try:
 		skills_src = project_root / "skills"
-		agent_dir = Path(os.getenv("RED_PILL_AGENT_DIR", str(Path.home() / ".agent")))
+		from red_pill.core.paths import get_agent_dir
+
+		agent_dir = Path(os.getenv("RED_PILL_AGENT_DIR") or str(get_agent_dir()))
 		skills_dest = agent_dir / "skills"
 		if skills_src.is_dir():
 			skills_dest.mkdir(parents=True, exist_ok=True)

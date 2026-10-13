@@ -280,6 +280,7 @@ async def update_metrics_loop(app: Application):
 
 # 3. TUI APPLICATION LAYOUT
 
+
 def sync_registry_desk(desk: str) -> None:
 	"""Keep `workspaces.yaml:agent_core` in step with the .env's AGENT_CORE_DIR.
 
@@ -296,6 +297,7 @@ def sync_registry_desk(desk: str) -> None:
 	registry = ws.load_registry()
 	if registry.agent_core != target:
 		ws.save_registry(registry.model_copy(update={"agent_core": target}))
+
 
 def build_tui_app() -> Application:
 	env_path = get_config_dir() / ".env"
@@ -333,10 +335,11 @@ def build_tui_app() -> Application:
 	notification_sound_cb.checked = env.get("NOTIFICATION_SOUND", "False").lower() == "true"
 
 	# Paths
-	workspace_root_txt = TextArea(text=env.get("WORKSPACE_ROOT", str(Path.home() / "Documents" / "IA")), multiline=False, style="class:input-field")
-	agent_core_txt = TextArea(
-		text=env.get("AGENT_CORE_DIR", str(Path.home() / "Documents" / "IA" / "Agent_Core")), multiline=False, style="class:input-field"
-	)
+	from red_pill.core.paths import get_workspace_root
+
+	_ws = get_workspace_root()
+	workspace_root_txt = TextArea(text=env.get("WORKSPACE_ROOT", str(_ws)), multiline=False, style="class:input-field")
+	agent_core_txt = TextArea(text=env.get("AGENT_CORE_DIR", str(_ws / "Agent_Core")), multiline=False, style="class:input-field")
 	cloud_folder_txt = TextArea(text=env.get("CLOUD_VAULT_FOLDER_ID", ""), multiline=False, style="class:input-field")
 
 	# Metabolism/Cadence

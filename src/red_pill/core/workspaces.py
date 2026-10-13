@@ -117,7 +117,9 @@ def registry_path() -> Path:
 
 def _back_compat_registry() -> WorkspaceRegistry:
 	"""No registry on disk yet: agent_core from existing config, no project workspaces (safe empty)."""
-	agent_core = "~/Agent_Core"
+	from red_pill.core.paths import get_workspace_root
+
+	agent_core = str(get_workspace_root() / "Agent_Core")
 	try:
 		import red_pill.config as cfg  # lazy: avoid import cycle (config does not import this module)
 

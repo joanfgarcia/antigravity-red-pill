@@ -21,7 +21,9 @@ class SoulManager:
 	"""
 
 	def __init__(self):
-		self.ia_dir = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		from red_pill.core.paths import get_workspace_root
+
+		self.ia_dir = str(get_workspace_root())
 		self.backup_root = os.path.join(self.ia_dir, "backups")
 		self.qdrant_url = cfg.QDRANT_URL
 		self.api_key = cfg.QDRANT_API_KEY
