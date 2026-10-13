@@ -494,6 +494,17 @@ def get_tmp_dir() -> Path:
 	return Path(os.path.expanduser(os.environ.get("RP_TMP_DIR") or "~/tmp"))
 
 
+def get_forge_home(area: str) -> Path:
+	"""Raíz del forge de un área media (`$<AREA>_FORGE_HOME`, default `~/opt/<area>-forge`).
+
+	RFC-HARNESS-005 §10.9: los forges (imagen/audio/música) son **opcionales** y
+	por-máquina; default documentado y **overridable** (gusto/equipo/SO).
+	`area` ∈ {image, audio, music}.
+	"""
+	env = os.environ.get(f"{area.upper()}_FORGE_HOME")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "opt" / f"{area}-forge"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 

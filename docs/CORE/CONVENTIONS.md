@@ -253,6 +253,12 @@ Runtime-generated files **must not** be written to `docs/` or the repo root.
 
 All runtime artifact paths are gitignored. **Never** commit a runtime output to `docs/CERTIFICATION/` or any `docs/` subdirectory unless it is a human-curated audit report (Section 8).
 
+> **Path resolution**: **every** filesystem path resolves through `core/paths.py`
+> — the sole owner of the XDG/config/data/state/tmp/forge roots. Modules must **not**
+> hardcode `Path.home()`/`~/…` or expand XDG themselves. **Exception**: standalone
+> `scripts/**` tools that must not import `red_pill` resolve XDG by hand
+> (e.g. `scripts/_config_common.py`; `platformdirs` is banned there — §see tests).
+
 ---
 
 ## 8. Certification Report Naming
@@ -419,6 +425,27 @@ integrators), **independent of any single feature**:
 > **When NOT to use #3**: a **single** implementation, or a value that is just
 > **data**. Wrapping those in a registry is over-abstraction. The pattern pays off
 > only with **≥2 interchangeable implementations chosen at runtime by a key**.
+
+---
+
+## 10.9 Optional & Customizable Harness Parts
+
+Parts of the harness that are **optional**, **depend on the IDE/provider**, or have
+**operator-customizable paths** (personal taste, hardware/OS constraints) follow one
+declarative pattern — never an assumption baked into code:
+
+1. **Ship a recipe** to create/configure them (e.g. `scripts/<area>/bootstrap.sh`),
+   readable by the agent when the operator asks to install/enable it.
+2. **Declare a documented default** as an environment variable, listed in
+   `.env.example` (e.g. `IMAGE_FORGE_HOME=~/opt/image-forge`).
+3. The operator may **override** it in `.env` (another directory, another provider);
+   the default is a **suggestion**, never an assumption.
+4. Templates that reference it (skills, seeds, config) use a **`${PLACEHOLDER}`**,
+   resolved **at seed time** (`scripts/_config_common.build_vars` + `subst` —
+   `${RED_PILL_CMD}`, `${AGENT_CORE_DIR}`, `${IMAGE_FORGE_HOME}`, `${HOME}`…).
+   `safe_substitute` leaves unknown placeholders literal — author against the known set.
+5. **Never assume presence**: if it is not configured the capability is *inactive*
+   (its skills are not seeded, cf. §10.8.3) and the agent falls back to the recipe.
 
 ---
 

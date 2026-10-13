@@ -9,19 +9,13 @@ futuro, la inyección en el handshake. Cero torch/subprocess/escaneo pesado.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import List, Optional
 
+from red_pill.core.paths import get_forge_home
+
 _FAMILIES = ("image_gen", "audio_gen", "music_gen")
 _HF_CACHE_REQUIRED = {"image_gen", "audio_gen"}  # música es tool-chain (sin pesos)
-
-
-def _forge_home(family: str) -> Path:
-	"""Raíz del forge de una familia (env `<AREA>_FORGE_HOME` o `~/opt/<area>-forge`)."""
-	area = family.split("_")[0]
-	env = os.environ.get(f"{area.upper()}_FORGE_HOME")
-	return Path(env) if env else Path.home() / "opt" / f"{area}-forge"
 
 
 def active_families() -> List[str]:
@@ -32,7 +26,7 @@ def active_families() -> List[str]:
 	"""
 	active: List[str] = []
 	for family in _FAMILIES:
-		home = _forge_home(family)
+		home = get_forge_home(family.split("_")[0])
 		if not (home / "venv").exists():
 			continue
 		if family in _HF_CACHE_REQUIRED and not (home / "hf-cache").exists():
