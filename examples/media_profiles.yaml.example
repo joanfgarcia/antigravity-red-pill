@@ -1,6 +1,6 @@
-# ⚠️ EJEMPLO / ESPECIFICACIÓN — el loader aún NO está cableado (RFC-HARNESS-004 §9).
-# Cuando se implemente (resolver + seed), se sembrará a
-# ~/.config/red-pill/media_profiles.yaml como model_profiles/task_profiles.
+# EJEMPLO / ESPECIFICACIÓN — loader cableado (RFC-HARNESS-004 F1). Se siembra
+# (copy-if-absent) a ~/.config/red-pill/media_profiles.yaml como
+# model_profiles/task_profiles, en install/update.
 #
 # media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
 #
@@ -34,6 +34,10 @@ media_profiles:
     sampler: { steps: 4, guidance: 1.0, size: 1024 }
     vram_footprint: { peak_mb: 2456 }
     capabilities: ["photorealism", "concept", "landscape", "fast"]
+    not_capable_for: []
+    priority: 1
+    constraints: { dim_multiple: 8 }        # ÷8 (tolera 1080 exacto)
+    adapters: ["snap_dims"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -53,6 +57,10 @@ media_profiles:
     sampler: { steps: 9, guidance: 0.0, size: 1024 }
     vram_footprint: { peak_mb: 2448 }
     capabilities: ["typography", "product", "photorealism"]
+    not_capable_for: []
+    priority: 2
+    constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16
+    adapters: ["snap_dims", "reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -72,6 +80,10 @@ media_profiles:
     sampler: { steps: 4, guidance: 1.0, size: 1024 }
     vram_footprint: { peak_mb: 6721 }
     capabilities: ["photorealism", "illustration", "ternary"]
+    not_capable_for: []
+    priority: 3
+    constraints: { dim_multiple: 32, max_pixels: 1600000 }   # ÷32; OOM por encima de ~1.5 MPix
+    adapters: ["snap_dims", "reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -92,6 +104,8 @@ media_profiles:
     sampler: { voices: 54, sr: 24000 }
     vram_footprint: { peak_mb: 800 }
     capabilities: ["narration", "multilingual", "fast"]
+    not_capable_for: ["cloning"]
+    priority: 1
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -111,6 +125,8 @@ media_profiles:
     sampler: { sr: 24000, exaggeration: 0.5 }
     vram_footprint: { peak_mb: 3350 }
     capabilities: ["cloning", "emotion", "multilingual"]
+    not_capable_for: []
+    priority: 2
     license:
       id: "mit"
       commercial_ok: true
@@ -130,6 +146,10 @@ media_profiles:
     sampler: { steps: 100, cfg_scale: 4.0, seconds_max: 30, sr: 48000 }
     vram_footprint: { peak_mb: 7400 }
     capabilities: ["environment", "animals", "urban", "foley"]
+    not_capable_for: []
+    priority: 1
+    constraints: { max_vram_mb: 6400 }      # OOM en 8 GB por defecto
+    adapters: ["reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -149,6 +169,10 @@ media_profiles:
     sampler: { steps: 25, guidance_scale: 5.0, sr: 16000 }
     vram_footprint: { peak_mb: 7400 }
     capabilities: ["mixed_scene", "music", "sfx", "speech", "environment"]
+    not_capable_for: []
+    priority: 2
+    constraints: { max_vram_mb: 6400 }      # justo en 8 GB (offload)
+    adapters: ["reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -157,6 +181,24 @@ media_profiles:
       share_alike: false
       source: "https://huggingface.co/mispeech/Dasheng-AudioGen"
     notes: "Escena mixta (voz+música+SFX+ambiente). transformers<5. En 8 GB, justo (offload)."
+
+# ── CASCADE POR TAREA / INTENCIÓN (RFC-HARNESS-004 §4.2) ──────────────────
+# Mapa intención -> [modelo, ...] (orden = preferencia). Espejo de `roles` del
+# LLM (model_catalog.yaml). El router resuelve task -> modelo y salta los
+# `not_capable_for`. Claves = vocabulario de `capabilities`.
+media_roles:
+  # imagen
+  typography:   [zimage_turbo]
+  product:      [zimage_turbo, flux2_klein]
+  concept:      [flux2_klein, bonsai_ternary]
+  landscape:    [flux2_klein, zimage_turbo]
+  illustration: [flux2_klein, bonsai_ternary]
+  photoreal:    [flux2_klein, zimage_turbo, bonsai_ternary]
+  # audio
+  narration:    [kokoro_voice, chatterbox_voice]
+  cloning:      [chatterbox_voice]
+  sfx:          [moss_sfx, dasheng_scene]
+  scene:        [dasheng_scene]
 
 # ── TOOL-CHAINS (NO son modelos) ──────────────────────────────────────────
 # La música SIMBÓLICA no tiene "modelo": es una receta. Vive en configs/jobs/.

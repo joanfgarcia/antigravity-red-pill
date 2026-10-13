@@ -471,6 +471,18 @@ def get_runtimes_path() -> Path:
 	return get_config_dir() / "runtimes.yaml"
 
 
+def get_media_profiles_path() -> Path:
+	"""Ruta del elenco de media generativa ($XDG_CONFIG_HOME/red-pill/media_profiles.yaml).
+
+	RFC-HARNESS-004: elenco de modelos de imagen/audio-onda (pipeline + sampler +
+	quant + VRAM) con discriminador `modality`/`task`, `capabilities`, `constraints`
+	y `adapters`. El **loader lo posee RFC-HARNESS-004** (F1); RFC-HARNESS-005 lo
+	consume. Se siembra (copy-if-absent) desde examples/media_profiles.yaml.example
+	en install/update (mismo patrón que task_profiles/runtimes).
+	"""
+	return get_config_dir() / "media_profiles.yaml"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 

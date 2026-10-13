@@ -146,14 +146,29 @@ class RuntimeRegistry:
 		if not rt:
 			return False, f"runtime '{runtime_id}' no declarado en {get_runtimes_path()}"
 		binary = rt.get("binary") or rt.get("server")
-		if not binary:
-			return False, f"runtime '{runtime_id}' sin 'binary'/'server'"
-		path = Path(binary)
-		if not path.exists():
-			return False, f"binario no existe: {binary}"
-		if not os.access(path, os.X_OK):
-			return False, f"binario no ejecutable: {binary}"
-		return True, ""
+		if binary:
+			path = Path(binary)
+			if not path.exists():
+				return False, f"binario no existe: {binary}"
+			if not os.access(path, os.X_OK):
+				return False, f"binario no ejecutable: {binary}"
+			return True, ""
+		# Contrato media (RFC-HARNESS-004 §5): engines sin binario → venv/dispatcher.
+		dispatcher = rt.get("dispatcher")
+		if dispatcher:
+			path = Path(str(dispatcher))
+			if not path.exists():
+				return False, f"dispatcher no existe: {dispatcher}"
+			if not os.access(path, os.X_OK):
+				return False, f"dispatcher no ejecutable: {dispatcher}"
+			return True, ""
+		venv = rt.get("venv")
+		if venv:
+			path = Path(str(venv))
+			if not path.exists():
+				return False, f"venv no existe: {venv}"
+			return True, ""
+		return False, f"runtime '{runtime_id}' sin 'binary'/'server'/'dispatcher'/'venv'"
 
 	@classmethod
 	def require(cls, runtime_id: str, variant: Optional[str] = None) -> dict:
@@ -168,7 +183,7 @@ class RuntimeRegistry:
 	@classmethod
 	def _resolve_paths(cls, rt: dict) -> dict:
 		"""`binary`/`server`/`library` relativos → absolutos contra el bunker root; `~` expandido."""
-		for key in ("binary", "server", "library"):
+		for key in ("binary", "server", "library", "venv", "dispatcher"):
 			value = rt.get(key)
 			if isinstance(value, str) and value:
 				rt[key] = str(_expand(value))
