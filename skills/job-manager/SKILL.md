@@ -19,9 +19,13 @@ Regla de oro: por CLI **todo es diferido**. No existe `--mode` — un "inmediato
 
 ## 2. Encolar trabajos (CLI)
 
+> **`--kick`**: dispara el runner **al momento** (sin esperar al timer de ~1 min).
+> Úsalo cuando quieras el resultado ya y haya sitio en la GPU; si no lo hay, el
+> preflight lo **difiere** igual (no fuerza lo imposible). Sin `--kick`, espera al tick.
+
 ```bash
-# Un flow YAML existente, como job pausable/reanudable
-${RED_PILL_CMD} job submit --source flow_job --payload '{"flow_id": "vulnerability-sweep"}' --title "Barrido nocturno" --priority 7
+# Un flow YAML existente, como job pausable/reanudable (--kick: procesar ya)
+${RED_PILL_CMD} job submit --source flow_job --payload '{"flow_id": "vulnerability-sweep"}' --title "Barrido nocturno" --priority 7 --kick
 
 # Una tarea agéntica genérica (backend/modelo/effort en el payload)
 ${RED_PILL_CMD} job submit --source agentic_job --payload '{
@@ -41,7 +45,7 @@ ${RED_PILL_CMD} job submit --source distill_job --payload '{"batch_size": 15, "s
 Para trabajos por pasos de un proyecto satélite (entrenamientos, backups, migraciones) **no se escribe un driver nuevo**: se declara la receta y la ejecuta el driver genérico. La receta vive **en el repo del satélite**, no aquí — describe cómo se ejecuta ese proyecto, así que le pertenece:
 
 ```bash
-${RED_PILL_CMD} job submit --recipe school     # busca subiendo: .red-pill/jobs/ → configs/jobs/ → jobs/
+${RED_PILL_CMD} job submit --recipe school --kick   # busca subiendo: .red-pill/jobs/ → configs/jobs/ → jobs/
 ```
 
 ```yaml
