@@ -15,13 +15,17 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-DEFAULT_STAGING = "~/tmp/red-pill/media/staging"
+from red_pill.core.paths import get_tmp_dir
+
 ARTIFACT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".flac", ".ogg", ".mp4"}
 
 
 def staging_root() -> Path:
-	"""Raíz del staging (env `RP_MEDIA_STAGING`, default `~/tmp/red-pill/media/staging`)."""
-	return Path(os.path.expanduser(os.environ.get("RP_MEDIA_STAGING") or DEFAULT_STAGING))
+	"""Raíz del staging: `RP_MEDIA_STAGING` o `<RP_TMP_DIR>/red-pill/media/staging` (default `~/tmp/...`)."""
+	override = os.environ.get("RP_MEDIA_STAGING")
+	if override:
+		return Path(os.path.expanduser(override))
+	return get_tmp_dir() / "red-pill" / "media" / "staging"
 
 
 def order_dir(title: str, create: bool = False) -> Path:

@@ -483,6 +483,17 @@ def get_media_profiles_path() -> Path:
 	return get_config_dir() / "media_profiles.yaml"
 
 
+def get_tmp_dir() -> Path:
+	"""Raíz de temporales del arnés ($RP_TMP_DIR, default `~/tmp`).
+
+	RFC-HARNESS-004 §7/§10.8: los artefactos de generación van a un **staging**
+	temporal bajo esta raíz (`<tmp>/red-pill/...`). Es **configurable** por `.env`
+	(`RP_TMP_DIR`); install/update crean el directorio si falta. Se prefiere `~/tmp`
+	a `/tmp` (no se purga al reiniciar y es visible, no oculto como `~/.local`).
+	"""
+	return Path(os.path.expanduser(os.environ.get("RP_TMP_DIR") or "~/tmp"))
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 

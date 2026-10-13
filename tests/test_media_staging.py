@@ -13,7 +13,14 @@ def _stg(monkeypatch, tmp_path):
 
 def test_default_root_is_tmp(monkeypatch):
 	monkeypatch.delenv("RP_MEDIA_STAGING", raising=False)
+	monkeypatch.delenv("RP_TMP_DIR", raising=False)
 	assert str(media_staging.staging_root()).endswith("tmp/red-pill/media/staging")
+
+
+def test_root_from_tmp_dir(monkeypatch, tmp_path):
+	monkeypatch.delenv("RP_MEDIA_STAGING", raising=False)
+	monkeypatch.setenv("RP_TMP_DIR", str(tmp_path / "t"))
+	assert media_staging.staging_root() == tmp_path / "t" / "red-pill" / "media" / "staging"
 
 
 def test_root_from_env(monkeypatch, tmp_path):

@@ -248,6 +248,8 @@ Runtime-generated files **must not** be written to `docs/` or the repo root.
 | Telemetry files | `IA_DIR/.bunker_telemetry.md` |
 | MLS group state | `~/.config/red_pill/swarm_groups/` |
 | Keystores | `~/.agent/` |
+| Media generation **staging** | `${RP_MEDIA_STAGING:-$RP_TMP_DIR/red-pill/media/staging}` (promote via `red-pill media promote`) |
+| Harness temporaries root | `${RP_TMP_DIR:-~/tmp}` (created by install/update; prefer `~/tmp` over `/tmp`) |
 
 All runtime artifact paths are gitignored. **Never** commit a runtime output to `docs/CERTIFICATION/` or any `docs/` subdirectory unless it is a human-curated audit report (Section 8).
 
@@ -377,6 +379,38 @@ numbers (paths, context ranges, VRAM footprints) as if they were universal.
    the field use the default). A declared runtime that is missing or broken **fails
    clean** — never a silent fallback to another engine (`Q2_0` ternary on stock
    llama.cpp loads without warning and produces garbage).
+
+---
+
+## 10.8 Harness Utilities — Parameters, Environment, Adapters
+
+Rules for harness/utility code (`scripts/**`, tool adapters, job drivers) that feeds
+the local runtimes (media generation, benchmarks, tool-chains):
+
+1. **No hardcoded values.** A value that varies **between invocations** (prompt,
+   size, output path, name, seed) is a **parameter**. A value set **once and rarely
+   changed** (runtime home, staging root, model dir) is an **environment variable**
+   documented in `.env.example` — never a literal in code. This prevents the
+   anti-pattern of an agent editing source to change a size/name/path per run.
+2. **Recipes, not special-cases.** Reusable behaviour lives in **recipes**
+   (`configs/jobs/*.yaml`); a new model/task is **declarative metadata**
+   (`examples/*.yaml`), not a new code branch. Adding a model must **not** require
+   touching the harness.
+3. **Adapters as plugins — no `if/else` cascades.** Concrete-implementation
+   peculiarities (dimension multiples, `max_pixels`/`max_vram`, engine quirks) are
+   *declared* in the elenco and resolved by **named adapters** applied generically
+   (`core/media_router.py`), or inside the implementation itself. Never an
+   `if model == "...":` ladder.
+4. **Fail clean, never silent fallback.** Premises (runtime availability, model
+   constraints) are checked and, on failure, raise with a reason — never a silent
+   swap to another engine/model (cf. §10.7.4).
+5. **Validate at assembly; warn vs error.** A predictable impossibility (bad
+   task/model/size) fails **at recipe submit/preflight** (JSON error), not three
+   attempts later; an automatic adaptation (e.g. size snapping) is a **warning**.
+   Uncontrollable runtime failures (OOM) are the DAG's job (fail-soft).
+6. **Staging vs final destination.** Generated artifacts go to a **staging** dir
+   (under `RP_TMP_DIR`), never to a repo/`docs/` path or the desk. Promotion to a
+   permanent location is an explicit action (`red-pill media promote`).
 
 ---
 

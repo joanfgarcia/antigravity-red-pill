@@ -567,6 +567,8 @@ update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Agent_Core"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$WORKSPACE_ROOT/scripts" "$WORKSPACE_ROOT/backups/qdrant" "$WORKSPACE_ROOT/backups/soul" "$WORKSPACE_ROOT/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
+# Raíz de temporales del arnés (RFC-HARNESS-004 §10.8): ~/tmp por defecto; .env la sobreescribe.
+RP_TMP="${RP_TMP_DIR:-$HOME/tmp}"; RP_TMP="${RP_TMP/#\~/$HOME}"; mkdir -p "$RP_TMP"
 
 # Desk scaffold (seeds/desk → AGENT_CORE_DIR, copy-if-absent — nunca pisa el
 # contenido que el operador ya ha tocado; las actualizaciones de convención
