@@ -159,11 +159,18 @@ class ScriptJobDriver(ResumableJobDriver):
 		if progress.get("stage_current_key") and not (progress.get("stage_total") or progress.get("stage_total_key")):
 			raise ValueError("progress.stage_current_key exige stage_total o stage_total_key")
 
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
+
 	# ── Preflight / teardown de entorno ────────────────────────────────────
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		import red_pill.config as cfg
 		from red_pill.core.vram_probe import VramProbe
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
 
 		pre = payload.get("preflight") or {}
 

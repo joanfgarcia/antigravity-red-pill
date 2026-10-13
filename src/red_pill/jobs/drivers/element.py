@@ -76,9 +76,16 @@ class ElementJobDriver(ResumableJobDriver):
 		if len(set(exit_codes.values())) != len(exit_codes):
 			raise ValueError("defer_exit_code, pause_exit_code y skip_exit_code no pueden coincidir")
 
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
+
 	# ── Preflight (requisitos declarativos) ────────────────────────────────
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
 		pre = payload.get("preflight") or {}
 		if pre.get("llm_required") and not self._llm_healthy(self._llm_port()):
 			raise JobDeferred("LLM local no responde — se difiere hasta que la GPU/LLM se libere")
