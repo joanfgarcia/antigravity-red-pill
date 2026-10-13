@@ -22,9 +22,11 @@ requiere.
 
 ## Uso directo
 ```bash
-${MUSIC_FORGE_HOME}/venv/bin/python scripts/music/compose.py \
-  --llm-prompt "lofi hip hop relajante en Do mayor" --out <destino>
+"$MUSIC_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/music/compose.py" \
+  --llm-prompt "lofi hip hop relajante en Do mayor" --out "$RP_MEDIA_STAGING/mi-cancion"
 ```
+Rutas por **env** (el runner exporta el `.env`); sin defaults ni rutas absolutas — si
+`MUSIC_FORGE_HOME`/`IA_DIR`/`RP_MEDIA_STAGING` no están configuradas, el comando falla.
 
 ## Vía job
 ```bash

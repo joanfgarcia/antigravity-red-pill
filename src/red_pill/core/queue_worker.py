@@ -439,12 +439,39 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 	return processed
 
 
+def _load_job_env() -> None:
+	"""Exporta el `.env` del operador (+ IA_DIR/REDPILL_DIR) al entorno del runner.
+
+	Los jobs heredan este entorno: así las vars de config (RP_TMP_DIR, *_FORGE_HOME,
+	RP_MEDIA_STAGING…) llegan a las recetas SIN fallbacks en las plantillas. `setdefault`:
+	no pisa lo ya presente; si una var no está configurada, no se inventa (fail-clean).
+	"""
+	import os
+
+	from red_pill.core.paths import get_bunker_root, get_config_dir
+
+	env_file = get_config_dir() / ".env"
+	if env_file.is_file():
+		for line in env_file.read_text(encoding="utf-8").splitlines():
+			line = line.strip()
+			if not line or line.startswith("#") or "=" not in line:
+				continue
+			key, _, value = line.partition("=")
+			key, value = key.strip(), value.strip().strip('"').strip("'")
+			if key and value:
+				os.environ.setdefault(key, os.path.expandvars(os.path.expanduser(value)))
+	root = str(get_bunker_root())
+	os.environ.setdefault("IA_DIR", root)
+	os.environ.setdefault("REDPILL_DIR", root)
+
+
 def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 	"""
 	Background daemon that consumes the SQLite queues
 	and slowly offloads them without blocking the main IDE Agent.
 	"""
 	logger.info("Starting Bünker Asynchronous Queue Worker (Zero-Daemon)...")
+	_load_job_env()
 	queue = MemoryQueueManager()
 
 	try:

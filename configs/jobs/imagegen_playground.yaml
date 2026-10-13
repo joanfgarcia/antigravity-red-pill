@@ -4,11 +4,12 @@
 # se REGISTRA en failures.jsonl y sale con skip_exit_code (79) → la cola lo
 # marca saltado y SIGUE con el resto. Reanudable por frontera de elemento.
 #
-# Salida → STAGING (RFC-HARNESS-004 §8.2): "${RP_MEDIA_STAGING:-${RP_TMP_DIR:-$HOME/tmp}/red-pill/media/staging}/imagegen-joel".
+# Salida → STAGING (RFC-HARNESS-004 §8.2): "$RP_MEDIA_STAGING/imagegen-joel" (env; sin default).
 # Al aprobar: `red-pill media promote imagegen-joel --to <destino>`.
-# Prompt: --prompt-file "${RP_MEDIA_PROMPT:-$OUT/prompt.txt}". El bloque `media:`
+# Prompt: --prompt-file "$RP_MEDIA_PROMPT" (env). El bloque `media:`
 # adapta el tamaño POR MODELO (zimage ÷16 → 1088; bonsai OOMea → salta).
 # Reutiliza la venv de configs/jobs/imagegen_setup.yaml (misma máquina).
+# Rutas por env (el runner exporta el .env): $IA_DIR (repo), $IMAGE_FORGE_HOME (forge).
 source: element_job
 media:
   task: concept          # baseline; la adaptación real se hace POR ELEMENTO (modelo)
@@ -17,8 +18,8 @@ media:
 priority: 3
 title: ImageGen playground — pantalla de carga (súcubo + Segador astado)
 mission_id: imagegen-joel
-elements_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-$HOME/tmp/red-pill/media/staging}/imagegen-joel"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python scripts/imagegen/gen_image.py --list-elements --prompt-file "${RP_MEDIA_PROMPT:-$OUT/prompt.txt}" --out "$OUT" --width 1920 --height 1080']
-step_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-$HOME/tmp/red-pill/media/staging}/imagegen-joel"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python -u scripts/imagegen/gen_image.py --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+elements_command: ["sh", "-c", 'OUT="$RP_MEDIA_STAGING/imagegen-joel"; mkdir -p "$OUT"; "$IMAGE_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/imagegen/gen_image.py" --list-elements --prompt-file "$RP_MEDIA_PROMPT" --out "$OUT" --width 1920 --height 1080']
+step_command: ["sh", "-c", 'OUT="$RP_MEDIA_STAGING/imagegen-joel"; mkdir -p "$OUT"; "$IMAGE_FORGE_HOME/venv/bin/python" -u "$IA_DIR/scripts/imagegen/gen_image.py" --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single
