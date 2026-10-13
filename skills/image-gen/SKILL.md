@@ -60,18 +60,28 @@ Cada modelo declara `constraints.dim_multiple`; el router ajusta con **warning**
 escribe la tuya (§3.b).
 
 ### 3.b Receta propia — "prompt libre, un modelo" (recomendado)
-Vive en **`.red-pill/jobs/<nombre>.yaml`** (no versionado; ver skill `job-manager`).
-Esqueleto exacto:
+Vive en **`.red-pill/jobs/<nombre>.yaml`** (**créalo si no existe**; no versionado;
+ver skill `job-manager`). **El intérprete sale del forge; el script, del repo** — no
+todo cuelga del forge. Esqueleto exacto (placeholders ya resueltos al sembrar):
 
 ```yaml
 source: element_job
 media: { model: flux2_klein, width: 1920, height: 1080 }   # o task: <token de §1>
 priority: 3
 title: mi-encargo
-elements_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-$RP_TMP_DIR/red-pill/media/staging}/mi-encargo"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python scripts/imagegen/gen_image.py --list-elements --models flux2_klein --prompt "un gato astronauta" --name mi-encargo --out "$OUT" --width 1920 --height 1080']
-step_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-$RP_TMP_DIR/red-pill/media/staging}/mi-encargo"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python -u scripts/imagegen/gen_image.py --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+elements_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-${RP_TMP_DIR:-$HOME/tmp}/red-pill/media/staging}/mi-encargo"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME}"/venv/bin/python "${REDPILL_DIR}/scripts/imagegen/gen_image.py" --list-elements --models flux2_klein --prompt "un gato astronauta" --name mi-encargo --out "$OUT" --width 1920 --height 1080']
+step_command: ["sh", "-c", 'OUT="${RP_MEDIA_STAGING:-${RP_TMP_DIR:-$HOME/tmp}/red-pill/media/staging}/mi-encargo"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME}"/venv/bin/python -u "${REDPILL_DIR}/scripts/imagegen/gen_image.py" --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
 skip_exit_code: 79
 ```
+
+Tres trampas que cuestan un job entero:
+- **Staging**: el runner **no exporta `.env`** a los jobs → `$RP_TMP_DIR`/`$RP_MEDIA_STAGING`
+  llegan **vacíos**; el fallback baja a `$HOME/tmp` (fiel a `get_tmp_dir()`). Sin el
+  `$HOME/tmp`, un `$RP_TMP_DIR` vacío expandiría a `/red-pill/...` (raíz → permission denied).
+- **Rutas ABSOLUTAS**: una receta en `.red-pill/jobs/` hereda **cwd = raíz del workspace**
+  (no el repo) → la ruta relativa `scripts/...` **no resuelve**. Usa `${REDPILL_DIR}/scripts/...`
+  (absoluta). El **intérprete** sí sale del forge: `${IMAGE_FORGE_HOME}/venv/bin/python`.
+- **`.red-pill/jobs/`** puede no existir → **créalo** antes (`mkdir -p .red-pill/jobs`).
 
 `gen_image.py` acepta `--prompt` (o `--prompt-file`), `--models <csv>`, `--name`
 (exacto) / `--tag` (patrón `<modelo>__<tag>__s<seed>`), `--width/--height`, `--seed`.

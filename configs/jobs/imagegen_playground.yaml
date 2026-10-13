@@ -4,7 +4,7 @@
 # se REGISTRA en failures.jsonl y sale con skip_exit_code (79) → la cola lo
 # marca saltado y SIGUE con el resto. Reanudable por frontera de elemento.
 #
-# Salida → STAGING (RFC-HARNESS-004 §8.2): "${RP_MEDIA_STAGING:-~/tmp/red-pill/media/staging}/imagegen-joel".
+# Salida → STAGING (RFC-HARNESS-004 §8.2): "${RP_MEDIA_STAGING:-${RP_TMP_DIR:-$HOME/tmp}/red-pill/media/staging}/imagegen-joel".
 # Al aprobar: `red-pill media promote imagegen-joel --to <destino>`.
 # Prompt: --prompt-file "${RP_MEDIA_PROMPT:-$OUT/prompt.txt}". El bloque `media:`
 # adapta el tamaño POR MODELO (zimage ÷16 → 1088; bonsai OOMea → salta).
