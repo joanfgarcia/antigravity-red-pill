@@ -382,35 +382,43 @@ numbers (paths, context ranges, VRAM footprints) as if they were universal.
 
 ---
 
-## 10.8 Harness Utilities — Parameters, Environment, Adapters
+## 10.8 Extensibility & Harness Utilities — General Rules
 
-Rules for harness/utility code (`scripts/**`, tool adapters, job drivers) that feeds
-the local runtimes (media generation, benchmarks, tool-chains):
+General behaviour rules for harness/utility code (drivers, adapters, plugins,
+integrators), **independent of any single feature**:
 
-1. **No hardcoded values.** A value that varies **between invocations** (prompt,
-   size, output path, name, seed) is a **parameter**. A value set **once and rarely
-   changed** (runtime home, staging root, model dir) is an **environment variable**
-   documented in `.env.example` — never a literal in code. This prevents the
-   anti-pattern of an agent editing source to change a size/name/path per run.
-2. **Recipes, not special-cases.** Reusable behaviour lives in **recipes**
-   (`configs/jobs/*.yaml`); a new model/task is **declarative metadata**
-   (`examples/*.yaml`), not a new code branch. Adding a model must **not** require
-   touching the harness.
-3. **Adapters as plugins — no `if/else` cascades.** Concrete-implementation
-   peculiarities (dimension multiples, `max_pixels`/`max_vram`, engine quirks) are
-   *declared* in the elenco and resolved by **named adapters** applied generically
-   (`core/media_router.py`), or inside the implementation itself. Never an
-   `if model == "...":` ladder.
-4. **Fail clean, never silent fallback.** Premises (runtime availability, model
-   constraints) are checked and, on failure, raise with a reason — never a silent
-   swap to another engine/model (cf. §10.7.4).
-5. **Validate at assembly; warn vs error.** A predictable impossibility (bad
-   task/model/size) fails **at recipe submit/preflight** (JSON error), not three
-   attempts later; an automatic adaptation (e.g. size snapping) is a **warning**.
-   Uncontrollable runtime failures (OOM) are the DAG's job (fail-soft).
-6. **Staging vs final destination.** Generated artifacts go to a **staging** dir
-   (under `RP_TMP_DIR`), never to a repo/`docs/` path or the desk. Promotion to a
-   permanent location is an explicit action (`red-pill media promote`).
+1. **No hardcoded values.** A value that varies **between invocations** is a
+   **parameter**; a value set **once** (a root, a home, a mode) is an
+   **environment variable** documented in `.env.example` — never a literal in code.
+2. **Data over branches.** Behaviour that varies by a **key** (model, engine, role,
+   backend, kind, …) is expressed as **declarative metadata** + a registry, not as
+   `if key == "…":` ladders. A new variant must be addable **without editing the
+   caller**.
+3. **One pattern for extension: registry + module-per-implementation (+ cascade).**
+   When a problem is a **family of interchangeable implementations selected at
+   runtime by a key**, model it as: (a) a **registry** where each implementation
+   **registers itself** (decorator / entry-point / discovery); (b) each
+   implementation in its **own module** that carries its own particularities;
+   (c) optionally an ordered **fallback chain** for a capability. The caller knows
+   only the **key**. Adding an implementation = **write its module + register it**;
+   nothing else changes — not even the call site. *Adapter / Strategy / Registry /
+   Chain-of-responsibility* are its well-known names. It is already the backbone of
+   this repo (job drivers, interceptor plugins, pulse strategies, bridge cascades,
+   model roles, runtime variants) — one pattern, uniform handling, particulars
+   resolved inside each implementation.
+4. **Fail clean, never silent fallback.** Check premises and raise with a reason;
+   never a silent swap to another implementation (cf. §10.7.4).
+5. **Validate at the earliest boundary; warn vs error.** A predictable impossibility
+   fails at the first boundary (submit/preflight), not deep in execution; an
+   automatic adaptation is a **warning**; uncontrollable failures are the job's own
+   fail-soft concern.
+6. **Separate transient from permanent.** Generated/transient artifacts go to a
+   **configured** staging/temp location (see §7) — never to a repo/`docs/` path or
+   the desk; moving something to its permanent home is an **explicit** action.
+
+> **When NOT to use #3**: a **single** implementation, or a value that is just
+> **data**. Wrapping those in a registry is over-abstraction. The pattern pays off
+> only with **≥2 interchangeable implementations chosen at runtime by a key**.
 
 ---
 
