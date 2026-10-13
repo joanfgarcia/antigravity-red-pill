@@ -1326,6 +1326,29 @@ def main() -> None:
 	runtime_stop.add_argument("profile", nargs="?", help="Perfil cuyo servidor dedicado abatir")
 	runtime_stop.add_argument("--all", action="store_true", help="Abatir todos los servidores dedicados vivos")
 
+	# RFC-HARNESS-004: media generativa — router por tarea, staging y promoción
+	media_parser = subparsers.add_parser("media", help="Media generativa: router por tarea, staging y promoción (RFC-HARNESS-004)")
+	media_sub = media_parser.add_subparsers(dest="media_cmd")
+	media_resolve = media_sub.add_parser("resolve", help="Resuelve task -> modelo del elenco media")
+	media_resolve.add_argument("--task")
+	media_resolve.add_argument("--model")
+	media_validate = media_sub.add_parser("validate", help="Valida/rutea una petición de generación (JSON)")
+	media_validate.add_argument("--task")
+	media_validate.add_argument("--model")
+	media_validate.add_argument("--width", type=int)
+	media_validate.add_argument("--height", type=int)
+	media_adapt = media_sub.add_parser("adapt", help="Adapta dimensiones para un modelo (JSON)")
+	media_adapt.add_argument("--model", required=True)
+	media_adapt.add_argument("--width", type=int)
+	media_adapt.add_argument("--height", type=int)
+	media_staging = media_sub.add_parser("staging", help="Muestra/crea el dir de staging de un encargo")
+	media_staging.add_argument("--title")
+	media_promote = media_sub.add_parser("promote", help="Promociona un artefacto del staging a destino definitivo")
+	media_promote.add_argument("title", help="Title del encargo en el staging")
+	media_promote.add_argument("--to", required=True, help="Destino definitivo (dir)")
+	media_promote.add_argument("--name", help="Fichero concreto a promocionar")
+	media_promote.add_argument("--move", action="store_true", help="Mover en vez de copiar")
+
 	# Centralized Job Manager
 	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
 	job_sub = job_parser.add_subparsers(dest="job_cmd")
@@ -1716,6 +1739,11 @@ def main() -> None:
 			return
 		elif args.command == "runtime":
 			handle_runtime(args)
+			return
+		elif args.command == "media":
+			from red_pill.media_cli import handle_media
+
+			handle_media(args)
 			return
 		elif args.command == "job":
 			handle_job(args)

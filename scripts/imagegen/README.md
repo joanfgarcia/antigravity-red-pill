@@ -51,3 +51,20 @@ Un modelo (o un género) que falla se registra y **no tumba el resto** (fail-sof
 GPU NVIDIA con ≥8 GB (probado en RTX 5070 Laptop, sm_120):
 - 4B/6B → **4-bit** obligatorio (bf16 no cabe).
 - Ternario Bonsai → cabe nativo (~6.7 GB pico a 1024²).
+
+## Router, adaptadores y staging (RFC-HARNESS-004)
+
+`gen_image.py` acepta prompt libre y tamaño no cuadrado y **no fija el múltiplo**:
+el tamaño lo **adapta el router** (`red_pill/core/media_router.py`) según el modelo
+(`constraints.dim_multiple`) → **warning** (`zimage ÷16`: 1080→1088) o **error
+limpio** si es imposible (`bonsai` OOM). El job side inyecta los params ya
+adaptados por env (`RP_MEDIA_WIDTH`/`RP_MEDIA_HEIGHT`/`RP_MEDIA_WARNINGS`).
+
+La generación va a **staging** `${RP_MEDIA_STAGING:-~/tmp/red-pill/media/staging}/<title>/`,
+**no** al desk. Al aprobar:
+
+```sh
+red-pill media validate --task typography --width 1920 --height 1080   # JSON
+red-pill media promote <title> --to <destino>                          # copia (--move) el elegido
+```
+
