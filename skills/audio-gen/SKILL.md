@@ -8,6 +8,12 @@ capability: audio_gen
 
 Audio local sobre la GPU/CPU del puesto. Elenco: `~/.config/red-pill/media_profiles.yaml`.
 
+## ¿Disponible / cómo montarlo?
+El forge (venv) se crea con `bash scripts/audio/bootstrap.sh`; raíz **configurable**
+`AUDIO_FORGE_HOME` (def `~/opt/audio-forge`) — cámbiala en `.env` si tu equipo/SO lo
+requiere. Modelos sugeridos en `examples/media_profiles.yaml.example`. Sin forge →
+capability inactiva (no se siembra esta skill).
+
 ## Voz (TTS)
 - `kokoro_voice` — ligero, **español OK**, sin clonación, corre en CPU.
 - `chatterbox_voice` — clonación (~5 s) + emoción, 23 idiomas.

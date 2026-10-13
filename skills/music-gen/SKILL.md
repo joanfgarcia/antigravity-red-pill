@@ -15,9 +15,14 @@ La música **simbólica** **no es un modelo**: es una **receta** (tool-chain), p
 - `configs/jobs/music_setup.yaml` — venv + Ardour.
 - `scripts/music/ardour_mcp_lite.py` — control del DAW por **MCP** (herramientas `ardour_*`).
 
+## ¿Disponible / cómo montarlo?
+El forge se crea con `bash scripts/music/bootstrap.sh`; raíz **configurable**
+`MUSIC_FORGE_HOME` (def `~/opt/music-forge`) — cámbiala en `.env` si tu equipo/SO lo
+requiere.
+
 ## Uso directo
 ```bash
-${MUSIC_FORGE_HOME:-$HOME/opt/music-forge}/venv/bin/python scripts/music/compose.py \
+${MUSIC_FORGE_HOME}/venv/bin/python scripts/music/compose.py \
   --llm-prompt "lofi hip hop relajante en Do mayor" --out <destino>
 ```
 

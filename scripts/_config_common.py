@@ -79,6 +79,14 @@ def build_vars(args):
 		"QUEUE_DB": queue_db,
 		"SESSION_DB": session_db,
 		"STATE_DIR": state_dir,
+		# Forges media (default documentado; override por env/.env). Los placeholders de
+		# las skills (`${IMAGE_FORGE_HOME}`…) se resuelven aquí al sembrar.
+		"IMAGE_FORGE_HOME": os.path.expanduser(os.environ.get("IMAGE_FORGE_HOME") or "~/opt/image-forge"),
+		"AUDIO_FORGE_HOME": os.path.expanduser(os.environ.get("AUDIO_FORGE_HOME") or "~/opt/audio-forge"),
+		"MUSIC_FORGE_HOME": os.path.expanduser(os.environ.get("MUSIC_FORGE_HOME") or "~/opt/music-forge"),
+		"REDPILL_IMAGE_MODELS_DIR": os.path.expanduser(
+			os.environ.get("REDPILL_IMAGE_MODELS_DIR") or "~/.local/share/red-pill/models/image"
+		),
 	}
 
 

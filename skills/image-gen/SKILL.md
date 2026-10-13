@@ -10,12 +10,14 @@ Generación de imagen local (diffusers / backend propio) sobre la GPU del puesto
 El **elenco** vive en `~/.config/red-pill/media_profiles.yaml` (seed:
 `examples/media_profiles.yaml.example`).
 
-## 0. ¿Está disponible?
+## 0. ¿Está disponible? ¿Cómo se monta?
 ```bash
 ${RED_PILL_CMD} media validate --task typography --width 1920 --height 1080   # JSON: status/model/adapted/warnings/errors
 ```
-Sin `media_profiles.yaml` o sin runtime montado → **instalable**:
-`bash scripts/imagegen/bootstrap.sh` (o job `configs/jobs/imagegen_setup.yaml`).
+Sin forge montado → **instalable**. Receta de creación: `bash scripts/imagegen/bootstrap.sh`
+(o job `configs/jobs/imagegen_setup.yaml`); **modelos sugeridos** en
+`examples/media_profiles.yaml.example`. La raíz del forge es **configurable**:
+`IMAGE_FORGE_HOME` (def `~/opt/image-forge`) — cámbiala en `.env` si tu equipo/SO lo requiere.
 
 ## 1. Pide por TAREA, no por modelo a pelo
 El router resuelve **tarea → modelo** (clasificación del bakeoff):
@@ -39,8 +41,8 @@ ${RED_PILL_CMD} job submit --recipe imagegen_playground --kick
 ```
 
 ## 4. Salida: STAGING → promoción
-La generación va a **staging** (`${RP_MEDIA_STAGING:-$RP_TMP_DIR/red-pill/media/staging}/<title>/`),
-**nunca** al repo ni al desk. Al aprobar:
+La generación va a **staging** (`$RP_MEDIA_STAGING`, o `$RP_TMP_DIR/red-pill/media/staging`
+por defecto), en `<staging>/<title>/` — **nunca** al repo ni al desk. Al aprobar:
 ```bash
 ${RED_PILL_CMD} media promote <title> --to /ruta/definitiva    # copia (o --move) el artefacto elegido
 ```

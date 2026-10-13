@@ -31,5 +31,13 @@ ver `docs/CORE/CONVENTIONS.md` §10.8).
 - **Fail-clean**: lo imposible falla en el ensamblado (error JSON); lo adaptable avisa
   (warning); lo no controlable (OOM) lo cubre el DAG (fail-soft).
 
+## Montar / ubicar los forges (opcional, por-máquina)
+Cada forge (imagen/audio/música) es un venv + pesos separado; default
+`~/opt/<area>-forge`, **configurable** por env en `.env`
+(`IMAGE_FORGE_HOME` / `AUDIO_FORGE_HOME` / `MUSIC_FORGE_HOME`) — cámbialo por gusto,
+restricciones de equipo o SO. Se crean con `scripts/<area>/bootstrap.sh`; modelos
+sugeridos en `examples/media_profiles.yaml.example`. Si un forge **no** está montado,
+su capability está inactiva y sus skills **no** se siembran.
+
 ## Skills relacionadas
 `image-gen` · `audio-gen` · `music-gen`.
