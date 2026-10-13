@@ -317,14 +317,32 @@ def evaluate(
 	if latest.get("input_hash") and input_hash and latest.get("input_hash") != input_hash:
 		return {"action": "process", "state": "pending", "reason": "input cambió (re-render)", "delta": ["input"], "input_hash": input_hash}
 	if engine and str(meta.get("engine") or "") and str(meta.get("engine")) != str(engine):
-		return {"action": "process", "state": "pending", "reason": f"engine distinto: {meta.get('engine')} → {engine}", "delta": ["engine"], "input_hash": input_hash}
+		return {
+			"action": "process",
+			"state": "pending",
+			"reason": f"engine distinto: {meta.get('engine')} → {engine}",
+			"delta": ["engine"],
+			"input_hash": input_hash,
+		}
 
 	old_manifest = meta.get("manifest")
 	delta = manifest_delta(old_manifest, pipeline["manifest"])
 	if delta is None:
 		if str(meta.get("annotate_prompt_version") or "") == str(pipeline["legacy_fingerprint"]):
-			return {"action": "skip", "state": "skipped", "reason": "versión vigente sin manifest (nada cambió)", "delta": [], "input_hash": input_hash}
-		return {"action": "process", "state": "pending", "reason": "legacy sin manifest (delta desconocido)", "delta": ["legacy"], "input_hash": input_hash}
+			return {
+				"action": "skip",
+				"state": "skipped",
+				"reason": "versión vigente sin manifest (nada cambió)",
+				"delta": [],
+				"input_hash": input_hash,
+			}
+		return {
+			"action": "process",
+			"state": "pending",
+			"reason": "legacy sin manifest (delta desconocido)",
+			"delta": ["legacy"],
+			"input_hash": input_hash,
+		}
 	if not delta:
 		return {"action": "skip", "state": "skipped", "reason": "sin delta de manifest", "delta": [], "input_hash": input_hash}
 	action, reason = predicate_action(delta, meta, meta.get("metrics") or {}, annotate_dir, pipeline)
@@ -343,7 +361,14 @@ def gate_session(
 	decision = evaluate(root, dir_rel, pipeline=pipeline, engine=engine)
 	if decision is None:
 		latest = read_gate(root, dir_rel).get("latest") or {}
-		return {"dir": dir_rel, "fast_path": True, "action": latest.get("action"), "state": latest.get("state"), "reason": latest.get("reason"), "emit": False}
+		return {
+			"dir": dir_rel,
+			"fast_path": True,
+			"action": latest.get("action"),
+			"state": latest.get("state"),
+			"reason": latest.get("reason"),
+			"emit": False,
+		}
 	meta = read_meta(root, dir_rel)
 	entry = seal(
 		root,

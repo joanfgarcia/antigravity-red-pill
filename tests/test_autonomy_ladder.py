@@ -28,7 +28,12 @@ def _probe(ladder, probe_id):
 
 def _fake_run(monkeypatch, messages, answer):
 	async def fake_run_local_minion(task, *, cwd=None, provider_name="sip"):
-		return {"ok": True, "answer": answer, "steps": 2, "messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": task}, *messages]}
+		return {
+			"ok": True,
+			"answer": answer,
+			"steps": 2,
+			"messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": task}, *messages],
+		}
 
 	monkeypatch.setattr(local_minion, "run_local_minion", fake_run_local_minion)
 
@@ -41,11 +46,20 @@ def test_sonda_viva_no_filtra_nada_de_lo_que_escribe_el_modelo(ladder, monkeypat
 		{
 			"role": "assistant",
 			"content": None,
-			"tool_calls": [{"id": "c1", "function": {"name": "bunker_memory_api", "arguments": json.dumps({"action": "search_memento", "payload": {"query": SECRET}})}}],
+			"tool_calls": [
+				{
+					"id": "c1",
+					"function": {"name": "bunker_memory_api", "arguments": json.dumps({"action": "search_memento", "payload": {"query": SECRET}})},
+				}
+			],
 		},
 		{"role": "tool", "name": "bunker_memory_api", "content": f"Memento: {SECRET} es la crónica"},
-		{"role": "user", "content": f"Tool `bunker_memory_api` result:\n<tool_output id=\"x\">\n{SECRET}\n</tool_output id=\"x\">"},
-		{"role": "assistant", "content": None, "tool_calls": [{"id": "c2", "function": {"name": "run_bash", "arguments": json.dumps({"command": f"echo {SECRET}"})}}]},
+		{"role": "user", "content": f'Tool `bunker_memory_api` result:\n<tool_output id="x">\n{SECRET}\n</tool_output id="x">'},
+		{
+			"role": "assistant",
+			"content": None,
+			"tool_calls": [{"id": "c2", "function": {"name": "run_bash", "arguments": json.dumps({"command": f"echo {SECRET}"})}}],
+		},
 		{"role": "user", "content": f"Tool `run_bash` result: {SECRET}"},
 		{"role": "assistant", "content": f"Memento Chronicle es {SECRET}, el archivo verbatim."},
 	]

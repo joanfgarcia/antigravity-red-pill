@@ -59,9 +59,7 @@ def _serve_once(sock_path, status, body):
 				rest += conn.recv(65536)
 			seen["payload"] = json.loads(rest)
 			raw = body.encode()
-			conn.sendall(
-				f"HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {len(raw)}\r\n\r\n".encode() + raw
-			)
+			conn.sendall(f"HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {len(raw)}\r\n\r\n".encode() + raw)
 		server.close()
 
 	threading.Thread(target=_handle, daemon=True).start()
@@ -71,7 +69,7 @@ def _serve_once(sock_path, status, body):
 def test_chat_aflora_el_error_del_daemon(tmp_path):
 	# Regresión: un 400 del daemon ({"error": ...}) reventaba con KeyError 'choices'.
 	sock = str(tmp_path / "sip.sock")
-	_serve_once(sock, 400, '{"error": "model \'granite_4_2_8b\' no es candidato de la task \'minion_tool\' (K1)"}')
+	_serve_once(sock, 400, "{\"error\": \"model 'granite_4_2_8b' no es candidato de la task 'minion_tool' (K1)\"}")
 	with pytest.raises(SipInferenceError) as exc:
 		SipInferenceProvider(socket_path=sock, model="granite_4_2_8b").chat([{"role": "user", "content": "hi"}], timeout=5)
 	assert "HTTP 400" in str(exc.value) and "K1" in str(exc.value)

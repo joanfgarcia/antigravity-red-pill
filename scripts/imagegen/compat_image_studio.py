@@ -57,11 +57,7 @@ def _load_gemlite_transformer_fixed(path, *, device="cuda:0"):
 	model = Flux2Transformer2DModel.from_config(cfg).to(torch.bfloat16)
 	state = torch.load(str(path / "state_dict.pt"), map_location="cpu")
 
-	layer_fqns = {
-		k.rpartition(".")[0]
-		for k in state
-		if k.rpartition(".")[2] in _GEMLITE_LAYER_KEYS and k.rpartition(".")[0]
-	}
+	layer_fqns = {k.rpartition(".")[0] for k in state if k.rpartition(".")[2] in _GEMLITE_LAYER_KEYS and k.rpartition(".")[0]}
 	n_swapped = 0
 	for fqn in layer_fqns:
 		parent_fqn, _, child_name = fqn.rpartition(".")
@@ -93,4 +89,3 @@ def _load_gemlite_transformer_fixed(path, *, device="cuda:0"):
 	model = model.to(device).eval()
 	model._inference_dtype = torch.float16
 	return model
-

@@ -39,9 +39,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 		with open(path, "r", encoding="utf-8") as f:
 			data: Any = yaml.safe_load(f) or {}
 	except FileNotFoundError:
-		raise MediaProfileError(
-			f"media_profiles.yaml no encontrado en {path} (copia examples/media_profiles.yaml.example)."
-		)
+		raise MediaProfileError(f"media_profiles.yaml no encontrado en {path} (copia examples/media_profiles.yaml.example).")
 	except yaml.YAMLError as e:
 		raise MediaProfileError(f"media_profiles.yaml malformado en {path}: {e}")
 	if not isinstance(data, dict):
@@ -113,11 +111,7 @@ class MediaProfiles:
 		raw = self._data.get("media_profiles") or {}
 		if not isinstance(raw, dict):
 			raise MediaProfileError(f"'media_profiles' debe ser un mapping en {self.path}")
-		self._profiles = {
-			mid: {**dict(profile), "id": mid}
-			for mid, profile in raw.items()
-			if isinstance(profile, dict)
-		}
+		self._profiles = {mid: {**dict(profile), "id": mid} for mid, profile in raw.items() if isinstance(profile, dict)}
 		self._loaded = True
 
 	def profiles(self) -> Dict[str, Dict[str, Any]]:

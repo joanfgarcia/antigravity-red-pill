@@ -45,9 +45,7 @@ class TestChatTemplateKwargs:
 	def test_reasoning_effort_passthrough(self):
 		from red_pill.inference import conduct
 
-		assert conduct.chat_template_kwargs(_resolved(thinking="on", reasoning_effort="medium")) == {
-			"reasoning_effort": "medium"
-		}
+		assert conduct.chat_template_kwargs(_resolved(thinking="on", reasoning_effort="medium")) == {"reasoning_effort": "medium"}
 
 	def test_no_conduct_no_kwargs(self):
 		from red_pill.inference import conduct

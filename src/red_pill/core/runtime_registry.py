@@ -175,9 +175,7 @@ class RuntimeRegistry:
 		"""Runtime obligatorio: o está operativo, o se falla limpio (nunca stock por accidente)."""
 		ok, reason = cls.check_available(runtime_id, variant=variant)
 		if not ok:
-			raise RuntimeUnavailableError(
-				f"[RUNTIME] {reason}. Instala/compila el engine o corrige '{get_runtimes_path()}'."
-			)
+			raise RuntimeUnavailableError(f"[RUNTIME] {reason}. Instala/compila el engine o corrige '{get_runtimes_path()}'.")
 		return cls.get(runtime_id, variant=variant)
 
 	@classmethod

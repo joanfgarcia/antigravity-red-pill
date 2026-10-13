@@ -59,7 +59,10 @@ def main() -> int:
 	out = Path(os.path.expanduser("~/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/reason_probes.jsonl"))
 	out.parent.mkdir(parents=True, exist_ok=True)
 	with out.open("a", encoding="utf-8") as f:
-		f.write(json.dumps({"model": model, "prompt_id": pid, "latency_s": round(res.latency_s, 1), "raw": res.raw_output[:4000]}, ensure_ascii=False) + "\n")
+		f.write(
+			json.dumps({"model": model, "prompt_id": pid, "latency_s": round(res.latency_s, 1), "raw": res.raw_output[:4000]}, ensure_ascii=False)
+			+ "\n"
+		)
 	print(f"[{model}/{pid}] {res.latency_s:.0f}s · {len(res.raw_output)} chars", flush=True)
 	return 0
 

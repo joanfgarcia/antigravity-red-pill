@@ -65,7 +65,9 @@ def _guard_python_path(models: list, allow_cpu: bool) -> None:
 	from red_pill.core.model_registry import ModelRegistry
 	from red_pill.core.runtime_registry import RuntimeRegistry
 
-	stock = [m for m in models if ((ModelRegistry.get_profile(m) or {}).get("runtime") or RuntimeRegistry.default_id()) == RuntimeRegistry.default_id()]
+	stock = [
+		m for m in models if ((ModelRegistry.get_profile(m) or {}).get("runtime") or RuntimeRegistry.default_id()) == RuntimeRegistry.default_id()
+	]
 	if not stock:
 		return
 	try:
@@ -97,6 +99,7 @@ def bench_elements() -> list:
 		else:
 			elements.append({"model": model, "thinking": "default"})
 	return elements
+
 
 PRIORITY_ROSTER = [
 	"bonsai_2_27b",
@@ -228,12 +231,26 @@ def _synthesis_probe():
 		return {"valid": ok, "hechos": f"{hits}/8", "frases": sentences, "sin_listas": no_list}
 
 	question = "Resume el informe en exactamente 3 frases en español. Incluye los nombres propios y las cifras clave. Sin listas ni títulos."
-	return Probe(name="synthesis_es", system_prompt="Eres un asistente útil y preciso.", user_message=SYNTH_REPORT + "\n\n" + question, validator=_v, max_tokens=6144, temperature=None)
+	return Probe(
+		name="synthesis_es",
+		system_prompt="Eres un asistente útil y preciso.",
+		user_message=SYNTH_REPORT + "\n\n" + question,
+		validator=_v,
+		max_tokens=6144,
+		temperature=None,
+	)
 
 
 def build_benchset(quick: bool, ctx: Optional[int]) -> list:
 	probes = [
-		Probe(name=f"contract_{name}", system_prompt=CONTRACT_PROMPT, user_message=data, validator=_make_contract_validator(data, must), max_tokens=6144, temperature=None)
+		Probe(
+			name=f"contract_{name}",
+			system_prompt=CONTRACT_PROMPT,
+			user_message=data,
+			validator=_make_contract_validator(data, must),
+			max_tokens=6144,
+			temperature=None,
+		)
 		for name, data, must in CONTRACT_CASES
 	]
 	depths = [8192] if quick else [8192, 16384]
@@ -241,9 +258,12 @@ def build_benchset(quick: bool, ctx: Optional[int]) -> list:
 		if ctx and depth > ctx - 4096:
 			continue
 		name, message, validator = _needle_case(depth)
-		probes.append(Probe(name=name, system_prompt="Eres un asistente útil.", user_message=message, validator=validator, max_tokens=1024, temperature=None))
+		probes.append(
+			Probe(name=name, system_prompt="Eres un asistente útil.", user_message=message, validator=validator, max_tokens=1024, temperature=None)
+		)
 	probes.append(_synthesis_probe())
 	return probes
+
 
 def _apply_thinking_variant(runner, mode: Optional[str]) -> None:
 	resolved = getattr(runner, "resolved", None)

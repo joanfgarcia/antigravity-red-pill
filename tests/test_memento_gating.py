@@ -86,16 +86,26 @@ def test_seal_upsert_por_run_id_y_cap(tmp_path):
 	pipeline = gating.current_pipeline()
 	for i in range(3):
 		gating.seal(
-			tmp_path, dir_rel, run_id="r1", action="skip", state="skipped",
-			reason=f"v{i}", to_fingerprint=pipeline["manifest_hash"],
+			tmp_path,
+			dir_rel,
+			run_id="r1",
+			action="skip",
+			state="skipped",
+			reason=f"v{i}",
+			to_fingerprint=pipeline["manifest_hash"],
 		)
 	gate = gating.read_gate(tmp_path, dir_rel)
 	assert len(gate["history"]) == 1  # upsert: no duplica el mismo run
 	assert gate["latest"]["reason"] == "v2"
 	for i in range(12):
 		gating.seal(
-			tmp_path, dir_rel, run_id=f"r{i}", action="skip", state="skipped",
-			reason="x", to_fingerprint=pipeline["manifest_hash"],
+			tmp_path,
+			dir_rel,
+			run_id=f"r{i}",
+			action="skip",
+			state="skipped",
+			reason="x",
+			to_fingerprint=pipeline["manifest_hash"],
 		)
 	gate = gating.read_gate(tmp_path, dir_rel)
 	assert len(gate["history"]) == gating.HISTORY_CAP
@@ -130,8 +140,13 @@ def test_failed_terminal_no_reintenta(tmp_path):
 	dir_rel = _session(tmp_path, meta=_meta())
 	pipeline = gating.current_pipeline()
 	gating.seal(
-		tmp_path, dir_rel, run_id="r1", action="process", state="failed",
-		reason="fallo inyectado", to_fingerprint=pipeline["manifest_hash"],
+		tmp_path,
+		dir_rel,
+		run_id="r1",
+		action="process",
+		state="failed",
+		reason="fallo inyectado",
+		to_fingerprint=pipeline["manifest_hash"],
 		input_hash=gating.session_input_hash(tmp_path, dir_rel),
 	)
 	result = gating.gate_session(tmp_path, dir_rel, run_id="r2", pipeline=pipeline)
@@ -245,8 +260,14 @@ def test_input_cambiado_dispara_process(tmp_path):
 	dir_rel = _session(tmp_path, meta=_meta())
 	pipeline = gating.current_pipeline()
 	gating.seal(
-		tmp_path, dir_rel, run_id="r1", action="skip", state="skipped",
-		reason="sin delta", to_fingerprint=pipeline["manifest_hash"], input_hash="hash-viejo",
+		tmp_path,
+		dir_rel,
+		run_id="r1",
+		action="skip",
+		state="skipped",
+		reason="sin delta",
+		to_fingerprint=pipeline["manifest_hash"],
+		input_hash="hash-viejo",
 	)
 	result = gating.gate_session(tmp_path, dir_rel, run_id="r2", pipeline=pipeline)
 	assert result["action"] == "process"

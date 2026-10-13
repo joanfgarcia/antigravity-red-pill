@@ -137,8 +137,13 @@ def test_process_one_cuenta_en_ledger(tmp_path, tmp_ledger, monkeypatch):
 	dir_rel = _session(tmp_path, "cuenta", meta=_meta())
 	ledger.open_run(run_id="rC", stage="annotate", to_fingerprint="h")
 	gating.seal(
-		tmp_path, dir_rel, run_id="rC", action="process", state="pending",
-		reason="test", to_fingerprint=gating.current_pipeline()["manifest_hash"],
+		tmp_path,
+		dir_rel,
+		run_id="rC",
+		action="process",
+		state="pending",
+		reason="test",
+		to_fingerprint=gating.current_pipeline()["manifest_hash"],
 	)
 	monkeypatch.setattr(mod, "_canonical_ids", lambda: {})
 	monkeypatch.setattr(mod, "annotate_session", lambda *a, **k: 0.5)

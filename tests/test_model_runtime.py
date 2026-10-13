@@ -95,7 +95,7 @@ def test_extract_thinking_no_parte_por_palabras_de_la_prosa():
 def test_extract_thinking_sin_cerrar_y_cli():
 	# Presupuesto agotado razonando: nada del razonamiento se filtra como respuesta.
 	assert extract_thinking("<think>sigo pensando y me corto") == ("sigo pensando y me corto", "")
-	assert extract_thinking("[Start thinking]razono[End thinking]\n{\"ok\": 1}") == ("razono", '{"ok": 1}')
+	assert extract_thinking('[Start thinking]razono[End thinking]\n{"ok": 1}') == ("razono", '{"ok": 1}')
 
 
 def test_resolve_rechaza_experimental_y_custom_juntos():

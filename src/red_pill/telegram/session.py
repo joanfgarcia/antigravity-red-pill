@@ -146,10 +146,7 @@ class TelegramSessionManager:
 
 			existing = CognitiveQueueManager().find_task_by_payload_key(source="samantha", key="session_id", value=session_id)
 			if existing:
-				logger.info(
-					f"[TelegramSession] Compaction already {existing['status']} for {session_id} "
-					f"({existing['id'][:8]}) — skipping duplicate"
-				)
+				logger.info(f"[TelegramSession] Compaction already {existing['status']} for {session_id} ({existing['id'][:8]}) — skipping duplicate")
 				return None
 		except Exception as e:
 			logger.warning(f"[TelegramSession] Compaction dedup check failed: {e} — enqueueing anyway")

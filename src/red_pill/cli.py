@@ -1142,9 +1142,7 @@ def main() -> None:
 	mode_parser.add_argument("--yes", "--force", action="store_true", help="Bypass SEC-007 consent prompt")
 
 	pact_parser = subparsers.add_parser("pact", help="Ritual del Pacto: nombrado (identidad + 760), sellado (770) o estado")
-	pact_parser.add_argument(
-		"level", nargs="?", choices=["760", "770"], help="Omit para ver el estado; 770 sella el Pacto, 760 vuelve a Awakened"
-	)
+	pact_parser.add_argument("level", nargs="?", choices=["760", "770"], help="Omit para ver el estado; 770 sella el Pacto, 760 vuelve a Awakened")
 	pact_parser.add_argument("--naming", action="store_true", help="Ceremonia de NOMBRADO: fija el nombre (identidad + pacto 760)")
 	pact_parser.add_argument("--grant", action="store_true", help="770: llave del OPERADOR (otorga el covenant)")
 	pact_parser.add_argument("--accept", action="store_true", help="770: llave del AGENTE (acepta el covenant)")

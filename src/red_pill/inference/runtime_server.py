@@ -159,9 +159,7 @@ class RuntimeServer:
 			runtime = RuntimeRegistry.for_profile(profile, variant=self.variant)
 		server_binary = runtime.get("server") or runtime.get("binary")
 		if not server_binary or not os.access(server_binary, os.X_OK):
-			raise RuntimeUnavailableError(
-				f"[RUNTIME] '{runtime_id or RuntimeRegistry.default_id()}' sin binario server ejecutable ({server_binary})"
-			)
+			raise RuntimeUnavailableError(f"[RUNTIME] '{runtime_id or RuntimeRegistry.default_id()}' sin binario server ejecutable ({server_binary})")
 		model_path = str(Path(os.path.expanduser(str(profile.get("model_path", "")))))
 		if not model_path or not os.path.isfile(model_path):
 			raise RuntimeServerError(f"model_path inexistente para '{self.profile_name}': {model_path}")
@@ -174,13 +172,20 @@ class RuntimeServer:
 		ngl = int(hw.get("n_gpu_layers", -1))
 		cmd = [
 			resolved["server_binary"],
-			"-m", resolved["model_path"],
-			"-ngl", str(ngl),
-			"-fa", "on",
-			"-c", str(n_ctx),
-			"-np", "1",  # 8 GB VRAM: un slot (RFC-HARNESS-003 quirks)
-			"--host", self.host,
-			"--port", str(self.port),
+			"-m",
+			resolved["model_path"],
+			"-ngl",
+			str(ngl),
+			"-fa",
+			"on",
+			"-c",
+			str(n_ctx),
+			"-np",
+			"1",  # 8 GB VRAM: un slot (RFC-HARNESS-003 quirks)
+			"--host",
+			self.host,
+			"--port",
+			str(self.port),
 		]
 		if self.kv_type:
 			cmd += ["-ctk", self.kv_type, "-ctv", self.kv_type]
@@ -280,9 +285,7 @@ class RuntimeServer:
 			free_mb = VramProbe.get_free_mb()
 		if free_mb < required_mb:
 			hint = "" if self.unload_daemon else " (activa unload_daemon=True para swap con el daemon)"
-			raise RuntimeServerError(
-				f"VRAM insuficiente para '{self.profile_name}': {free_mb} MB libres < {required_mb} MB requeridos{hint}"
-			)
+			raise RuntimeServerError(f"VRAM insuficiente para '{self.profile_name}': {free_mb} MB libres < {required_mb} MB requeridos{hint}")
 
 	def _request_daemon_unload(self) -> bool:
 		"""Evict del modelo residente vía proxy dual-bind (/v1/unload, patrón script_job).

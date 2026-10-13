@@ -52,7 +52,7 @@ def test_pi_extension_paridad_alma():
 	src = SEED.read_text(encoding="utf-8")
 	# Handshake MCP con cuerpo compuesto (paridad F5).
 	assert "async function handshake(" in src
-	assert "callTool(\"sovereign_handshake\"" in src
+	assert 'callTool("sovereign_handshake"' in src
 	assert "`pi:${sessionId}`" in src
 	assert "void handshake(" in src
 	# No reintroducir el link en el hook ni el tagScan (retirados: un solo escritor).

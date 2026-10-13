@@ -131,7 +131,7 @@ def test_run_rhizodb_washout_attenuates_repeated_runs(monkeypatch, tmp_path):
 
 	run_rhizodb_washout_and_pruning(mock_mem_mgr)
 
-	gamma = 0.85 ** 0.5
+	gamma = 0.85**0.5
 	expected = round(gamma * 0.8 + (1.0 - gamma) * (200.0 / 365.0), 3)
 	ops = mock_client.batch_update_points.call_args[1]["update_operations"]
 	assert ops[0].set_payload.payload["reinforcement_score"] == pytest.approx(expected, abs=0.01)

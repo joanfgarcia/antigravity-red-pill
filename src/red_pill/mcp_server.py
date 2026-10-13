@@ -543,9 +543,7 @@ async def handle_recall(arguments: Dict[str, Any]):
 	deep = bool(arguments.get("deep", False))
 
 	def _run() -> List[Any]:
-		return MemoryManager().search_and_reinforce(
-			collection, query, limit=limit, deep_recall=deep, caller="mcp_recall", hybrid=True
-		)
+		return MemoryManager().search_and_reinforce(collection, query, limit=limit, deep_recall=deep, caller="mcp_recall", hybrid=True)
 
 	try:
 		# Blocking search (embeddings + Qdrant + RRF/MMR): never run it on the event loop.
@@ -1666,11 +1664,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			# turn (bridge turns are persisted by their transport relay).
 			if clean_p and (len(clean_p) > 20 or len(clean_r) > 20):
 				relay_originator = str(arguments.get("originator") or "").strip() or None
-				relay_session_id = (
-					relay_originator.split(":", 1)[1]
-					if relay_originator and ":" in relay_originator
-					else None
-				)
+				relay_session_id = relay_originator.split(":", 1)[1] if relay_originator and ":" in relay_originator else None
 				MemoryQueueManager().enqueue_memory(
 					clean_p,
 					clean_r,
@@ -1862,9 +1856,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 	# así el bridge NO se confunde entre IDEs simultáneos (dos servidores MCP
 	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
 	# aunque el originator venga explícito.
-	explicit_originator = str(
-		arguments.get("originator") or os.getenv("REDPILL_ORIGINATOR") or ""
-	).strip() or None
+	explicit_originator = str(arguments.get("originator") or os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
 	harness = os.getenv("REDPILL_HARNESS") or (explicit_originator.split(":", 1)[0] if explicit_originator else None)
 	bridge = _harness_bridge(harness)
 	originator = explicit_originator or (bridge["originator"] or None)
@@ -1943,8 +1935,14 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 		"type": "object",
 		"properties": {
 			"user_prompt": {"type": "string", "description": "The current user message."},
-			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
-			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook)."},
+			"previous_prompt": {
+				"type": "string",
+				"description": "Prompt from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook).",
+			},
+			"previous_response": {
+				"type": "string",
+				"description": "Response from the preceding turn (Silent Scribe Relay; only needed on harnesses without an editor hook).",
+			},
 			"previous_model": {"type": "string", "description": "The LLM model name that generated the previous response."},
 			"previous_category": {
 				"type": "string",

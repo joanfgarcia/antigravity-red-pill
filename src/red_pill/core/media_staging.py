@@ -65,10 +65,7 @@ def promote(title: str, to: str, name: Optional[str] = None, move: bool = False)
 	elif not artifacts:
 		raise FileNotFoundError(f"sin artefactos media en {origin}")
 	else:
-		raise ValueError(
-			f"hay {len(artifacts)} artefactos en {origin}; usa --name para elegir uno "
-			f"({', '.join(a.name for a in artifacts)})"
-		)
+		raise ValueError(f"hay {len(artifacts)} artefactos en {origin}; usa --name para elegir uno ({', '.join(a.name for a in artifacts)})")
 
 	dest_dir = Path(os.path.expanduser(to))
 	dest_dir.mkdir(parents=True, exist_ok=True)

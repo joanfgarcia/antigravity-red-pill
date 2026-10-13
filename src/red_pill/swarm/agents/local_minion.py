@@ -130,8 +130,7 @@ TOOLS: List[Dict[str, Any]] = [
 		"function": {
 			"name": "swarm_orchestrator_api",
 			"description": (
-				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background "
-				"reports), session_board (live and recent sessions)."
+				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports), session_board (live and recent sessions)."
 			),
 			"parameters": {
 				"type": "object",
@@ -225,11 +224,13 @@ def _normalize_native_toolcalls(parsed: List[dict], turn: int) -> List[Dict[str,
 	out: List[Dict[str, Any]] = []
 	for i, tc in enumerate(parsed):
 		fn = tc.get("function") or {}
-		out.append({
-			"id": f"call_native_{turn}_{i}",
-			"type": "function",
-			"function": {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}},
-		})
+		out.append(
+			{
+				"id": f"call_native_{turn}_{i}",
+				"type": "function",
+				"function": {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}},
+			}
+		)
 	return out
 
 

@@ -743,7 +743,9 @@ def audit_engram_quality(
 
 	from red_pill.core.providers import ProviderRegistry
 
-	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name})
+	system_prompt = load_prompt_text(
+		"engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name}
+	)
 
 	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"
 

@@ -123,8 +123,14 @@ def _force_sweep(root: Path) -> list:
 	decisions: dict = {}
 	for d in _sessions(root):
 		gating.seal(
-			root, d, run_id=run_id, action="forced", state="pending", reason="--all (forzado)",
-			to_fingerprint=pipeline["manifest_hash"], input_hash=gating.session_input_hash(root, d),
+			root,
+			d,
+			run_id=run_id,
+			action="forced",
+			state="pending",
+			reason="--all (forzado)",
+			to_fingerprint=pipeline["manifest_hash"],
+			input_hash=gating.session_input_hash(root, d),
 		)
 		decisions[d] = {"action": "forced", "reason": "--all (forzado)"}
 		elements.append({"dir": d, "action": "forced", "run_id": run_id})
@@ -275,9 +281,14 @@ def process_one(
 		current_hash = gating.session_input_hash(root, dir_rel)
 		if latest.get("input_hash") and current_hash and latest.get("input_hash") != current_hash:
 			gating.seal(
-				root, dir_rel, run_id=run_id, action=action or "forced", state="pending",
+				root,
+				dir_rel,
+				run_id=run_id,
+				action=action or "forced",
+				state="pending",
 				reason=f"{latest.get('reason') or 'pendiente'} (input cambió)",
-				to_fingerprint=str(latest.get("to_fingerprint") or ""), input_hash=current_hash,
+				to_fingerprint=str(latest.get("to_fingerprint") or ""),
+				input_hash=current_hash,
 			)
 	try:
 		max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
@@ -318,12 +329,18 @@ def main() -> None:
 		help="Entra al pipeline en esa fase reutilizando el estado persistido (parcial o notas); degrada con aviso si faltan prerrequisitos.",
 	)
 	parser.add_argument("--reason", default=None, help="Motivo de la invocación (audit trail en _meta.json).")
-	parser.add_argument("--gate-migrate", action="store_true", help="Migración one-shot (MEM-010 F2b): completa manifest/métricas en metas legacy adoptables.")
+	parser.add_argument(
+		"--gate-migrate", action="store_true", help="Migración one-shot (MEM-010 F2b): completa manifest/métricas en metas legacy adoptables."
+	)
 	parser.add_argument("--dry-run", action="store_true", help="Con --gate-migrate/--rebuild-run: solo censo, sin escribir.")
 	parser.add_argument("--runs", action="store_true", help="Lista los últimos runs del ledger (MEM-010 F3).")
 	parser.add_argument("--backfill-run", default=None, help="F4: reconstruye en el ledger un job ya ejecutado desde su log (state/jobs/<id>.log).")
-	parser.add_argument("--checkpoint", default=None, help="Con --backfill-run: JSON {index, elements} del job para marcar no-alcanzadas como unknown.")
-	parser.add_argument("--rebuild-run", default=None, help="Remediación (MEM-010 F3): re-sella como forced el subconjunto de ese run y emite la lista.")
+	parser.add_argument(
+		"--checkpoint", default=None, help="Con --backfill-run: JSON {index, elements} del job para marcar no-alcanzadas como unknown."
+	)
+	parser.add_argument(
+		"--rebuild-run", default=None, help="Remediación (MEM-010 F3): re-sella como forced el subconjunto de ese run y emite la lista."
+	)
 	parser.add_argument("--actions", default="all", help="Con --rebuild-run: processed,skipped,failed,all (CSV).")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
@@ -360,11 +377,28 @@ def main() -> None:
 			for element in elements[index:]:
 				decisions.setdefault(str((element or {}).get("dir")), {"action": "unknown", "reason": "no alcanzado al cierre del backfill"})
 		run_id = f"job-{job_id}"
-		ledger.open_run(run_id=run_id, stage="annotate", to_fingerprint="legacy", from_fingerprint="legacy", reason=f"backfill del run fundacional {job_id}", job_id=job_id)
+		ledger.open_run(
+			run_id=run_id,
+			stage="annotate",
+			to_fingerprint="legacy",
+			from_fingerprint="legacy",
+			reason=f"backfill del run fundacional {job_id}",
+			job_id=job_id,
+		)
 		ledger.record_decisions(run_id, decisions)
 		ledger.set_counts(run_id, processed=sum(1 for v in decisions.values() if v["action"] == "processed"))
 		ledger.close_stale_runs(resolutions={run_id: "closed-incomplete"})
-		print(json.dumps({"run_id": run_id, "decisiones": len(decisions), "processed": sum(1 for v in decisions.values() if v["action"] == "processed"), "unknown": sum(1 for v in decisions.values() if v["action"] == "unknown")}, ensure_ascii=False))
+		print(
+			json.dumps(
+				{
+					"run_id": run_id,
+					"decisiones": len(decisions),
+					"processed": sum(1 for v in decisions.values() if v["action"] == "processed"),
+					"unknown": sum(1 for v in decisions.values() if v["action"] == "unknown"),
+				},
+				ensure_ascii=False,
+			)
+		)
 		return
 	if args.rebuild_run:
 		import re as _re
@@ -393,7 +427,7 @@ def main() -> None:
 			wanted = set().union(*(aliases.get(a, {a}) for a in requested)) if requested else set()
 			subset = {d: v for d, v in (original.get("decisions") or {}).items() if str((v or {}).get("action")) in wanted}
 			if "failed" in requested:
-				for d in (original.get("failures") or {}):
+				for d in original.get("failures") or {}:
 					subset.setdefault(d, {"action": "failed", "reason": "fallo registrado"})
 		new_run = f"{args.rebuild_run}-rb-" + ("".join(sorted(a[0] for a in requested)) or "all")
 		pipeline = gating.current_pipeline()
@@ -415,7 +449,9 @@ def main() -> None:
 					to_fingerprint=pipeline["manifest_hash"],
 					input_hash=gating.session_input_hash(root, d),
 				)
-			ledger.record_decisions(new_run, {d: {"action": "forced", "reason": args.reason or f"rebuild-run {args.rebuild_run}"} for d in sorted(subset)})
+			ledger.record_decisions(
+				new_run, {d: {"action": "forced", "reason": args.reason or f"rebuild-run {args.rebuild_run}"} for d in sorted(subset)}
+			)
 		print(json.dumps([{"dir": d, "action": "forced", "run_id": new_run} for d in sorted(subset)], ensure_ascii=False))
 		return
 	if args.status:
@@ -427,7 +463,7 @@ def main() -> None:
 			actions: dict = {}
 			reasons: dict = {}
 			for d in _sessions(root):
-				latest = (gating.read_gate(root, d).get("latest") or {})
+				latest = gating.read_gate(root, d).get("latest") or {}
 				if latest.get("to_fingerprint") == pipeline["manifest_hash"]:
 					key = str(latest.get("action") or "?")
 					actions[key] = actions.get(key, 0) + 1

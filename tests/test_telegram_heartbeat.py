@@ -131,9 +131,7 @@ class TestHeartbeatLease:
 
 		worker = IDEWorker.__new__(IDEWorker)
 		worker._heartbeat_stop = threading.Event()
-		worker._heartbeat_thread = threading.Thread(
-			target=lambda: worker._heartbeat_stop.wait(30), name="heartbeat-daemon", daemon=True
-		)
+		worker._heartbeat_thread = threading.Thread(target=lambda: worker._heartbeat_stop.wait(30), name="heartbeat-daemon", daemon=True)
 		worker._heartbeat_thread.start()
 		assert worker._heartbeat_thread.is_alive()
 

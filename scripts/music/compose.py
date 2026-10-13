@@ -34,8 +34,25 @@ import urllib.request
 from pathlib import Path
 
 # Nota MIDI (C4 = 60) y grados de la escala mayor.
-SEMITONES = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5,
-	"F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
+SEMITONES = {
+	"C": 0,
+	"C#": 1,
+	"Db": 1,
+	"D": 2,
+	"D#": 3,
+	"Eb": 3,
+	"E": 4,
+	"F": 5,
+	"F#": 6,
+	"Gb": 6,
+	"G": 7,
+	"G#": 8,
+	"Ab": 8,
+	"A": 9,
+	"A#": 10,
+	"Bb": 10,
+	"B": 11,
+}
 MAJOR = [0, 2, 4, 5, 7, 9, 11]
 _ES = {"do": "C", "re": "D", "mi": "E", "fa": "F", "sol": "G", "la": "A", "si": "B"}
 
@@ -47,15 +64,25 @@ def _norm_key(k: str) -> str:
 	low = k.strip().lower()
 	for es, en in _ES.items():
 		if low.startswith(es):
-			k = en + k[len(es):]
+			k = en + k[len(es) :]
 			break
 	m = re.match(r"([A-Ga-g])([#b]?)", k)
 	root = (m.group(1).upper() + m.group(2)) if m else "C"
 	return root if root in SEMITONES else "C"
 
+
 # Progresiones por grado (0-based) → semitonos de la tríada sobre la tónica.
-ROMAN = {"I": (0, 4, 7), "ii": (2, 5, 9), "iii": (4, 7, 11), "IV": (5, 9, 12),
-	"V": (7, 11, 14), "vi": (9, 12, 16), "iv": (5, 8, 12), "i": (0, 3, 7), "v": (7, 10, 14)}
+ROMAN = {
+	"I": (0, 4, 7),
+	"ii": (2, 5, 9),
+	"iii": (4, 7, 11),
+	"IV": (5, 9, 12),
+	"V": (7, 11, 14),
+	"vi": (9, 12, 16),
+	"iv": (5, 8, 12),
+	"i": (0, 3, 7),
+	"v": (7, 10, 14),
+}
 
 
 def _note(key: str, semi: int, octave: int = 4) -> int:
@@ -169,19 +196,22 @@ def _llm_spec(prompt: str) -> dict:
 	url = os.environ.get("REDPILL_LLM_URL", "http://localhost:8760").rstrip("/")
 	# RULE 5 (PROMPT-001): el system prompt es un RECURSO declarado, no un string inline.
 	system = (Path(__file__).resolve().parent / "prompts" / "composer_system.txt").read_text(encoding="utf-8").strip()
-	req_body = json.dumps({
-		"messages": [
-			{"role": "system", "content": system},
-			{"role": "user", "content": prompt},
-		],
-		"temperature": 0.7, "max_tokens": 256,
-	}).encode()
+	req_body = json.dumps(
+		{
+			"messages": [
+				{"role": "system", "content": system},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.7,
+			"max_tokens": 256,
+		}
+	).encode()
 	req = urllib.request.Request(f"{url}/v1/chat/completions", data=req_body, headers={"Content-Type": "application/json"})
 	with urllib.request.urlopen(req, timeout=120) as r:
 		data = json.loads(r.read())
 	content = data["choices"][0]["message"]["content"]
 	start, end = content.find("{"), content.rfind("}")
-	return json.loads(content[start:end + 1])
+	return json.loads(content[start : end + 1])
 
 
 DEMO = {"tempo": 92, "key": "C", "progression": ["I", "V", "vi", "IV"], "bars": 8}

@@ -499,8 +499,7 @@ def test_ascend_script_ignora_notas_ya_ascendidas(tmp_path):
 	nota = root / "2026-09" / "opencode" / "s1" / "annotate"
 	nota.mkdir(parents=True)
 	(nota / "001-nota.md").write_text(
-		"---\nsession_id: opencode:s1\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.1\n"
-		"significance: 0.9\nascended: true\n---\ncuerpo\n",
+		"---\nsession_id: opencode:s1\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.1\nsignificance: 0.9\nascended: true\n---\ncuerpo\n",
 		encoding="utf-8",
 	)
 	assert mod._ascendable_sessions(root) == {}

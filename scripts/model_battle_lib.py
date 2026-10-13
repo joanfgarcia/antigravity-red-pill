@@ -443,7 +443,10 @@ class FastFlowLMRunner:
 		think_body["max_tokens"] = self._think_budget(probe)
 		think_body["messages"] = [
 			{"role": "system", "content": probe.system_prompt},
-			{"role": "user", "content": f"{probe.user_message}\n\nPiensa el problema con calma y, al terminar, escribe un resumen de tu razonamiento en ≤{words} palabras dentro de <resumen>...</resumen>."},
+			{
+				"role": "user",
+				"content": f"{probe.user_message}\n\nPiensa el problema con calma y, al terminar, escribe un resumen de tu razonamiento en ≤{words} palabras dentro de <resumen>...</resumen>.",
+			},
 		]
 		data_a = self._chat(think_body)
 		msg_a = (data_a.get("choices") or [{}])[0].get("message", {})
@@ -452,7 +455,10 @@ class FastFlowLMRunner:
 		answer_body = self._request_body(probe)
 		answer_body["messages"] = [
 			{"role": "system", "content": probe.system_prompt},
-			{"role": "user", "content": f"{probe.user_message}\n\n[Razonamiento previo, resumen]\n{summary}\n\nResponde ahora directamente a la tarea, con el formato pedido y sin razonar más."},
+			{
+				"role": "user",
+				"content": f"{probe.user_message}\n\n[Razonamiento previo, resumen]\n{summary}\n\nResponde ahora directamente a la tarea, con el formato pedido y sin razonar más.",
+			},
 		]
 		answer_body["max_tokens"] = min(answer_body["max_tokens"], 3072)
 		return self._chat(answer_body)
@@ -544,4 +550,6 @@ def runner_for(
 	except Exception as e:
 		print(f"[runner_for] conducta no resoluble para '{model_name}' ({e}) — camino crudo", flush=True)
 	stock_ctx = n_ctx or (resolved.resolved_n_ctx() if resolved is not None else 6144)
-	return BattleRunner(model_name, gguf_path, chat_format=chat_format, n_ctx=stock_ctx, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, resolved=resolved)
+	return BattleRunner(
+		model_name, gguf_path, chat_format=chat_format, n_ctx=stock_ctx, n_gpu_layers=n_gpu_layers, use_mmap=use_mmap, resolved=resolved
+	)

@@ -182,9 +182,7 @@ def _load_bonsai(cfg: dict):
 	forge = _forge_home()
 	studio = forge / "image-studio"
 	if not (studio / "backend_gpu").is_dir():
-		raise RuntimeError(
-			f"image-studio/backend_gpu no encontrado en {studio} — corre scripts/imagegen/bootstrap.sh"
-		)
+		raise RuntimeError(f"image-studio/backend_gpu no encontrado en {studio} — corre scripts/imagegen/bootstrap.sh")
 	sys.path.insert(0, str(studio))
 
 	from huggingface_hub import snapshot_download
@@ -192,9 +190,7 @@ def _load_bonsai(cfg: dict):
 	snap = Path(snapshot_download(cfg["hf_id"], allow_patterns=None))
 
 	def _is_transformer(d: Path) -> bool:
-		return (d / "quantization_config.json").is_file() and (
-			(d / "state_dict.pt").is_file() or any(d.glob("*.pt"))
-		)
+		return (d / "quantization_config.json").is_file() and ((d / "state_dict.pt").is_file() or any(d.glob("*.pt")))
 
 	def _is_vae(d: Path) -> bool:
 		cfg_j = d / "config.json"
@@ -307,8 +303,8 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 				t0 = time.perf_counter()
 				img = _generate(kind, pipe, model_id, genre["prompt"], seed, size)
 				wall = time.perf_counter() - t0
-				peak = torch.cuda.max_memory_allocated() / (1024 ** 2)
-				reserved = torch.cuda.max_memory_reserved() / (1024 ** 2)
+				peak = torch.cuda.max_memory_allocated() / (1024**2)
+				reserved = torch.cuda.max_memory_reserved() / (1024**2)
 				img.save(png)
 				rec = {
 					"model": model_id,

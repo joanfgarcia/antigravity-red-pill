@@ -129,7 +129,7 @@ def _run_element(el: dict) -> int:
 		t1 = time.perf_counter()
 		img = _gen(kind, pipe, model_id, prompt, seed, width, height)
 		wall = time.perf_counter() - t1
-		peak = torch.cuda.max_memory_allocated() / (1024 ** 2)
+		peak = torch.cuda.max_memory_allocated() / (1024**2)
 		img.save(png)
 		rec = {
 			"model": model_id,
@@ -221,7 +221,18 @@ def main() -> int:
 		return 1
 	rc = 0
 	for m in [x.strip() for x in (args.models or ",".join(MODELS)).split(",") if x.strip()]:
-		rc |= _run_element({"model": m, "prompt": prompt, "seed": args.seed, "width": args.width, "height": args.height, "out": args.out, "tag": args.tag, "name": args.name})
+		rc |= _run_element(
+			{
+				"model": m,
+				"prompt": prompt,
+				"seed": args.seed,
+				"width": args.width,
+				"height": args.height,
+				"out": args.out,
+				"tag": args.tag,
+				"name": args.name,
+			}
+		)
 	return rc
 
 

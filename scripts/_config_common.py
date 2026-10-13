@@ -84,9 +84,7 @@ def build_vars(args):
 		"IMAGE_FORGE_HOME": os.path.expanduser(os.environ.get("IMAGE_FORGE_HOME") or "~/opt/image-forge"),
 		"AUDIO_FORGE_HOME": os.path.expanduser(os.environ.get("AUDIO_FORGE_HOME") or "~/opt/audio-forge"),
 		"MUSIC_FORGE_HOME": os.path.expanduser(os.environ.get("MUSIC_FORGE_HOME") or "~/opt/music-forge"),
-		"REDPILL_IMAGE_MODELS_DIR": os.path.expanduser(
-			os.environ.get("REDPILL_IMAGE_MODELS_DIR") or "~/.local/share/red-pill/models/image"
-		),
+		"REDPILL_IMAGE_MODELS_DIR": os.path.expanduser(os.environ.get("REDPILL_IMAGE_MODELS_DIR") or "~/.local/share/red-pill/models/image"),
 	}
 
 

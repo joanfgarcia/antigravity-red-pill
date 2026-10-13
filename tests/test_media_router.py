@@ -102,11 +102,7 @@ def test_resolve_unknown_task_raises(tmp_path):
 def test_not_capable_for_skips(tmp_path):
 	path = tmp_path / "media_profiles.yaml"
 	path.write_text(
-		"media_profiles:\n"
-		"  a: { capabilities: [x], not_capable_for: [x] }\n"
-		"  b: { capabilities: [x] }\n"
-		"media_roles:\n"
-		"  x: [a, b]\n",
+		"media_profiles:\n  a: { capabilities: [x], not_capable_for: [x] }\n  b: { capabilities: [x] }\nmedia_roles:\n  x: [a, b]\n",
 		encoding="utf-8",
 	)
 	assert MediaProfiles(path=path).resolve(task="x") == "b"
@@ -115,10 +111,7 @@ def test_not_capable_for_skips(tmp_path):
 def test_not_capable_for_all_raises(tmp_path):
 	path = tmp_path / "media_profiles.yaml"
 	path.write_text(
-		"media_profiles:\n"
-		"  a: { capabilities: [x], not_capable_for: [x] }\n"
-		"media_roles:\n"
-		"  x: [a]\n",
+		"media_profiles:\n  a: { capabilities: [x], not_capable_for: [x] }\nmedia_roles:\n  x: [a]\n",
 		encoding="utf-8",
 	)
 	with pytest.raises(MediaCapabilityError):

@@ -85,8 +85,7 @@ def test_cli_media_commands(monkeypatch, tmp_path, capsys):
 
 	elenco = tmp_path / "media_profiles.yaml"
 	elenco.write_text(
-		"media_profiles:\n  m: { constraints: { dim_multiple: 16 }, adapters: [snap_dims] }\n"
-		"media_roles:\n  t: [m]\n",
+		"media_profiles:\n  m: { constraints: { dim_multiple: 16 }, adapters: [snap_dims] }\nmedia_roles:\n  t: [m]\n",
 		encoding="utf-8",
 	)
 	monkeypatch.setattr(media_router, "_MEDIA_SINGLETON", media_router.MediaProfiles(path=elenco))

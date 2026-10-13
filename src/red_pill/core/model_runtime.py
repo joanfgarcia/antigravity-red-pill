@@ -393,10 +393,10 @@ def extract_thinking(text: str) -> Tuple[str, str]:
 		return thinking.replace(_THINK_OPEN, "").strip(), answer.strip()
 	stripped = text.lstrip()
 	if stripped.startswith(_THINK_OPEN):
-		return stripped[len(_THINK_OPEN):].strip(), ""
+		return stripped[len(_THINK_OPEN) :].strip(), ""
 	m = _CLI_THINKING.search(text)
 	if m:
-		return m.group(1).strip(), (text[: m.start()] + text[m.end():]).strip()
+		return m.group(1).strip(), (text[: m.start()] + text[m.end() :]).strip()
 	return "", text.strip()
 
 
