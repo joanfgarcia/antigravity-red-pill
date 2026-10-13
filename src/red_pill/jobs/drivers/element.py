@@ -323,6 +323,13 @@ class ElementJobDriver(ResumableJobDriver):
 		# El elemento a tratar: JSON serializado + índice (para logs y selección).
 		env["RP_ELEMENT"] = json.dumps(element, ensure_ascii=False)
 		env["RP_ELEMENT_INDEX"] = str(index)
+		# RFC-HARNESS-004 §8: adaptación media POR ELEMENTO (multi-modelo).
+		try:
+			from red_pill.jobs.drivers.media_hook import media_env_for_element
+
+			env.update(media_env_for_element(payload, element))
+		except Exception:  # noqa: BLE001 — nunca romper el step por el hook
+			pass
 		if payload.get("defer_exit_code") is not None:
 			env["RP_DEFER_EXIT_CODE"] = str(payload["defer_exit_code"])
 		if payload.get("pause_exit_code") is not None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from red_pill.core import media_router
@@ -93,3 +95,42 @@ def test_script_driver_validates_media(monkeypatch, tmp_path):
 
 	with pytest.raises(ValueError):
 		ScriptJobDriver.validate({"step_command": "x", "media": {"task": "nope"}})
+
+
+def test_media_env_per_element_adapts(monkeypatch, tmp_path):
+	import json
+
+	_patch(monkeypatch, tmp_path)
+	from red_pill.jobs.drivers.media_hook import media_env_for_element
+
+	payload = {"media": {"task": "concept", "width": 1920, "height": 1080}}
+	# flux2 (÷8) conserva 1080; zimage (÷16) → 1088 + warning.
+	env_flux = media_env_for_element(payload, {"model": "flux2_klein"})
+	assert env_flux["RP_MEDIA_WIDTH"] == "1920" and env_flux["RP_MEDIA_HEIGHT"] == "1080"
+	assert "RP_MEDIA_WARNINGS" not in env_flux
+
+	env_zimg = media_env_for_element(payload, {"model": "zimage_turbo"})
+	assert env_zimg["RP_MEDIA_HEIGHT"] == "1088"
+	assert "1080→1088" in json.loads(env_zimg["RP_MEDIA_WARNINGS"])[0]
+
+
+def test_media_env_per_element_impossible(monkeypatch, tmp_path):
+	_patch(monkeypatch, tmp_path)
+	from red_pill.jobs.drivers.media_hook import media_env_for_element
+
+	payload = {"media": {"task": "concept", "width": 1920, "height": 1080}}
+	env = media_env_for_element(payload, {"model": "bonsai_ternary"})
+	assert "RP_MEDIA_ERROR" in env
+	assert "RP_MEDIA_WIDTH" not in env
+
+
+def test_element_build_env_injects_media(monkeypatch, tmp_path):
+	_patch(monkeypatch, tmp_path)
+	from red_pill.jobs.drivers.element import ElementJobDriver
+
+	driver = ElementJobDriver.__new__(ElementJobDriver)
+	driver.job_id = "test"
+	payload = {"media": {"task": "concept", "width": 1920, "height": 1080}}
+	env = driver._build_env(payload, os.getcwd(), {"model": "zimage_turbo"}, 0)
+	assert env["RP_MEDIA_HEIGHT"] == "1088"
+	assert env["RP_MEDIA_MODEL"] == "zimage_turbo"

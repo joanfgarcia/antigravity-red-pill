@@ -1,0 +1,27 @@
+# ImageGen playground — prompt LIBRE (pantalla de carga para el DK de Joel).
+#
+# UN step = UN modelo (element_job, fail-soft): si un modelo OOMea o falla,
+# se REGISTRA en failures.jsonl y sale con skip_exit_code (79) → la cola lo
+# marca saltado y SIGUE con el resto. Reanudable por frontera de elemento.
+#
+# Reutiliza la venv de configs/jobs/imagegen_setup.yaml (misma máquina).
+# Prompt en el fichero referenciado por --prompt-file (desk/notes).
+source: element_job
+media:
+  task: concept          # baseline; la adaptación real se hace POR ELEMENTO (modelo)
+  width: 1920
+  height: 1080
+priority: 3
+title: ImageGen playground — pantalla de carga (súcubo + Segador astado)
+mission_id: imagegen-joel
+elements_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-13-imagegen-joel"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python scripts/imagegen/gen_image.py --list-elements --prompt-file "$OUT/prompt.txt" --out "$OUT" --width 1920 --height 1080']
+step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-13-imagegen-joel"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python -u scripts/imagegen/gen_image.py --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 90
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 16G
