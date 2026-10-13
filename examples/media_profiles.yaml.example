@@ -36,7 +36,7 @@ media_profiles:
     capabilities: ["photorealism", "concept", "landscape", "fast"]
     not_capable_for: []
     priority: 1
-    constraints: { dim_multiple: 8 }        # ÷8 (tolera 1080 exacto)
+    constraints: { dim_multiple: 16 }       # ÷16 (Flux2KleinPipeline exige múltiplo de 16)
     adapters: ["snap_dims"]
     license:
       id: "apache-2.0"

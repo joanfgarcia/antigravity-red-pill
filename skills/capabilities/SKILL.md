@@ -39,5 +39,10 @@ restricciones de equipo o SO. Se crean con `scripts/<area>/bootstrap.sh`; modelo
 sugeridos en `examples/media_profiles.yaml.example`. Si un forge **no** está montado,
 su capability está inactiva y sus skills **no** se siembran.
 
+**Dos piezas independientes**: el **runtime** (bootstrap) y el **elenco**
+(`media_profiles.yaml`). Si el forge existe pero `media validate` falla con
+"media_profiles.yaml no encontrado" → **siembra el elenco** (bootstrap no lo hace):
+`cp examples/media_profiles.yaml.example ~/.config/red-pill/media_profiles.yaml`.
+
 ## Skills relacionadas
 `image-gen` · `audio-gen` · `music-gen`.

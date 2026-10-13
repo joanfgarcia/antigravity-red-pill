@@ -14,6 +14,10 @@ El forge (venv) se crea con `bash scripts/audio/bootstrap.sh`; raíz **configura
 requiere. Modelos sugeridos en `examples/media_profiles.yaml.example`. Sin forge →
 capability inactiva (no se siembra esta skill).
 
+Si el forge existe pero `media validate` falla con **"media_profiles.yaml no
+encontrado"** → siembra el elenco (bootstrap NO lo hace):
+`cp examples/media_profiles.yaml.example ~/.config/red-pill/media_profiles.yaml`.
+
 ## Voz (TTS)
 - `kokoro_voice` — ligero, **español OK**, sin clonación, corre en CPU.
 - `chatterbox_voice` — clonación (~5 s) + emoción, 23 idiomas.
