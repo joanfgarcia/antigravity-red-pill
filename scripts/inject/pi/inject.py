@@ -108,6 +108,23 @@ def _overridden_files(override_dir: str) -> set:
 	return out
 
 
+def _pi_skill_capability(skill_md: str) -> str | None:
+	"""Lee `capability:` del frontmatter YAML de un SKILL.md (sin dependencias)."""
+	try:
+		with open(skill_md, encoding="utf-8") as f:
+			lines = f.read().splitlines()
+	except OSError:
+		return None
+	if not lines or lines[0].strip() != "---":
+		return None
+	for line in lines[1:]:
+		if line.strip() == "---":
+			break
+		if line.startswith("capability:"):
+			return line.split(":", 1)[1].strip() or None
+	return None
+
+
 def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, skip: set | None = None) -> int:
 	"""Copy a skills dir into the Pi skills root. Returns number of changed skills."""
 	changed = 0
@@ -119,6 +136,18 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, s
 		skill_md = os.path.join(skill_src, "SKILL.md")
 		if not os.path.isdir(skill_src) or not os.path.exists(skill_md):
 			continue
+		_cap = _pi_skill_capability(skill_md)
+		if _cap is not None:
+			try:
+				from red_pill.core.capabilities import enabled_for
+
+				_keep = enabled_for(_cap)
+			except Exception as e:  # noqa: BLE001
+				logger.warning(f"  Skill '{skill_entry}': gate no disponible ({e}) → skip (capability='{_cap}')")
+				_keep = False
+			if not _keep:
+				logger.info(f"  Skill '{skill_entry}' gated (capability '{_cap}' inactiva) → skip")
+				continue
 		skill_dest_dir = os.path.join(dest_dir, skill_entry)
 		os.makedirs(skill_dest_dir, exist_ok=True)
 		skill_changed = 0

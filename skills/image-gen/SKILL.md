@@ -1,6 +1,7 @@
 ---
 name: image-gen
 description: Genera imágenes locales con el arnés de media de Red-Pill (RFC-HARNESS-004) — router por tarea, adaptadores por modelo, staging y promoción. Úsala cuando haya que crear una imagen (pantalla, ilustración, concepto, tipografía) en este equipo.
+capability: image_gen
 ---
 
 # Image generation (local)
