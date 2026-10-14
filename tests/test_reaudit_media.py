@@ -91,10 +91,9 @@ def test_bench_kind_desconocido(monkeypatch):
 
 
 def test_gen_image_list_models_sin_staging(monkeypatch):
-	"""`--list-models`/`--list-elements` NO exigen staging (RV1: no abortar)."""
-	monkeypatch.delenv("OUTDIR", raising=False)
-	monkeypatch.delenv("RP_MEDIA_STAGING", raising=False)
-	monkeypatch.delenv("RP_TMP_DIR", raising=False)
+	"""`--list-models`/`--list-elements` NO exigen staging ni IMAGE_FORGE_HOME (RV1)."""
+	for k in ("OUTDIR", "RP_MEDIA_STAGING", "RP_TMP_DIR", "IMAGE_FORGE_HOME"):
+		monkeypatch.delenv(k, raising=False)
 	g = _load(monkeypatch, "gen_image_lm", IMAGE_PATH)
 	monkeypatch.setattr(sys, "argv", ["gen_image.py", "--list-models"])
 	assert g.main() == 0
