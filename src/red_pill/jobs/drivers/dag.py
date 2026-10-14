@@ -123,6 +123,11 @@ _VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
 # so it can never traverse out of the confín (§7; SHARD-PSEC-02).
 _SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
+# `stage.params` is a legitimate per-stage override channel, but it must NOT carry
+# the runner's policy/path keys: an unfiltered `params` could widen MemoryMax to
+# `infinity` or divert `job_id` (re-orphaning what `job kill` reaps) — SHARD-PSEC-01.
+_PROTECTED_STAGE_PARAMS = frozenset({"job_id", "memory_max", "env", "cwd", "command", "timeout", "pause_probe", "sleep_cutoff_ts", "item"})
+
 
 class _GroupPauseGate:
 	"""Puerta de pausa compartida por las etapas de UN grupo paralelo del DAG.
@@ -821,6 +826,9 @@ class DagJobDriver(ResumableJobDriver):
 		if stage.get("command"):
 			kwargs["command"] = task
 		if isinstance(stage.get("params"), dict):
+			protected = _PROTECTED_STAGE_PARAMS & set(stage["params"])
+			if protected:
+				raise ValueError(f"dag_job stage '{stage_path}' params no puede fijar claves de política: {sorted(protected)}")
 			kwargs.update({k: _render_item(v, item) if item is not None else v for k, v in stage["params"].items()})
 		# AD-030 (v3): el bloque `llm:` POR ETAPA en el manifest del
 		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
@@ -847,7 +855,7 @@ class DagJobDriver(ResumableJobDriver):
 			build_pause_probe(self.job_id, gate=gate) if stage.get("pausable", True) else None,
 		)
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
-		kwargs.setdefault("job_id", self.job_id)
+		kwargs["job_id"] = self.job_id  # hard: neither payload nor params may divert it (SHARD-PSEC-01)
 
 		# Fase 4 (RFC-JOBDAG-002): canal de avance FINO intra-etapa. Si la etapa lo
 		# pide (`progress_file: true`), se le da un fichero donde publicar su

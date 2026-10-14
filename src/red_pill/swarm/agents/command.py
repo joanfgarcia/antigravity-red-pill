@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -8,6 +9,10 @@ import uuid
 from typing import Any, Dict, List, Union
 
 from red_pill.swarm.base import Minion
+
+# systemd memory size: a number with an optional unit. Rejects `infinity`/`max`
+# so a payload can never lift the per-job cgroup cap (SHARD-PSEC-01).
+_SAFE_MEMORY_MAX = re.compile(r"^[0-9]+(\.[0-9]+)?[KMGTP]?$")
 
 
 class CommandMinion(Minion):
@@ -42,6 +47,8 @@ class CommandMinion(Minion):
 		job_id = str(kwargs.get("job_id") or "")
 		if job_id and shutil.which("systemd-run"):
 			mem = str(kwargs.get("memory_max") or os.environ.get("RP_JOB_MEMORY_MAX") or "10G")
+			if not _SAFE_MEMORY_MAX.match(mem):
+				raise ValueError(f"memory_max inválido: {mem!r} (usa p.ej. 10G/512M; 'infinity' no permitido)")
 			unit = f"redpill-job-{job_id[:8]}-{uuid.uuid4().hex[:6]}"
 			argv = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={unit}", "-p", f"MemoryMax={mem}", "--", *argv]
 
