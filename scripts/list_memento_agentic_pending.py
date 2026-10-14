@@ -4,9 +4,9 @@
 Lista las sesiones que el pase agéntico nocturno procesaría — EXACTAMENTE la
 misma selección que `memento_agentic.py` SIN `--target`:
 
-  pending = pending_agentic(force=False)   # delta (no re-destilado)
-  orden   = stale primero                  # line refs muertos primero
-  tope    = MEMENTO_AGENTIC_NIGHT_LIMIT     # igual que el pase clásico
+	pending = pending_agentic(force=False)   # delta (no re-destilado)
+	orden   = stale primero                  # line refs muertos primero
+	tope    = MEMENTO_AGENTIC_NIGHT_LIMIT     # igual que el pase clásico
 
 Emite `{"items": ["source:session_id", ...]}` en stdout (contrato de la fuente
 del fan-out por items del dag_job, RFC-JOBDAG-001 §4.6). Así CADA sesión es un

@@ -233,9 +233,7 @@ def main() -> None:
 	)
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
-	parser.add_argument(
-		"--models-dir", default=str(get_models_dir()), help="Directory holding the candidate GGUFs."
-	)
+	parser.add_argument("--models-dir", default=str(get_models_dir()), help="Directory holding the candidate GGUFs.")
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_BAKEOFF.md")
 	args = parser.parse_args()
 

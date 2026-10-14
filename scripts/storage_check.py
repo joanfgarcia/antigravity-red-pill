@@ -6,13 +6,13 @@ Esta herramienta lo verifica agrupando por tamaño, confirmando por hash (sha256
 e **ignorando hardlinks** (mismo inodo = un solo dato en disco, no es duplicado).
 
 Reporta:
-  - **duplicados reales** (mismo contenido, inodos distintos) + bytes recuperables;
-  - **hardlinks** (mismo inodo) → informativo (no ocupan de más);
-  - restos **`.incomplete`** (descargas abortadas de HF) → basura;
-  - **modelos en >1 caché HF** (mismo repo en sitios distintos) → doble copia.
+	- **duplicados reales** (mismo contenido, inodos distintos) + bytes recuperables;
+	- **hardlinks** (mismo inodo) → informativo (no ocupan de más);
+	- restos **`.incomplete`** (descargas abortadas de HF) → basura;
+	- **modelos en >1 caché HF** (mismo repo en sitios distintos) → doble copia.
 
 Uso:
-  storage_check.py [--roots R [R ...]] [--min-size MB] [--json]
+	storage_check.py [--roots R [R ...]] [--min-size MB] [--json]
 Defaults de roots: ~/.local/share/red-pill/models, ~/opt/*-forge, ~/.cache/huggingface
 """
 
@@ -29,13 +29,18 @@ MB = 1024 * 1024
 
 
 def _default_roots() -> list:
-	roots = [Path.home() / ".local" / "share" / "red-pill" / "models"]
-	opt = Path.home() / "opt"
+	import sys
+
+	sys.path.insert(0, str(Path(__file__).resolve().parent))
+	from _config_common import _data_dir, default_hf_cache, opt_dir
+
+	opt = Path(opt_dir())
+	roots = [Path(_data_dir()) / "models"]
 	if opt.is_dir():
 		roots += [d for d in opt.glob("*-forge") if d.is_dir()]
 	# modelos custom (no-HF / composiciones multi-repo)
 	roots.append(opt / "red-pill-custom-image-models")
-	roots.append(Path.home() / ".cache" / "huggingface")
+	roots.append(Path(default_hf_cache()))
 	return [r for r in roots if r.exists()]
 
 

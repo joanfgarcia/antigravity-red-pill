@@ -8,13 +8,13 @@ de qué es, de dónde vino y con qué hashes — con la **revisión pinada**.
 Manifiesto: `~/.local/share/red-pill/model_manifest.json` (o `$REDPILL_MODEL_MANIFEST`).
 
 Modos:
-  # Repo HF (fija el commit + sha256/lfs.oid de cada fichero, desde la metadata de HF)
-  model_approve.py --repo Tongyi-MAI/Z-Image-Turbo [--revision main] [--note "probado"]
+	# Repo HF (fija el commit + sha256/lfs.oid de cada fichero, desde la metadata de HF)
+	model_approve.py --repo Tongyi-MAI/Z-Image-Turbo [--revision main] [--note "probado"]
 
-  # Modelo custom / composición multi-repo (hashea los ficheros locales)
-  model_approve.py --name qwen-image-2.1 --file a.gguf --file b.gguf [:role=path ...]
+	# Modelo custom / composición multi-repo (hashea los ficheros locales)
+	model_approve.py --name qwen-image-2.1 --file a.gguf --file b.gguf [:role=path ...]
 
-  model_approve.py --list            # ver lo registrado
+	model_approve.py --list            # ver lo registrado
 """
 
 from __future__ import annotations
@@ -36,8 +36,13 @@ def manifest_path(explicit: str | None = None) -> Path:
 	env = os.environ.get("REDPILL_MODEL_MANIFEST")
 	if env:
 		return Path(env).expanduser()
-	data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-	return Path(data) / "red-pill" / "model_manifest.json"
+	# Ruta por defecto vía el helper compartido (sin literales XDG/home — §7).
+	import sys
+
+	sys.path.insert(0, str(Path(__file__).resolve().parent))
+	from _config_common import _data_dir
+
+	return Path(_data_dir()) / "model_manifest.json"
 
 
 def load_manifest(path: Path) -> dict:
@@ -88,7 +93,7 @@ def local_components(specs: list) -> dict:
 
 
 def hf_components(repo: str, revision: str | None) -> tuple:
-	"""(commit_sha, {fichero: sha256}) desde la metadata de HF. Requiere red."""
+	"""(commit_sha, {fichero: oid/sha256}, license_id) desde la metadata de HF. Requiere red."""
 	try:
 		from huggingface_hub import HfApi
 	except Exception:
@@ -133,7 +138,15 @@ def main() -> int:
 	if args.repo:
 		commit, components, license_id = hf_components(args.repo, args.revision)
 		mid = args.repo
-		entry = {"source": "hf", "repo": args.repo, "revision": commit, "license": license_id, "components": components, "approved_at": now, "note": args.note}
+		entry = {
+			"source": "hf",
+			"repo": args.repo,
+			"revision": commit,
+			"license": license_id,
+			"components": components,
+			"approved_at": now,
+			"note": args.note,
+		}
 	elif args.name:
 		if not args.files:
 			raise SystemExit("[error] modo --name requiere al menos un --file")
