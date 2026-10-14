@@ -367,6 +367,10 @@ class DagJobDriver(ResumableJobDriver):
 			recipe_stack = []
 		if all_ids is None:
 			all_ids = set()
+		# fan_out_from referencia una fuente HERMANA (mismo nivel, RFC §4.6). El
+		# scope LOCAL importa al COMPONER (`type: dag` incrusta otra receta): el id
+		# local 'discover' no está en el `all_ids` del nivel superior.
+		sibling_ids = {x.get("id") for x in stages}
 		for s in stages:
 			sid = s.get("id")
 			if not sid:
@@ -448,7 +452,7 @@ class DagJobDriver(ResumableJobDriver):
 						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from must be a stage id.")
 					if fof == sid:
 						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from no puede referenciarse a sí misma.")
-					if fof not in all_ids:
+					if fof not in sibling_ids and fof not in all_ids:
 						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from unknown '{fof}' (no existe ningún id de etapa así).")
 			for dep in s.get("depends_on", []):
 				# las deps referencian hermanos (ids del mismo nivel)
