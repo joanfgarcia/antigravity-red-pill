@@ -26,7 +26,6 @@ defer_exit_code: 77
 # Memento pide granite_8b (task refine, default) sin tocar el default del daemon.
 llm:
   task: refine
-  fallup: true
 preflight:
   llm_required: true
 control:

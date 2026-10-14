@@ -46,10 +46,9 @@ manifest:
       progress_file: true            # avance FINO intra-sesión (extract k/N) vía RP_PROGRESS_FILE
       command: .venv/bin/python scripts/memento_agentic.py --target {{item}}
       # AD-030 (v3): `llm:` POR ETAPA del dag_job — el pase
-      # Memento pide task distill/refine (default granite_8b) + fallup.
+      # Memento pide task distill/refine (default granite_8b).
       llm:
         task: distill
-        fallup: true
       # El default de etapa es 600s y abate las sesiones largas (incidente
       # 2026-09-17, mismo motivo que el fan-out redistill). 5400s como el
       # resto del pase agéntico; el tope real lo pone control.max_step_minutes.
