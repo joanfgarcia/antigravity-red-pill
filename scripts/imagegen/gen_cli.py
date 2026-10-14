@@ -99,12 +99,6 @@ def main() -> int:
 	ap.add_argument("--strength", type=float, help="fuerza de re-difusión en edición (def: del elenco / 0.75)")
 	ap.add_argument("--no-unload", action="store_true", help="no pedir el unload del LLM residente")
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
-
-	# `media-gen help` (o `-h`/`--help`) → ayuda, NUNCA se toma como prompt.
-	if len(sys.argv) > 1 and sys.argv[1] == "help":
-		ap.print_help()
-		return 0
-
 	args = ap.parse_args()
 
 	data = _profiles()
@@ -128,7 +122,11 @@ def main() -> int:
 	if not args.no_unload:
 		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
 
-	B._setup_caches()  # HF_HOME = caché del forge (misma que los jobs; evita re-descargas)
+	B._setup_caches()  # HF_HOME = caché del forge (misma que los jobs)
+	# Política del CLI: NO descargar. Trabaja con lo que ya esté en la caché; si
+	# el modelo no está, falla limpio (instálalo aparte: bootstrap/hf download).
+	os.environ["HF_HUB_OFFLINE"] = "1"
+	os.environ["TRANSFORMERS_OFFLINE"] = "1"
 	kind, pipe = B._load(model)
 	editing = bool(args.image or args.mask or args.ref_images)
 	if editing and backend != "sd_cpp":
