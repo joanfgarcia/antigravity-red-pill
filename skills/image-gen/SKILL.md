@@ -60,9 +60,10 @@ Cada modelo declara `constraints.dim_multiple`; el router ajusta con **warning**
 escribe la tuya (§3.b).
 
 ### 3.b Receta propia — "prompt libre, un modelo" (recomendado)
-Vive en **`.red-pill/jobs/<nombre>.yaml`** (**créalo si no existe**; no versionado;
-ver skill `job-manager`). **El intérprete sale del forge; el script, del repo** — no
-todo cuelga del forge. Esqueleto exacto (rutas por **env**, sin defaults):
+Vive en **`$RP_MEDIA_STAGING/<nombre>/recipe.yaml`** — **junto a la salida**: todo el
+encargo en un directorio **desechable** (receta + artefactos; se borra al promover).
+**El intérprete sale del forge; el script, del repo** — no todo cuelga del forge.
+Esqueleto exacto (rutas por **env**, sin defaults):
 
 ```yaml
 source: element_job
@@ -81,7 +82,8 @@ Reglas de la plantilla (**fail-clean**):
 - **`$IA_DIR`** = raíz del repo (bunker); **`$IMAGE_FORGE_HOME`** = forge (venv).
   Usa **env, no rutas relativas**: una receta en `.red-pill/jobs/` hereda **cwd = raíz
   del workspace** (no el repo).
-- **`.red-pill/jobs/`** puede no existir → **créalo** antes (`mkdir -p .red-pill/jobs`).
+- El **directorio del encargo** (`$RP_MEDIA_STAGING/<nombre>/`) debe existir → créalo
+  (`mkdir -p "$RP_MEDIA_STAGING/<nombre>"`) y escribe ahí `recipe.yaml` (y el prompt).
 
 `gen_image.py` acepta `--prompt` (o `--prompt-file`), `--models <csv>`, `--name`
 (exacto) / `--tag` (patrón `<modelo>__<tag>__s<seed>`), `--width/--height`, `--seed`.
