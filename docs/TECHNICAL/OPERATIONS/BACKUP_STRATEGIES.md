@@ -62,7 +62,10 @@ You never have to worry about embedding model upgrades breaking your backups.
 - **The Amnesia Problem**: Changing models usually means changing vector dimensions (e.g., 384 to 1024), which breaks vector databases.
 - **The Sovereign Solution**: When you run `red-pill soul restore`, the system reads the `manifest.json`. If it detects that the Soul Kit was created with a different embedding dimension than your current configuration, it automatically halts, unpacks the raw memories, transparently re-embeds them using your *new* local model, and safely drops them into the new collections. **Your backups are fully forward-compatible and model-agnostic.**
 
-### The Quota Buffer (v5.6.3)
+### The Quota Buffer (v5.6.3) — *planned, not yet wired*
+> **Status: not implemented.** The quota knobs below (`CLOUD_VAULT_QUOTA_MB`, reserve
+> count) are a planned safeguard and are **not** read by the codebase yet; they are no
+> longer documented in `docs/ENV_REFERENCE.md`.
 The Agent monitors the `CLOUD_VAULT_QUOTA_MB` (Default: 500MB).
 - **The 4-Copy Rule**: The system warns you when available space is less than `4 * [Current Kit Size]`. 
 - **Growth Monitoring**: Vector databases or "Engram Layers" grow as you interact. A 1MB kit today might be 50MB in a month.

@@ -165,7 +165,7 @@ def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[
 	implements that mapping at runtime without requiring callers to know
 	which prompt each model prefers.
 
-	RFC-HARNESS-002 §8: la conducta de la TAREA `distill` (incl. el prompt_file
+	AD-030: la conducta de la TAREA `distill` (incl. el prompt_file
 	del candidato default) la resuelve `model_runtime`; este helper cae a eso
 	primero y a la lógica por env solo si la resolución falla.
 	"""
@@ -743,7 +743,9 @@ def audit_engram_quality(
 
 	from red_pill.core.providers import ProviderRegistry
 
-	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name})
+	system_prompt = load_prompt_text(
+		"engram_quality_auditor.txt", override_text=override_prompt, static={"agent_name": agent_name, "operator_name": operator_name}
+	)
 
 	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"
 

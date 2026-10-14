@@ -9,14 +9,13 @@ tiempo/imagen y VRAM pico, guarda PNG y un metrics.jsonl incremental.
 Reanudable por género: si el PNG del par (modelo, género, seed) ya existe, se
 salta (idempotente). Fail-soft lo gestiona el element_job (skip_exit_code).
 
-Backends (dispatch por id):
-		- flux2_klein    : Flux2KleinPipeline (diffusers) — FLUX.2 klein 4B (Apache-2.0)
-		- zimage_turbo   : ZImagePipeline    (diffusers) — Z-Image-Turbo 6B (Apache-2.0)
-		- bonsai_ternary : GpuPipeline (image-studio/backend_gpu, gemlite INT2) — Bonsai 4B (Apache-2.0)
+Registro de modelos (DATOS, no código): el harness LEE cada modelo del elenco de
+máquina `media_profiles.yaml` (la MISMA fuente que el router); su campo `backend`
+elige el loader (diffusers / bonsai / …).
 
 Rutas configurables (opción por defecto del puesto, override por entorno):
 		IMAGE_FORGE_HOME          (def ~/opt/image-forge)  — venv + repo image-studio + caches
-		REDPILL_IMAGE_MODELS_DIR  (def $XDG_DATA_HOME/red-pill/models/image)
+		REDPILL_IMAGE_MODELS_DIR  (def ~/opt/red-pill-custom-image-models)
 		HF_HOME                   (def $IMAGE_FORGE_HOME/hf-cache)
 
 Uso manual (lo normal es que lo invoque el element_job):
@@ -38,48 +37,202 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 BENCH_JSON = Path(__file__).resolve().parent / "benchgenres.json"
 
-# ── Registro de modelos (perfil local: id → backend/params/licencia) ─────────
-MODELS = {
-	"flux2_klein": {
-		"backend": "diffusers",
-		"pipeline": "Flux2KleinPipeline",
-		"hf_id": "black-forest-labs/FLUX.2-klein-4B",
-		"steps": 4,
-		"guidance": 1.0,
-		"license": "apache-2.0",
-		"note": "FLUX.2 klein 4B (MMDiT 4B). Base FP del que se destila Bonsai.",
-	},
-	"zimage_turbo": {
-		"backend": "diffusers",
-		"pipeline": "ZImagePipeline",
-		"hf_id": "Tongyi-MAI/Z-Image-Turbo",
-		"steps": 9,
-		"guidance": 0.0,
-		"license": "apache-2.0",
-		"note": "Z-Image-Turbo, single-stream DiT 6B, 8 NFEs. Fuerte en tipografía/fotorealismo.",
-	},
-	"bonsai_ternary": {
-		"backend": "bonsai",
-		"backend_name": "bonsai-ternary-gemlite",
-		"hf_id": "prism-ml/bonsai-image-ternary-4B-gemlite-2bit",
-		"steps": 4,
-		"guidance": 1.0,
-		"license": "apache-2.0",
-		"note": "Bonsai Image 4B ternario (1.58-bit, gemlite INT2), destilado de FLUX.2 klein 4B.",
-	},
-}
+# Registro de modelos: DATOS, no código (CONVENTIONS §10.8.2)
+# El harness NO hardcodea modelos: los traduce desde el elenco de máquina
+# (media_profiles.yaml, la MISMA fuente que consume el router). Añadir un modelo
+# = añadir su entrada al YAML (backend + pipeline/weights/sampler), sin tocar
+# código. El "cómo" de un runtime nuevo (p.ej. sd.cpp) vive en su backend + en
+# runtimes.yaml (ver docs/CORE/MEDIA_MODELS.md).
+
+
+def _media_profiles_path() -> Path:
+	return Path(os.environ["REDPILL_MEDIA_PROFILES"])
+
+
+def _load_media_models() -> dict:
+	"""Traduce el elenco (`media_profiles.yaml`) a la forma que carga el harness.
+
+	Cada modelo de imagen (modality=image) declara `backend` (dispatch) + sus
+	params; aquí se normalizan a backend/pipeline/hf_id/steps/guidance/license
+	(+ backend_name). Falla limpio si el elenco falta o está malformado.
+	"""
+	import yaml
+
+	path = _media_profiles_path()
+	try:
+		data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+	except FileNotFoundError:
+		raise RuntimeError(f"media_profiles.yaml no encontrado en {path} (copia examples/media_profiles.yaml.example)")
+	except yaml.YAMLError as e:
+		raise RuntimeError(f"media_profiles.yaml malformado en {path}: {e}")
+
+	profiles = data.get("media_profiles") or {}
+	models: dict = {}
+	for mid, profile in profiles.items():
+		if not isinstance(profile, dict) or profile.get("modality") != "image":
+			continue
+		backend = profile.get("backend")
+		if not backend:
+			continue  # sin `backend` declarado el harness no sabe cómo cargarlo
+		sampler = profile.get("sampler") or {}
+		entry = {
+			"id": mid,
+			"backend": backend,
+			"pipeline": profile.get("pipeline"),
+			"hf_id": profile.get("weights"),
+			"steps": sampler.get("steps"),
+			"guidance": sampler.get("guidance"),
+			"license": (profile.get("license") or {}).get("id"),
+			"note": profile.get("notes"),
+		}
+		if profile.get("backend_name"):
+			entry["backend_name"] = profile["backend_name"]
+		if backend == "sd_cpp":
+			entry["runtime"] = profile.get("runtime") or "sd_cpp"
+			entry["sampler_method"] = sampler.get("sampler") or "euler"
+			entry["sd_cpp"] = profile.get("sd_cpp") or {}
+		models[mid] = entry
+	if not models:
+		raise RuntimeError(f"media_profiles.yaml sin modelos de imagen cargables en {path}")
+	return models
+
+
+def _bootstrap_env() -> None:
+	"""Defaults de política por-máquina (elenco/forges) para uso de CONSOLA/directo.
+	En un job los exporta el runner; aquí los resuelve `_config_common` (§10.8.1)."""
+	sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+	from _config_common import media_console_env
+
+	for key, val in media_console_env().items():
+		if val:
+			os.environ.setdefault(key, val)
+
+
+_bootstrap_env()
+
+MODELS = _load_media_models()
+
+
+def _runtimes_path() -> Path:
+	return Path(os.environ["REDPILL_RUNTIMES"])
+
+
+def _resolve_runtime(runtime_id: str) -> dict:
+	"""Resuelve un engine del registro de runtimes (~/.config/red-pill/runtimes.yaml)."""
+	import yaml
+
+	path = _runtimes_path()
+	try:
+		data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+	except FileNotFoundError:
+		raise RuntimeError(f"runtimes.yaml no encontrado en {path} (copia examples/runtimes.yaml.example)")
+	except yaml.YAMLError as e:
+		raise RuntimeError(f"runtimes.yaml malformado en {path}: {e}")
+	rt = (data.get("runtimes") or {}).get(runtime_id)
+	if not rt:
+		raise RuntimeError(f"runtime '{runtime_id}' no está declarado en {path}")
+	return rt
+
+
+def _resolve_sd_cpp(cfg: dict) -> dict:
+	"""Resuelve binario (del runtime) + ficheros GGUF/safetensors (del elenco). Falla limpio."""
+	rt = _resolve_runtime(cfg.get("runtime") or "sd_cpp")
+	binary = Path(os.path.expanduser(str(rt.get("binary") or "")))
+	if not binary.is_file():
+		raise RuntimeError(f"sd.cpp: binario no encontrado {binary} (runtime '{cfg.get('runtime')}')")
+	sd = cfg.get("sd_cpp") or {}
+	paths = {k: Path(os.path.expanduser(str(sd.get(k) or ""))) for k in ("diffusion_model", "text_encoder", "vae")}
+	for key, p in paths.items():
+		if not p.is_file():
+			raise RuntimeError(f"sd.cpp: {key} no encontrado {p} (modelo {cfg.get('id')})")
+	# Vision (mmproj): opcional para text2img; requerido para edición/referencias.
+	vision = sd.get("vision")
+	if vision:
+		vp = Path(os.path.expanduser(str(vision)))
+		if not vp.is_file():
+			raise RuntimeError(f"sd.cpp: vision (mmproj) no encontrado {vp} (modelo {cfg.get('id')})")
+		paths["vision"] = vp
+	env = dict(os.environ)
+	for k, v in (rt.get("env") or {}).items():
+		env[str(k)] = os.path.expanduser(str(v))
+	return {"binary": binary, "paths": paths, "sd": sd, "rt": rt, "env": env, "cfg": cfg}
+
+
+def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, out, image=None, mask=None, ref_images=None, strength=None) -> list:
+	"""Construye el argv de `sd-cli`: text2img; con `image`/`ref_images` → edición.
+
+	Editar (o usar referencias) exige el proyector de visión (`--llm_vision` →
+	`vision`/mmproj del elenco); sin él falla limpio.
+	"""
+	cfg = ctx["cfg"]
+	sd = ctx["sd"]
+	cmd = [
+		str(ctx["binary"]),
+		"--diffusion-model",
+		str(ctx["paths"]["diffusion_model"]),
+		"--llm",
+		str(ctx["paths"]["text_encoder"]),
+		"--vae",
+		str(ctx["paths"]["vae"]),
+		"--backend",
+		str(sd.get("backend_assign") or "te=cpu,diffusion=cuda0,vae=cuda0"),
+		"--steps",
+		str(cfg.get("steps") or 8),
+		"--cfg-scale",
+		str(cfg.get("guidance", 1.0)),
+		"--sampling-method",
+		str(cfg.get("sampler_method") or "euler"),
+		"-W",
+		str(width),
+		"-H",
+		str(height),
+		"-s",
+		str(seed),
+		"-p",
+		prompt,
+		"-o",
+		str(out),
+	]
+	if sd.get("sigmas"):
+		cmd += ["--sigmas", str(sd["sigmas"])]
+	if image:
+		cmd += ["-i", str(image), "--strength", str(strength if strength is not None else sd.get("edit_strength", 0.75))]
+	if mask:
+		cmd += ["--mask", str(mask)]
+	for r in ref_images or []:
+		cmd += ["--ref-image", str(r)]
+	if image or ref_images:
+		vision = (ctx.get("paths") or {}).get("vision")
+		if not vision:
+			raise RuntimeError(f"sd.cpp: edición/referencias requieren `vision` (mmproj) en el elenco ({cfg.get('id')})")
+		cmd += ["--llm_vision", str(vision)]
+	cmd += [str(a) for a in (sd.get("extra_args") or [])]
+	return cmd
+
+
+def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int, image=None, mask=None, ref_images=None, strength=None):
+	"""Ejecuta sd-cli (subprocess) y devuelve la PIL.Image del PNG resultante."""
+	import subprocess
+	import tempfile
+
+	from PIL import Image
+
+	with tempfile.TemporaryDirectory() as td:
+		out = Path(td) / "out.png"
+		cmd = _sd_cpp_command(ctx, prompt, seed, width, height, out, image=image, mask=mask, ref_images=ref_images, strength=strength)
+		proc = subprocess.run(cmd, env=ctx["env"], capture_output=True, text=True)
+		if proc.returncode != 0 or not out.is_file():
+			tail = (proc.stderr or proc.stdout or "")[-2000:]
+			raise RuntimeError(f"sd-cli falló (rc={proc.returncode}): {tail}")
+		return Image.open(out).convert("RGB")
 
 
 def _forge_home() -> Path:
-	return Path(os.environ.get("IMAGE_FORGE_HOME") or (Path.home() / "opt" / "image-forge"))
+	return Path(os.environ["IMAGE_FORGE_HOME"])
 
 
 def _models_dir() -> Path:
-	env = os.environ.get("REDPILL_IMAGE_MODELS_DIR")
-	if env:
-		return Path(env)
-	base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
-	return Path(base) / "red-pill" / "models" / "image"
+	return Path(os.environ["REDPILL_IMAGE_MODELS_DIR"])
 
 
 def _setup_caches() -> None:
@@ -101,7 +254,7 @@ def _diffusers_pipe_class(name: str):
 	return cls
 
 
-# ── Carga per-backend ───────────────────────────────────────────────────────
+# Carga per-backend
 def _load_diffusers_4bit(cls, hf_id: str):
 	"""Carga 4-bit probando las dos APIs de diffusers (varían por pipeline).
 
@@ -137,31 +290,40 @@ def _load_diffusers_4bit(cls, hf_id: str):
 	return None
 
 
-def _load(model_id: str):
-	cfg = MODELS[model_id]
+def _load_backend_diffusers(cfg: dict):
 	import torch
 
-	if cfg["backend"] == "diffusers":
-		cls = _diffusers_pipe_class(cfg["pipeline"])
-		# 8 GB (7.53 GiB útiles): bf16 no cabe para 4B/6B → 4-bit NF4 (bitsandbytes).
-		# IMG_DIFFUSERS_QUANT: bnb4 (def) | seqoff (bf16 + offload secuencial) | bf16
-		quant = os.environ.get("IMG_DIFFUSERS_QUANT", "bnb4")
-		if quant == "bnb4":
-			pipe = _load_diffusers_4bit(cls, cfg["hf_id"])
-			if pipe is not None:
-				return "diffusers", pipe
-			print("  [quant] bnb4 no disponible → fallback bf16 + offload secuencial (más lento)", flush=True)
-		pipe = cls.from_pretrained(cfg["hf_id"], torch_dtype=torch.bfloat16)
-		if quant == "bf16":
-			pipe.to("cuda")
-		else:
-			pipe.enable_sequential_cpu_offload()
-		return "diffusers", pipe
+	cls = _diffusers_pipe_class(cfg["pipeline"])
+	# 8 GB (7.53 GiB útiles): bf16 no cabe para 4B/6B → 4-bit NF4 (bitsandbytes).
+	# IMG_DIFFUSERS_QUANT: bnb4 (def) | seqoff (bf16 + offload secuencial) | bf16
+	quant = os.environ.get("IMG_DIFFUSERS_QUANT", "bnb4")
+	if quant == "bnb4":
+		pipe = _load_diffusers_4bit(cls, cfg["hf_id"])
+		if pipe is not None:
+			return "diffusers", pipe
+		print("  [quant] bnb4 no disponible → fallback bf16 + offload secuencial (más lento)", flush=True)
+	pipe = cls.from_pretrained(cfg["hf_id"], torch_dtype=torch.bfloat16)
+	if quant == "bf16":
+		pipe.to("cuda")
+	else:
+		pipe.enable_sequential_cpu_offload()
+	return "diffusers", pipe
 
-	if cfg["backend"] == "bonsai":
-		return "bonsai", _load_bonsai(cfg)
 
-	raise RuntimeError(f"backend desconocido: {cfg['backend']}")
+def _load_backend_bonsai(cfg: dict):
+	return "bonsai", _load_bonsai(cfg)
+
+
+def _load_backend_sd_cpp(cfg: dict):
+	return "sd_cpp", _resolve_sd_cpp(cfg)
+
+
+def _load(model_id: str):
+	cfg = MODELS[model_id]
+	entry = BACKEND_DISPATCH.get(cfg["backend"])
+	if entry is None:
+		raise RuntimeError(f"backend desconocido: {cfg['backend']}")
+	return entry["load"](cfg)
 
 
 def _read_json(path: Path):
@@ -182,9 +344,7 @@ def _load_bonsai(cfg: dict):
 	forge = _forge_home()
 	studio = forge / "image-studio"
 	if not (studio / "backend_gpu").is_dir():
-		raise RuntimeError(
-			f"image-studio/backend_gpu no encontrado en {studio} — corre scripts/imagegen/bootstrap.sh"
-		)
+		raise RuntimeError(f"image-studio/backend_gpu no encontrado en {studio} — corre scripts/imagegen/bootstrap.sh")
 	sys.path.insert(0, str(studio))
 
 	from huggingface_hub import snapshot_download
@@ -192,9 +352,7 @@ def _load_bonsai(cfg: dict):
 	snap = Path(snapshot_download(cfg["hf_id"], allow_patterns=None))
 
 	def _is_transformer(d: Path) -> bool:
-		return (d / "quantization_config.json").is_file() and (
-			(d / "state_dict.pt").is_file() or any(d.glob("*.pt"))
-		)
+		return (d / "quantization_config.json").is_file() and ((d / "state_dict.pt").is_file() or any(d.glob("*.pt")))
 
 	def _is_vae(d: Path) -> bool:
 		cfg_j = d / "config.json"
@@ -243,34 +401,90 @@ def _load_bonsai(cfg: dict):
 	return pipe
 
 
-# ── Generación ──────────────────────────────────────────────────────────────
-def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
+# Generación
+def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+	return _sd_cpp_generate(pipe, prompt, seed, width, height)
+
+
+def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	import torch
+
+	gen = torch.Generator(device="cuda").manual_seed(seed)
+	return pipe(
+		prompt=prompt,
+		height=height,
+		width=width,
+		num_inference_steps=cfg["steps"],
+		guidance_scale=cfg["guidance"],
+		generator=gen,
+	).images[0]
+
+
+def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	from PIL import Image
 
-	cfg = MODELS[model_id]
-	if kind == "diffusers":
-		gen = torch.Generator(device="cuda").manual_seed(seed)
-		img = pipe(
-			prompt=prompt,
-			height=size,
-			width=size,
-			num_inference_steps=cfg["steps"],
-			guidance_scale=cfg["guidance"],
-			generator=gen,
-		).images[0]
-		return img
-
-	# bonsai (backend_gpu): devuelve PNG bytes
 	buf = pipe.generate_png(
 		prompt=prompt,
 		seed=seed,
 		steps=cfg["steps"],
-		height=size,
-		width=size,
+		height=height,
+		width=width,
 		guidance=cfg["guidance"],
 	)
 	return Image.open(io.BytesIO(buf))
+
+
+# Registro ÚNICO backend→(loader, generador) (data over branches, AD-052): fuente única
+# que comparten bench_imagegen y gen_image. Añadir un runtime = sus 2 funciones + 1 entrada.
+BACKEND_DISPATCH = {
+	"diffusers": {"load": _load_backend_diffusers, "generate": _gen_diffusers},
+	"bonsai": {"load": _load_backend_bonsai, "generate": _gen_bonsai},
+	"sd_cpp": {"load": _load_backend_sd_cpp, "generate": _gen_sd_cpp},
+}
+
+
+def generate(kind: str, cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+	entry = BACKEND_DISPATCH.get(kind)
+	if entry is None:
+		raise RuntimeError(f"kind desconocido: {kind}")
+	return entry["generate"](cfg, pipe, prompt, seed, width, height)
+
+
+def _avail_sd_cpp(prof: dict):
+	sd = prof.get("sd_cpp") or {}
+	for key in ("diffusion_model", "text_encoder", "vae"):
+		p = os.path.expanduser(str(sd.get(key) or ""))
+		if not p or not os.path.isfile(p):
+			return False, f"falta {key}"
+	return True, None
+
+
+def _avail_snapshot(prof: dict):
+	hf_id = prof.get("weights")
+	if not hf_id:
+		return False, "sin 'weights' declarado"
+	try:
+		from huggingface_hub import snapshot_download
+
+		snapshot_download(hf_id, local_files_only=True)
+		return True, None
+	except Exception:
+		return False, f"snapshot incompleto en la caché ({hf_id})"
+
+
+# Disponibilidad por backend (el CLI NO descarga): política en el harness (A42).
+BACKEND_AVAILABILITY = {"sd_cpp": _avail_sd_cpp, "diffusers": _avail_snapshot, "bonsai": _avail_snapshot}
+
+
+def backend_available(prof: dict) -> tuple:
+	fn = BACKEND_AVAILABILITY.get(prof.get("backend"))
+	if fn is None:
+		return False, f"backend desconocido: {prof.get('backend')}"
+	return fn(prof)
+
+
+def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
+	return generate(kind, MODELS[model_id], pipe, prompt, seed, size, size)
 
 
 def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Path) -> int:
@@ -307,8 +521,8 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 				t0 = time.perf_counter()
 				img = _generate(kind, pipe, model_id, genre["prompt"], seed, size)
 				wall = time.perf_counter() - t0
-				peak = torch.cuda.max_memory_allocated() / (1024 ** 2)
-				reserved = torch.cuda.max_memory_reserved() / (1024 ** 2)
+				peak = torch.cuda.max_memory_allocated() / (1024**2)
+				reserved = torch.cuda.max_memory_reserved() / (1024**2)
 				img.save(png)
 				rec = {
 					"model": model_id,
@@ -333,7 +547,7 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 	return 0 if (n_ok + n_skip) > 0 else 1
 
 
-# ── CLI ─────────────────────────────────────────────────────────────────────
+# CLI
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Banco A/B de generación de imagen local")
 	ap.add_argument("--list-models", action="store_true", help="imprime el array JSON de elementos (para element_job)")
@@ -345,12 +559,12 @@ def main() -> int:
 	ap.add_argument("--out", default=str(_forge_home() / "output"))
 	args = ap.parse_args()
 
-	_setup_caches()
-	bench = _load_bench()
-
 	if args.list_models:
 		print(json.dumps([{"model": m} for m in MODELS], ensure_ascii=False))
 		return 0
+
+	_setup_caches()
+	bench = _load_bench()
 
 	if args.element:
 		raw = os.environ.get("RP_ELEMENT") or ""

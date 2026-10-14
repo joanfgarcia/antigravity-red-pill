@@ -97,9 +97,7 @@ class SessionRegistry:
 	# ── Lecturas ────────────────────────────────────────────────────────────
 	def get_by_originator(self, originator: str) -> Optional[dict]:
 		with self._connect() as conn:
-			row = conn.execute(
-				"SELECT * FROM session_registry WHERE originator = ?", (originator,)
-			).fetchone()
+			row = conn.execute("SELECT * FROM session_registry WHERE originator = ?", (originator,)).fetchone()
 		return dict(row) if row else None
 
 	def get_by_continuity(self, continuity_id: str) -> List[dict]:

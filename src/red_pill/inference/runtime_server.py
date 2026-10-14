@@ -1,4 +1,4 @@
-"""runtime_server — servidor dedicado por runtime para perfiles no-python (RFC-HARNESS-003).
+"""runtime_server — servidor dedicado por runtime para perfiles no-python (AD-049).
 
 El daemon clásico (llama-cpp-python) solo puede servir modelos del runtime
 stock. Los perfiles anclados a un runtime no-python (p.ej. el fork PrismML con
@@ -79,7 +79,7 @@ def running_servers() -> List[Dict[str, Any]]:
 
 
 def stop_dedicated_servers(profile_name: Optional[str] = None, timeout: float = 10.0) -> int:
-	"""Abate servidores dedicados (todos o uno) — swap del daemon (RFC-HARNESS-003).
+	"""Abate servidores dedicados (todos o uno) — swap del daemon (AD-049).
 
 	Espera a que mueran: la VRAM debe estar liberada de verdad antes de que el
 	caller re-mida/re-evalúe el tier. Devuelve cuántos paró.
@@ -148,7 +148,7 @@ class RuntimeServer:
 		return self._proc is not None and self._proc.poll() is None
 
 	def _resolve(self) -> Dict[str, Any]:
-		"""Perfil + runtime resueltos, con gate fail-clean (RFC-HARNESS-003)."""
+		"""Perfil + runtime resueltos, con gate fail-clean (AD-049)."""
 		profile = ModelRegistry.get_profile(self.profile_name)
 		if not profile:
 			raise RuntimeServerError(f"perfil '{self.profile_name}' no existe en model_profiles.yaml")
@@ -159,9 +159,7 @@ class RuntimeServer:
 			runtime = RuntimeRegistry.for_profile(profile, variant=self.variant)
 		server_binary = runtime.get("server") or runtime.get("binary")
 		if not server_binary or not os.access(server_binary, os.X_OK):
-			raise RuntimeUnavailableError(
-				f"[RUNTIME] '{runtime_id or RuntimeRegistry.default_id()}' sin binario server ejecutable ({server_binary})"
-			)
+			raise RuntimeUnavailableError(f"[RUNTIME] '{runtime_id or RuntimeRegistry.default_id()}' sin binario server ejecutable ({server_binary})")
 		model_path = str(Path(os.path.expanduser(str(profile.get("model_path", "")))))
 		if not model_path or not os.path.isfile(model_path):
 			raise RuntimeServerError(f"model_path inexistente para '{self.profile_name}': {model_path}")
@@ -174,13 +172,20 @@ class RuntimeServer:
 		ngl = int(hw.get("n_gpu_layers", -1))
 		cmd = [
 			resolved["server_binary"],
-			"-m", resolved["model_path"],
-			"-ngl", str(ngl),
-			"-fa", "on",
-			"-c", str(n_ctx),
-			"-np", "1",  # 8 GB VRAM: un slot (RFC-HARNESS-003 quirks)
-			"--host", self.host,
-			"--port", str(self.port),
+			"-m",
+			resolved["model_path"],
+			"-ngl",
+			str(ngl),
+			"-fa",
+			"on",
+			"-c",
+			str(n_ctx),
+			"-np",
+			"1",  # 8 GB VRAM: un slot (AD-049 quirks)
+			"--host",
+			self.host,
+			"--port",
+			str(self.port),
 		]
 		if self.kv_type:
 			cmd += ["-ctk", self.kv_type, "-ctv", self.kv_type]
@@ -244,7 +249,7 @@ class RuntimeServer:
 		return self
 
 	def _plan_kv(self) -> dict:
-		"""Plan de KV por calidad del perfil (RFC-HARNESS-003 §2.7).
+		"""Plan de KV por calidad del perfil (AD-049).
 
 		{} si el perfil no declara `kv_cache`/`vram_footprint` (el caller cae al
 		kv_type explícito o a la heurística de tamaño + margen).
@@ -256,7 +261,7 @@ class RuntimeServer:
 			return {}
 
 	def _ensure_vram(self, model_path: str, required_mb: Optional[int] = None) -> None:
-		"""Gate de VRAM (RFC-HARNESS-003 §4.2): swap o defer — NUNCA degradar.
+		"""Gate de VRAM (AD-049): swap o defer — NUNCA degradar.
 
 		Decisión del operador (2026-10-08): la degradación CPU/parcial queda
 		descartada para modelos que caben en VRAM (tiempos inaceptables). Si la
@@ -280,9 +285,7 @@ class RuntimeServer:
 			free_mb = VramProbe.get_free_mb()
 		if free_mb < required_mb:
 			hint = "" if self.unload_daemon else " (activa unload_daemon=True para swap con el daemon)"
-			raise RuntimeServerError(
-				f"VRAM insuficiente para '{self.profile_name}': {free_mb} MB libres < {required_mb} MB requeridos{hint}"
-			)
+			raise RuntimeServerError(f"VRAM insuficiente para '{self.profile_name}': {free_mb} MB libres < {required_mb} MB requeridos{hint}")
 
 	def _request_daemon_unload(self) -> bool:
 		"""Evict del modelo residente vía proxy dual-bind (/v1/unload, patrón script_job).

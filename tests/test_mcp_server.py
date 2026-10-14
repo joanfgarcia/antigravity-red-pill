@@ -703,9 +703,7 @@ class TestSovereignHandshakeIdentity:
 		import re
 
 		alma = re.search(r'continuity_id="([^"]+)"', first[0].text).group(1)
-		second = await self._handshake(
-			{"user_prompt": "b", "originator": "opencode:link1", "continuity_id": "otra-alma-distinta"}
-		)
+		second = await self._handshake({"user_prompt": "b", "originator": "opencode:link1", "continuity_id": "otra-alma-distinta"})
 		alma2 = re.search(r'continuity_id="([^"]+)"', second[0].text).group(1)
 		assert alma2 == alma
 		assert "otra-alma-distinta" not in second[0].text
@@ -811,9 +809,7 @@ class TestHarnessBridge:
 	async def test_bridge_without_timestamp_is_ignored(self, tmp_path):
 		import json as _json
 
-		(tmp_path / "opencode_session.json").write_text(
-			_json.dumps({"provider": "opencode", "session_id": "o1", "workdir": "/ws/o"})
-		)
+		(tmp_path / "opencode_session.json").write_text(_json.dumps({"provider": "opencode", "session_id": "o1", "workdir": "/ws/o"}))
 		assert self._read(tmp_path) == {"originator": "", "workdir": ""}
 
 

@@ -1,11 +1,18 @@
 import asyncio
 import os
+import re
 import shlex
+import shutil
 import signal
 import time
-from typing import Any, Dict, List, Union
+import uuid
+from typing import Any, ClassVar, Dict, List, Union
 
 from red_pill.swarm.base import Minion
+
+# systemd memory size: a number with an optional unit. Rejects `infinity`/`max`
+# so a payload can never lift the per-job cgroup cap (SHARD-PSEC-01).
+_SAFE_MEMORY_MAX = re.compile(r"^[0-9]+(\.[0-9]+)?[KMGTP]?$")
 
 
 class CommandMinion(Minion):
@@ -13,6 +20,8 @@ class CommandMinion(Minion):
 	Minion that executes shell commands.
 	Useful for Ruff, Pytest, and other CLI tools.
 	"""
+
+	kind: ClassVar[str] = "command"
 
 	name: str = "Command-Runner"
 	specialization: str = "CLI Tool Execution"
@@ -31,6 +40,19 @@ class CommandMinion(Minion):
 		# command ever originates from a payload. Accept a pre-split list, or split a string
 		# with shlex (covers all built-in commands: `ruff check .`, `pytest`, `git log …`).
 		argv = cmd if isinstance(cmd, list) else shlex.split(cmd)
+
+		# Per-job cgroup scope → `job kill` aborts the WHOLE TREE (not just the leader).
+		# element_job already created it; the CommandMinion (used by dag_job) did NOT, and
+		# its comment ASSUMED it → orphans consuming GPU/CPU (SHARD-15, 2026-10-14).
+		# Unique suffix per invocation: a step may run several stages without clashing the
+		# unit name. `job kill` stops by PREFIX `redpill-job-<short_id>`.
+		job_id = str(kwargs.get("job_id") or "")
+		if job_id and shutil.which("systemd-run"):
+			mem = str(kwargs.get("memory_max") or os.environ.get("RP_JOB_MEMORY_MAX") or "10G")
+			if not _SAFE_MEMORY_MAX.match(mem):
+				raise ValueError(f"memory_max inválido: {mem!r} (usa p.ej. 10G/512M; 'infinity' no permitido)")
+			unit = f"redpill-job-{job_id[:8]}-{uuid.uuid4().hex[:6]}"
+			argv = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={unit}", "-p", f"MemoryMax={mem}", "--", *argv]
 
 		self.log(f"Ejecutando comando: {cmd} en {cwd}")
 		start_time = time.time()

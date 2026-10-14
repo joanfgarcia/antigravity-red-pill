@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from red_pill.core.paths import get_config_dir
+from red_pill.core.paths import get_config_dir, get_containers_systemd_dir
 
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
@@ -46,7 +46,7 @@ def update_systemd_quadlet(new_key):
 	if sys.platform != "linux":
 		return True  # Skip on non-linux
 
-	quadlet_path = os.path.expanduser("~/.config/containers/systemd/qdrant.container")
+	quadlet_path = str(get_containers_systemd_dir() / "qdrant.container")
 	if not os.path.exists(quadlet_path):
 		logger.warning(f"Quadlet file not found at {quadlet_path}. Ensure Qdrant is managed via systemd.")
 		return False

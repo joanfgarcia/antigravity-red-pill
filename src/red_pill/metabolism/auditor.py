@@ -46,7 +46,9 @@ class SentinelAuditor:
 		self.target_repos = target_repos or []
 		self.force = force
 		self.logger = logging.getLogger("redpill.auditor")
-		self.uv_path = os.path.expanduser("~/.local/bin/uv")
+		from red_pill.core.paths import get_uv_bin
+
+		self.uv_path = get_uv_bin()
 
 		# Auditor Cache System
 		from red_pill.core.paths import get_data_dir
@@ -416,9 +418,11 @@ class SentinelAuditor:
 						all_errors.append(line)
 
 		# 4. Scan external service error logs (stdout/stderr redirected to files)
+		from red_pill.core.paths import get_agent_dir, get_daemon_persistent_dir
+
 		external_logs = [
-			Path.home() / ".local/share/red-pill/daemon/error.log",
-			Path.home() / ".agent/bunker_daemon_error.log",
+			get_daemon_persistent_dir() / "error.log",
+			get_agent_dir() / "bunker_daemon_error.log",
 		]
 		for log_path in external_logs:
 			if log_path.exists():

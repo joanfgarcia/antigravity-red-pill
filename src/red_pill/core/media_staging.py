@@ -1,0 +1,99 @@
+"""media_staging — staging de generación y promoción a destino definitivo (docs/CORE/MEDIA_MODELS.md).
+
+La generación media va a un **staging** temporal (no al desk ni a un destino
+final); cuando el Operador/QA aprueba, `promote()` **mueve/copia el artefacto
+elegido** al destino definitivo.
+
+Staging configurable por env `RP_MEDIA_STAGING` (default `~/tmp/red-pill/media/staging`).
+Subcarpeta por encargo: `<title>` descriptivo (elegido por el agente).
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from pathlib import Path
+from typing import List, Optional
+
+from red_pill.core.paths import get_tmp_dir
+
+ARTIFACT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".flac", ".ogg", ".mp4"}
+
+
+def staging_root() -> Path:
+	"""Raíz del staging: `RP_MEDIA_STAGING` o `<RP_TMP_DIR>/red-pill/media/staging` (default `~/tmp/...`)."""
+	override = os.environ.get("RP_MEDIA_STAGING")
+	if override:
+		return Path(os.path.expanduser(override))
+	return get_tmp_dir() / "red-pill" / "media" / "staging"
+
+
+def _safe_component(value: str, what: str) -> str:
+	"""Rechaza componentes que escapan del staging (path traversal / rutas absolutas)."""
+	v = (value or "").strip()
+	if not v:
+		raise ValueError(f"{what} vacío")
+	if Path(v).is_absolute() or "/" in v or "\\" in v or ".." in Path(v).parts or v.startswith("."):
+		raise ValueError(f"{what} inválido (sin separadores ni '..'): {value!r}")
+	return v
+
+
+def order_dir(title: str, create: bool = False) -> Path:
+	"""Directorio de staging de un encargo (`<staging_root>/<title>`).
+
+	Rechaza un `title` que resuelva a un symlink o fuera de la raíz (no seguir el
+	confín del staging: un symlink podría sacar lecturas/escrituras del staging)."""
+	root = staging_root()
+	path = root / _safe_component(title, "title")
+	if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+		raise ValueError(f"staging '{title}' apunta fuera de la raíz (no permitido): {path}")
+	if create:
+		path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def list_artifacts(title: str) -> List[Path]:
+	"""Artefactos media presentes en el staging de un encargo (ignora symlinks)."""
+	origin = order_dir(title)
+	if not origin.is_dir():
+		return []
+	return sorted(p for p in origin.iterdir() if p.is_file() and not p.is_symlink() and p.suffix.lower() in ARTIFACT_SUFFIXES)
+
+
+def promote(title: str, to: str, name: Optional[str] = None, move: bool = False) -> Path:
+	"""Promociona un artefacto del staging `<title>` al destino definitivo `to`.
+
+	- `name`: fichero concreto a promocionar (si se omite y hay varios → error, para no elegir a ciegas).
+	- `move=True`: mueve (libera el staging); por defecto copia.
+	Devuelve la ruta final.
+	"""
+	origin = order_dir(title)
+	if not origin.is_dir():
+		raise FileNotFoundError(f"staging no encontrado para '{title}': {origin}")
+
+	artifacts = list_artifacts(title)
+	if name:
+		picked = origin / _safe_component(name, "name")
+		if picked.is_symlink():
+			raise ValueError(f"artefacto '{name}' es un symlink (no permitido): {picked}")
+		if not picked.is_file():
+			raise FileNotFoundError(f"artefacto '{name}' no existe en {origin}")
+	elif len(artifacts) == 1:
+		picked = artifacts[0]
+	elif not artifacts:
+		raise FileNotFoundError(f"sin artefactos media en {origin}")
+	else:
+		raise ValueError(f"hay {len(artifacts)} artefactos en {origin}; usa --name para elegir uno ({', '.join(a.name for a in artifacts)})")
+
+	# Confín: el artefacto debe resolver DENTRO del staging (no seguir symlinks fuera).
+	if not picked.resolve().is_relative_to(origin.resolve()):
+		raise ValueError(f"artefacto fuera del staging (no permitido): {picked}")
+
+	dest_dir = Path(os.path.expanduser(to))
+	dest_dir.mkdir(parents=True, exist_ok=True)
+	dest = dest_dir / picked.name
+	if move:
+		shutil.move(str(picked), str(dest))
+	else:
+		shutil.copy2(picked, dest)
+	return dest

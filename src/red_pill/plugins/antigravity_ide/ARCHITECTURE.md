@@ -1,7 +1,7 @@
 # Antigravity IDE Plugin — Architecture & Design Decisions
 
 > **Plugin**: `red_pill.plugins.antigravity_ide`  
-> **Last updated**: 2026-06-18  
+> **Last updated**: 2026-10-14  
 > **Authors**: Joan + Aleth (Opus 4.6 + Gemini Flash 3.5 via Telegram)
 
 > [!NOTE]
@@ -52,15 +52,17 @@ The `GrpcBridge` is **NOT deprecated**. It remains the only way to call `GetAllC
 ```
 antigravity_ide/
 ├── __init__.py              # Public API exports
-├── bridge.py                # IDEBridge ABC + dataclasses (BackendType, BridgeCapabilities, ConversationResult)
 ├── agy_bridge.py            # AgyBridge: execution via agy CLI
 ├── grpc_bridge.py           # GrpcBridge: extraction via gRPC-Web + legacy execution
-├── factory.py               # create_bridge() / create_extraction_bridge() / preflight_check()
 ├── ide_client.py            # Low-level gRPC-Web client (AntigravityIDEClient)
 ├── pulse.py                 # AntigravityPulseStrategy: legacy gRPC polling + agy autonomous ops
 ├── worker.py                # Deprecated shim → red_pill.core.agent_worker (generic IDEWorker)
 └── telegram_extractor.py    # TelegramResponseExtractor (gRPC response fallback)
 ```
+
+> The `AgentBridge` ABC (ex-`IDEBridge`) and the `create_bridge`/`create_extraction_bridge`/
+> `preflight_check` factory are **not** in this package: they moved to `red_pill.swarm.bridges`
+> (the backends here import the ABC from there — see the NOTE at the top).
 
 ## 4. AgyBridge — Multi-Turn Design
 

@@ -51,7 +51,7 @@ uv run mypy src/red_pill/       # Strict typing
 ## 🧪 Requirements & Governance
 
 - **Tabs**, not spaces. Configure your editor to `insertSpaces: false`.
-- **Coverage Gate**: **≥ 96%** required for all merges.
+- **Coverage Gate**: enforced by CI through `pyproject.toml` (`[tool.coverage.report] fail_under`, currently **80%**). Run `uv run pytest --cov=src/red_pill`.
 - **Type Hints**: Required on ALL public functions.
 - **Agnosticism**: No absolute paths. Use `pathlib` for all OS-fluid logic.
 - **PII Shield**: Never commit secrets or personal identifiable info. Use `.env`.
@@ -59,7 +59,7 @@ uv run mypy src/red_pill/       # Strict typing
 ## ✅ PR Checklist
 
 - [ ] `uv run ruff check . --fix` (Apply Sound of Silence format)
-- [ ] `uv run pytest --cov=src/red_pill` (Passed 96% threshold)
+- [ ] `uv run pytest --cov=src/red_pill` (Passed the `fail_under` gate in `pyproject.toml`)
 - [ ] No decorative comments or "ghost" code.
 - [ ] Final audit performed by your own local `Agent Smith`.
 

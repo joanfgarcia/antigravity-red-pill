@@ -3,6 +3,8 @@ import logging
 import os
 import sys
 
+from red_pill.core.paths import get_workspace_root
+
 # Fix path for local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
@@ -15,7 +17,7 @@ async def main():
 
 	logger.info("Sentinel Auditor: Commencing scheduled infrastructure audit...")
 
-	repos = [os.path.expanduser("~/Documents/IA/pure-mls"), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+	repos = [str(get_workspace_root() / "pure-mls"), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
 
 	auditor = SentinelAuditor(target_repos=repos)
 

@@ -39,7 +39,7 @@ def test_skin_switching_logic_integration():
 	"""Verify the switch_skin function in cli.py loads the YAML correctly (logic check)."""
 	from red_pill.cli import switch_skin
 
-	with patch("red_pill.cli.MemoryManager") as mock_mgr_cls:
+	with patch("red_pill.cli_commands.MemoryManager") as mock_mgr_cls:
 		mock_mgr = MagicMock()
 		mock_mgr_cls.return_value = mock_mgr
 		result = switch_skin("matrix")

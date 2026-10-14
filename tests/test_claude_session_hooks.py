@@ -106,7 +106,11 @@ def _make_queue_db(data_home: Path) -> Path:
 def _write_transcript(tmp_path: Path, tag: str) -> Path:
 	entries = [
 		{"type": "user", "uuid": "u0", "message": {"role": "user", "content": "¿qué tal el plan?"}},
-		{"type": "assistant", "uuid": "a0", "message": {"role": "assistant", "model": "claude-x", "content": [{"type": "text", "text": "Vamos con la fase 0a."}]}},
+		{
+			"type": "assistant",
+			"uuid": "a0",
+			"message": {"role": "assistant", "model": "claude-x", "content": [{"type": "text", "text": "Vamos con la fase 0a."}]},
+		},
 		{"type": "user", "uuid": "u1", "message": {"role": "user", "content": [{"type": "tool_result", "content": tag}]}},
 	]
 	path = tmp_path / "transcript.jsonl"

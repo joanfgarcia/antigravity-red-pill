@@ -228,8 +228,7 @@ async def test_presupuesto_total_de_tool_calls(monkeypatch):
 		"role": "assistant",
 		"content": None,
 		"tool_calls": [
-			{"id": f"c{i}", "function": {"name": "run_bash", "arguments": '{"command": "true"}'}}
-			for i in range(local_minion.MAX_TOOL_CALLS + 3)
+			{"id": f"c{i}", "function": {"name": "run_bash", "arguments": '{"command": "true"}'}} for i in range(local_minion.MAX_TOOL_CALLS + 3)
 		],
 	}
 	_use_provider(monkeypatch, FakeProvider([many]))
@@ -329,8 +328,21 @@ _TASK = {
 # prueban la precedencia, no el recorte.
 _WIDE_CTX = {"n_ctx": 16384}
 _PROFILES = {
-	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
-	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
+	"granite_8b": {
+		"temperature": 0.3,
+		"max_tokens": 4096,
+		"minion_chat_format": "chatml-function-calling",
+		"tool_format": "qwen",
+		"hardware_affinity": _WIDE_CTX,
+	},
+	"granite_4_2_8b": {
+		"temperature": 1.0,
+		"max_tokens": 8192,
+		"thinking": "on",
+		"minion_chat_format": None,
+		"tool_format": "qwen",
+		"hardware_affinity": _WIDE_CTX,
+	},
 	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
 }
 
@@ -340,6 +352,7 @@ def _fake_profiles(monkeypatch, task=_TASK, profiles=_PROFILES):
 	from red_pill.core.model_registry import ModelRegistry
 
 	if isinstance(task, Exception):
+
 		def _raise(task_id):
 			raise task
 
@@ -521,7 +534,7 @@ async def test_chatml_function_calling_cerca_el_resultado_como_dato(monkeypatch)
 	_fake_shell(monkeypatch, FakeProc(rc=0, out=_INJECTION))
 	res = await local_minion.run_local_minion("resume notes.txt")
 	fed = next(m["content"] for m in res["messages"] if m.get("role") == "user" and "IGNORE" in str(m.get("content")))
-	assert fed.startswith("Tool `run_bash` result:\n<tool_output id=\"")
+	assert fed.startswith('Tool `run_bash` result:\n<tool_output id="')
 	nonce = fed.split('id="', 1)[1].split('"', 1)[0]
 	opened, closed = fed.index(f'<tool_output id="{nonce}">'), fed.index(f'</tool_output id="{nonce}">')
 	assert opened < fed.index("IGNORE PREVIOUS INSTRUCTIONS") < closed

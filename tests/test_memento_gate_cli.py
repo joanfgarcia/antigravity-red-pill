@@ -34,9 +34,7 @@ def _session(tmp_path: Path, name: str, *, meta=None, notes=None, partial=False)
 	if meta is not None:
 		(session / "annotate" / "_meta.json").write_text(json.dumps(meta), encoding="utf-8")
 	for i, text in enumerate(notes or []):
-		(session / "annotate" / f"00{i}-n.md").write_text(
-			f"---\ntitle: t{i}\nwork_score: 0.9\nsocial_score: 0.1\n---\n{text}\n", encoding="utf-8"
-		)
+		(session / "annotate" / f"00{i}-n.md").write_text(f"---\ntitle: t{i}\nwork_score: 0.9\nsocial_score: 0.1\n---\n{text}\n", encoding="utf-8")
 	if partial:
 		(session / "annotate" / "_partial.json").write_text("{}", encoding="utf-8")
 	return dir_rel
@@ -124,8 +122,13 @@ def test_process_one_enruta_rescore_y_sella_outcome(tmp_path, monkeypatch):
 	for name, action, expected_phase in (("p1", "process", None), ("p2", "rescore", "score")):
 		dir_rel = _session(tmp_path, name, meta=_meta())
 		gating.seal(
-			tmp_path, dir_rel, run_id=run_id, action=action, state="pending",
-			reason="test", to_fingerprint=pipeline["manifest_hash"],
+			tmp_path,
+			dir_rel,
+			run_id=run_id,
+			action=action,
+			state="pending",
+			reason="test",
+			to_fingerprint=pipeline["manifest_hash"],
 		)
 		result = mod.process_one(tmp_path, dir_rel, action=action)
 		assert result["anotaciones"] == 1
@@ -150,8 +153,13 @@ def test_process_one_sella_failed_al_fallar(tmp_path, monkeypatch):
 	pipeline = gating.current_pipeline()
 	dir_rel = _session(tmp_path, "boom", meta=_meta())
 	gating.seal(
-		tmp_path, dir_rel, run_id=mod._run_id(pipeline), action="process", state="pending",
-		reason="test", to_fingerprint=pipeline["manifest_hash"],
+		tmp_path,
+		dir_rel,
+		run_id=mod._run_id(pipeline),
+		action="process",
+		state="pending",
+		reason="test",
+		to_fingerprint=pipeline["manifest_hash"],
 	)
 
 	def boom(*a, **k):

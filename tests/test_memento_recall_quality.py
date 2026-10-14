@@ -211,7 +211,7 @@ def test_v21_reescribe_ingles_y_aleth_en_tercera(monkeypatch):
 
 
 def test_job_submit_rechaza_rutas_volatiles():
-	from red_pill.cli import _volatile_paths
+	from red_pill.cli_jobs import _volatile_paths
 
 	assert _volatile_paths({"step_command": "x --root /tmp/claude-1000/pilot"}) == ["/tmp/claude-1000/pilot"]
 	assert _volatile_paths({"a": "/dev/shm/q", "b": "/var/tmp/ok", "c": "~/tmp/ok", "d": "/home/user/tmp/ok"}) == ["/dev/shm/q"]

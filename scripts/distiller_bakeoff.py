@@ -32,6 +32,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from red_pill.core.paths import get_models_dir
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [BAKEOFF] %(message)s")
 logger = logging.getLogger("bakeoff")
 
@@ -231,9 +233,7 @@ def main() -> None:
 	)
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
-	parser.add_argument(
-		"--models-dir", default=str(Path("~/.local/share/red-pill/models").expanduser()), help="Directory holding the candidate GGUFs."
-	)
+	parser.add_argument("--models-dir", default=str(get_models_dir()), help="Directory holding the candidate GGUFs.")
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_BAKEOFF.md")
 	args = parser.parse_args()
 

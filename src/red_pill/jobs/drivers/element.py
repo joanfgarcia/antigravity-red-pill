@@ -29,7 +29,6 @@ import json
 import logging
 import os
 import shlex
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -42,7 +41,6 @@ from red_pill.jobs.drivers.base import (
 	JobStepTimeout,
 	ResumableJobDriver,
 	StepOutcome,
-	job_log_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +50,7 @@ logger = logging.getLogger(__name__)
 class ElementJobDriver(ResumableJobDriver):
 	source = "element_job"
 	min_vram_mb = 0  # El preflight declarativo decide (igual que script_job)
+	_LOG_TAG = "[ELEMENT JOB]"
 
 	# ── Validación en el submit ────────────────────────────────────────────
 
@@ -76,11 +75,28 @@ class ElementJobDriver(ResumableJobDriver):
 		if len(set(exit_codes.values())) != len(exit_codes):
 			raise ValueError("defer_exit_code, pause_exit_code y skip_exit_code no pueden coincidir")
 
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
+
 	# ── Preflight (requisitos declarativos) ────────────────────────────────
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
 		pre = payload.get("preflight") or {}
-		if pre.get("llm_required") and not self._llm_healthy(self._llm_port()):
+
+		# Paridad con script_job: si la receta pide `vram_unload`, liberar la VRAM
+		# del LLM residente ANTES de medir `min_free_vram_mb`. Sin esto, el gate
+		# difiere para siempre (nadie pide el unload): bug 2026-10-14 — element_job
+		# ignoraba la clave en silencio (solo script_job la implementaba).
+		if pre.get("vram_unload"):
+			import red_pill.config as cfg
+
+			self._request_vram_unload(str(cfg.DUAL_BIND_PROXY_URL))
+
+		if pre.get("llm_required") and not self._llm_healthy():
 			raise JobDeferred("LLM local no responde — se difiere hasta que la GPU/LLM se libere")
 
 		# Gate GPU (2026-10-05): con `min_free_vram_mb`, el step solo arranca si el
@@ -104,41 +120,14 @@ class ElementJobDriver(ResumableJobDriver):
 		import json as _json
 		import urllib.request
 
+		from red_pill.core.llm_endpoint import llm_base_url
+
 		try:
-			with urllib.request.urlopen(f"http://127.0.0.1:{ElementJobDriver._llm_port()}/status", timeout=3) as resp:
+			with urllib.request.urlopen(f"{llm_base_url()}/status", timeout=3) as resp:
 				data = _json.loads(resp.read().decode("utf-8"))
 		except Exception:
 			return False
 		return str(data.get("loaded_profile") or "") == model and str(data.get("mode") or "") == "gpu"
-
-	@staticmethod
-	def _llm_port() -> int:
-		try:
-			import red_pill.config as cfg
-
-			env = getattr(cfg, "MLX_LM_URL", "") or ""
-			if env and ":" in env:
-				import re
-
-				m = re.search(r":(\d+)", env)
-				if m:
-					return int(m.group(1))
-		except Exception:
-			pass
-		return 8760
-
-	@staticmethod
-	def _llm_healthy(port: int) -> bool:
-		import urllib.request
-
-		for path in ("/health", "/v1/models"):
-			try:
-				resp = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=3)
-				if resp.status == 200:
-					return True
-			except Exception:
-				continue
-		return False
 
 	# ── Inicialización: origen de los elementos ────────────────────────────
 
@@ -305,17 +294,31 @@ class ElementJobDriver(ResumableJobDriver):
 
 	def _build_env(self, payload: Dict[str, Any], cwd: str, element: Any, index: int) -> Dict[str, str]:
 		env = dict(os.environ)
-		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
-		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
+		from red_pill.jobs.drivers.base import sanitize_job_env
+
+		env.update(sanitize_job_env(payload.get("env")))
+		# AD-030: el bloque `llm:` del recipe → env RP_LLM_*.
 		try:
 			from red_pill.jobs.drivers.base import inject_llm_env
 
 			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
 		except ValueError as e:
 			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
+		# Fine progress channel (RFC-JOBDAG-002): uniform with dag_job/script_job, so a
+		# child that calls report_stage_progress() is no longer a silent no-op.
+		from red_pill.core.progress import enable_stage_progress
+
+		enable_stage_progress(env, self.job_id)
 		# El elemento a tratar: JSON serializado + índice (para logs y selección).
 		env["RP_ELEMENT"] = json.dumps(element, ensure_ascii=False)
 		env["RP_ELEMENT_INDEX"] = str(index)
+		# docs/CORE/MEDIA_MODELS.md: adaptación media POR ELEMENTO (multi-modelo).
+		try:
+			from red_pill.jobs.drivers.media_hook import media_env_for_element
+
+			env.update(media_env_for_element(payload, element))
+		except Exception:  # noqa: BLE001 — nunca romper el step por el hook
+			pass
 		if payload.get("defer_exit_code") is not None:
 			env["RP_DEFER_EXIT_CODE"] = str(payload["defer_exit_code"])
 		if payload.get("pause_exit_code") is not None:
@@ -324,34 +327,3 @@ class ElementJobDriver(ResumableJobDriver):
 			env["RP_SKIP_EXIT_CODE"] = str(payload["skip_exit_code"])
 		env["PYTHONUNBUFFERED"] = "1"
 		return env
-
-	@staticmethod
-	def _has_systemd() -> bool:
-		return shutil.which("systemd-run") is not None
-
-	def _clear_stale_scope(self) -> None:
-		unit = f"redpill-job-{self.short_id}.scope"
-		try:
-			active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=5).returncode == 0
-			if active:
-				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
-			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
-		except Exception:
-			pass
-
-	def _looks_like_timeout(self, elapsed: float, returncode: int) -> bool:
-		if not self.step_timeout_s:
-			return False
-		if returncode in (124, 137, 143, -9, -15) and elapsed >= self.step_timeout_s * 0.9:
-			return True
-		return elapsed >= self.step_timeout_s
-
-	def _log_path(self) -> Path:
-		return job_log_path(self.job_id)
-
-	def _log_tail(self, lines: int = 25) -> str:
-		try:
-			content = self._log_path().read_text(encoding="utf-8", errors="replace").strip().splitlines()
-			return "\n".join(content[-lines:]) if content else "(sin salida)"
-		except Exception:
-			return "(log no disponible)"

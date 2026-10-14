@@ -1,9 +1,10 @@
 """Las recetas versionadas (`configs/jobs/`) no llevan rutas de un usuario concreto.
 
-El repo es público y las recetas viajan con él: `cwd` ausente se ancla a la raíz
-del repo (`load_recipe`), `manifest.workdir` relativo a ese `cwd`, y lo que vive
-fuera del repo (venvs auxiliares) se alcanza con un `sh -c` explícito que expande
-`$HOME` — el driver tokeniza con shlex y jamás expande `~` ni variables.
+El repo es público y las recetas viajan con él. Se ejecutan **post-siembra**, así que
+resuelven por **env** (sembrado por el runner, `queue_worker._load_job_env`): `$IA_DIR`
+(raíz del repo), `$<VENV>_VENV` (venvs auxiliares fuera del repo), `$RP_MEDIA_STAGING`…
+`cwd` ausente se ancla a la raíz del repo (`load_recipe`). Nada de `/home/`, `~/` ni
+`$HOME`-based: el driver tokeniza con shlex y no expande `~`/variables.
 """
 
 from __future__ import annotations
@@ -54,28 +55,30 @@ def _fake_python(path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-	"name, venv_rel, expected",
+	"name, venv_var, script, args",
 	[
-		("bakeoff_granite_42", ".local/share/red-pill/llmtools-venv", "PYTHONPATH=src ARGS=scripts/bakeoff_granite_42.py"),
-		("laya_router_bakeoff", ".local/share/red-pill/laya-venv", "PYTHONPATH= ARGS=scripts/laya_router_bakeoff.py --n 120 --seed 7"),
+		("bakeoff_granite_42", "LLMTOOLS_VENV", "bakeoff_granite_42.py", ""),
+		("laya_router_bakeoff", "LAYA_VENV", "laya_router_bakeoff.py", " --n 120 --seed 7"),
 	],
 )
-def test_venv_fuera_del_repo_se_resuelve_con_la_home_de_quien_ejecuta(tmp_path, name, venv_rel, expected):
+def test_venv_fuera_del_repo_se_resuelve_por_env(tmp_path, name, venv_var, script, args):
+	"""Post-siembra: el venv (fuera del repo) y el script (repo) resuelven por ENV."""
 	_, payload, _, _, _ = load_recipe(str(RECIPES_DIR / f"{name}.yaml"))
 	command = payload["step_command"]
 	assert isinstance(command, list) and command[:2] == ["sh", "-c"]
 
-	home = tmp_path / "home"
-	_fake_python(home / venv_rel / "bin" / "python")
-	env = {"HOME": str(home), "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+	venv = tmp_path / "venv"
+	_fake_python(venv / "bin" / "python")
+	env = {venv_var: str(venv), "IA_DIR": str(REPO_ROOT), "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
 	out = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, check=True, timeout=30)
-	assert out.stdout.strip() == expected
+	assert out.stdout.strip().endswith(f"ARGS={REPO_ROOT}/scripts/{script}{args}")
 
 
-def test_laya_router_bakeoff_respeta_laya_venv(tmp_path):
+def test_laya_router_bakeoff_usa_laya_venv_del_env(tmp_path):
+	"""`$LAYA_VENV` (sembrado por el runner) manda; script absoluto vía `$IA_DIR`."""
 	_, payload, _, _, _ = load_recipe(str(RECIPES_DIR / "laya_router_bakeoff.yaml"))
 	venv = tmp_path / "otro-venv"
 	_fake_python(venv / "bin" / "python")
-	env = {"HOME": str(tmp_path / "sin-venv"), "LAYA_VENV": str(venv), "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+	env = {"LAYA_VENV": str(venv), "IA_DIR": str(REPO_ROOT), "PATH": os.environ.get("PATH", "/usr/bin:/bin")}
 	out = subprocess.run(payload["step_command"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True, timeout=30)
-	assert "ARGS=scripts/laya_router_bakeoff.py" in out.stdout
+	assert f"ARGS={REPO_ROOT}/scripts/laya_router_bakeoff.py" in out.stdout

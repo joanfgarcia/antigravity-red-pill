@@ -14,6 +14,8 @@ import subprocess
 import sys
 import textwrap
 
+from red_pill.core.paths import get_launchd_dir, get_systemd_user_dir, get_uv_bin
+
 # Config
 DEFAULT_INTERVAL_HOURS = 1
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,11 +34,11 @@ GRAPHIFY_SERVICE = "redpill-graphify.service"
 GRAPHIFY_TIMER = "redpill-graphify.timer"
 BANK_JANITOR_SERVICE = "redpill-bank-janitor.service"
 BANK_JANITOR_TIMER = "redpill-bank-janitor.timer"
-SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
+SYSTEMD_USER_DIR = str(get_systemd_user_dir())
 
 # Launchd label (macOS)
 LAUNCHD_LABEL = "com.redpill.pulse"
-LAUNCHD_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
+LAUNCHD_PLIST = str(get_launchd_dir() / f"{LAUNCHD_LABEL}.plist")
 
 # Task Scheduler name (Windows)
 TASK_NAME_PULSE = "RedPill-Pulse"
@@ -46,7 +48,6 @@ TASK_NAME_QUEUE = "RedPill-Queue"
 # Scripts
 TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
 TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "bunker_telemetry.py")
-QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
 
 # Recetas de los ciclos nocturnos: los timers de calendario ENCOLAN el job en la
 # cola central en vez de ejecutar el ciclo directamente — el runner serializa
@@ -63,7 +64,7 @@ def _find_uv() -> str:
 	if uv:
 		return uv
 	# Fallback: common install location
-	candidate = os.path.expanduser("~/.local/bin/uv")
+	candidate = get_uv_bin()
 	if os.path.exists(candidate):
 		return candidate
 	print("[ERROR] 'uv' not found. Install it first: https://docs.astral.sh/uv/")
@@ -158,7 +159,7 @@ def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = 
 		nice_line += f"\nMemoryMax={memory_max}"
 	# Minimal, stable PATH — do NOT freeze the installer session's PATH, which can carry
 	# ephemeral per-session dirs (e.g. Claude local-agent-mode plugin bins) ahead of the venv.
-	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin"
+	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.dirname(get_uv_bin())}:/usr/local/bin:/usr/bin:/bin"
 	content = textwrap.dedent(f"""\
 		[Unit]
 		Description={desc}
@@ -267,7 +268,7 @@ def _uninstall_linux() -> None:
 
 def _uninstall_macos() -> None:
 	for label in ("wake", "sleep", "telemetry", "queue"):
-		p = os.path.expanduser(f"~/Library/LaunchAgents/com.redpill.{label}.plist")
+		p = str(get_launchd_dir() / f"com.redpill.{label}.plist")
 		if os.path.exists(p):
 			subprocess.run(["launchctl", "unload", p], check=False)
 			os.remove(p)
@@ -294,7 +295,7 @@ def _install_macos(interval_hours: int, uv_path: str) -> None:
 
 
 def _write_launchd_plist(label, command, interval_seconds):
-	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	plist_path = str(get_launchd_dir() / f"{label}.plist")
 	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
@@ -326,7 +327,7 @@ def _write_launchd_plist(label, command, interval_seconds):
 
 def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: int) -> None:
 	"""Write a launchd plist that fires at a fixed daily time (StartCalendarInterval)."""
-	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	plist_path = str(get_launchd_dir() / f"{label}.plist")
 	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
@@ -369,8 +370,8 @@ def _install_windows(interval_hours: int, uv_path: str) -> None:
 	_create_win_daily_task("RedPill-Nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', "03:00")
 	# 3. Telemetry
 	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)
-	# 4. Queue
-	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 1)
+	# 4. Queue (module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)
+	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python -m red_pill.core.queue_worker --oneshot', 1)
 	print("[OK] Windows Tasks created. Protocol Zero-Daemon active.")
 
 

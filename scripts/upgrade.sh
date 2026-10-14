@@ -204,9 +204,12 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$CONFIG_DIR/workspace
 	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml). Edítalo o usa 'red-pill workspace enable'.${NC}"
 fi
 
+# Raíz de temporales del arnés (docs/CORE/MEDIA_MODELS.md): ~/tmp por defecto; .env la sobreescribe.
+RP_TMP="${RP_TMP_DIR:-$HOME/tmp}"; RP_TMP="${RP_TMP/#\~/$HOME}"; mkdir -p "$RP_TMP"
+
 # Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
 # Misma lista que bunker_lifecycle.CONFIG_EXAMPLE_SEEDS (`red-pill bunker install|update`).
-for seed in model_profiles model_catalog task_profiles; do
+for seed in model_profiles model_catalog task_profiles runtimes media_profiles; do
 	if [ -f "$REPO_ROOT/examples/$seed.yaml.example" ] && [ ! -e "$CONFIG_DIR/$seed.yaml" ]; then
 		mkdir -p "$CONFIG_DIR"
 		cp "$REPO_ROOT/examples/$seed.yaml.example" "$CONFIG_DIR/$seed.yaml"
@@ -278,6 +281,12 @@ p._purge_leaked_duplicates()
 		done
 		for skill_dir in "$REPO_ROOT/skills/"*/; do
 			skill_name=$(basename "$skill_dir")
+			# Gate por capacidad (docs/TECHNICAL/DECISION_LOG.md): no sembrar si la capability está inactiva.
+			if grep -q '^capability:' "$skill_dir/SKILL.md" 2>/dev/null; then
+				if ! "${UV_BIN:-uv}" run --no-sync --project "$REPO_ROOT" python -c "import sys; from red_pill.core.capabilities import skill_enabled; sys.exit(0 if skill_enabled('$skill_dir/SKILL.md') else 1)" 2>/dev/null; then
+					echo -e "  ${YELLOW}skip $skill_name (capability inactiva)${NC}"; continue
+				fi
+			fi
 			cp -r "$skill_dir" "$AGENT_DIR/skills/$skill_name"
 			# ${RED_PILL_CMD} → invocación uv (el CLI no está en el PATH del harness)
 			if grep -q '\${RED_PILL_CMD}' "$AGENT_DIR/skills/$skill_name/SKILL.md" 2>/dev/null; then

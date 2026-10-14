@@ -6,14 +6,14 @@
 # Reanudable por frontera de elemento; watchdog por elemento.
 #
 # Requiere haber corrido antes configs/jobs/imagegen_setup.yaml (misma venv).
-# Portabilidad: sin rutas de usuario salvo $HOME/XDG (el shell expande las ${VAR:-def}).
-# SALIDA: hits medidos y PNG → desk (notes); el repo lleva las TOOLS.
+# Rutas por env (el runner exporta el .env): $IA_DIR (repo), $IMAGE_FORGE_HOME (forge).
+# SALIDA: hits medidos y PNG → staging (desechable); el repo lleva las TOOLS.
 source: element_job
 priority: 3
 title: ImageGen A/B — 3 modelos × 6 géneros (element_job, fail-soft)
 mission_id: imagegen-ab
-elements_command: ["sh", "-c", '"${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python scripts/imagegen/bench_imagegen.py --list-models']
-step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-10-imagegen-ab"; mkdir -p "$OUT"; "${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"/venv/bin/python -u scripts/imagegen/bench_imagegen.py --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+elements_command: ["sh", "-c", '"$IMAGE_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/imagegen/bench_imagegen.py" --list-models']
+step_command: ["sh", "-c", 'OUT="$RP_MEDIA_STAGING/imagegen-ab"; mkdir -p "$OUT"; "$IMAGE_FORGE_HOME/venv/bin/python" -u "$IA_DIR/scripts/imagegen/bench_imagegen.py" --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single

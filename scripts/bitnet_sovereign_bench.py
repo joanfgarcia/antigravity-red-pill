@@ -5,12 +5,14 @@ import subprocess
 import time
 from datetime import datetime
 
+from red_pill.core.paths import get_models_dir
+
 # PROYECTO FREE ALETH: BITNET SOVEREIGN BENCHMARK (QUAD-FLAVOR) - CURL EDITION
 # Script diseñado para el PR oficial de BitNet. Sin dependencias externas.
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BITNET_DIR = os.path.join(PROJECT_ROOT, "3rdparty/BitNet-1.58b")
-MODEL_PATH = os.path.expanduser("~/.local/share/red-pill/models/falcon3-10b-instruct-1.58bit-V2.gguf")
+MODEL_PATH = str(get_models_dir() / "falcon3-10b-instruct-1.58bit-V2.gguf")
 API_URL = "http://127.0.0.1:8080/completion"
 HEALTH_URL = "http://127.0.0.1:8080/health"
 

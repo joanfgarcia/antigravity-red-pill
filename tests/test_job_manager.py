@@ -842,12 +842,11 @@ class _FakeAgentMinion:
 
 def _patch_dag_agent(monkeypatch):
 	"""Sustituye MinionFactory.create (solo 'agent') y _resolve_minion_kind."""
-	import red_pill.jobs.drivers.dag as dag_mod
 	import red_pill.swarm.factory as fac
 
 	fake = _FakeAgentMinion()
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: fake if minion_id == "agent" else None))
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else None)
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else None)
 	return fake
 
 
@@ -945,11 +944,10 @@ def test_dag_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypatch
 		async def execute(self, task, **kwargs):
 			return {"status": "failed", "error": "API down"}
 
-	import red_pill.jobs.drivers.dag as dag_mod
 	import red_pill.swarm.factory as fac
 
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	d = DagJobDriver()
 	payload = _dag_payload(
 		str(ws),
@@ -974,11 +972,10 @@ def test_dag_job_on_fail_stop_raises(tmp_path, monkeypatch):
 		async def execute(self, task, **kwargs):
 			return {"status": "failed", "error": "API down"}
 
-	import red_pill.jobs.drivers.dag as dag_mod
 	import red_pill.swarm.factory as fac
 
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	d = DagJobDriver()
 	payload = _dag_payload(
 		str(ws),

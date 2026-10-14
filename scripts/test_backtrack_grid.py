@@ -4,6 +4,8 @@ import time
 
 import numpy as np
 
+from red_pill.core.paths import get_antigravity_brain_dir, get_workspace_root
+
 try:
 	from llama_cpp import Llama, llama_get_logits
 
@@ -156,7 +158,7 @@ def generate_gguf_backtrack(
 
 
 def main():
-	workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+	workspace = str(get_workspace_root())
 	model_path = os.path.join(workspace, "sharing", "models", "gguf", "Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf")
 
 	if not os.path.exists(model_path):
@@ -207,7 +209,7 @@ def main():
 			results.append({"desc": desc, "label": case["label"], "response": clean_resp, "backtracks": backtracks, "time": dt})
 
 	# Escribir los resultados en una tabla de markdown en los artefactos
-	report_path = os.path.expanduser("~/.gemini/antigravity/brain/426682cc-776c-436a-9332-8afcdbb382a9/backtrack_comparison_report.md")
+	report_path = str(get_antigravity_brain_dir() / "426682cc-776c-436a-9332-8afcdbb382a9" / "backtrack_comparison_report.md")
 
 	with open(report_path, "w", encoding="utf-8") as f:
 		f.write("# Reporte Comparativo: Modos de Backtracking en Falcon-3B GGUF\n\n")

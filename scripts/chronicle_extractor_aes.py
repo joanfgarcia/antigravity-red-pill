@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from red_pill.core.paths import get_antigravity_conversations_dir, get_unencrypted_conversations_dir
+
 # Configurar logging básico
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ExtractorAES")
@@ -23,8 +25,8 @@ def run_extraction():
 		logger.error("ANTIGRAVITY_KEY no encontrada en el entorno.")
 		return
 
-	conv_dir = Path.home() / ".gemini/antigravity/conversations"
-	out_dir = Path.home() / ".local/share/red-pill/unencrypted_conversations"
+	conv_dir = get_antigravity_conversations_dir()
+	out_dir = get_unencrypted_conversations_dir()
 	out_dir.mkdir(parents=True, exist_ok=True)
 
 	# 1. Comprobar Idempotencia (mtime)

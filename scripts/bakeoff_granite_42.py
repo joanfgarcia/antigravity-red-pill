@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bakeoff_granite_42.py — Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3 §5.3).
+"""bakeoff_granite_42.py — Bake-off Granite 4.2 vs 4.1 (AD-030).
 
 F1 (destilador): granite_4_2_8b vs Granite-4.1-8B — prompt distiller_v3_voice
 MODE B. Mide voz 1ª persona, género de Joan (masculino), fidelidad (relics),
@@ -26,9 +26,10 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from red_pill.core import model_runtime as mr  # noqa: E402
 from red_pill.core.model_runtime import extract_thinking  # noqa: E402
+from red_pill.core.paths import get_models_dir  # noqa: E402
 from red_pill.metabolism.distiller import load_prompt_text  # noqa: E402
 
-MODELS = Path.home() / ".local" / "share" / "red-pill" / "models"
+MODELS = get_models_dir()
 PROMPT_VOICE = load_prompt_text("distiller_v3_voice.txt", static={"agent_name": "Aleth", "operator_name": "Joan"})
 
 FEM_RE = re.compile(

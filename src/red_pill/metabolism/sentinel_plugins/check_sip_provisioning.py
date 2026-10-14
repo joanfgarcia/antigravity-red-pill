@@ -136,7 +136,9 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				)
 
 		# 4. systemd service file — persistent (survives reboot)
-		service_path = Path.home() / ".config" / "systemd" / "user" / "redpill-llm.service"
+		from red_pill.core.paths import get_systemd_user_dir
+
+		service_path = get_systemd_user_dir() / "redpill-llm.service"
 		if not service_path.exists():
 			findings.append(
 				AuditFinding(

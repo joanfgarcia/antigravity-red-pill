@@ -89,7 +89,7 @@ catalog:
             share_alike: false
             source: "https://huggingface.co/ibm-granite/granite-4.1-8b-instruct"
           timeout: 300
-        # Granite 4.2 8B — thinking + tool-calling NATIVO (HARNESS-004, 2026-09-30).
+        # Granite 4.2 8B — thinking + tool-calling NATIVO (docs/CORE/MEDIA_MODELS.md, 2026-09-30).
         # Más capaz que el 4.1 (razona y encadena; P3 del arnés en 6 pasos), pero
         # más pesado (5.35 GB → n_ctx reducido para caber en 8 GB).
         # OJO: `backend: local` = LocalBridge, one-shot y SIN tools; el bridge no

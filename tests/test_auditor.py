@@ -370,4 +370,3 @@ def test_fingerprint_ignores_noise_outside_the_code(tmp_path):
 	(repo / ".venv").mkdir()
 	(repo / ".venv" / "lib.py").write_text("z = 0\n")
 	assert auditor._project_fingerprint(str(repo)) == fp
-

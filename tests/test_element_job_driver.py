@@ -184,10 +184,10 @@ def test_preflight_llm_required_difiere():
 	driver = _bind(ElementJobDriver())
 	from red_pill.jobs.drivers.base import JobDeferred
 
-	driver._llm_healthy = staticmethod(lambda port: False)
+	driver._llm_healthy = staticmethod(lambda: False)
 	with pytest.raises(JobDeferred):
 		driver.preflight({"preflight": {"llm_required": True}})
-	driver._llm_healthy = staticmethod(lambda port: True)
+	driver._llm_healthy = staticmethod(lambda: True)
 	driver.preflight({"preflight": {"llm_required": True}})  # no lanza
 
 

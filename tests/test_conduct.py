@@ -1,4 +1,4 @@
-"""TST-CO-001: capa de conducta unificada (RFC-HARNESS-003 corte 4).
+"""TST-CO-001: capa de conducta unificada (AD-049 corte 4).
 
 Herméticos: sin GPU ni config real — ResolvedModel construidos a mano y
 monkeypatch de ModelRegistry para la propagación del resolve.
@@ -45,9 +45,7 @@ class TestChatTemplateKwargs:
 	def test_reasoning_effort_passthrough(self):
 		from red_pill.inference import conduct
 
-		assert conduct.chat_template_kwargs(_resolved(thinking="on", reasoning_effort="medium")) == {
-			"reasoning_effort": "medium"
-		}
+		assert conduct.chat_template_kwargs(_resolved(thinking="on", reasoning_effort="medium")) == {"reasoning_effort": "medium"}
 
 	def test_no_conduct_no_kwargs(self):
 		from red_pill.inference import conduct

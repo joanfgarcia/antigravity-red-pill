@@ -194,7 +194,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.connect(self.path)
 
 		payload = self._build_payload(
-			task=str(kwargs.get("task") or "conversation"),  # RFC-HARNESS-002 §6.1
+			task=str(kwargs.get("task") or "conversation"),  # AD-030
 			messages=kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			temperature=kwargs.get("temperature", 0.3),
 			max_tokens=kwargs.get("max_tokens"),
@@ -377,7 +377,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		import os
 		import shutil
 
-		# RFC-HARNESS-003: un perfil anclado a un runtime no-python NO se sirve
+		# AD-049: un perfil anclado a un runtime no-python NO se sirve
 		# por el camino stock. Runtime declarado y ausente → fallo limpio; y si
 		# está presente, este factory no lo sirve (el consumidor debe usar
 		# RuntimeServer, el servidor dedicado del runtime).
@@ -394,7 +394,9 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 				return None
 
 		# 1. Locate runner
-		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		from red_pill.core.paths import get_workspace_root
+
+		workspace = str(get_workspace_root())
 		runner_path = os.path.join(workspace, "sharing", "3rdparty", "llama_official", "build", "bin", "llama-cli")
 		if not os.path.exists(runner_path):
 			runner_path_opt = shutil.which("llama-cli")
@@ -495,7 +497,9 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 
 		if device in ("vulkan", "igpu"):
 			# Resolve Vulkan runner
-			workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+			from red_pill.core.paths import get_workspace_root
+
+			workspace = str(get_workspace_root())
 			vulkan_runner = os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b", "build_vulkan", "bin", "llama-cli")
 			if os.path.exists(vulkan_runner):
 				runner_path = vulkan_runner

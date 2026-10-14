@@ -59,13 +59,9 @@ class TestIdentity:
 
 	def test_tag_parse_mission_with_slash(self):
 		# Un `repo:<rama>` con '/' ya no se trunca al parsear (fix adversarial).
-		tag = render_session_tag(
-			continuity_id="alma-1", originator="opencode:s1", mission_id="repo:feat/phase-0a-affinity"
-		)
+		tag = render_session_tag(continuity_id="alma-1", originator="opencode:s1", mission_id="repo:feat/phase-0a-affinity")
 		parsed = _parse_session_tags(tag)
-		assert parsed == [
-			{"continuity_id": "alma-1", "leg": "opencode:s1", "mission": "repo:feat/phase-0a-affinity"}
-		]
+		assert parsed == [{"continuity_id": "alma-1", "leg": "opencode:s1", "mission": "repo:feat/phase-0a-affinity"}]
 
 	def test_tag_roundtrip_sanitizes_breaking_chars(self):
 		# '>' '<' '"' en una rama romperían el grammar del tag → se sanean, y el
@@ -74,18 +70,12 @@ class TestIdentity:
 		assert tag.count("<") == 1 and tag.endswith("/>")
 		parsed = _parse_session_tags(tag)
 		assert parsed == [{"continuity_id": "alma-1", "leg": "opencode:s1", "mission": "repo:feat/x_y"}]
-		out = decorate_with_session_tag(
-			tag, continuity_id="alma-1", originator="opencode:s1", mission_id="repo:feat/x>y"
-		)
+		out = decorate_with_session_tag(tag, continuity_id="alma-1", originator="opencode:s1", mission_id="repo:feat/x>y")
 		assert out.count("<session") == 1
 
 	def test_decorate_idempotent_single_tag(self):
-		out = decorate_with_session_tag(
-			"hola", continuity_id="alma-1", originator="opencode:s1", mission_id="repo:main"
-		)
-		out2 = decorate_with_session_tag(
-			out, continuity_id="alma-1", originator="opencode:s1", mission_id="repo:main"
-		)
+		out = decorate_with_session_tag("hola", continuity_id="alma-1", originator="opencode:s1", mission_id="repo:main")
+		out2 = decorate_with_session_tag(out, continuity_id="alma-1", originator="opencode:s1", mission_id="repo:main")
 		assert out.count("<session") == 1
 		assert out2.count("<session") == 1  # no acumula tags obsoletos
 		assert "alma-1" in out2

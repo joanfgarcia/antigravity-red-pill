@@ -1,7 +1,6 @@
 import logging
 import shutil
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict
 
 from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
@@ -19,7 +18,9 @@ class ScratchPurgePlugin(JanitorPlugin):
 		plugin_cfg = config_dict.get("plugins", {}).get(self.name, {})
 		days_to_keep = plugin_cfg.get("days_to_keep", 7)
 
-		scratch_path = Path.home() / "tmp" / "scratch"
+		from red_pill.core.paths import get_tmp_dir
+
+		scratch_path = get_tmp_dir() / "scratch"
 		purged_files = 0
 
 		if scratch_path.exists() and scratch_path.is_dir():

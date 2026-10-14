@@ -33,6 +33,7 @@ def distill_session(
 		stale.unlink()  # regeneración completa, jamás parcheo (§4.5.1)
 
 	import red_pill.config as cfg
+	from red_pill.core.progress import report_stage_progress
 
 	if max_chars is None:
 		max_chars = int(getattr(cfg, "MEMENTO_FRAGMENT_MAX_CHARS", 12000))
@@ -40,7 +41,9 @@ def distill_session(
 		overlap = int(getattr(cfg, "MEMENTO_FRAGMENT_OVERLAP_MESSAGES", 2))
 
 	sections = []
-	for unit in work_units(session_dir):
+	units = list(work_units(session_dir))
+	for i_unit, unit in enumerate(units, 1):
+		report_stage_progress(label="distill", current=i_unit, total=len(units), session=session_id)
 		nnn, ref, content = unit.nnn, unit.ref, unit.content
 		if len(content) <= max_chars:
 			frag_parts = [(content, 1, 1)]

@@ -27,7 +27,6 @@ def _load_fragment(name: str) -> str:
 	return (_FRAGMENTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
 
 
-
 def _identity_bio_with_source() -> tuple[str, str]:
 	"""Bio de identidad (MEM-006 P0) y su origen:
 

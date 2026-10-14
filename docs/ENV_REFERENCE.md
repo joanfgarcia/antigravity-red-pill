@@ -29,7 +29,19 @@ This document provides a comprehensive list of all parameters available in the `
 | `EXECUTION_PROVIDER`| `None` | Hardware acceleration strategy (e.g., `cpu`, `cuda`, `coreml`). |
 | `FASTEMBED_CACHE_PATH` | `<project>/storage/models` | Absolute path to the locally cached embedding model weights. |
 | `READ_PATH_PRUNING_ENABLED` | `False` | When `False`, `search_and_reinforce` hides eroded engrams from a result but never DELETES them — forgetting is the sleep cycle's job, not a lookup's. `True` restores the legacy destructive-read behavior. |
-| `SLEEP_CHUNK_SIZE` | `6000` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). |
+| `SLEEP_CHUNK_SIZE` | `500` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). The shipped `.env.example` overrides it to `6000`. |
+
+### Media Generation (Forges & Staging)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `RP_TMP_DIR` | `~/tmp` | Root for harness temporaries; the media **staging** lives under `<RP_TMP_DIR>/red-pill/media/staging`. |
+| `RP_MEDIA_STAGING` | `<RP_TMP_DIR>/red-pill/media/staging` | Explicit staging root for generated media (overrides the tmp-derived default). |
+| `IMAGE_FORGE_HOME` | `~/opt/image-forge` | Image forge root (venv + models + `hf-cache`). Optional; capability inactive if unmounted. |
+| `AUDIO_FORGE_HOME` | `~/opt/audio-forge` | Audio forge root. Optional. |
+| `MUSIC_FORGE_HOME` | `~/opt/music-forge` | Music forge root. Optional. |
+| `REDPILL_IMAGE_MODELS_DIR` | `~/opt/red-pill-custom-image-models` | Composed/non-HF image models (multi-repo compositions). |
+| `REDPILL_MEDIA_PROFILES` | `<config>/red-pill/media_profiles.yaml` | The media elenco (models/roles). |
+| `REDPILL_RUNTIMES` | `<config>/red-pill/runtimes.yaml` | Inference engine registry. |
 
 ---
 
@@ -41,7 +53,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `METABOLISM_ENABLED` | `True` | Activates the core engine that forgets over time (entropic background decay). |
 | `METABOLISM_STRATEGY`| `LAZY` | Calculation mode: `CLASSIC` run as a loop, `LAZY` calculated at query time. |
 | `METABOLISM_COOLDOWN`| `3600` | Minimum seconds between global erosion cycles. |
-| `ABSENCE_THRESHOLD`| `604800` (7 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
+| `ABSENCE_THRESHOLD`| `259200` (3 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
 | `MAX_SINK_TIME` | `2592000` (30 days)| Total max time an engram survives before a `Gran Purge` irrevocably destroys it. |
 | `DECAY_STRATEGY` | `linear` | Mathematical model to apply score reduction (`linear` or `exponential`). |
 | `EROSION_RATE` | `0.01` | How much reinforcement score is removed per cycle. At 0.01, standard memories last ~4 days without reinforcement. |
@@ -297,11 +309,7 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `CLOUD_VAULT_ENABLED` | `False` | Toggles AES-256 encrypted auto-exports to cloud services. |
-| `CLOUD_VAULT_PROVIDER`| `google_drive` | Only `google_drive` supported. |
 | `CLOUD_VAULT_FOLDER_ID`| `""` | The absolute folder ID in the Drive account to stage exports. |
-| `CLOUD_SERVICE_ACCOUNT_FILE`| `*/service_account.json`| Auto-generated path to G-Cloud credentials. |
-| `CLOUD_VAULT_QUOTA_MB` | `500` | Maximum size in MB stored on the cloud. |
-| `CLOUD_VAULT_RESERVE_COUNT`| `4` | How many recent full Soul Kits to keep before pruning older ones. |
 | `CLOUD_VAULT_GPG_PASSPHRASE`| `N/A` | Critical: Sets the symmetric AES-256 payload password. Used dynamically but not printed in `.env.example`. |
 
 ---
@@ -334,7 +342,7 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `SWARM_SHARED_SECRET` | `""` | **Required.** The community admission password. Used as the HMAC-SHA256 key to sign/verify every `KeyPackage` published to Firebase. Agents without this secret cannot fake a valid `admission_token` and will be silently dropped on `resolve_alias()`. Must be identical between all community members (distributed out-of-band by the operator). |
-| `SWARM_TELEMETRY_LEVEL`| `MINIMUM` | Controls Swarm-level logging verbosity. Options: `NONE`, `MINIMUM`, `FULL`. |
+| `SWARM_TELEMETRY_DEFAULT`| `NONE` | Controls Swarm-level logging verbosity. Options: `NONE`, `MINIMUM`, `FULL`. |
 
 ### How MLS B1 Works (Quick Reference)
 
@@ -346,3 +354,159 @@ Plugins 05–10. Each is independently toggleable.
 
 > [!IMPORTANT]
 > `SWARM_SHARED_SECRET` must be **32+ characters** and shared **out-of-band** (Signal/in-person) between all Swarm operators before the first subscription. After the initial group formation, TreeKEM handles all key rotation automatically — you never need to re-share the secret.
+
+---
+
+## 🧩 Appendix — Complete key inventory
+
+> Reconciled by the R5 adversarial audit (SHARD-PC-02/PC-05): closes the gap where a
+> documented or shipped key/property was absent from the tables above. Every field of
+> `RedPillConfig` is readable from the environment by its name (pydantic BaseSettings).
+
+### Keys shipped in `.env.example` (previously undocumented here)
+
+**Workspace roots**
+
+| Parameter | Description |
+| :--- | :--- |
+| `WORKSPACE_ROOT` | Red-pill's OWN ecosystem/asset root (not a project workspace). |
+| `APP_ROOT` | Application root (repo) used for bundled resources. |
+| `AGENT_CORE_DIR` | The agent's GLOBAL personal desk (transversal notes/plans). |
+| `RED_PILL_PROFILE` | Active profile (user/enterprise/community). |
+
+**Neuro-Immune signals**
+
+| Parameter | Description |
+| :--- | :--- |
+| `SIGNAL_VISIBILITY_THRESHOLD` | Score above which a pain signal becomes visible. |
+| `SIGNAL_BASE_NOTIFICATION` | Base notification weight for a signal. |
+| `SIGNAL_BASE_PAIN_CUDA` | Base pain weight for CUDA-related signals. |
+| `SIGNAL_PAIN_ESCALATION_RATE` | Per-cycle escalation of unresolved pain. |
+| `SIGNAL_AMNESIA_HOURS` | Hours without consolidation before an amnesia signal fires. |
+| `SIGNAL_MIGRAINE_VECTORS` | Comma-separated vector names that trigger a migraine signal. |
+
+**Emotional pre-heating**
+
+| Parameter | Description |
+| :--- | :--- |
+| `PRE_HEATING_ENABLED` | Inject emotionally pre-heated fragments before the turn. |
+| `PRE_HEATING_HOT_COLORS` | Chroma colors considered 'hot' for pre-heating. |
+| `PRE_HEATING_INJECTION_MODE` | How fragments are injected (prepend/append/…). |
+| `PRE_HEATING_MAX_CHARS_PER_FRAGMENT` | Char cap per injected fragment. |
+| `PRE_HEATING_MAX_FRAGMENTS` | Max fragments injected per turn. |
+| `PRE_HEATING_QUALITY_THRESHOLD` | Minimum quality score to inject a fragment. |
+| `PRE_HEATING_SCORING_STRATEGY` | Ranking strategy for candidate fragments. |
+
+**Reactive debounce**
+
+| Parameter | Description |
+| :--- | :--- |
+| `REACTIVE_DEBOUNCE_ENABLED` | Debounce rapid successive reactive triggers. |
+| `REACTIVE_DEBOUNCE_SECONDS` | Debounce window in seconds. |
+
+**Milvus (optional backend)**
+
+| Parameter | Description |
+| :--- | :--- |
+| `MILVUS_USER` | Milvus username (optional). |
+| `MILVUS_PASSWORD` | Milvus password (optional). |
+
+**Metabolism / purge**
+
+| Parameter | Description |
+| :--- | :--- |
+| `METABOLISM_AUTO_COLLECTIONS` | Collections auto-collected by metabolism. |
+| `ALLOW_PURGE` | SEC-PURGE-001: allow `red-pill purge` (default off). |
+
+### Internal tunables (`config.py`, no `.env.example` entry)
+
+Code-default value shown; override by the field name via env.
+
+| Parameter | Code default |
+| :--- | :--- |
+| `ABSENCE_GUARD_SCROLL_LIMIT` | `500` |
+| `ABSOLUTE_KEYWORDS` | `["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]` |
+| `AFFECT_DECAY_MODEL` | `"PIONEER"` |
+| `BRAIN_PATH` | `os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain")` |
+| `CADENCE_ABSENCE_THRESHOLD` | `86400 * 2` |
+| `CADENCE_BURST_THRESHOLD` | `30.0` |
+| `CONTAINER_ENGINE` | `None` |
+| `CONTEXT_HYDRATION_DEPTH` | `"HIGH"` |
+| `CURATED_HUB_MIN_LIFETIME_YEARS` | `10.0  # piso MAYOR para hubs (anclan el hilo; no mueren antes que sus miembros)` |
+| `CURATED_LIFETIME_MULTIPLIER_SOCIAL` | `1.0  # factor por motor (social=RhizoDB)` |
+| `CURATED_LIFETIME_MULTIPLIER_WORK` | `1.0  # factor por motor (work=Bayesiano)` |
+| `CURIOSITY_ENGINE_ENABLED` | `True` |
+| `CURIOSITY_PROFILE` | `"balanced"` |
+| `DEFAULT_COLOR` | `"gray"` |
+| `DEFAULT_EMOTION` | `"neutral"` |
+| `DUAL_BIND_PROXY_URL` | `"http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)` |
+| `EMBEDDING_LOCAL_FILES_ONLY` | `True` |
+| `EMERGENCY_CLOUD_OVERRIDE` | `False` |
+| `FLOW_REGISTRY_PATH` | `os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "flow_registry.yaml")` |
+| `GRAPHIFY_RAG_ENABLED` | `True` |
+| `HEDONIC_SET_POINT_COLOR` | `"emerald"` |
+| `ICE_MODE_ENABLED` | `False` |
+| `IDENTITY_DEPTH_HEADLESS` | `"low"` |
+| `IDENTITY_DEPTH_IDE` | `"full"` |
+| `IDENTITY_DEPTH_NEON_LINK` | `"medium"` |
+| `INGESTION_DIRECTORIES` | `[]` |
+| `JOB_CHECKPOINT_CADENCE_TARGET` | `600  # 10 min — advisory: steps longer than this hurt preemption` |
+| `JOB_STALL_LIMIT` | `3  # Consecutive steps with no progress before failing` |
+| `JOB_STEP_EMA_ALPHA` | `0.3  # Smoothing of the observed step duration` |
+| `JOB_STEP_TIMEOUT_DEFAULT` | `7200` |
+| `JOB_STEP_TIMEOUT_FACTOR` | `4  # bound = FACTOR × EMA(step_seconds)` |
+| `JOB_STEP_TIMEOUT_FLOOR` | `1800  # 30 min — never bound tighter than this` |
+| `LAZARUS_OFFICE_HOURS_PROTECTION` | `True` |
+| `LAZARUS_STATE_FILE` | `str(get_state_dir() / "lazarus_state.json")` |
+| `LLM_GENERATE_TIMEOUT` | `600  # Cota por llamada generate() al LLM local — un proxy mudo no puede congelar el sueño` |
+| `MAX_METADATA_STR` | `1024` |
+| `MEMENTO_AGENT_LABEL` | `"Aleth"` |
+| `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` | `0.6` |
+| `MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD` | `0.90  # medido 2026-09-25: 0,90-0,93 = mismo hecho` |
+| `MEMENTO_ANNOTATE_FRAGMENT_VIEW` | `"raw"` |
+| `MEMENTO_ANNOTATE_GATE` | `False` |
+| `MEMENTO_ANNOTATE_POST_REWRITE_DEDUP` | `False` |
+| `MEMENTO_ANNOTATE_VOICE_V2` | `False` |
+| `MEMENTO_CATEGORY_WORK_THRESHOLD` | `0.5` |
+| `MEMENTO_CURATED_IMPORTANCE_FACTOR` | `5.0` |
+| `MEMENTO_EMBED_ENRICHED` | `False` |
+| `MEMENTO_FRAGMENT_MAX_CHARS` | `8000` |
+| `MEMENTO_FRAGMENT_OVERLAP_MESSAGES` | `2  # solape de turnos entre fragmentos del distill` |
+| `MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL` | `0.5` |
+| `MEMENTO_GATE_MIN_SIGNIFICANCE_WORK` | `0.6` |
+| `MEMENTO_LLM_TIMEOUT` | `180` |
+| `MEMENTO_OPERATOR_LABEL` | `"Joan"` |
+| `MEMENTO_PROMPT_LANGUAGE` | `"auto"` |
+| `MEMENTO_SOCIAL_SCOPE` | `(` |
+| `MEMENTO_WORK_SCOPE` | `(` |
+| `MEMORY_HYBRID_RECALL_ENABLED` | `False` |
+| `MEMORY_RECALL_CANDIDATES_FACTOR` | `4  # candidatos = limit × factor antes de MMR/fusión` |
+| `MEMORY_RECALL_MMR_ENABLED` | `False` |
+| `MEMORY_RECALL_MMR_LAMBDA` | `0.85  # banco 2026-09-25: 0,85 > 0,7 (12/13 vs 11/13 hit@3 con híbrido)` |
+| `METABOLISM_STATE_FILE` | `str(get_state_dir() / "metabolism_state.json")` |
+| `MILVUS_LITE_PATH` | `str(get_db_dir() / "hive_lite.db")` |
+| `MLX_LM_URL` | `"http://127.0.0.1:8760/v1/chat/completions"` |
+| `NEON_LINK_ENABLED` | `True` |
+| `NEON_LINK_HTTP_API` | `False` |
+| `NEON_LINK_URL` | `"http://localhost:8770"` |
+| `NIGHTLY_ENABLED` | `True  # ciclo nocturno chronicle → sleep (nightly.yaml)` |
+| `OPERATOR_DISPLAY_NAME` | `os.getenv("USER_NAME", os.getenv("USER", "Operador"))` |
+| `OVERNIGHT_THERAPY_THRESHOLD_HOURS` | `4` |
+| `P2P_SYNC_REQUIRE_KNOWN_PEER` | `True` |
+| `POLAROID_GAIN` | `0.5  # incremento de estabilidad por reaparición` |
+| `POLAROID_REVIVAL_GATE` | `7.0  # umbral: S >= gate → ascenso por refuerzo` |
+| `POLAROID_TAU` | `90.0  # días de decaimiento de la estabilidad entre refuerzos` |
+| `RESONANCE_INTERVAL` | `600` |
+| `SAMANTHA_DRAIN_TIMEOUT` | `int(os.getenv("SAMANTHA_DRAIN_TIMEOUT", "240"))` |
+| `SEMANTIC_INTENT_THRESHOLD_STR` | `Field(` |
+| `SIP_ENABLED` | `True` |
+| `SIP_SOCKET_PATH` | `os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "red_pill.sock")` |
+| `SITUATION_MAX_AFFINITIES_PER_CYCLE` | `10` |
+| `SITUATION_SOLERA_RATIO` | `0.2  # peso de lo previo en el merge solera (0.2 = 20/80)` |
+| `SITUATION_TTL_DAYS` | `30  # evicción de semáforos inactivos` |
+| `SLEEP_CULL_THRESHOLD` | `0.1` |
+| `SLEEP_MAX_LLM_FAILURES` | `5  # Thermal breaker: abort sleep after N consecutive LLM failures` |
+| `SLEEP_SCROLL_LIMIT` | `50  # Max engrams fetched per scroll batch (loop drains until empty)` |
+| `WORKSPACE_MEMORY_COMPACT_BACKEND` | `"auto"` |
+| `WORKSPACE_MEMORY_COMPACT_MODEL` | `"flash"` |
+| `WORKSPACE_MEMORY_COMPACT_PROMPT` | `"seeds/memory/optimizer_prompt.txt"` |

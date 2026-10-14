@@ -11,11 +11,13 @@ from . import prompts
 
 logger = logging.getLogger(__name__)
 
+# Endpoint from the single resolver (CONVENTIONS §10.8.1) — no hardcoded host/port.
+from red_pill.core.llm_endpoint import llm_chat_url, llm_health_url  # noqa: E402
 
-EDGE_ENGINE_URL = "http://localhost:8760/v1/chat/completions"
+EDGE_ENGINE_URL = llm_chat_url()
 
 
-EDGE_HEALTH_URL = "http://localhost:8760/v1/models"
+EDGE_HEALTH_URL = llm_health_url()
 
 
 EDGE_MODEL = "Granite-4.1-8B-Q4_K_M.gguf"
@@ -235,7 +237,7 @@ def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 		return False
 
 
-# ── Transporte selectivo (RFC-HARNESS-002 §7): el pase Memento lee su demanda
+# ── Transporte selectivo (AD-030): el pase Memento lee su demanda
 # de inferencia del env RP_LLM_* (inyectado por el driver del job desde la
 # receta `llm:`), o cae a los defaults del daemon si no hay override.
 #
@@ -331,7 +333,7 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		"temperature": temperature,
 		"max_tokens": max_tokens,
 	}
-	# RFC-HARNESS-002 §7: task/model/thinking desde el env del job (RP_LLM_*).
+	# AD-030: task/model/thinking desde el env del job (RP_LLM_*).
 	# Sin env → sin task/model → el daemon cae a su default (comportamiento actual).
 	if llm["task"]:
 		payload["task"] = llm["task"]

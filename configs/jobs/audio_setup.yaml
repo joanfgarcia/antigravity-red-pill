@@ -1,12 +1,12 @@
 # AudioGen setup — provisiona el runtime de audio generativo (por-máquina).
 #
-# Instala en ${AUDIO_FORGE_HOME:-$HOME/opt/audio-forge}: venv uv (py3.12),
+# Instala en el forge ($AUDIO_FORGE_HOME, default ~/opt/audio-forge): venv uv (py3.12),
 # torch cu128 (sm_120), diffusers main, kokoro + chatterbox-tts. Termina con
 # un smoke test (CUDA + imports de los 4 motores).
 source: script_job
 priority: 6
 title: AudioGen setup — venv diffusers+kokoro+chatterbox (sm_120)
-step_command: ["sh", "-c", 'bash scripts/audio/bootstrap.sh']
+step_command: ["sh", "-c", 'bash "$IA_DIR/scripts/audio/bootstrap.sh"']
 progress:
   mode: single
 control:

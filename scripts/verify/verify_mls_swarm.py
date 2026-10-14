@@ -15,6 +15,7 @@ import os
 from red_pill.skills.swarm_messaging import SwarmMessagingSkill  # noqa: E402
 from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill  # noqa: E402
 
+from red_pill.core.paths import get_agent_dir
 from red_pill.swarm.crypto import SwarmCrypto  # noqa: E402
 from red_pill.swarm.transports.manager import TransportManager  # noqa: E402
 
@@ -27,7 +28,7 @@ def test_mls_swarm_e2ee():
 	print("--- Sovereign Swarm MLS Verification ---")
 
 	# Setup mock credentials and config
-	config_dir = os.path.expanduser("~/.agent/config")
+	config_dir = get_agent_dir() / "config"
 	os.makedirs(config_dir, exist_ok=True)
 	config_path = os.path.join(config_dir, "swarm_communities.json")
 

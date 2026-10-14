@@ -95,6 +95,23 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	return changed
 
 
+def _skill_capability(skill_md: str) -> str | None:
+	"""Lee `capability:` del frontmatter YAML de un SKILL.md (sin dependencias)."""
+	try:
+		with open(skill_md, encoding="utf-8") as f:
+			lines = f.read().splitlines()
+	except OSError:
+		return None
+	if not lines or lines[0].strip() != "---":
+		return None
+	for line in lines[1:]:
+		if line.strip() == "---":
+			break
+		if line.startswith("capability:"):
+			return line.split(":", 1)[1].strip() or None
+	return None
+
+
 def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -> int:
 	deployed = 0
 	if not os.path.isdir(src_dir):
@@ -106,6 +123,20 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 		skill_md = os.path.join(skill_src, "SKILL.md")
 		if not os.path.exists(skill_md):
 			continue
+		# Gate por capacidad (docs/TECHNICAL/DECISION_LOG.md): sembrar solo si la capability está
+		# activa en ESTA máquina (harness configurado). Fail-closed si no se puede verificar.
+		_cap = _skill_capability(skill_md)
+		if _cap is not None:
+			try:
+				from red_pill.core.capabilities import enabled_for
+
+				_keep = enabled_for(_cap)
+			except Exception as e:  # noqa: BLE001
+				logger.warning(f"  Skill '{entry}': gate de capacidades no disponible ({e}) → skip (capability='{_cap}')")
+				_keep = False
+			if not _keep:
+				logger.info(f"  Skill '{entry}' gated (capability '{_cap}' inactiva) → skip")
+				continue
 		dest = os.path.join(dest_dir, entry, "SKILL.md")
 		os.makedirs(os.path.dirname(dest), exist_ok=True)
 		resolved = subst(_read_seed(skill_md), variables)

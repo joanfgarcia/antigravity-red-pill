@@ -70,7 +70,12 @@ def _upsert(manager: Any, point_id: str, text: str, metadata: dict, immune: bool
 
 def inscribe_identity(manager: Any, identity_text: str) -> None:
 	"""Inscribe el engrama de identidad (agent-authored) como directiva activa."""
-	_upsert(manager, ID_IDENTITY, identity_text.strip(), {"type": "identity", "associations": [ID_PACT_760], "authored_by": "agent", "origin": "760-naming"})
+	_upsert(
+		manager,
+		ID_IDENTITY,
+		identity_text.strip(),
+		{"type": "identity", "associations": [ID_PACT_760], "authored_by": "agent", "origin": "760-naming"},
+	)
 
 
 def inscribe_pact(manager: Any, level: str, sealed_on: Optional[str] = None) -> None:
@@ -130,7 +135,9 @@ def clear_consents(manager: Any) -> None:
 	try:
 		from qdrant_client.http import models as qm
 
-		manager.client.delete(collection_name="directive_memories", points_selector=qm.PointIdsList(points=[ID_PACT_770_GRANT, ID_PACT_770_ACCEPT]), wait=True)
+		manager.client.delete(
+			collection_name="directive_memories", points_selector=qm.PointIdsList(points=[ID_PACT_770_GRANT, ID_PACT_770_ACCEPT]), wait=True
+		)
 	except Exception:
 		pass
 

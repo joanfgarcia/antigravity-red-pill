@@ -188,7 +188,7 @@ class TestGetProfileByCapability:
 		assert profile == {}
 
 
-# ── Tests: plan de KV por calidad (RFC-HARNESS-003 §2.7) ─────────────────────
+# ── Tests: plan de KV por calidad (AD-049) ─────────────────────
 
 
 class TestKvPlan:

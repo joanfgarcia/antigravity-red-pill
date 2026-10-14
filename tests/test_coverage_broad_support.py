@@ -213,11 +213,12 @@ async def test_log_rotation_execute_no_targets(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_log_rotation_execute_rotates_big_log(tmp_path, monkeypatch):
-	import red_pill.swarm.agents.janitor_plugins.log_rotation as lr
+	from red_pill.core import paths
 
-	monkeypatch.setattr(lr.Path, "home", staticmethod(lambda: tmp_path))
 	d = tmp_path / ".local/share/red-pill/daemon"
 	d.mkdir(parents=True)
+	monkeypatch.setattr(paths, "get_daemon_persistent_dir", lambda: d)
+	monkeypatch.setattr(paths, "get_agent_dir", lambda: tmp_path / ".agent")
 	big = d / "output.log"
 	big.write_text("y" * 200, encoding="utf-8")
 	res = await _plugin().execute(_J(), {"plugins": {"log_rotation": {"max_size_bytes": 10}}})

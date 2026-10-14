@@ -59,7 +59,7 @@ MODELS = {
 
 
 def _forge_home() -> Path:
-	return Path(os.environ.get("AUDIO_FORGE_HOME") or (Path.home() / "opt" / "audio-forge"))
+	return Path(os.environ["AUDIO_FORGE_HOME"])
 
 
 def _setup_caches() -> None:
@@ -132,9 +132,7 @@ def _gen_moss(piece, size_hint=None):
 
 		# 8 GB: cargar en CPU y activar la gestión de VRAM por etapa del engine
 		# DiffSynth (onload/offload de text_encoder/DiT/VAE según la unidad).
-		_MOSS = MossSoundEffectPipeline.from_pretrained(
-			"OpenMOSS-Team/MOSS-SoundEffect-v2.0", torch_dtype=torch.bfloat16, device="cpu"
-		)
+		_MOSS = MossSoundEffectPipeline.from_pretrained("OpenMOSS-Team/MOSS-SoundEffect-v2.0", torch_dtype=torch.bfloat16, device="cpu")
 		try:
 			_MOSS.engine.enable_cpu_offload()
 		except Exception:
@@ -157,9 +155,7 @@ def _gen_dasheng(piece, size_hint=None):
 
 	global _DSG
 	if "_DSG" not in globals():
-		_DSG = AutoModel.from_pretrained(
-			"mispeech/Dasheng-AudioGen", trust_remote_code=True, dtype=torch.bfloat16
-		).cuda()
+		_DSG = AutoModel.from_pretrained("mispeech/Dasheng-AudioGen", trust_remote_code=True, dtype=torch.bfloat16).cuda()
 	kw = {k: piece[k] for k in ("caption", "speech", "asr", "sfx", "music", "env") if piece.get(k)}
 	prompt = _DSG.compose_prompt(**kw)
 	audio = _DSG.generate(prompt, num_steps=25, guidance_scale=5.0)
@@ -211,11 +207,15 @@ def _run_model(model_id: str, bench: dict, out_dir: Path, only: set | None) -> i
 			audio, sr = gen(p)
 			wall = time.perf_counter() - t0
 			load_s = load_s or wall  # primera pieza incluye carga
-			peak = torch.cuda.max_memory_allocated() / (1024 ** 2) if torch.cuda.is_available() else 0.0
+			peak = torch.cuda.max_memory_allocated() / (1024**2) if torch.cuda.is_available() else 0.0
 			_save_wav(wav, audio, sr)
 			rec = {
-				"model": model_id, "piece": p["id"], "kind": p["kind"],
-				"sr": int(sr), "wall_s": round(wall, 2), "peak_mb": round(peak, 1),
+				"model": model_id,
+				"piece": p["id"],
+				"kind": p["kind"],
+				"sr": int(sr),
+				"wall_s": round(wall, 2),
+				"peak_mb": round(peak, 1),
 				"wav": wav.name,
 			}
 			with metrics.open("a", encoding="utf-8") as f:

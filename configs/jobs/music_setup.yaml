@@ -3,7 +3,7 @@
 source: script_job
 priority: 5
 title: Music setup — venv mido + ardour-mcp (detecta fluidsynth/ardour)
-step_command: ["sh", "-c", 'bash scripts/music/bootstrap.sh']
+step_command: ["sh", "-c", 'bash "$IA_DIR/scripts/music/bootstrap.sh"']
 progress:
   mode: single
 control:

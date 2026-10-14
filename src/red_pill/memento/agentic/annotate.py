@@ -14,108 +14,48 @@ sigue usando `refine_session` legacy.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
-import os
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import prompts, runtime
-from .fragments import _as_list, _frontmatter_block, fragment_view, slugify_title, work_units
+from .annotation_phases import (  # noqa: F401  (re-exported: tests/agents use annotate.<phase>)
+	_distill_ref,
+	_extract,
+	_needs_voice_rewrite,
+	_score_dual,
+	_with_annotate_task,
+	dedup_post_rewrite,
+	rewrite_voice_notes,
+)
+from .annotation_quality import (
+	compute_note_metrics,
+	dedup_annotations,
+	is_first_person,  # noqa: F401  (re-exported via red_pill.memento.agentic)
+	looks_english,  # noqa: F401  (re-exported for tests)
+	quality_flags,
+)
+from .annotation_state import (
+	_PARTIAL,
+	PHASES,
+	_annotations_from_notes,
+	_contract,
+	_empty_partial,
+	_load_partial,
+	_resolve_from,
+	_save_partial,
+	_scrub_idea,
+)
+from .fragments import _frontmatter_block, fragment_view, slugify_title, work_units
 
 logger = logging.getLogger(__name__)
-
-_SCORE_BATCH = 20
-
-_FEMININE_JOAN = re.compile(
-	r"\bJoan\b[^.\n]{0,60}\b(abrumada|emocionada|cansada|preocupada|contenta|enfadada|orgullosa|nerviosa|tranquila|feliz|harta)\b", re.I
-)
-_IDENTITY_CONFUSION = re.compile(r"\b(Samantha|Cenicienta)\b", re.I)
-_THIRD_PERSON = re.compile(r"(^|\b)(Aleth|El asistente|La asistente)\s+(ha|había|fue|es|utiliza|propone|explica|implementa|crea|rectifica)\b", re.I)
-_IMPERSONAL = re.compile(
-	r"^\s*(se\s+(creó|omitió|implementó|generó|corrigió|configuró|eliminó|añadió|actualizó|desplegó|sincronizó|ejecutó|arregló|restauró))\b", re.I
-)
-_ALETH_PAST = re.compile(
-	r"\bAleth\s+(creó|implementó|propuso|explicó|desplegó|configuró|generó|corrigió|añadió|actualizó|sincronizó|ejecutó|arregló|restauró|omitió)\b",
-	re.I,
-)
-_FIRST_PERSON = re.compile(
-	r"\b(me|mi|mis|nos|le|les|he|creé|implementé|propuso|expliqué|dije|hice|desplegué|generé|corregí|configuré|actualicé|sincronicé|ejecuté|arreglé|restauré)\b",
-	re.I,
-)
-
-
-_ALETH_OPENER = re.compile(r"^\s*Aleth\s+\w+", re.I)
-_EN_WORDS = set("the and of to in is was for with that this from have has had were are by on as it he she they".split())
-_ES_WORDS = set("el la los las de que y en un una por para con me le lo se del al es fue su sus como".split())
-
-
-def looks_english(text: str) -> bool:
-	"""¿La nota está en inglés? Recuento de palabras vacías EN vs ES (determinista)."""
-	words = re.findall(r"[a-záéíóúüñ]+", text.lower())
-	en = sum(w in _EN_WORDS for w in words)
-	es = sum(w in _ES_WORDS for w in words)
-	return en > es and en >= 3
-
-
-def is_first_person(text: str) -> bool:
-	"""True si la nota tiene marcadores de 1ª persona (criterio del rewrite)."""
-	return bool(_FIRST_PERSON.search(text))
-
-
-def quality_flags(text: str) -> List[str]:
-	"""Detectores MEM-006 P2: género femenino de Joan, identidad confundida, voz 3ª."""
-	flags: List[str] = []
-	if _FEMININE_JOAN.search(text):
-		flags.append("gender")
-	if _IDENTITY_CONFUSION.search(text):
-		flags.append("identity")
-	if _THIRD_PERSON.search(text) or _IMPERSONAL.search(text) or _ALETH_PAST.search(text):
-		flags.append("voice")
-	return flags
 
 
 # ── MEM-010 F1: métricas por sesión para el gating (RFC §3.2) ────────────────
 # Se computan SIEMPRE sobre las notas FINALES (post rewrite/dedup) y con el
 # umbral de dedup efectivo guardado junto a la métrica, para que vivo y
 # backfill comparen like-for-like (enmienda r3 del panel).
-
-_BIO_LEAK_PATTERNS = (
-	re.compile(r"\bcomo narradora\b", re.I),
-	re.compile(r"\bla narradora del b[úu]nker\b", re.I),
-	re.compile(r"\bel (?:operador|ingeniero) catal[áa]n\b", re.I),
-)
-
-
-def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: float) -> Dict[str, Any]:
-	"""Métricas de calidad de una sesión anotada (deterministas, sin IO)."""
-	texts = [str(a.get("text") or "") for a in annotations]
-	n = len(texts)
-	lens = [len(t) for t in texts]
-	toks = [_tokens(t + " " + str(a.get("title") or "")) for t, a in zip(texts, annotations)]
-	near_dups = 0
-	for i in range(len(toks)):
-		for j in range(i + 1, len(toks)):
-			a, b = toks[i], toks[j]
-			if a and b and len(a & b) / min(len(a), len(b)) > dedup_threshold:
-				near_dups += 1
-	margins = [
-		abs(float(a.get("work_score", 0.0) or 0.0) - float(a.get("social_score", 0.0) or 0.0))
-		for a in annotations
-		if "work_score" in a and "social_score" in a
-	]
-	return {
-		"notas": n,
-		"pct_gt_600": round(100 * sum(1 for x in lens if x > 600) / max(1, n), 1),
-		"pct_primera_persona": round(100 * sum(1 for t in texts if is_first_person(t)) / max(1, n), 1),
-		"near_dups": near_dups,
-		"dedup_threshold": float(dedup_threshold),
-		"min_margin": round(min(margins), 3) if margins else None,
-		"bio_leaks": sum(1 for t in texts if any(p.search(t) for p in _BIO_LEAK_PATTERNS)),
-	}
 
 
 def session_input_hash(root: Path, dir_rel: str, units: List[Any]) -> Tuple[Optional[str], str]:
@@ -139,47 +79,6 @@ def session_input_hash(root: Path, dir_rel: str, units: List[Any]) -> Tuple[Opti
 	return hashlib.sha256(payload.encode("utf-8")).hexdigest(), "units"
 
 
-def _normalize(text: str) -> str:
-	return re.sub(r"[^a-z0-9áéíóúüñ ]+", " ", text.lower()).strip()
-
-
-def _tokens(text: str) -> set:
-	return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
-
-
-def _rank(a: Dict[str, Any]) -> Tuple[int, float, int]:
-	flags = a.get("flags") or []
-	voice_ok = 0 if "voice" in flags else 1
-	try:
-		sig = float(a.get("significance") or 0)
-	except (TypeError, ValueError):
-		sig = 0.0
-	return (voice_ok, sig, len(str(a.get("text") or "")))
-
-
-def dedup_annotations(annotations: List[Dict[str, Any]], threshold: float = 0.6) -> List[Dict[str, Any]]:
-	"""P1-A: colapsa duplicados exactos (hash normalizado) y near-dups (tokens).
-
-	Conserva la mejor variante: 1ª persona > significance > longitud. Los gemelos
-	work/social del mismo evento se funden aquí.
-	"""
-	kept: List[Dict[str, Any]] = []
-	kept_tokens: List[set] = []
-	seen: set = set()
-	for a in sorted(annotations, key=_rank, reverse=True):
-		text = str(a.get("text") or "")
-		h = hashlib.sha256(_normalize(text).encode("utf-8")).hexdigest()
-		if h in seen:
-			continue
-		t = _tokens(text + " " + str(a.get("title") or ""))
-		if any(t and kt and len(t & kt) / min(len(t), len(kt)) > threshold for kt in kept_tokens):
-			continue
-		seen.add(h)
-		kept.append(a)
-		kept_tokens.append(t)
-	return kept
-
-
 def _route(work: float, social: float, th_work: float, th_social: float, dead_zone: float) -> Optional[str]:
 	"""Ruta por ejes con zona muerta: margen < δ → None (unstable, no asciende)."""
 	over_w = work >= th_work
@@ -196,336 +95,6 @@ def _route(work: float, social: float, th_work: float, th_social: float, dead_zo
 	if over_s:
 		return "social" if (social - th_social) >= dead_zone else None
 	return None
-
-
-def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]:
-	ideas: List[Dict[str, Any]] = []
-	v2 = runtime.voice_v2_enabled()
-	work_scope, social_scope = runtime.annotate_scopes()
-	prompt_ids = ("annotate_work_user_v2", "annotate_social_user_v2") if v2 else ("annotate_work_user", "annotate_social_user")
-	static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
-	for prompt_id in prompt_ids:
-		prompt = prompts.render(prompt_id, static=static, fragment=content)
-		raw = transport(prompts.system(prompt_id) or "", prompt, 1024)
-		for idea in runtime._extract_json_array(raw) or []:
-			if not isinstance(idea, dict):
-				continue
-			text = str(idea.get("text") or "").strip()
-			if not text:
-				continue
-			ideas.append(
-				{
-					"title": str(idea.get("title") or "Anotación")[:80],
-					"text": text,
-					"significance": idea.get("significance"),
-					"emotion": str(idea.get("emotion") or "gray"),
-					"intensity": idea.get("intensity"),
-					"theme": str(idea.get("theme") or ""),
-					"relics": [str(r) for r in _as_list(idea.get("relics"))][:4],
-				}
-			)
-	return ideas
-
-
-def _needs_voice_rewrite(text: str) -> bool:
-	"""¿La nota necesita re-escritura de voz? Solo si tiene la bandera `voice`.
-
-	2026-09-25: antes el criterio era "no está en 1ª persona", y el prompt exigía
-	empezar por "Joan me…" y prohibía "Joan implementó". Resultado medido: el 50,2%
-	de las notas abría con la muletilla y había inversiones de sujeto ("Joan me
-	comprometió dos cambios" por commits de Aleth). Una nota que narra una acción de
-	Joan con Joan como sujeto ya es correcta; se reescriben solo las impersonales o
-	en 3ª persona de Aleth (`quality_flags` → `voice`).
-	"""
-	if not runtime.voice_v2_enabled():
-		return not is_first_person(text)  # voz v1
-	# v2.1 (piloto 2026-09-26): el detector `voice` solo conoce patrones en español;
-	# las notas que el modelo escribió en inglés y en 3ª persona ("Aleth updated…")
-	# pasaban sin reescribir. También se reescriben si están en inglés o si abren
-	# con "Aleth <verbo>" (el narrador hablando de sí mismo en 3ª persona).
-	return "voice" in quality_flags(text) or looks_english(text) or bool(_ALETH_OPENER.match(text))
-
-
-def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str, Any]], batch_size: int = 10) -> int:
-	"""Re-escribe la voz de las notas con bandera `voice` (MEM-006 Q8, lever b).
-
-	Reintenta con lotes decrecientes hasta individual (el modelo responde a veces
-	solo una parte). Actualiza `text` y recalcula `flags` in-place. Devuelve cuántas
-	se reescribieron.
-	"""
-	rewritten = 0
-	for size in (batch_size, 4, 1):
-		pending = [a for a in annotations if _needs_voice_rewrite(str(a.get("text") or ""))]
-		if not pending:
-			break
-		for start in range(0, len(pending), size):
-			chunk = pending[start : start + size]
-			listing = "\n\n".join(f"[{i}] {a['text'][:600]}" for i, a in enumerate(chunk))
-			prompt_id = "voice_rewrite_user_v2" if runtime.voice_v2_enabled() else "voice_rewrite_user"
-			user = prompts.render(prompt_id, static={"identity": prompts.IDENTITY_BIO}, notes=listing)
-			raw = transport(prompts.system(prompt_id) or "", user, 2048)
-			for row in runtime._extract_json_array(raw) or []:
-				if not isinstance(row, dict):
-					continue
-				raw_idx = row.get("i")
-				if raw_idx is None:
-					continue
-				try:
-					idx = int(raw_idx)
-				except (TypeError, ValueError):
-					continue
-				new_text = str(row.get("text") or "").strip()
-				if 0 <= idx < len(chunk) and new_text:
-					chunk[idx]["text"] = new_text
-					chunk[idx]["flags"] = quality_flags(new_text)
-					rewritten += 1
-	return rewritten
-
-
-def dedup_post_rewrite(
-	annotations: List[Dict[str, Any]],
-	threshold: float = 0.90,
-	embed_fn: Optional[Any] = None,
-) -> List[Dict[str, Any]]:
-	"""Dedup DESPUÉS de la re-escritura de voz (feedback de recall 2026-09-25).
-
-	La dedup P1-A corre sobre las ideas crudas; la re-escritura puede hacer que dos
-	ideas distintas acaben con el mismo texto (7 duplicados exactos en el corpus) o
-	con paráfrasis casi idénticas. Dos pasadas: (1) P1-A otra vez (hash normalizado
-	+ solape de tokens); (2) casi-duplicados por embedding dentro de la sesión:
-	coseno ≥ `threshold` entre cuerpos sin muletilla → se queda la mejor variante
-	(mismo orden de `_rank`). Umbral 0,90 medido: en el corpus, los pares de la
-	misma sesión en 0,90-0,93 son el mismo hecho dicho dos veces.
-
-	`embed_fn(textos) -> vectores` inyectable (tests); por defecto, el embedder vigente.
-	"""
-	kept = dedup_annotations(annotations)
-	if threshold <= 0 or len(kept) < 2:
-		return kept
-	from red_pill.memento.embed_text import strip_lead
-
-	texts = [strip_lead(str(a.get("text") or "")) or str(a.get("text") or "") for a in kept]
-	if embed_fn is None:
-		from red_pill.core.embeddings import EmbeddingEngine
-
-		engine = EmbeddingEngine()
-		engine.get_vector("warmup")
-		encoder: Any = engine.encoder
-		vectors = list(encoder.embed(texts, batch_size=64))
-	else:
-		vectors = list(embed_fn(texts))
-	import numpy as np
-
-	units = []
-	for v in vectors:
-		arr = np.asarray(v, dtype=float)
-		n = float(np.linalg.norm(arr))
-		units.append(arr / n if n else arr)
-	out: List[Dict[str, Any]] = []
-	out_units: List[Any] = []
-	for a, u in zip(kept, units):  # `kept` ya viene ordenado por `_rank` (mejor primero)
-		if any(float(u @ w) >= threshold for w in out_units):
-			continue
-		out.append(a)
-		out_units.append(u)
-	return out
-
-
-def _score_dual(transport: runtime.Transport, annotations: List[Dict[str, Any]]) -> None:
-	"""Puntúa cada anotación en los ejes work/social con reintento por lotes decrecientes.
-
-	El lote grande puede truncarse por contexto (500 → recorte del transporte) y el
-	modelo responde solo una parte: los no puntuados se reintentan en lotes menores
-	hasta individual. Los que aun así queden sin puntuar se marcan `unscored`.
-	"""
-	for batch_size in (_SCORE_BATCH, 5, 1):
-		pending = [a for a in annotations if "work_score" not in a]
-		if not pending:
-			return
-		for start in range(0, len(pending), batch_size):
-			chunk = pending[start : start + batch_size]
-			listing = "\n\n".join(f"[{i}] {a['text'][:400]}" for i, a in enumerate(chunk))
-			if runtime.voice_v2_enabled():
-				work_scope, social_scope = runtime.annotate_scopes()
-				prompt_id = "dual_score_user_v2"
-				user = prompts.render(prompt_id, static={"work_scope": work_scope, "social_scope": social_scope}, memories=listing)
-			else:
-				prompt_id = "dual_score_user"
-				user = prompts.render(prompt_id, memories=listing)
-			raw = transport(prompts.system(prompt_id) or "", user, 2048)
-			for row in runtime._extract_json_array(raw) or []:
-				if not isinstance(row, dict):
-					continue
-				raw_idx = row.get("i")
-				if raw_idx is None:
-					continue
-				try:
-					idx = int(raw_idx)
-					work = max(0.0, min(1.0, float(row.get("work_score", 0.0) or 0.0)))
-					social = max(0.0, min(1.0, float(row.get("social_score", 0.0) or 0.0)))
-				except (TypeError, ValueError):
-					continue
-				if 0 <= idx < len(chunk):
-					chunk[idx]["work_score"] = work
-					chunk[idx]["social_score"] = social
-
-
-def _distill_ref(root: Path, dir_rel: str, nnn: str) -> str:
-	files = sorted((root / dir_rel / "distill").glob(f"{nnn}-*.md"))
-	return str(files[0].relative_to(root)) if files else ""
-
-
-def _with_annotate_task(transport: runtime.Transport) -> runtime.Transport:
-	"""Envuelve el transporte fijando `RP_LLM_TASK=annotate` durante cada llamada.
-
-	Annotate tiene su PROPIO contrato task (el carril refine/distill era un apaño
-	de RFC-HARNESS-002 §7). Se fija por llamada: el nocturno (stage task=distill)
-	y el rebuild (task=annotate) usan el mismo contrato sin cambiar sus recipes.
-	"""
-
-	def call(system: str, user: str, max_tokens: int) -> str:
-		previous = os.environ.get("RP_LLM_TASK")
-		os.environ["RP_LLM_TASK"] = "annotate"
-		try:
-			return transport(system, user, max_tokens)
-		finally:
-			if previous is None:
-				os.environ.pop("RP_LLM_TASK", None)
-			else:
-				os.environ["RP_LLM_TASK"] = previous
-
-	return call
-
-
-_PARTIAL = "_partial.json"
-PHASES = ("extract", "rewrite", "score")
-_SCRUB_FIELDS = ("title", "text", "theme", "emotion")
-
-
-def _scrub_idea(idea: Dict[str, Any]) -> Dict[str, Any]:
-	"""Scrub de la salida cruda del LLM antes de persistirla (MEM-009 S1, MUST-9).
-
-	Solo campos de texto de la idea: los hashes/refs no pasan por el scrub (un
-	sha256 podría parecer un token y corromperse).
-	"""
-	from red_pill.memento.clean import normalize_noise
-	from red_pill.memento.scrub import scrub_secrets
-
-	for key in _SCRUB_FIELDS:
-		if isinstance(idea.get(key), str):
-			idea[key] = scrub_secrets(normalize_noise(idea[key]))
-	if isinstance(idea.get("relics"), list):
-		idea["relics"] = [scrub_secrets(normalize_noise(str(r))) for r in idea["relics"]]
-	return idea
-
-
-def _contract(voice_rewrite: bool) -> Dict[str, Any]:
-	return {"prompt_version": runtime.annotate_prompt_version(), "engine": runtime.engine_id(), "voice_rewrite": bool(voice_rewrite)}
-
-
-def _empty_partial(contract: Dict[str, Any]) -> Dict[str, Any]:
-	return {"contract": contract, "splits": {}, "phases": {ph: "pending" for ph in PHASES}, "annotations": []}
-
-
-def _load_partial(annotate_dir: Path, contract: Dict[str, Any]) -> Dict[str, Any]:
-	"""Parcial compatible con el contrato vigente, o uno vacío (reset con aviso)."""
-	empty = _empty_partial(contract)
-	path = annotate_dir / _PARTIAL
-	if not path.exists():
-		return empty
-	try:
-		data: Dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-	except (OSError, json.JSONDecodeError):
-		logger.warning("annotate: parcial ilegible en %s — se reinicia", annotate_dir)
-		return empty
-	if data.get("contract") != contract:
-		logger.warning("annotate: contrato del parcial distinto (%s ≠ %s) — reset", data.get("contract"), contract)
-		return empty
-	data.setdefault("splits", {})
-	data.setdefault("annotations", [])
-	data["phases"] = {ph: (data.get("phases") or {}).get(ph, "pending") for ph in PHASES}
-	return data
-
-
-def _save_partial(annotate_dir: Path, partial: Dict[str, Any]) -> None:
-	"""Escritura atómica (tmp+replace). Las ideas ya vienen scrubbeadas de `_extract`."""
-	partial["updated_at"] = datetime.now(timezone.utc).isoformat()
-	tmp = annotate_dir / (_PARTIAL + ".tmp")
-	tmp.write_text(json.dumps(partial, ensure_ascii=False, indent=1), encoding="utf-8")
-	tmp.replace(annotate_dir / _PARTIAL)
-
-
-def _annotations_from_notes(annotate_dir: Path, contract: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-	"""Reconstruye las anotaciones desde las notas materializadas (prerrequisito de `--from`).
-
-	Solo si `_meta.json` casa con el contrato vigente: si no, las notas son de otro
-	motor/prompt y no valen como estado previo. None → no hay prerrequisito.
-	"""
-	meta_path = annotate_dir / "_meta.json"
-	if not meta_path.exists():
-		return None
-	try:
-		meta = json.loads(meta_path.read_text(encoding="utf-8"))
-	except (OSError, json.JSONDecodeError):
-		return None
-	if meta.get("annotate_prompt_version") != contract["prompt_version"] or meta.get("engine") != contract["engine"]:
-		return None
-	from red_pill.memento.ascension import parse_refine as _parse_refine
-
-	out: List[Dict[str, Any]] = []
-	for note in sorted(annotate_dir.glob("[0-9][0-9][0-9]-*.md")):
-		try:
-			fm, body = _parse_refine(note.read_text(encoding="utf-8"))
-		except Exception:
-			continue
-		raw_texture = fm.get("texture")
-		texture: Dict[str, Any] = raw_texture if isinstance(raw_texture, dict) else {}
-		idea: Dict[str, Any] = {
-			"title": str(fm.get("title") or "Anotación"),
-			"text": str(body or "").strip(),
-			"significance": fm.get("significance"),
-			"emotion": str(fm.get("emotion") or "gray"),
-			"intensity": fm.get("intensity"),
-			"theme": str(texture.get("theme") or ""),
-			"relics": [str(r) for r in _as_list(texture.get("relics"))][:4],
-			"split_ref": str(fm.get("split_ref") or fm.get("source_lines") or ""),
-			"nnn": note.name[:3],
-		}
-		idea["flags"] = quality_flags(idea["text"])
-		if fm.get("work_score") is not None and "unscored" not in _as_list(fm.get("quality_flags")):
-			idea["work_score"] = float(fm.get("work_score") or 0.0)
-			idea["social_score"] = float(fm.get("social_score") or 0.0)
-		out.append(idea)
-	return out
-
-
-def _resolve_from(
-	from_phase: Optional[str], partial: Dict[str, Any], notes: Optional[List[Dict[str, Any]]], voice_rewrite: bool
-) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
-	"""`--from`: fase de entrada efectiva + anotaciones previas (degradado gracioso).
-
-	Las fases son secuenciales y mandan los prerrequisitos: la bandera pide
-	intención, el estado decide. Sin prerrequisitos → fase factible más temprana,
-	avisando. `rewrite` sin voice_rewrite activo se trata como `score`.
-	"""
-	if from_phase in (None, "extract"):
-		return "extract", None
-	if from_phase not in PHASES:
-		raise ValueError(f"--from inválido: {from_phase!r} (extract|rewrite|score)")
-	if from_phase == "rewrite" and not voice_rewrite:
-		from_phase = "score"
-	prior: Optional[List[Dict[str, Any]]] = None
-	if partial["phases"]["extract"] == "done" and partial["annotations"]:
-		prior = partial["annotations"]
-		if from_phase == "score" and voice_rewrite and partial["phases"]["rewrite"] != "done":
-			logger.warning("annotate --from=score: rewrite no completado en el parcial — degrado a rewrite")
-			from_phase = "rewrite"
-	elif notes:
-		prior = notes
-	if prior is None:
-		logger.warning("annotate --from=%s sin prerrequisitos (ni parcial ni notas del contrato vigente) — degrado a extract", from_phase)
-		return "extract", None
-	return from_phase, [dict(a) for a in prior]
 
 
 def annotate_session(
@@ -552,6 +121,7 @@ def annotate_session(
 	fase reutilizando el estado persistido de las anteriores (parcial o notas).
 	"""
 	import red_pill.config as cfg
+	from red_pill.core.progress import report_stage_progress
 	from red_pill.memento.render import compute_hash
 
 	# 2026-09-24: contrato propio de annotate (ver `_with_annotate_task`).
@@ -594,7 +164,8 @@ def annotate_session(
 		keys = [unit.key for unit in units]
 		fresh_splits: Dict[str, Any] = {}
 		reused = extracted = 0
-		for unit in units:
+		for i_unit, unit in enumerate(units, 1):
+			report_stage_progress(label="extract", current=i_unit, total=len(units), session=session_id)
 			key, nnn, ref, content = unit.key, unit.nnn, unit.ref, unit.content
 			chash = compute_hash(content)
 			saved = partial["splits"].get(key)

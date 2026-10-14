@@ -24,6 +24,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from red_pill.core.paths import get_models_dir
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [FIDELITY] %(message)s")
 logger = logging.getLogger("fidelity")
 
@@ -161,7 +163,7 @@ def main() -> None:
 	parser.add_argument("--n-gpu-layers", type=int, default=-1, help="-1 GPU / 0 CPU / N hybrid (needs CUDA llama-cpp for GPU).")
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
-	parser.add_argument("--models-dir", default=str(Path("~/.local/share/red-pill/models").expanduser()))
+	parser.add_argument("--models-dir", default=str(get_models_dir()))
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_FIDELITY.md")
 	args = parser.parse_args()
 

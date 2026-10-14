@@ -107,7 +107,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [2026-08-13-PENDING.md](BENCHMARKS/2026-08-13-PENDING.md) | Open TODOs for next session (SIP-nemo verification, tool-bake-off, more harnesses) |
 | [2026-09-11-TOOL_BAKEOFF.md](BENCHMARKS/2026-09-11-TOOL_BAKEOFF.md) | Tool-calling bake-off 2026-09-11: 6 modelos, template nativo, peculiaridades por modelo (granite/qwen3/gemma4/smollm3/qwen35) |
 | [2026-09-17-GRANITE_42_BAKEOFF.md](BENCHMARKS/2026-09-17-GRANITE_42_BAKEOFF.md) | Granite 4.2 vs 4.1: destilador (thinking on, 12K KV cuantizada) + detector 3B. Receta completa en AD-033 |
-| [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (RFC-HARNESS-003): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
+| [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (AD-049): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
 
 ### Bünker
 
@@ -180,6 +180,8 @@ Project-level rules and standards. These govern how the project itself is built 
 | [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — pre-push, pre-PR, release, certification, identity resync |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
+| [MEDIA_MODELS.md](CORE/MEDIA_MODELS.md) | Media models & runtimes — how the harness discovers models and how to add one |
+| [MODEL_STORAGE.md](CORE/MODEL_STORAGE.md) | Model storage layout & anti-duplication policy (HF blob store + uv hardlinks) |
 
 ---
 

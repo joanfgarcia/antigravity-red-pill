@@ -1,21 +1,25 @@
-# ⚠️ EJEMPLO / ESPECIFICACIÓN — el loader aún NO está cableado (RFC-HARNESS-004 §9).
-# Cuando se implemente (resolver + seed), se sembrará a
-# ~/.config/red-pill/media_profiles.yaml como model_profiles/task_profiles.
+# EJEMPLO / ESPECIFICACIÓN — loader cableado (docs/CORE/MEDIA_MODELS.md F1). Se siembra
+# (copy-if-absent) a ~/.config/red-pill/media_profiles.yaml como
+# model_profiles/task_profiles, en install/update.
 #
-# media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
+# media_profiles.yaml — elenco de MEDIA GENERATIVA (docs/CORE/MEDIA_MODELS.md).
 #
-# Define qué ES cada modelo de imagen/audio (declarativo). El CÓMO se ejecuta
-# (runtime, venv, pipeline de herramientas) vive en las RECETAS
-# (configs/jobs/*.yaml + scripts/<área>/), NO aquí.
+# Define qué ES cada modelo de imagen/audio (declarativo) Y CÓMO lo CARGA el
+# harness: `backend` (dispatch del harness, scripts/<área>/) + `pipeline`/
+# `weights`/`quant`/`sampler`. Es la ÚNICA fuente de verdad del elenco de máquina
+# — el harness NO hardcodea modelos, los lee de aquí (data over branches,
+# CONVENTIONS §10.8.2). La ORQUESTACIÓN (venv, job, staging) vive en las RECETAS
+# (configs/jobs/*.yaml), no aquí.
 #
-# ── Dos esquemas de elenco (RFC-HARNESS-004) ──────────────────────────────
+# Dos esquemas de elenco (docs/CORE/MEDIA_MODELS.md)
 #   1) LLM (texto)        -> model_profiles.yaml  (llama.cpp; sin cambios)
 #   2) Media generativa   -> ESTE fichero          (imagen + audio de onda)
 #   3) Tool-chains        -> NO son modelos: son RECETAS (configs/jobs/).
 #
-# ── Discriminador ─────────────────────────────────────────────────────────
+# Discriminador
 #   modality: image | audio
 #   task:     text2image | tts | sfx | music | scene
+#   backend:  dispatch del harness (diffusers | bonsai | sd_cpp | ...) — solo imagen
 #   capabilities: clasificación por TIPO DE ARTE / TIPO DE SONIDO (roles).
 #
 # ⚠️ AVISO: EJEMPLO del PUESTO DE REFERENCIA (RTX 5070 Laptop 8 GB, sm_120,
@@ -23,17 +27,22 @@
 # La config viva (~/.config/red-pill/media_profiles.yaml) NO se comitea.
 
 media_profiles:
-  # ── IMAGEN ────────────────────────────────────────────────────────────
+  # IMAGEN
   flux2_klein:
     modality: image
     task: text2image
     pipeline: Flux2KleinPipeline           # clase diffusers (o backend propio)
+    backend: diffusers                     # dispatch del harness (scripts/imagegen)
     runtime: diffusers_cuda
     weights: "black-forest-labs/FLUX.2-klein-4B"
     quant: { scheme: bnb4, dtype: bfloat16 }
     sampler: { steps: 4, guidance: 1.0, size: 1024 }
     vram_footprint: { peak_mb: 2456 }
     capabilities: ["photorealism", "concept", "landscape", "fast"]
+    not_capable_for: []
+    priority: 1
+    constraints: { dim_multiple: 8 }        # ÷8 (Flux2 stride 8 → conserva 1080)
+    adapters: ["snap_dims"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -47,12 +56,17 @@ media_profiles:
     modality: image
     task: text2image
     pipeline: ZImagePipeline
+    backend: diffusers                     # dispatch del harness
     runtime: diffusers_cuda
     weights: "Tongyi-MAI/Z-Image-Turbo"
     quant: { scheme: seqoff, dtype: bfloat16 }
     sampler: { steps: 9, guidance: 0.0, size: 1024 }
     vram_footprint: { peak_mb: 2448 }
     capabilities: ["typography", "product", "photorealism"]
+    not_capable_for: []
+    priority: 2
+    constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16
+    adapters: ["snap_dims", "reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -66,12 +80,18 @@ media_profiles:
     modality: image
     task: text2image
     pipeline: GpuPipeline                  # image-studio/backend_gpu (gemlite INT2)
+    backend: bonsai                        # dispatch del harness
+    backend_name: bonsai-ternary-gemlite
     runtime: pipeline_custom
     weights: "prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
     quant: { scheme: gemlite_int2, dtype: bfloat16 }
     sampler: { steps: 4, guidance: 1.0, size: 1024 }
     vram_footprint: { peak_mb: 6721 }
     capabilities: ["photorealism", "illustration", "ternary"]
+    not_capable_for: []
+    priority: 3
+    constraints: { dim_multiple: 32, max_pixels: 1600000 }   # ÷32; OOM por encima de ~1.5 MPix
+    adapters: ["snap_dims", "reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -81,7 +101,38 @@ media_profiles:
       source: "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
     notes: "Ternario 1.58-bit (transformer 1.5 GB). Requiere shim torch>=2.10 (compat_image_studio.py)."
 
-  # ── AUDIO ─────────────────────────────────────────────────────────────
+  qwen_image_2_1_turbo:
+    modality: image
+    task: text2image
+    pipeline: sd_cpp                       # vía stable-diffusion.cpp (GGUF)
+    backend: sd_cpp                        # dispatch del harness
+    runtime: sd_cpp
+    weights: "webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
+    sampler: { steps: 8, guidance: 1.0, size: 1024, sampler: euler }
+    vram_footprint: { peak_mb: 4707 }
+    capabilities: ["photorealism", "typography", "portrait"]
+    not_capable_for: []
+    priority: 2
+    constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16 (VAE scale 16)
+    adapters: ["snap_dims", "reject_oversize"]
+    sd_cpp:
+      diffusion_model: "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
+      text_encoder: "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
+      vae: "~/opt/red-pill-custom-image-models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
+      vision: "~/opt/red-pill-custom-image-models/qwen-image-2.1/mmproj-Qwen-Image-2.1-Turbo-Uncensored-F16.gguf"  # edición/referencias
+      backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"   # encoder a RAM, DiT+VAE a GPU
+      extra_args: ["--flash-attn", "on", "--vae-tiling"]
+      sigmas: "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"
+    license:
+      id: "qwen-research"
+      commercial_ok: false
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: false
+      source: "https://huggingface.co/webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
+    notes: "Qwen-Image-2.1-Turbo (7B DiT, 8 steps) + encoder Qwen3-VL-8B abliterado (Sakura). GGUF vía sd.cpp; encoder en CPU → cabe en 8 GB. NO COMERCIAL (Qwen Research)."
+
+  # AUDIO
   kokoro_voice:
     modality: audio
     task: tts
@@ -92,6 +143,8 @@ media_profiles:
     sampler: { voices: 54, sr: 24000 }
     vram_footprint: { peak_mb: 800 }
     capabilities: ["narration", "multilingual", "fast"]
+    not_capable_for: ["cloning"]
+    priority: 1
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -111,6 +164,8 @@ media_profiles:
     sampler: { sr: 24000, exaggeration: 0.5 }
     vram_footprint: { peak_mb: 3350 }
     capabilities: ["cloning", "emotion", "multilingual"]
+    not_capable_for: []
+    priority: 2
     license:
       id: "mit"
       commercial_ok: true
@@ -130,6 +185,10 @@ media_profiles:
     sampler: { steps: 100, cfg_scale: 4.0, seconds_max: 30, sr: 48000 }
     vram_footprint: { peak_mb: 7400 }
     capabilities: ["environment", "animals", "urban", "foley"]
+    not_capable_for: []
+    priority: 1
+    constraints: { max_vram_mb: 6400 }      # OOM en 8 GB por defecto
+    adapters: ["reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -149,6 +208,10 @@ media_profiles:
     sampler: { steps: 25, guidance_scale: 5.0, sr: 16000 }
     vram_footprint: { peak_mb: 7400 }
     capabilities: ["mixed_scene", "music", "sfx", "speech", "environment"]
+    not_capable_for: []
+    priority: 2
+    constraints: { max_vram_mb: 6400 }      # justo en 8 GB (offload)
+    adapters: ["reject_oversize"]
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -158,7 +221,26 @@ media_profiles:
       source: "https://huggingface.co/mispeech/Dasheng-AudioGen"
     notes: "Escena mixta (voz+música+SFX+ambiente). transformers<5. En 8 GB, justo (offload)."
 
-# ── TOOL-CHAINS (NO son modelos) ──────────────────────────────────────────
+# CASCADE POR TAREA / INTENCIÓN (docs/CORE/MEDIA_MODELS.md)
+# Mapa intención -> [modelo, ...] (orden = preferencia). Espejo de `roles` del
+# LLM (model_catalog.yaml). El router resuelve task -> modelo y salta los
+# `not_capable_for`. Claves = vocabulario de `capabilities`.
+media_roles:
+  # imagen
+  typography:   [zimage_turbo]
+  product:      [zimage_turbo, flux2_klein]
+  concept:      [flux2_klein, bonsai_ternary]
+  landscape:    [flux2_klein, zimage_turbo]
+  illustration: [flux2_klein, bonsai_ternary]
+  photoreal:    [flux2_klein, zimage_turbo, bonsai_ternary, qwen_image_2_1_turbo]
+  portrait:     [qwen_image_2_1_turbo]
+  # audio
+  narration:    [kokoro_voice, chatterbox_voice]
+  cloning:      [chatterbox_voice]
+  sfx:          [moss_sfx, dasheng_scene]
+  scene:        [dasheng_scene]
+
+# TOOL-CHAINS (NO son modelos)
 # La música SIMBÓLICA no tiene "modelo": es una receta. Vive en configs/jobs/.
 # Ejemplos:
 #   configs/jobs/music_demo.yaml   -> LLM -> MIDI (mido) -> FluidSynth -> WAV

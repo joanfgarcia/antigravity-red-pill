@@ -14,9 +14,7 @@ import json
 import logging
 import os
 import shlex
-import shutil
 import subprocess
-import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -29,89 +27,19 @@ from red_pill.jobs.drivers.base import (
 	StepOutcome,
 	append_job_log,
 	human_duration,
-	job_log_path,
 )
+from red_pill.jobs.drivers.checkpoint_watch import _CheckpointWatcher, _dig
 
 logger = logging.getLogger(__name__)
 
 _VALID_MODES = ("single", "bounded", "unbounded")
 
 
-class _CheckpointWatcher:
-	"""Vigila el fichero de checkpoint MIENTRAS corre el step.
-
-	La granularidad que importa no es cuánto vive el proceso, sino cada cuánto
-	deja algo registrado: eso es lo que se pierde al interrumpirlo y desde donde
-	se retoma. Un step puede contener varios guardados, así que medirlo por el
-	mtime de antes y después lo inflaría hasta la duración del step entero.
-	Aquí se observa cada escritura, con su intervalo real.
-	"""
-
-	def __init__(self, state_path: Optional[Path], job_id: str, poll_seconds: float = 1.0):
-		self._state_path = state_path
-		self._job_id = job_id
-		self._poll = poll_seconds
-		self._stop = threading.Event()
-		self._thread: Optional[threading.Thread] = None
-		self._last_mtime: Optional[float] = None
-		self._last_seen: float = 0.0
-		self.intervals: List[float] = []
-		self.writes: int = 0
-
-	def __enter__(self) -> "_CheckpointWatcher":
-		self._last_mtime = self._current_mtime()
-		self._last_seen = time.time()
-		if self._state_path is not None:
-			self._thread = threading.Thread(target=self._watch, name="rp-checkpoint-watch", daemon=True)
-			self._thread.start()
-		return self
-
-	def __exit__(self, *exc: Any) -> None:
-		self._stop.set()
-		if self._thread:
-			self._thread.join(timeout=max(2.0, self._poll * 2))
-		# Última mirada: el guardado más importante es el del final de la época, y
-		# el proceso sale acto seguido — entre el último sondeo y su muerte cabe
-		# justo esa escritura. Sin este cierre, se perdería la que más importa.
-		self._check_once()
-
-	def _watch(self) -> None:
-		while not self._stop.wait(self._poll):
-			self._check_once()
-
-	def _check_once(self) -> None:
-		mtime = self._current_mtime()
-		if mtime is None or mtime == self._last_mtime:
-			return
-		now = time.time()
-		if self._last_mtime is not None:
-			self.intervals.append(now - self._last_seen)
-		self.writes += 1
-		note = f" (+{human_duration(self.intervals[-1])} desde el anterior)" if self.intervals else " (primero observado en este step)"
-		append_job_log(self._job_id, f"checkpoint escrito por el satélite{note}")
-		self._last_mtime, self._last_seen = mtime, now
-
-	def _current_mtime(self) -> Optional[float]:
-		try:
-			return self._state_path.stat().st_mtime if self._state_path and self._state_path.exists() else None
-		except OSError:
-			return None
-
-
-def _dig(data: Dict[str, Any], key_path: str) -> Any:
-	"""Lee una clave declarativa del checkpoint, con soporte de ruta `a.b.c`."""
-	node: Any = data
-	for part in str(key_path).split("."):
-		if not isinstance(node, dict) or part not in node:
-			return None
-		node = node[part]
-	return node
-
-
 class ScriptJobDriver(ResumableJobDriver):
 	source = "script_job"
 	min_vram_mb = 0  # El preflight declarativo decide; el gate genérico del runner no aplica aquí
 	checkpoint_poll_seconds = 1.0  # Sondeo del vigilante de checkpoints (un stat() por segundo)
+	_LOG_TAG = "[SCRIPT JOB]"
 
 	# ── Validación en el submit ────────────────────────────────────────────
 
@@ -159,11 +87,18 @@ class ScriptJobDriver(ResumableJobDriver):
 		if progress.get("stage_current_key") and not (progress.get("stage_total") or progress.get("stage_total_key")):
 			raise ValueError("progress.stage_current_key exige stage_total o stage_total_key")
 
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
+
 	# ── Preflight / teardown de entorno ────────────────────────────────────
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		import red_pill.config as cfg
 		from red_pill.core.vram_probe import VramProbe
+		from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+		validate_media_payload(payload)
 
 		pre = payload.get("preflight") or {}
 
@@ -189,61 +124,13 @@ class ScriptJobDriver(ResumableJobDriver):
 			llm_port = self._llm_port()
 			if not llm_port:
 				raise JobDeferred("LLM local no disponible (sin puerto de inferencia detectado)")
-			if not self._llm_healthy(llm_port):
+			if not self._llm_healthy():
 				raise JobDeferred(f"LLM local no responde (puerto {llm_port}) — se difiere hasta que la GPU/LLM se libere")
 
 	def teardown(self, payload: Dict[str, Any]) -> None:
 		"""Restaura servicios en TODAS las salidas (incluido el deferral nocturno)."""
 		for service in (payload.get("teardown") or {}).get("restore_services") or []:
 			self._systemctl("start", service)
-
-	@staticmethod
-	def _llm_port() -> Optional[int]:
-		"""Puerto del LLM local (por config o 8760 por convención del dual-bind)."""
-		try:
-			import red_pill.config as cfg
-
-			env = getattr(cfg, "MLX_LM_URL", "") or ""
-			if env and ":" in env:
-				import re
-
-				m = re.search(r":(\d+)", env)
-				if m:
-					return int(m.group(1))
-		except Exception:
-			pass
-		return 8760
-
-	@staticmethod
-	def _llm_healthy(port: int) -> bool:
-		"""Health-check del LLM local: /health o /v1/models (mismo patrón que check_sip)."""
-		import urllib.error
-		import urllib.request
-
-		for path in ("/health", "/v1/models"):
-			try:
-				resp = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=3)
-				if resp.status == 200:
-					return True
-			except urllib.error.HTTPError as he:
-				if he.code != 404:
-					continue  # 404 en /health → probar /v1/models
-			except Exception:
-				continue
-		return False
-
-	@staticmethod
-	def _request_vram_unload(base_url: str) -> None:
-		import urllib.request
-
-		try:
-			request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/unload", method="POST")
-			with urllib.request.urlopen(request, timeout=5) as response:
-				if response.status == 200:
-					logger.info("[SCRIPT JOB] VRAM liberada en el proxy dual-bind.")
-					time.sleep(2.0)  # El driver CUDA no devuelve la memoria al instante
-		except Exception as e:
-			logger.debug(f"[SCRIPT JOB] Proxy dual-bind inalcanzable para unload: {e}")
 
 	@staticmethod
 	def _systemctl(action: str, unit: str) -> None:
@@ -388,14 +275,21 @@ class ScriptJobDriver(ResumableJobDriver):
 
 	def _build_env(self, payload: Dict[str, Any], cwd: str = "") -> Dict[str, str]:
 		env = dict(os.environ)
-		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
-		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
+		from red_pill.jobs.drivers.base import sanitize_job_env
+
+		env.update(sanitize_job_env(payload.get("env")))
+		# AD-030: el bloque `llm:` del recipe → env RP_LLM_*.
 		try:
 			from red_pill.jobs.drivers.base import inject_llm_env
 
 			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
 		except ValueError as e:
 			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
+		# Fine progress channel (RFC-JOBDAG-002): uniform with dag_job/element_job, so a
+		# child that calls report_stage_progress() is no longer a silent no-op.
+		from red_pill.core.progress import enable_stage_progress
+
+		enable_stage_progress(env, self.job_id)
 		# Exponer los códigos de salida declarativos al proceso hijo: el satélite
 		# puede salir con defer_exit_code ("ahora no puedo, reintenta") o
 		# pause_exit_code ("revisión del operador") sin hardcodear el número.
@@ -417,34 +311,6 @@ class ScriptJobDriver(ResumableJobDriver):
 			env["RP_CHECKPOINT_FILE"] = str(cp if cp.is_absolute() else Path(cwd) / cp)
 		env["PYTHONUNBUFFERED"] = "1"  # Sin esto el log del job llega a trozos y tarde
 		return env
-
-	@staticmethod
-	def _has_systemd() -> bool:
-		return shutil.which("systemd-run") is not None
-
-	def _clear_stale_scope(self) -> None:
-		"""Retira un scope homónimo huérfano de un crash previo (el flock impide concurrencia real)."""
-		unit = f"redpill-job-{self.short_id}.scope"
-		try:
-			active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=5).returncode == 0
-			if active:
-				logger.warning(f"[SCRIPT JOB] Retirando scope huérfano {unit}.")
-				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
-			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
-		except Exception:
-			pass
-
-	def _looks_like_timeout(self, elapsed: float, returncode: int) -> bool:
-		"""¿Lo abatió la cota o falló por sus propios medios?
-
-		Detección por tiempo transcurrido (robusta ante el código de salida que
-		propague systemd) y por los códigos canónicos de muerte por señal.
-		"""
-		if not self.step_timeout_s:
-			return False
-		if returncode in (124, 137, 143, -9, -15) and elapsed >= self.step_timeout_s * 0.9:
-			return True
-		return elapsed >= self.step_timeout_s
 
 	# ── Estado, progreso y finalización ────────────────────────────────────
 
@@ -625,14 +491,3 @@ class ScriptJobDriver(ResumableJobDriver):
 		return f"{title}: {''.join(parts)} — {state} (step {elapsed / 60:.1f} min){skip_note}."
 
 	# ── Log por job ────────────────────────────────────────────────────────
-
-	def _log_path(self) -> Path:
-		return job_log_path(self.job_id)
-
-	def _log_tail(self, lines: int = 25) -> str:
-		"""Cola del log — el error real del hijo, no el banner del envoltorio."""
-		try:
-			content = self._log_path().read_text(encoding="utf-8", errors="replace").strip().splitlines()
-			return "\n".join(content[-lines:]) if content else "(sin salida)"
-		except Exception:
-			return "(log no disponible)"

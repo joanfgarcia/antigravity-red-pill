@@ -135,4 +135,3 @@ def test_coverage_ignores_content_the_synthesis_can_never_group():
 	assert wm["content"] == 12
 	assert wm["groupable"] == 2
 	assert wm["hub_coverage_pct"] == 100.0
-

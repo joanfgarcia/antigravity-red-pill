@@ -54,9 +54,9 @@ def _meta():
 
 
 def test_sanitize_quita_ansi_rutas_y_capa():
-	raw = "\x1b[31mfallo en /home/joan/Documents/IA/sharing/src/x.py\x1b[0m"
+	raw = "\x1b[31mfallo en /home/user/proj/src/x.py\x1b[0m"
 	out = ledger.sanitize_text(raw, ledger.ERROR_CAP)
-	assert "\x1b" not in out and "/home/joan" not in out and "x.py" in out
+	assert "\x1b" not in out and "/home/user" not in out and "x.py" in out
 	assert len(ledger.sanitize_text("palabra " * 200, 512)) == 512
 	assert len(ledger.sanitize_text("x" * 5000, 512)) <= 512  # scrub puede redactar antes del cap
 
@@ -137,8 +137,13 @@ def test_process_one_cuenta_en_ledger(tmp_path, tmp_ledger, monkeypatch):
 	dir_rel = _session(tmp_path, "cuenta", meta=_meta())
 	ledger.open_run(run_id="rC", stage="annotate", to_fingerprint="h")
 	gating.seal(
-		tmp_path, dir_rel, run_id="rC", action="process", state="pending",
-		reason="test", to_fingerprint=gating.current_pipeline()["manifest_hash"],
+		tmp_path,
+		dir_rel,
+		run_id="rC",
+		action="process",
+		state="pending",
+		reason="test",
+		to_fingerprint=gating.current_pipeline()["manifest_hash"],
 	)
 	monkeypatch.setattr(mod, "_canonical_ids", lambda: {})
 	monkeypatch.setattr(mod, "annotate_session", lambda *a, **k: 0.5)

@@ -207,7 +207,7 @@ echo "------------------------------------------------------------------"
 echo -e "${BLUE}👔 DRESS CODE (PUNTUACIÓN Y TYPOS):${NC}"
 echo "La calidad de tu memoria a largo plazo depende de cómo escribes."
 echo "Los Agentes usan tu puntuación para el Chunking Semántico."
-echo "Por favor, lee: docs/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
+echo "Por favor, lee: docs/GUIDES/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
 echo "------------------------------------------------------------------"
 
 
@@ -567,6 +567,8 @@ update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Agent_Core"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$WORKSPACE_ROOT/scripts" "$WORKSPACE_ROOT/backups/qdrant" "$WORKSPACE_ROOT/backups/soul" "$WORKSPACE_ROOT/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
+# Raíz de temporales del arnés (docs/CORE/MEDIA_MODELS.md): ~/tmp por defecto; .env la sobreescribe.
+RP_TMP="${RP_TMP_DIR:-$HOME/tmp}"; RP_TMP="${RP_TMP/#\~/$HOME}"; mkdir -p "$RP_TMP"
 
 # Desk scaffold (seeds/desk → AGENT_CORE_DIR, copy-if-absent — nunca pisa el
 # contenido que el operador ya ha tocado; las actualizaciones de convención
@@ -734,7 +736,7 @@ fi
 
 # Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
 # Misma lista que bunker_lifecycle.CONFIG_EXAMPLE_SEEDS (`red-pill bunker install|update`).
-for seed in model_profiles model_catalog task_profiles; do
+for seed in model_profiles model_catalog task_profiles runtimes media_profiles; do
 	if [ -f "$REPO_ROOT/examples/$seed.yaml.example" ] && [ ! -e "$RP_CONFIG_DIR/$seed.yaml" ]; then
 		mkdir -p "$RP_CONFIG_DIR"
 		cp "$REPO_ROOT/examples/$seed.yaml.example" "$RP_CONFIG_DIR/$seed.yaml"

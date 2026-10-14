@@ -1,4 +1,4 @@
-"""TST-BR-001: RuntimeBattleRunner y factory runtime-aware (RFC-HARNESS-003 corte 3).
+"""TST-BR-001: RuntimeBattleRunner y factory runtime-aware (AD-049 corte 3).
 
 Herméticos: sin GPU ni procesos reales — se carga `scripts/model_battle_lib.py`
 por ruta (no es paquete) y se inyectan fakes del RuntimeServer / BattleRunner.

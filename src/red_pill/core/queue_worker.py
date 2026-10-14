@@ -439,12 +439,70 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 	return processed
 
 
+def _load_job_env() -> None:
+	"""Exporta el `.env` del operador (+ IA_DIR/REDPILL_DIR) al entorno del runner.
+
+	Los jobs heredan este entorno: así las vars de config (RP_TMP_DIR, *_FORGE_HOME,
+	RP_MEDIA_STAGING…) llegan a las recetas SIN fallbacks en las plantillas. `setdefault`:
+	no pisa lo ya presente; si una var no está configurada, no se inventa (fail-clean).
+	"""
+	import os
+
+	from red_pill.core.paths import (
+		get_bunker_root,
+		get_config_dir,
+		get_data_dir,
+		get_forge_home,
+		get_image_models_dir,
+		get_laya_venv,
+		get_llmtools_venv,
+		get_media_profiles_path,
+		get_runtimes_path,
+		get_tmp_dir,
+	)
+
+	env_file = get_config_dir() / ".env"
+	if env_file.is_file():
+		for line in env_file.read_text(encoding="utf-8").splitlines():
+			line = line.strip()
+			if not line or line.startswith("#") or "=" not in line:
+				continue
+			key, _, value = line.partition("=")
+			key, value = key.strip(), value.strip().strip('"').strip("'")
+			if key and value:
+				os.environ.setdefault(key, os.path.expandvars(os.path.expanduser(value)))
+	root = str(get_bunker_root())
+	os.environ.setdefault("IA_DIR", root)
+	os.environ.setdefault("REDPILL_DIR", root)
+	# Media (docs/CORE/MEDIA_MODELS.md / docs/TECHNICAL/DECISION_LOG.md): valor canónico de paths.py (default documentado,
+	# overridable por `.env`). Así las plantillas usan `$VAR` sin defaults ni absolutos.
+	os.environ.setdefault("IMAGE_FORGE_HOME", str(get_forge_home("image")))
+	os.environ.setdefault("AUDIO_FORGE_HOME", str(get_forge_home("audio")))
+	os.environ.setdefault("MUSIC_FORGE_HOME", str(get_forge_home("music")))
+	os.environ.setdefault("RP_TMP_DIR", str(get_tmp_dir()))
+	try:
+		from red_pill.core.media_staging import staging_root
+
+		os.environ.setdefault("RP_MEDIA_STAGING", str(staging_root()))
+	except Exception:  # noqa: BLE001
+		pass
+	os.environ.setdefault("LAYA_VENV", str(get_laya_venv()))
+	os.environ.setdefault("LLMTOOLS_VENV", str(get_llmtools_venv()))
+	# Rutas que el harness standalone (venv propio, sin red_pill) lee por env.
+	os.environ.setdefault("REDPILL_MEDIA_PROFILES", str(get_media_profiles_path()))
+	os.environ.setdefault("REDPILL_RUNTIMES", str(get_runtimes_path()))
+	os.environ.setdefault("REDPILL_IMAGE_MODELS_DIR", str(get_image_models_dir()))
+	os.environ.setdefault("REDPILL_SOUNDFONTS_DIR", str(get_data_dir() / "soundfonts"))
+	os.environ.setdefault("MEMENTO_ROOT", str(get_data_dir() / "memento"))
+
+
 def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 	"""
 	Background daemon that consumes the SQLite queues
 	and slowly offloads them without blocking the main IDE Agent.
 	"""
 	logger.info("Starting Bünker Asynchronous Queue Worker (Zero-Daemon)...")
+	_load_job_env()
 	queue = MemoryQueueManager()
 
 	try:

@@ -72,7 +72,18 @@ def test_manifest_determinista_y_contratos_separados():
 	assert m1["extract_contract"] != m1["score_contract"]
 	assert runtime.annotate_manifest_hash() == runtime.annotate_manifest_hash()
 	components = m1["components"]
-	for key in ("extract_work", "extract_social", "voice_rewrite_prompt", "dual_score", "bio", "work_scope", "social_scope", "fragment_view", "dedup_policy", "thresholds"):
+	for key in (
+		"extract_work",
+		"extract_social",
+		"voice_rewrite_prompt",
+		"dual_score",
+		"bio",
+		"work_scope",
+		"social_scope",
+		"fragment_view",
+		"dedup_policy",
+		"thresholds",
+	):
 		assert key in components, key
 	assert components["dedup_policy"]["threshold"] == runtime.memento_dedup_threshold()
 

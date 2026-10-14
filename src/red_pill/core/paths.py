@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -240,6 +241,14 @@ def get_models_dir() -> Path:
 	return path
 
 
+def get_image_models_dir() -> Path:
+	"""Raíz de modelos de imagen custom/no-HF (`$REDPILL_IMAGE_MODELS_DIR`,
+	default `~/opt/red-pill-custom-image-models`). Modelos multi-repo/composición
+	que no siguen el layout HF blob-store (docs/CORE/MODEL_STORAGE.md)."""
+	env = os.environ.get("REDPILL_IMAGE_MODELS_DIR")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "opt" / "red-pill-custom-image-models"
+
+
 def get_session_db() -> Path:
 	"""Ruta de `session.db`, la BD propia del subsistema de sesiones.
 
@@ -443,7 +452,7 @@ def get_model_runtime_path() -> Path:
 	"""Ruta de la config en caliente del selector de inferencia
 	($XDG_CONFIG_HOME/red-pill/model_runtime.yaml).
 
-	RFC-HARNESS-002 §10: `default_model`, `fallup`, `hot_reload`. El fichero se
+	AD-030: `default_model`, `fallup`, `hot_reload`. El fichero se
 	relee por mtime en cada request (hot reload) cuando `hot_reload: true`.
 	"""
 	return get_config_dir() / "model_runtime.yaml"
@@ -452,7 +461,7 @@ def get_model_runtime_path() -> Path:
 def get_task_profiles_path() -> Path:
 	"""Ruta de la zona curada de tareas ($XDG_CONFIG_HOME/red-pill/task_profiles.yaml).
 
-	RFC-HARNESS-002 §4: conducta de tarea (prompt_file, temperature, max_tokens,
+	AD-030: conducta de tarea (prompt_file, temperature, max_tokens,
 	thinking) + candidatos de modelo (referencias a model_profiles.yaml). Se
 	relee por mtime en cada request cuando `hot_reload: true`. Se siembra
 	(copy-if-absent) desde examples/task_profiles.yaml.example en install/update.
@@ -463,7 +472,7 @@ def get_task_profiles_path() -> Path:
 def get_runtimes_path() -> Path:
 	"""Ruta del registro de runtimes de inferencia ($XDG_CONFIG_HOME/red-pill/runtimes.yaml).
 
-	RFC-HARNESS-003: catálogo de engines instalados (stock, forks de llama.cpp,
+	AD-049: catálogo de engines instalados (stock, forks de llama.cpp,
 	bitnet, npu...) al que los perfiles de modelo se anclan vía `runtime: <id>`.
 	Se siembra (copy-if-absent) desde examples/runtimes.yaml.example en
 	install/update (mismo patrón que task_profiles).
@@ -471,10 +480,93 @@ def get_runtimes_path() -> Path:
 	return get_config_dir() / "runtimes.yaml"
 
 
+def get_media_profiles_path() -> Path:
+	"""Ruta del elenco de media generativa ($XDG_CONFIG_HOME/red-pill/media_profiles.yaml).
+
+	docs/CORE/MEDIA_MODELS.md: elenco de modelos de imagen/audio-onda (pipeline + sampler +
+	quant + VRAM) con discriminador `modality`/`task`, `capabilities`, `constraints`
+	y `adapters`. El **loader lo posee docs/CORE/MEDIA_MODELS.md** (F1); docs/TECHNICAL/DECISION_LOG.md lo
+	consume. Se siembra (copy-if-absent) desde examples/media_profiles.yaml.example
+	en install/update (mismo patrón que task_profiles/runtimes).
+	"""
+	return get_config_dir() / "media_profiles.yaml"
+
+
+def get_tmp_dir() -> Path:
+	"""Raíz de temporales del arnés ($RP_TMP_DIR, default `~/tmp`).
+
+	docs/CORE/MEDIA_MODELS.md: los artefactos de generación van a un **staging**
+	temporal bajo esta raíz (`<tmp>/red-pill/...`). Es **configurable** por `.env`
+	(`RP_TMP_DIR`); install/update crean el directorio si falta. Se prefiere `~/tmp`
+	a `/tmp` (no se purga al reiniciar y es visible, no oculto como `~/.local`).
+	"""
+	return Path(os.path.expanduser(os.environ.get("RP_TMP_DIR") or "~/tmp"))
+
+
+def get_forge_home(area: str) -> Path:
+	"""Raíz del forge de un área media (`$<AREA>_FORGE_HOME`, default `~/opt/<area>-forge`).
+
+	docs/TECHNICAL/DECISION_LOG.md: los forges (imagen/audio/música) son **opcionales** y
+	por-máquina; default documentado y **overridable** (gusto/equipo/SO).
+	`area` ∈ {image, audio, music}.
+	"""
+	env = os.environ.get(f"{area.upper()}_FORGE_HOME")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "opt" / f"{area}-forge"
+
+
+def get_workspace_root() -> Path:
+	"""Raíz del workspace (`$WORKSPACE_ROOT`, default `~/Documents/IA`)."""
+	env = os.getenv("WORKSPACE_ROOT")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "Documents" / "IA"
+
+
+def get_xdg_data_home() -> Path:
+	"""Base XDG de datos (`$XDG_DATA_HOME`, default `~/.local/share`)."""
+	env = os.getenv("XDG_DATA_HOME")
+	return Path(env) if env else Path.home() / ".local" / "share"
+
+
+def get_uv_bin() -> str:
+	"""Binario `uv` (en el PATH o `~/.local/bin/uv`)."""
+	return shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+
+
+def get_metabolism_flag_path() -> Path:
+	"""Fichero de estado del metabolismo (`~/.red_pill_metabolism`)."""
+	return Path.home() / ".red_pill_metabolism"
+
+
+def get_systemd_user_dir() -> Path:
+	"""Directorio de unidades systemd de usuario (`~/.config/systemd/user`)."""
+	return Path.home() / ".config" / "systemd" / "user"
+
+
+def get_laya_venv() -> Path:
+	"""venv de Laya (clasificador CPU) — `$LAYA_VENV` o `$XDG_DATA_HOME/red-pill/laya-venv`."""
+	env = os.environ.get("LAYA_VENV")
+	return Path(os.path.expanduser(env)) if env else get_data_dir() / "laya-venv"
+
+
+def get_llmtools_venv() -> Path:
+	"""venv de herramientas LLM — `$LLMTOOLS_VENV` o `$XDG_DATA_HOME/red-pill/llmtools-venv`."""
+	env = os.environ.get("LLMTOOLS_VENV")
+	return Path(os.path.expanduser(env)) if env else get_data_dir() / "llmtools-venv"
+
+
+def get_launchd_dir() -> Path:
+	"""Directorio de LaunchAgents de macOS (`~/Library/LaunchAgents`)."""
+	return Path.home() / "Library" / "LaunchAgents"
+
+
+def get_containers_systemd_dir() -> Path:
+	"""Directorio de quadlets de contenedores (`~/.config/containers/systemd`)."""
+	return Path.home() / ".config" / "containers" / "systemd"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 
-	RFC-HARNESS-002 §10 (K5): clave path+size+mtime+sha256_cabecera →
+	AD-030 (K5): clave path+size+mtime+sha256_cabecera →
 	{validado_at, magic, load_verified}. Cap 100, eviction por antigüedad,
 	escritura atómica.
 	"""

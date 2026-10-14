@@ -51,9 +51,8 @@ def _patch_minion_factory(monkeypatch, record):
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
 	# el resolve del módulo importa la factory real: hay que parchear también el
 	# _resolve_minion_kind para que conozca agent/command sin el isinstance real
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
 
 
 # ── Validación ────────────────────────────────────────────────────────────────
@@ -258,9 +257,8 @@ def test_dag_sequential_pause_honored_checkpoint_preserved(tmp_path, monkeypatch
 		raise KeyError(minion_id)
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
 	monkeypatch.setattr(
 		"red_pill.cognitive.queue_manager.CognitiveQueueManager.get_task",
 		lambda self, tid: {"id": tid, "status": "PAUSING"},
@@ -336,9 +334,8 @@ def test_dag_on_fail_stop_raises(tmp_path, monkeypatch):
 		return _Failing()
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(
 		str(ws),
 		[
@@ -362,9 +359,8 @@ def test_dag_on_fail_warn_continues(tmp_path, monkeypatch):
 		return _Failing()
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(
 		str(ws),
 		[
@@ -494,60 +490,60 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 
 def test_gpu_health_probe_sin_binario(monkeypatch):
 	"""Sin nvidia-smi en PATH → (False, 0, 0)."""
-	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.jobs.drivers.dag_exec as dag_exec
 
-	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: None)
-	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: None)
+	assert dag_exec._gpu_health_probe() == (False, 0, 0)
 
 
 def test_gpu_health_probe_exit_nonzero(monkeypatch):
 	"""nvidia-smi presente pero exit!=0 → (False, 0, 0)."""
-	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.jobs.drivers.dag_exec as dag_exec
 
-	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 1, "stdout": ""})())
-	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 1, "stdout": ""})())
+	assert dag_exec._gpu_health_probe() == (False, 0, 0)
 
 
 def test_gpu_health_probe_ok_con_ngl(monkeypatch):
 	"""nvidia-smi OK (8192 MB) y llama-server con -ngl 33 → (True, 8192, 33)."""
-	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.jobs.drivers.dag_exec as dag_exec
 
-	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
 	responses = iter(
 		[
 			type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
 			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl 33\n"})(),
 		]
 	)
-	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
-	usable, free_mb, ngl = dag_mod._gpu_health_probe()
+	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: next(responses))
+	usable, free_mb, ngl = dag_exec._gpu_health_probe()
 	assert (usable, free_mb, ngl) == (True, 8192, 33)
 
 
 def test_gpu_health_probe_ngl_malformado(monkeypatch):
 	"""llama-server con -ngl no numérico → ngl=0 (CPU disfrazada detectada)."""
-	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.jobs.drivers.dag_exec as dag_exec
 
-	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
 	responses = iter(
 		[
 			type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
 			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl abc\n"})(),
 		]
 	)
-	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
-	usable, _free_mb, ngl = dag_mod._gpu_health_probe()
+	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: next(responses))
+	usable, _free_mb, ngl = dag_exec._gpu_health_probe()
 	assert usable is True and ngl == 0
 
 
 def test_gpu_health_probe_excepcion(monkeypatch):
 	"""nvidia-smi lanza excepción → (False, 0, 0)."""
-	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.jobs.drivers.dag_exec as dag_exec
 
-	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+	assert dag_exec._gpu_health_probe() == (False, 0, 0)
 
 
 def test_resolve_minion_kind_no_registrado(monkeypatch):
@@ -566,7 +562,7 @@ def test_resolve_minion_kind_logic(monkeypatch):
 	class _LogicMinion:
 		pass
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "logic" if mid == "echo_mirror" else None)
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "logic" if mid == "echo_mirror" else None)
 	assert dag_mod._resolve_minion_kind("echo_mirror") == "logic"
 
 
@@ -664,9 +660,8 @@ def test_dag_stage_timeout_capped_by_step_budget(tmp_path, monkeypatch):
 			return {"status": "success", "summary": "ok"}
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Spy()))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(
 		str(ws),
 		[{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "timeout": 6000}],
@@ -693,11 +688,10 @@ def test_dag_yields_at_budget_boundary_keeping_progress(tmp_path, monkeypatch):
 		],
 	)
 	d.bind("job-1", attempts=0, step_timeout_s=30)
-	import red_pill.jobs.drivers.dag as dag_mod
 
 	# Cada etapa consume 60s de reloj: la cota de 30s se agota tras la primera.
 	state = {"t": 1000.0}
-	monkeypatch.setattr(dag_mod.time, "monotonic", lambda: state["t"])
+	monkeypatch.setattr("time.monotonic", lambda: state["t"])
 	real_run_atomic = d._run_atomic
 
 	def _slow(payload_, stage_, path_, gate_=None):
@@ -722,9 +716,8 @@ def test_dag_on_fail_inherited_from_compound(tmp_path, monkeypatch):
 			return {"status": "failed", "error": "boom"}
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Failing()))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(
 		str(ws),
 		[
@@ -872,9 +865,8 @@ def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
 			return {"status": "failed", "error": "boom"}
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Failing()))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	monkeypatch.setattr(
 		DagJobDriver,
 		"_load_recipe",
@@ -931,7 +923,6 @@ def test_resolve_on_fail_by_path_not_by_homonym():
 
 def test_homonym_leaf_failure_honors_own_on_fail(tmp_path, monkeypatch):
 	"""La hoja F2/implementor (warn) falla → el job NO aborta pese al homónimo stop de F1."""
-	import red_pill.jobs.drivers.dag as dag_mod
 
 	record = []
 
@@ -943,7 +934,7 @@ def test_homonym_leaf_failure_honors_own_on_fail(tmp_path, monkeypatch):
 			return {"status": "success", "summary": "ok"}
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Fake()))
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 
 	drv = DagJobDriver()
 	drv.bind("job-homonym")
@@ -1088,9 +1079,8 @@ def _patch_fanout_factory(monkeypatch, record):
 		raise KeyError(minion_id)
 
 	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
-	import red_pill.jobs.drivers.dag as dag_mod
 
-	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "command")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "command")
 
 
 def test_fanout_blocked_until_source_completes_then_instances(tmp_path, monkeypatch):

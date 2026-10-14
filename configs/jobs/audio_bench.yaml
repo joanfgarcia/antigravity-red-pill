@@ -5,13 +5,14 @@
 # Reanudable por frontera de elemento; watchdog por elemento.
 #
 # Requiere haber corrido antes configs/jobs/audio_setup.yaml (misma venv).
-# SALIDA: WAV + metrics.jsonl → desk (notes); el repo lleva las TOOLS.
+# Rutas por env (el runner exporta el .env): $IA_DIR (repo), $AUDIO_FORGE_HOME (forge).
+# SALIDA: WAV + metrics.jsonl → staging (desechable); el repo lleva las TOOLS.
 source: element_job
 priority: 3
 title: AudioGen A/B — voz+música+SFX (element_job, fail-soft)
 mission_id: audiogen-ab
-elements_command: ["sh", "-c", '"${AUDIO_FORGE_HOME:-$HOME/opt/audio-forge}"/venv/bin/python scripts/audio/bench_audio.py --list-models']
-step_command: ["sh", "-c", 'OUT="$HOME/Documents/IA/Aleth_Core/notes/2026-10-10-audiogen-ab"; mkdir -p "$OUT"; sh scripts/audio/run_element.sh; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+elements_command: ["sh", "-c", '"$AUDIO_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/audio/bench_audio.py" --list-models']
+step_command: ["sh", "-c", 'export AUDIOGEN_OUT="$RP_MEDIA_STAGING/audiogen-ab"; OUT="$AUDIOGEN_OUT"; mkdir -p "$OUT"; sh "$IA_DIR/scripts/audio/run_element.sh"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single

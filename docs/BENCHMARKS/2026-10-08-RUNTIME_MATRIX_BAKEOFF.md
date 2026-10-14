@@ -1,6 +1,6 @@
 # Runtime matrix bake-off — 2026-10-08 13:08
 
-> Matriz runtime × modelo (RFC-HARNESS-003): el mismo harness sirve cada
+> Matriz runtime × modelo (AD-049): el mismo harness sirve cada
 > modelo por su runtime anclado — Bonsai 2 27B PTQ1_0 exige el fork
 > PrismML (`llama_cpp_prism`); Granite corre por el runtime stock.
 >

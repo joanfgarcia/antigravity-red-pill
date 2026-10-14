@@ -125,7 +125,7 @@ curl -s http://localhost:8760/v1/chat/completions \
   -d '{"task":"conversation","messages":[{"role":"user","content":"Di hola"}],"max_tokens":50}' \
   | python3 -m json.tool
 
-# Probar un modelo NUEVO sin tocar la config (modo experimental, RFC-HARNESS-002)
+# Probar un modelo NUEVO sin tocar la config (modo experimental, AD-030)
 # model_path = ruta al GGUF en $XDG_DATA_HOME/red-pill/models/
 curl -s http://localhost:8760/v1/chat/completions \
   -H "Content-Type: application/json" \

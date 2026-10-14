@@ -293,7 +293,7 @@ def test_enqueue_pass_renders_validates_and_expands(monkeypatch):
 		},
 	}
 	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
-	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "logic")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "logic")
 	monkeypatch.setattr(
 		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: []
 	)
@@ -327,7 +327,7 @@ def test_enqueue_pass_failsafe_blocks_flash(monkeypatch):
 		},
 	}
 	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
-	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "agent")
 	monkeypatch.setattr(
 		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: []
 	)

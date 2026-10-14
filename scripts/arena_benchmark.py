@@ -2,7 +2,9 @@ import os
 import subprocess
 import time
 
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+from red_pill.core.paths import get_workspace_root
+
+WORKSPACE_ROOT = str(get_workspace_root())
 MODELS_DIR = os.path.join(WORKSPACE_ROOT, "sharing", "models", "gguf")
 MODELS = ["Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf", "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf", "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"]
 

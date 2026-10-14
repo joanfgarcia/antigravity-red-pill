@@ -1,0 +1,71 @@
+"""Construcción del argv de `sd-cli`: text2img + edición/referencias.
+
+`_sd_cpp_command` es pura (no ejecuta): permite verificar las flags sin cargar
+modelos. La edición/referencias exigen `vision` (mmproj) y fallan limpio sin él.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[1]
+MOD = REPO / "scripts" / "imagegen" / "bench_imagegen.py"
+EXAMPLE = REPO / "examples" / "media_profiles.yaml.example"
+
+
+def _load(monkeypatch):
+	monkeypatch.setenv("REDPILL_MEDIA_PROFILES", str(EXAMPLE))
+	monkeypatch.setenv("REDPILL_RUNTIMES", str(REPO / "examples" / "runtimes.yaml.example"))
+	spec = importlib.util.spec_from_file_location("bench_cmd_under_test", MOD)
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def _ctx(vision: bool = True) -> dict:
+	ctx = {
+		"binary": "/bin/sd-cli",
+		"cfg": {"id": "m", "steps": 8, "guidance": 1.0, "sampler_method": "euler"},
+		"sd": {"backend_assign": "te=cpu,diffusion=cuda0,vae=cuda0", "sigmas": "1.0,0.0", "extra_args": ["--flash-attn", "on"]},
+		"paths": {"diffusion_model": "/d.gguf", "text_encoder": "/e.gguf", "vae": "/v.safetensors"},
+	}
+	if vision:
+		ctx["paths"]["vision"] = "/mmproj.gguf"
+	return ctx
+
+
+def test_text2img_sin_vision_ni_edit(monkeypatch):
+	m = _load(monkeypatch)
+	cmd = m._sd_cpp_command(_ctx(vision=False), "p", 42, 1024, 1024, "/o.png")
+	assert "--llm_vision" not in cmd and "-i" not in cmd and "--ref-image" not in cmd
+	assert cmd[cmd.index("-W") + 1] == "1024" and cmd[cmd.index("-o") + 1] == "/o.png"
+
+
+def test_edicion_con_imagen_exige_vision(monkeypatch):
+	m = _load(monkeypatch)
+	cmd = m._sd_cpp_command(_ctx(), "edit it", 7, 1024, 1024, "/o.png", image="/in.png", strength=0.6)
+	assert cmd[cmd.index("-i") + 1] == "/in.png"
+	assert cmd[cmd.index("--strength") + 1] == "0.6"
+	assert cmd[cmd.index("--llm_vision") + 1] == "/mmproj.gguf"
+
+
+def test_edicion_sin_vision_falla_limpio(monkeypatch):
+	m = _load(monkeypatch)
+	with pytest.raises(RuntimeError, match="vision"):
+		m._sd_cpp_command(_ctx(vision=False), "edit", 7, 1024, 1024, "/o.png", image="/in.png")
+
+
+def test_referencias_repetibles(monkeypatch):
+	m = _load(monkeypatch)
+	cmd = m._sd_cpp_command(_ctx(), "compose", 1, 1024, 1024, "/o.png", ref_images=["/a.png", "/b.png"])
+	assert cmd.count("--ref-image") == 2
+	assert "--llm_vision" in cmd
+
+
+def test_mask_inpainting(monkeypatch):
+	m = _load(monkeypatch)
+	cmd = m._sd_cpp_command(_ctx(), "inpaint", 1, 1024, 1024, "/o.png", image="/in.png", mask="/m.png")
+	assert cmd[cmd.index("--mask") + 1] == "/m.png"

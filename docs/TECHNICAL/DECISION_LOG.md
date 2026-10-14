@@ -4,6 +4,57 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-053] El tipo de nodo del DAG es un REGISTRO + el driver secciona en módulos
+**Date**: 2026-10-14
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`, release 8.1.0). Extiende `RFC_JOB_DAG` (ver `docs/TECHNICAL/`).
+**Context**: `jobs/drivers/dag.py` (1178 L) mezclaba tres concerns (validación/composición del árbol, ejecución atómica, planificación del step) y decidía el **tipo de etapa** con cuatro escaleras `if type ==` (tipos válidos, validación, expansión, ejecución). Añadir un nodo del DAG nuevo obligaba a tocar los cuatro sitios — el anti-patrón que CONVENTIONS §10.8.2/§10.8.3 prohíbe.
+**Decision**:
+- El **tipo de nodo** (`agent`/`command`/`compound`/`dag`) vive en `jobs/drivers/dag_types/`: un `StageType` (protocolo con `validate`/`compose`/`kind`/`report_suffix`) **uno por fichero**, que se **auto-registra** (`register(...)`) al importar. El validador (`dag_validate`), el compositor (`dag_compose`) y el ejecutor despachan por la **clave del registro** — sin `if type ==`.
+- **Añadir un nodo = escribir `dag_types/<kind>.py` + `register(...)`**; el call site no se toca (§10.8.3).
+- El driver se **secciona** en módulos cohesivos (`dag_manifest`/`dag_validate`/`dag_compose`/`dag_fanout`/`dag_exec`/`dag_schedule`), compuestos por **mixins** (call sites intactos); `dag.py` queda como espina fina. Equivalencia de comportamiento verificada byte-a-byte (validate+expand) + suite completa + E2E real.
+- Mismo criterio aplicado a `cli.py` (→ `cli_jobs`/`cli_parser`/`cli_commands`/`cli_services`), `annotate.py` (→ `annotation_quality`/`annotate_state`/`annotate_phases`), `core/progress.py` (canal de progreso neutro) y `core/llm_endpoint.py` (endpoint LLM fuente única).
+**Consequences**: unidades pequeñas, autocontenidas y de bajo blast-radius; el elenco de tipos del DAG es datos+registro, no ramas. Deuda menor declarada: cobertura por-fichero de la superficie CLI por debajo de 80% (el gate aplicable es global, verde).
+
+---
+
+**Date**: 2026-10-14
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende el router/elenco (ver `docs/CORE/MEDIA_MODELS.md`).
+**Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres
+grietas: (1) `scripts/imagegen/bench_imagegen.py` tenía el registro `MODELS`
+**hardcodeado** y `gen_image.py` lo importaba — la doc ("añadir un modelo = añadir
+metadata, no código") era **falsa**, con dos fuentes de verdad desincronizables;
+(2) `runtimes.yaml` no tenía `kind` para GGUF/sd.cpp, ni bootstrap, ni doc;
+(3) discrepancias template↔vivo: `flux2_klein.constraints.dim_multiple` era **16** en
+`examples/…` (comentario erróneo) y **8** en el vivo (la verdad: ÷8, conserva 1080,
+fijada en `tests/test_media_recipe_hook.py`), y el `runtimes.yaml` vivo **carecía** de
+los engines de media que sí traía el template.
+**Decision**:
+- **Una fuente única de máquina**: el elenco `media_profiles.yaml` declara qué es cada
+  modelo **y** su dispatch de carga (`backend` + `pipeline`/`weights`/`quant`/`sampler`).
+  Lo consumen el **router** y el **harness**; el harness **traduce** cada
+  `modality: image`. Se **deriva** el dict `MODELS` del elenco (ya no está hardcodeado; data over branches,
+  CONVENTIONS §10.8.2).
+- **`backend`** (`diffusers`|`bonsai`|`sd_cpp`|…) es la clave de dispatch; un `kind`
+  nuevo = un loader nuevo en `scripts/<área>/` (registro + módulo-por-implementación,
+  §10.8.3). Único sitio con código.
+- **Engines en `runtimes.yaml`** (LLM y media): se añade `sd_cpp` (binary/env/build).
+  Runtime declarado y no disponible = fallo limpio.
+- El elenco pasa a ser **obligatorio** para el harness (falla limpio sin él).
+- Corregido `flux2 ÷8` en template+skill; vivo re-sembrado; modelo nuevo con
+  bloque `license` (`qwen-research`, `commercial_ok: false`).
+**Alternatives**: (a) mantener `MODELS` en código + duplicar en YAML — es la
+enfermedad; (b) YAML dedicado `media_models.yaml` — duplicaría id/pipeline/weights con
+el elenco; (c) solo diffusers, sin GGUF — pierde Qwen-Image, que **sí** corre en 8 GB
+vía sd.cpp; (d) derivar `backend` de `runtime` — conflaciona engine con loader.
+**Rationale / Evidence**: 41 tests verdes (incl. `tests/test_imagegen_registry.py`, que
+fija la invariante y el fallo limpio); router intacto; `sd-cli` + Sakura genera
+**~32 s/imagen a 1024²** (DiT 4.7 GB en VRAM, encoder 8.3 GB en RAM) con VRAM libre.
+Riesgo ops documentado: el LLM residente del daemon (~6.8 GB) no se suelta vía
+`POST /unload` → los jobs de imagen grandes quedan `PENDING` (el runner no desaloja).
+Diseño completo: `docs/CORE/MEDIA_MODELS.md`.
+
+---
+
 ## [AD-051] El ciclo de sueño reporta producción real (contador de engramas vestigial)
 **Date**: 2026-10-11
 **Status**: ACCEPTED & IMPLEMENTED (rama `fix/sleep-cycle-real-engram-counter`).
@@ -213,12 +264,12 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
-## [AD-030] Servicio de Gobierno de la Inferencia Local (RFC-HARNESS-002 v3)
+## [AD-030] Servicio de Gobierno de la Inferencia Local
 **Date**: 2026-09-15
 **Status**: ACCEPTED & IMPLEMENTED (v3 fusionado; PR-0/PR-1/PR-2 desplegados).
 **Supersedes**: AD-020 (On-Demand Model Loading) — el mecanismo (lock, unload→load, idle, `/unload`, reaper) se conserva íntegro; cambia la semántica: el daemon ya no sirve UN modelo fijo sino un **selector por tarea×modelo + zona curada + modos custom/experimental + razonamiento nativo**.
 **Context**: el pase agéntico Memento (RFC-002) necesita un modelo de contexto largo (`tiny_aya_water`, 32K) mientras el sueño y la conversación usan `granite_8b`. El daemon fijaba UN modelo por `MINION_PROFILE` (restart para cambiar) y el service file llevaba un parche temporal. Además, la llegada de **Granite 4.2** (razonamiento nativo) requería soportar modos thinking (`enable_thinking`/`low_effort`) que llama-cpp-python no expone en su API pública.
-**Decision** (v3 — fusiona RFC-HARNESS-002 + RFC_INVENTARIO_MODELOS_HARNESS):
+**Decision** (v3 — fusiona AD-030 + RFC_INVENTARIO_MODELOS_HARNESS):
 - **Selector sin aliases**: `experimental > custom > model > task > config > env`. `task`/`model`/`thinking`/`custom`/`experimental` mutuamente resolubles; id sin resolver → 400 explícito. `task`+`model` exige que el model sea candidato de la tarea (K1).
 - **Separación de registros**: `model_profiles.yaml` = calibración HARDWARE + conducta de MODELO (`chat_format`/`null` = template nativo, `tool_format`, `thinking`); `task_profiles.yaml` = curación de TAREAS (conducta + candidatos con `default: true`); `model_runtime.yaml` = config en caliente (`default_model`, `fallup`, `hot_reload`).
 - **`model_runtime.py`**: fuente única de resolución compartida daemon+clientes (merge por especificidad: candidato > tarea > perfil-conducta > perfil-calibración > config > env). Incluye parsers `toolcall`/`extract_thinking`, validación de modelos (magic bytes GGUF, `model_validation.json` K5) y presupuesto de contexto dinámico.
@@ -228,7 +279,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 - **`MINION_PROFILE` → `MINION_DEFAULT_PROFILE`** (fallback legacy con warning, eliminado tras migración verificada).
 - **`llm:` en recipes de jobs**: `inject_llm_env` traduce el bloque `llm:` a env `RP_LLM_*` (script/element/dag por etapa), incl. fichero de contexto `RP_LLM_CONTEXT_FILE` para custom/experimental. Coherencia con DAG-001 (fan-out futuro).
 - **Endpoint `/v1/tokenize`**: count de tokens reales con el tokenizer del modelo cargado (universal en GGUF) para dimensionar splits del refine por tokens en vez de chars.
-**Por qué esto y no alternativas**: no `llama-server` subproceso (cambiaría VRAM management/fallup); no alias legacy en el selector (compatibilidad se migra refactorizando clientes); no bump obligatorio (refutado empíricamente). El INVENTARIO (RFC-HARNESS-001) quedó **SUPERSEDED y archivado** — su vocabulario (`tool_format`, `thinking`, template nativo) se absorbió en `model_profiles` como conducta de modelo, y su invocador `run_battle` pasa a FASE 2 como consumidor de `model_runtime`.
+**Por qué esto y no alternativas**: no `llama-server` subproceso (cambiaría VRAM management/fallup); no alias legacy en el selector (compatibilidad se migra refactorizando clientes); no bump obligatorio (refutado empíricamente). El INVENTARIO quedó **SUPERSEDED y archivado** — su vocabulario (`tool_format`, `thinking`, template nativo) se absorbió en `model_profiles` como conducta de modelo, y su invocador `run_battle` pasa a FASE 2 como consumidor de `model_runtime`.
 
 ---
 
@@ -280,7 +331,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 ## [AD-041] Tool-calling local roto en silencio + Granite 4.2 soportado por parser nativo
 **Date**: 2026-09-30
 **Status**: ACCEPTED — verificado end-to-end (daemon + arnés de autonomía).
-**Context**: el backend `local-tools` (`run_local_minion`) llevaba roto desde RFC-HARNESS-002 v3 y fallaba sin señal: `apply_chat_handler` nunca leía `minion_chat_format` ni detectaba `tools`, así que el daemon aplicaba el `chat_format` de destilación (`chatml`) y llama_cpp descartaba los tools en silencio — el modelo respondía en prosa o **inventaba una tool y fabricaba su salida** (y `run_local_minion` lo daba por `ok`).
+**Context**: el backend `local-tools` (`run_local_minion`) llevaba roto desde AD-030 y fallaba sin señal: `apply_chat_handler` nunca leía `minion_chat_format` ni detectaba `tools`, así que el daemon aplicaba el `chat_format` de destilación (`chatml`) y llama_cpp descartaba los tools en silencio — el modelo respondía en prosa o **inventaba una tool y fabricaba su salida** (y `run_local_minion` lo daba por `ok`).
 **Evidence**:
 - `curl` al daemon (UDS y TCP) con `tools=` y perfil `granite_8b` → prosa, 0 tool_calls. Forzar template nativo (`chat_format=null`) → `Invalid chat handler: None` (llama_cpp 0.3.31 no autodetecta en request-time).
 - `chatml-function-calling` SÍ emite `tool_calls` válidos para Granite-4.1-Q4; el bake-off de 2026-09-11 lo acusó por error (medía el binario `llama-server`, no el daemon).
@@ -1207,7 +1258,7 @@ stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
 
 ---
 
-## [AD-049] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
+## [AD-049] Afinidad de runtime por modelo + conducta unificada
 
 **Date**: 2026-10-08
 

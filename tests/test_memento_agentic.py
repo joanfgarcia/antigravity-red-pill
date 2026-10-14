@@ -818,7 +818,17 @@ def test_refine_escribe_memory_por_idea_y_fallback_al_summary(tmp_path):
 	from red_pill.memento.agentic import refine_session
 	from red_pill.memento.ascension import parse_refine
 
-	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "RESUMEN DEL FRAGMENTO", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+	sections = [
+		{
+			"nnn": "001",
+			"file": "001-a.md",
+			"title": "A",
+			"summary": "RESUMEN DEL FRAGMENTO",
+			"source_lines": "l1-5",
+			"fragment": None,
+			"fragments_total": None,
+		}
+	]
 
 	def with_memory(system, user, max_tokens):
 		return json.dumps(
@@ -830,9 +840,7 @@ def test_refine_escribe_memory_por_idea_y_fallback_al_summary(tmp_path):
 
 	root_a, _reg_a, rendered_a = _tree_with_session(tmp_path / "a")
 	refine_session(root_a, rendered_a.dir_rel, "opencode:s1", "opencode", sections, [], with_memory, min_significance=0.3)
-	bodies = {
-		f.stem: parse_refine(f.read_text(encoding="utf-8"))[1] for f in (root_a / rendered_a.dir_rel / "refine").glob("*.md")
-	}
+	bodies = {f.stem: parse_refine(f.read_text(encoding="utf-8"))[1] for f in (root_a / rendered_a.dir_rel / "refine").glob("*.md")}
 	assert set(bodies.values()) == {"Texto propio de alfa", "Texto propio de beta"}
 
 	def legacy(system, user, max_tokens):

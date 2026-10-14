@@ -39,9 +39,9 @@ def _active_seconds() -> int:
 
 
 def _opencode_db_path() -> Path:
-	xdg = os.environ.get("XDG_DATA_HOME")
-	base = Path(xdg) if xdg else Path.home() / ".local" / "share"
-	return base / "opencode" / "opencode.db"
+	from red_pill.core.paths import get_xdg_data_home
+
+	return get_xdg_data_home() / "opencode" / "opencode.db"
 
 
 def _format_model(raw: Any) -> Optional[str]:

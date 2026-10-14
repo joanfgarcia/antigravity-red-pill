@@ -18,7 +18,7 @@ class ModelRegistry:
 
 	@classmethod
 	def reload(cls) -> None:
-		"""Refresca el cache si el mtime de model_profiles.yaml cambió (RFC-HARNESS-002 §10).
+		"""Refresca el cache si el mtime de model_profiles.yaml cambió (AD-030).
 
 		Hot reload por request: los perfiles añadidos sin restart se detectan
 		en la siguiente resolución del selector (`model_runtime._get_profile`).
@@ -208,7 +208,7 @@ class ModelRegistry:
 
 	@classmethod
 	def plan_kv_cache(cls, profile_name: str, ctx: Optional[int] = None, free_mb: Optional[int] = None) -> dict:
-		"""Plan de KV por calidad (RFC-HARNESS-003 §2.7): conserva el contexto y
+		"""Plan de KV por calidad (AD-049): conserva el contexto y
 		degrada la quantización de la KV para caber en la VRAM disponible.
 
 		Datos por perfil: `kv_cache.bytes_per_token_kib` (medido) y

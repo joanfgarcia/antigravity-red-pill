@@ -130,8 +130,7 @@ TOOLS: List[Dict[str, Any]] = [
 		"function": {
 			"name": "swarm_orchestrator_api",
 			"description": (
-				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background "
-				"reports), session_board (live and recent sessions)."
+				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports), session_board (live and recent sessions)."
 			),
 			"parameters": {
 				"type": "object",
@@ -225,11 +224,13 @@ def _normalize_native_toolcalls(parsed: List[dict], turn: int) -> List[Dict[str,
 	out: List[Dict[str, Any]] = []
 	for i, tc in enumerate(parsed):
 		fn = tc.get("function") or {}
-		out.append({
-			"id": f"call_native_{turn}_{i}",
-			"type": "function",
-			"function": {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}},
-		})
+		out.append(
+			{
+				"id": f"call_native_{turn}_{i}",
+				"type": "function",
+				"function": {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}},
+			}
+		)
 	return out
 
 
@@ -286,7 +287,7 @@ def _minion_conduct(model: str = "") -> Dict[str, Any]:
 
 	Same merge by specificity as the daemon (`model_runtime._resolve_task`), but
 	in-process and without probing hardware. The daemon does NOT apply the
-	profile's temperature/max_tokens (clients derive conduct, RFC-HARNESS-002 §8):
+	profile's temperature/max_tokens (clients derive conduct, AD-030):
 	without this the minion always sent 0.3/1024 (IBM's Granite 4.2 recipe needs
 	1.0, and the 4.2-3B spends ~1200 tokens reasoning before the tool call).
 	Precedence is by presence (`is not None`), so `temperature: 0` counts.

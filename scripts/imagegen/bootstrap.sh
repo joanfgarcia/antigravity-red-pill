@@ -7,7 +7,7 @@
 #
 # Rutas configurables (opción por defecto del puesto de referencia):
 #   IMAGE_FORGE_HOME          (def $HOME/opt/image-forge)
-#   REDPILL_IMAGE_MODELS_DIR  (def $XDG_DATA_HOME/red-pill/models/image)
+#   REDPILL_IMAGE_MODELS_DIR  (def ~/opt/red-pill-custom-image-models)
 #   IMAGE_FORGE_PYTHON        (def 3.12 — el 3.14 del sistema no tiene wheels torch)
 #   UV_BIN                    (def $HOME/.local/bin/uv)
 #
@@ -15,7 +15,7 @@
 set -eu
 
 FORGE_HOME="${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"
-MODELS_DIR="${REDPILL_IMAGE_MODELS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/red-pill/models/image}"
+MODELS_DIR="${REDPILL_IMAGE_MODELS_DIR:-$HOME/opt/red-pill-custom-image-models}"
 HF_CACHE="${HF_HOME:-$FORGE_HOME/hf-cache}"
 PY_VER="${IMAGE_FORGE_PYTHON:-3.12}"
 VENV="$FORGE_HOME/venv"

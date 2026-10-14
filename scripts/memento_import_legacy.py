@@ -67,7 +67,9 @@ def _messages(payloads: List[dict]) -> List[Dict[str, Any]]:
 	return messages
 
 
-def import_legacy(collection: str, apply: bool, only: Optional[str] = None, source: str = "antigravity", force: bool = False, max_points: int = 0) -> Dict[str, int]:
+def import_legacy(
+	collection: str, apply: bool, only: Optional[str] = None, source: str = "antigravity", force: bool = False, max_points: int = 0
+) -> Dict[str, int]:
 	"""Reconstruye el árbol Memento desde una colección Qdrant legacy. Dry-run salvo `apply`."""
 	import red_pill.config as cfg
 	from red_pill.memento import get_memento_root
@@ -113,9 +115,14 @@ def import_legacy(collection: str, apply: bool, only: Optional[str] = None, sour
 			stats["imported"] += 1
 			continue
 		rendered = render_session(
-			sid, src, src, messages,
-			reconstructed=True, step_count=len(messages),
-			split_max_messages=split_max_messages, split_max_chars=split_max_chars,
+			sid,
+			src,
+			src,
+			messages,
+			reconstructed=True,
+			step_count=len(messages),
+			split_max_messages=split_max_messages,
+			split_max_chars=split_max_chars,
 			month_override=entry.get("month"),
 		)
 		session_dir = write_session(root, rendered)
@@ -125,15 +132,27 @@ def import_legacy(collection: str, apply: bool, only: Optional[str] = None, sour
 			json.dumps({"session_id": sid, "source": src, "messages": messages}, ensure_ascii=False, indent=2), encoding="utf-8"
 		)
 		(raw_dir / "meta.json").write_text(
-			json.dumps({"session_id": sid, "source": src, "imported": True, "collection": collection, "imported_at": now}, ensure_ascii=False, indent=2),
+			json.dumps(
+				{"session_id": sid, "source": src, "imported": True, "collection": collection, "imported_at": now}, ensure_ascii=False, indent=2
+			),
 			encoding="utf-8",
 		)
-		reg.upsert(src, sid, {
-			"dir": rendered.dir_rel, "month": rendered.month, "created_at": rendered.created_at,
-			"rendered_at": now, "message_count": rendered.message_count, "step_count": len(messages),
-			"body_chars": rendered.body_chars, "has_splits": rendered.has_splits,
-			"memento_hash": rendered.memento_hash, "reconstructed": True,
-		})
+		reg.upsert(
+			src,
+			sid,
+			{
+				"dir": rendered.dir_rel,
+				"month": rendered.month,
+				"created_at": rendered.created_at,
+				"rendered_at": now,
+				"message_count": rendered.message_count,
+				"step_count": len(messages),
+				"body_chars": rendered.body_chars,
+				"has_splits": rendered.has_splits,
+				"memento_hash": rendered.memento_hash,
+				"reconstructed": True,
+			},
+		)
 		stats["imported"] += 1
 
 	if apply:

@@ -31,9 +31,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_battle_lib import BattleResult, write_jsonl  # noqa: E402
 from model_battle_tool import PROBES, TOOLS_PER_PROBE  # noqa: E402
 
+from red_pill.core.paths import get_models_dir
+
 REPO = Path(__file__).resolve().parent.parent
 LLAMA_SERVER = REPO / "3rdparty" / "llama_official" / "build" / "bin" / "llama-server"
-MODELS_DIR = Path(os.environ.get("MODELS_DIR", os.path.expanduser("~/.local/share/red-pill/models")))
+MODELS_DIR = Path(os.environ.get("MODELS_DIR") or get_models_dir())
 PORT = int(os.environ.get("TOOL_BAKEOFF_PORT", "8890"))
 
 # name -> (gguf filename)

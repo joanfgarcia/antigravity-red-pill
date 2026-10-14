@@ -30,7 +30,7 @@ profiles:
   #     samantha  -> legacy 7B, 0/4 JSON. Retired from distillation.
   # ===============================================================
 
-  # ── PRIMARY distiller (AD-022, jul 2026) ──────────────────────
+  # PRIMARY distiller (AD-022, jul 2026)
   # Granite-4.1-8B (IBM, Apache-2.0). Co-won the bake-off on format AND fidelity;
   # chosen over Hermes on license + small-expert fit + efficiency. SOLE carrier of
   # "distillation" -> deterministic selection by the sleep cycle. Hybrid arch: if a
@@ -93,10 +93,10 @@ profiles:
           n_gpu_layers: -1
           n_ctx: 16384
 
-  # ── Granite 4.2 8B (IBM, Apache-2.0) — razonamiento nativo + tool-calling ──
+  # Granite 4.2 8B (IBM, Apache-2.0) — razonamiento nativo + tool-calling
   # Primera familia IBM con thinking (enable_thinking/low_effort). Template NATIVO
   # del GGUF (chat_format: null) — el chatml NO activa el razonamiento.
-  # TOOL-CALLING (verificado 2026-09-30, HARNESS-004): con tools usa el template
+  # TOOL-CALLING (verificado 2026-09-30, docs/CORE/MEDIA_MODELS.md): con tools usa el template
   # nativo; el modelo emite el tool-call como TEXTO
   #   <tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>
   # y `local_minion` lo parsea con model_runtime.extract_toolcalls (tool_format).
@@ -152,7 +152,7 @@ profiles:
           n_gpu_layers: -1
           n_ctx: 16384
 
-  # ── Granite 4.2 3B (IBM, Apache-2.0) — razonamiento compacto + tool-calling ──
+  # Granite 4.2 3B (IBM, Apache-2.0) — razonamiento compacto + tool-calling
   # Mismo formato nativo de tool-calling que el 8B y FUNCIONA (verificado
   # 2026-09-30), pero MUCHO más verboso en el think: necesita ~1200 tokens para
   # llegar al tool-call (con 1024 se trunca a mitad de razonamiento) — el
@@ -201,7 +201,7 @@ profiles:
           n_gpu_layers: -1
           n_ctx: 32768
 
-  # ── Multilingual generalist (NOT the distiller — see bake-off) ─
+  # Multilingual generalist (NOT the distiller — see bake-off)
   # Qwen3.5-9B Instruct: Apache-2.0, 201 langs, large ctx, fits 8 GB. Strong
   # general model but ignores "no reasoning" and breaks strict JSON (1/4 in the
   # bake-off). Kept for logic/emotional tasks; promote to "distillation" only
@@ -235,7 +235,7 @@ profiles:
         - min_free_gb: 7
           n_gpu_layers: -1
 
-  # ── Bake-off candidate: domain-specialist distiller ───────────
+  # Bake-off candidate: domain-specialist distiller
   # Beck-8B (finetune of Piaget-8B = Qwen3-8B + LoRA on psychology/philosophy
   # reasoning traces). Strong affective/narrative judgment for the culling
   # role. Promote by moving "distillation" here after the bake-off
@@ -269,7 +269,7 @@ profiles:
         - min_free_gb: 7
           n_gpu_layers: -1
 
-  # ── Alternative distiller: affective/narrative depth ──────────
+  # Alternative distiller: affective/narrative depth
   # Piaget-8B (Qwen3-8B + LoRA on 15k psychology/philosophy reasoning traces).
   # Bake-off: 4/4 JSON + the best 3rd-person abstraction of the field, but emits
   # <think> blocks (token tax). Choose over hermes_8b if emotional nuance matters
@@ -304,7 +304,7 @@ profiles:
         - min_free_gb: 7
           n_gpu_layers: -1
 
-  # ── FALLBACK distiller / primary "logic" (AD-022) ─────────────
+  # FALLBACK distiller / primary "logic" (AD-022)
   # Hermes-3-Llama-3.1-8B. Classic Llama arch (always loads, no <think> tax).
   # Bake-off co-winner (4/4 format + 3/3 tuned fidelity); lost the tiebreaker to
   # granite_8b on license (Llama-3.1 vs Apache-2.0). Kept as the arch-risk fallback
@@ -352,7 +352,7 @@ profiles:
           n_gpu_layers: -1
           n_ctx: 16384
 
-  # ── Legacy: Samantha-Mistral-7B ────────────────────────────────
+  # Legacy: Samantha-Mistral-7B
   # Kept for operators who prefer the original empathy-tuned model.
   # Does NOT carry "logic" capability — will not be auto-selected by
   # samantha_on_demand.py unless explicitly set via MINION_PROFILE.
@@ -400,7 +400,7 @@ profiles:
     use_mmap: false
     capabilities: ["logic", "fast", "coding"]
 
-  # ── Memento agentic-pass distiller/curator (bake-off 2026-09-14) ──────
+  # Memento agentic-pass distiller/curator (bake-off 2026-09-14)
   # Tiny Aya Water 3.35B (CohereLabs). RFC-002's file-based pass faces LONG
   # sessions that exceed Granite's 10240 window; this 2 GB model carries a
   # large context (500K in GGUF, served at 32K) and fits a 16K-token session
@@ -447,7 +447,7 @@ profiles:
           n_ctx: 32768
 
   # ===============================================================
-  # ESQUEMA: plan de KV por calidad (RFC-HARNESS-003 §2.7)
+  # ESQUEMA: plan de KV por calidad (AD-049)
   # ---------------------------------------------------------------
   # Un perfil puede declarar la calibración MEDIDA de su equipo:
   #   kv_cache.bytes_per_token_kib: coste de KV por token y calidad — se mide
@@ -468,7 +468,7 @@ profiles:
   #       weights_mb: 5536
   #       overhead_mb: 330
   #
-  # Nota de anclaje de runtime (RFC-HARNESS-003): un perfil puede declarar
+  # Nota de anclaje de runtime (AD-049): un perfil puede declarar
   # `runtime: <id>` (ver runtimes.yaml.example); sin campo, usa el default.
   # ===============================================================
 
