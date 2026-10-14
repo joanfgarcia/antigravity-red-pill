@@ -231,7 +231,8 @@ media_roles:
   concept:      [flux2_klein, bonsai_ternary]
   landscape:    [flux2_klein, zimage_turbo]
   illustration: [flux2_klein, bonsai_ternary]
-  photoreal:    [flux2_klein, zimage_turbo, bonsai_ternary]
+  photoreal:    [flux2_klein, zimage_turbo, bonsai_ternary, qwen_image_2_1_turbo]
+  portrait:     [qwen_image_2_1_turbo]
   # audio
   narration:    [kokoro_voice, chatterbox_voice]
   cloning:      [chatterbox_voice]
