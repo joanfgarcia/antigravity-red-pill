@@ -43,11 +43,7 @@ RESERVED_JOB_ENV = frozenset(
 
 def sanitize_job_env(raw: Any) -> Dict[str, str]:
 	"""Filtra el bloque `env:` de una receta quitando las vars reservadas de política."""
-	return {
-		str(k): str(v)
-		for k, v in (raw or {}).items()
-		if str(k) not in RESERVED_JOB_ENV and not str(k).startswith(RESERVED_JOB_ENV_PREFIXES)
-	}
+	return {str(k): str(v) for k, v in (raw or {}).items() if str(k) not in RESERVED_JOB_ENV and not str(k).startswith(RESERVED_JOB_ENV_PREFIXES)}
 
 
 @dataclass
