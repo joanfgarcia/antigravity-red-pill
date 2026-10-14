@@ -78,6 +78,18 @@ def test_snap_paridad_adapter_router(monkeypatch):
 			assert m._snap(v, mult) == media_router._adapter_snap_dims({"width": v}, {"constraints": {"dim_multiple": mult}})[0]["width"]
 
 
+def test_gen_image_snap_paridad_adapter(monkeypatch):
+	"""`gen_image._snap` == `media_router._adapter_snap_dims` (3ª copia, ahora guardada)."""
+	from red_pill.core import media_router
+
+	g = _load(monkeypatch, "gen_image_snap", IMAGE_PATH)
+	for mult in (8, 16, 32):
+		monkeypatch.setattr(g, "SNAP", mult)
+		for v in (100, 1024, 1080, 1920):
+			ref = media_router._adapter_snap_dims({"width": v}, {"constraints": {"dim_multiple": mult}})[0]["width"]
+			assert g._snap(v) == ref
+
+
 def test_gen_image_kind_desconocido(monkeypatch):
 	g = _load(monkeypatch, "gen_image_k", IMAGE_PATH)
 	with pytest.raises(RuntimeError):
