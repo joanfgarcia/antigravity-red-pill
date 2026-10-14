@@ -736,7 +736,7 @@ fi
 
 # Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
 # Misma lista que bunker_lifecycle.CONFIG_EXAMPLE_SEEDS (`red-pill bunker install|update`).
-for seed in model_profiles model_catalog task_profiles; do
+for seed in model_profiles model_catalog task_profiles runtimes media_profiles; do
 	if [ -f "$REPO_ROOT/examples/$seed.yaml.example" ] && [ ! -e "$RP_CONFIG_DIR/$seed.yaml" ]; then
 		mkdir -p "$RP_CONFIG_DIR"
 		cp "$REPO_ROOT/examples/$seed.yaml.example" "$RP_CONFIG_DIR/$seed.yaml"

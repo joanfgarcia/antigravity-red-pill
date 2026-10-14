@@ -81,6 +81,8 @@ CONFIG_EXAMPLE_SEEDS = (
 	("model_profiles.yaml.example", "model_profiles.yaml"),
 	("model_catalog.yaml.example", "model_catalog.yaml"),
 	("task_profiles.yaml.example", "task_profiles.yaml"),
+	("runtimes.yaml.example", "runtimes.yaml"),
+	("media_profiles.yaml.example", "media_profiles.yaml"),
 )
 
 
