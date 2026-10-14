@@ -94,6 +94,7 @@ import copy
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -117,6 +118,10 @@ _TYPE_COMMAND = "command"
 _TYPE_COMPOUND = "compound"
 _TYPE_DAG = "dag"  # cuarto tipo (RFC_JOB_DAG §4.5): composición por referencia
 _VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
+
+# A stage `id` becomes a path component under .cell/reports — restrict the charset
+# so it can never traverse out of the confín (§7; SHARD-PSEC-02).
+_SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 class _GroupPauseGate:
@@ -400,6 +405,8 @@ class DagJobDriver(ResumableJobDriver):
 			sid = s.get("id")
 			if not sid:
 				raise ValueError("dag_job stage requires 'id'.")
+			if not isinstance(sid, str) or not _SAFE_STAGE_ID.match(sid):
+				raise ValueError(f"dag_job stage id '{sid}' inválido: usa [A-Za-z0-9_.-] empezando por letra/dígito (sin rutas).")
 			stage_path = f"{path}/{sid}" if path else sid
 			if stage_path in seen:
 				raise ValueError(f"dag_job duplicate stage path '{stage_path}' (los ids son únicos globalmente).")
@@ -863,6 +870,8 @@ class DagJobDriver(ResumableJobDriver):
 		reports_dir = workdir / ".cell" / "reports"
 		suffix = ".envelope.json" if stage.get("type") == _TYPE_AGENT else ".json"
 		report_path = reports_dir / f"{stage_path}{suffix}"
+		if not report_path.resolve().is_relative_to(reports_dir.resolve()):
+			raise ValueError(f"dag stage '{stage_path}' report path escapes '.cell/reports'.")
 		report_path.parent.mkdir(parents=True, exist_ok=True)
 		report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
