@@ -71,3 +71,24 @@ red-pill media validate --task typography --width 1920 --height 1080   # JSON
 red-pill media promote <title> --to <destino>                          # copia (--move) el elegido
 ```
 
+## Lanzador de consola — `gen.sh` (genérico, dirigido por el elenco)
+
+Generar desde la terminal sin montar un job, por **modelo** (`--model ID`) o por
+**familia/tarea** (`--role TASK`, resuelto por la cascade `media_roles`), con el
+backend que declare el elenco:
+
+```sh
+scripts/imagegen/gen.sh --role photoreal "un gato astronauta, foto realista"
+scripts/imagegen/gen.sh --model zimage_turbo "…" --width 832 --height 1216 --seed -1
+W=1024 H=1536 SEED=7 scripts/imagegen/gen.sh "…"       # tamaño/seed por entorno
+scripts/imagegen/gen.sh --role photoreal --dry-run     # resuelve, sin generar
+```
+
+- Libera la VRAM del LLM residente antes de generar (`--no-unload` lo evita).
+- Resuelve modelo/rol del elenco (misma fuente que router y harness) y hace `snap`
+  al `dim_multiple` del modelo.
+- Salida: `<out>/<modelo>_<fecha>_s<seed>.png` (`--out` / `OUTDIR`).
+- Wrapper delgado sobre `gen_cli.py` (usa el python del forge); en un job el
+  entorno ya viene del runner — aquí el launcher fija los defaults canónicos
+  por-máquina con `setdefault`.
+
