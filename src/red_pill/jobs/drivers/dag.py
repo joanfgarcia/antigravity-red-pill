@@ -706,6 +706,7 @@ class DagJobDriver(ResumableJobDriver):
 			if not items:
 				skipped.append(path)
 				continue
+			stepwise = bool(s.get("fanout_stepwise"))
 			instances = []
 			for i, item in enumerate(items):
 				inst = dict(s)
@@ -717,6 +718,13 @@ class DagJobDriver(ResumableJobDriver):
 				inst.pop("depends_on", None)
 				inst.pop("fan_out_from", None)
 				inst.pop("sub_etapas", None)
+				inst.pop("fanout_stepwise", None)
+				# `fanout_stepwise`: encadena (i depende de i-1) para que el frente
+				# tenga UNA instancia por step → el progreso del job avanza por item
+				# (RFC-JOBDAG-002). Sin esto, TODO el frente corre en un solo step y
+				# el contador queda congelado hasta que terminan todas.
+				if stepwise and i > 0:
+					inst["depends_on"] = [f"{s['id']}-{i - 1}"]
 				instances.append(inst)
 			comp = dict(s)
 			comp["type"] = _TYPE_COMPOUND
