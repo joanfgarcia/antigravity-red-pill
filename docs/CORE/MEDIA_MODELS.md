@@ -25,8 +25,9 @@ and which `backend` loads it; the runtime registry says *where the engine lives*
 per-machine and **never committed** (recalibrate timings/VRAM per box).
 
 > The harness (`bench_imagegen.py`) reads the elenco at run time and translates
-> each `modality: image` entry into its loader shape. **There is no `MODELS` dict
-> in code** — adding a model is editing the YAML, nothing else.
+> each `modality: image` entry into its loader shape: `MODELS = _load_media_models()`
+> is **DERIVED** from the YAML, **not hardcoded** — adding a model is editing the YAML,
+> nothing else.
 
 ---
 

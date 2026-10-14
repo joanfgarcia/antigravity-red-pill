@@ -287,7 +287,7 @@ def _minion_conduct(model: str = "") -> Dict[str, Any]:
 
 	Same merge by specificity as the daemon (`model_runtime._resolve_task`), but
 	in-process and without probing hardware. The daemon does NOT apply the
-	profile's temperature/max_tokens (clients derive conduct, RFC-HARNESS-002 §8):
+	profile's temperature/max_tokens (clients derive conduct, AD-030):
 	without this the minion always sent 0.3/1024 (IBM's Granite 4.2 recipe needs
 	1.0, and the 4.2-3B spends ~1200 tokens reasoning before the tool call).
 	Precedence is by presence (`is not None`), so `temperature: 0` counts.

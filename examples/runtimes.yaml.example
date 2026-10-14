@@ -1,4 +1,4 @@
-# runtimes.yaml — registro de engines de inferencia local (RFC-HARNESS-003).
+# runtimes.yaml — registro de engines de inferencia local (AD-049).
 #
 # Los perfiles de modelo (`model_profiles.yaml`) se anclan a un engine con
 # `runtime: <id>`; sin campo, aplica `default_runtime`. `binary`/`server`

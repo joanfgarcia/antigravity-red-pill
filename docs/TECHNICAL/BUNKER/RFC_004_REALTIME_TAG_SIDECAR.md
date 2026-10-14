@@ -7,7 +7,7 @@
 | **Status** | COMPLETE (P1-P4 DONE 2026-09-28; flags OFF en producción por RULE 4) |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-27 |
-| **Related** | AD-040 (DECISION_LOG), AD-039 (router System One, parked), RFC-HARNESS-002 (daemon UDS) |
+| **Related** | AD-040 (DECISION_LOG), AD-039 (router System One, parked), AD-030 (daemon UDS) |
 
 ---
 

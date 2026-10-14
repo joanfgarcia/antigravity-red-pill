@@ -76,7 +76,7 @@ exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8
 START_EOF
 else
 cat << 'DUAL_BIND_EOF' > "$PERSISTENT_DIR/run_dual_bind.py"
-"""Red Pill Dynamic Inference Proxy — SERVICIO DE GOBIERNO (RFC-HARNESS-002 v3).
+"""Red Pill Dynamic Inference Proxy — SERVICIO DE GOBIERNO (AD-030).
 
 Selector `(task, model, thinking, custom, experimental)` resuelto SIEMPRE bajo
 el lock vía `model_runtime`; cambio de modelo sin reiniciar; chat handlers por
@@ -217,7 +217,7 @@ class ModelManager:
 						continue
 					ngl = resolved.n_gpu_layers
 					if ngl == 0:
-						# Swap-o-defer (RFC-HARNESS-003): antes de degradar, pedir a los
+						# Swap-o-defer (AD-049): antes de degradar, pedir a los
 						# servidores dedicados (runtimes no-stock) que suelten la VRAM y
 						# re-evaluar el tier con la medida fresca. Sin servidores vivos o
 						# sin helper (repo viejo) → comportamiento previo intacto.
@@ -238,7 +238,7 @@ class ModelManager:
 					return
 				elif device == "cpu":
 					if IS_CPU_WORKER:
-						# El worker CPU carga EN SU PROCESO. Antes (desde RFC-HARNESS-002
+						# El worker CPU carga EN SU PROCESO. Antes (desde AD-030
 						# v3, 2026-09-17) llamaba a _start_cpu_worker → intentaba lanzar
 						# otro worker con su mismo scope → "already loaded" → exited
 						# early → 500 en todo el fallback a CPU.
@@ -554,7 +554,7 @@ async def unload_endpoint():
 async def tokenize_endpoint(request: Request):
 	"""Cuenta tokens reales de un texto con el tokenizer del modelo CARGADO.
 
-	RFC-HARNESS-002 §7 (v3, pendiente-final): útil para dimensionar los splits
+	AD-030 (v3, pendiente-final): útil para dimensionar los splits
 	del refine/distill del pase Memento por TOKENS REALES en vez de chars (el
 	ratio chars/token varía 1-4, ningún presupuesto fijo es seguro). Universal:
 	todo GGUF lleva su tokenizer.
@@ -782,7 +782,7 @@ After=network.target
 
 [Service]
 Type=simple
-# RFC-HARNESS-002 v3: default de arranque (MINION_DEFAULT_PROFILE). El selector
+# AD-030: default de arranque (MINION_DEFAULT_PROFILE). El selector
 # por tarea/modelo lo sobreescribe por request; el pase Memento pide su modelo
 # vía task (RP_LLM_*) sin tocar este default.
 Environment=MINION_DEFAULT_PROFILE=granite_8b

@@ -447,7 +447,7 @@ profiles:
           n_ctx: 32768
 
   # ===============================================================
-  # ESQUEMA: plan de KV por calidad (RFC-HARNESS-003 §2.7)
+  # ESQUEMA: plan de KV por calidad (AD-049)
   # ---------------------------------------------------------------
   # Un perfil puede declarar la calibración MEDIDA de su equipo:
   #   kv_cache.bytes_per_token_kib: coste de KV por token y calidad — se mide
@@ -468,7 +468,7 @@ profiles:
   #       weights_mb: 5536
   #       overhead_mb: 330
   #
-  # Nota de anclaje de runtime (RFC-HARNESS-003): un perfil puede declarar
+  # Nota de anclaje de runtime (AD-049): un perfil puede declarar
   # `runtime: <id>` (ver runtimes.yaml.example); sin campo, usa el default.
   # ===============================================================
 

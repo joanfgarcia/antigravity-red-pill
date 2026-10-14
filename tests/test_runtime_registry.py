@@ -1,4 +1,4 @@
-"""TST-RT-001: RuntimeRegistry — afinidad de runtime por modelo (RFC-HARNESS-003).
+"""TST-RT-001: RuntimeRegistry — afinidad de runtime por modelo (AD-049).
 
 Piloto corte 1: carga del registro, resolución por perfil, y disponibilidad con
 FALLO LIMPIO (nunca fallback silencioso al runtime stock). Tests herméticos:

@@ -1,4 +1,4 @@
-"""TST-RS-001: RuntimeServer — servidor dedicado por runtime (RFC-HARNESS-003 corte 2).
+"""TST-RS-001: RuntimeServer — servidor dedicado por runtime (AD-049 corte 2).
 
 Tests herméticos: sin GPU, sin proceso real (se inyectan fakes de Popen/urlopen)
 y sin tocar la config del operador (se monkeypatchean ModelRegistry y

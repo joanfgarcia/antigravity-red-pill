@@ -326,7 +326,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 
 
 def handle_runtime(args: argparse.Namespace) -> None:
-	"""Registro de runtimes de inferencia (RFC-HARNESS-003): list / check."""
+	"""Registro de runtimes de inferencia (AD-049): list / check."""
 	from red_pill.core.model_registry import ModelRegistry
 	from red_pill.core.paths import get_runtimes_path
 	from red_pill.core.runtime_registry import RuntimeRegistry
@@ -1361,13 +1361,13 @@ def main() -> None:
 	license_parser = subparsers.add_parser("license", help="Compliance audit: licencias de modelos y contexto")
 	license_parser.add_argument("--json", action="store_true", help="Salida estructurada JSON para parseo agéntico")
 
-	# RFC-HARNESS-003: registro de runtimes de inferencia (múltiples llama.cpp)
-	runtime_parser = subparsers.add_parser("runtime", help="Registro de runtimes de inferencia (RFC-HARNESS-003)")
+	# AD-049: registro de runtimes de inferencia (múltiples llama.cpp)
+	runtime_parser = subparsers.add_parser("runtime", help="Registro de runtimes de inferencia (AD-049)")
 	runtime_sub = runtime_parser.add_subparsers(dest="runtime_cmd")
 	runtime_sub.add_parser("list", help="Lista los runtimes declarados y su disponibilidad")
 	runtime_check = runtime_sub.add_parser("check", help="Resuelve el runtime de un perfil y comprueba disponibilidad")
 	runtime_check.add_argument("profile", help="Nombre del perfil (model_profiles.yaml)")
-	runtime_stop = runtime_sub.add_parser("stop", help="Abate servidores dedicados (swap-o-defer, RFC-HARNESS-003)")
+	runtime_stop = runtime_sub.add_parser("stop", help="Abate servidores dedicados (swap-o-defer, AD-049)")
 	runtime_stop.add_argument("profile", nargs="?", help="Perfil cuyo servidor dedicado abatir")
 	runtime_stop.add_argument("--all", action="store_true", help="Abatir todos los servidores dedicados vivos")
 

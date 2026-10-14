@@ -1,4 +1,4 @@
-"""Inference runtime (RFC-HARNESS-002 v3) — núcleo común daemon/CLI.
+"""Inference runtime (AD-030) — núcleo común daemon/CLI.
 
 Los handlers por modo thinking y la ejecución compartida viven en
 `red_pill.inference.runtime`; el daemon y el front CLI del bake-off la importan.

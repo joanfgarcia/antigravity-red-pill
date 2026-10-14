@@ -38,7 +38,7 @@ manifest:
       depends_on: [discover]
       on_fail: warn
       command: uv run python scripts/memento_agentic.py --force --redistill-round 2026-09-15T15:13:00Z --target {{item}}
-# RFC-HARNESS-002 §7: demanda de inferencia del job → env RP_LLM_* → el pase
+# AD-030: demanda de inferencia del job → env RP_LLM_* → el pase
 # Memento pide granite_8b (task refine, default) sin tocar el default del daemon.
 llm:
   task: refine

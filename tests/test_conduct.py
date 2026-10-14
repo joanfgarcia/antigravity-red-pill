@@ -1,4 +1,4 @@
-"""TST-CO-001: capa de conducta unificada (RFC-HARNESS-003 corte 4).
+"""TST-CO-001: capa de conducta unificada (AD-049 corte 4).
 
 Herméticos: sin GPU ni config real — ResolvedModel construidos a mano y
 monkeypatch de ModelRegistry para la propagación del resolve.

@@ -57,7 +57,7 @@ To configure or change the loaded model:
 1. Edit the active profile (e.g., `samantha`) in your model configuration file (`model_profiles.yaml` located in your bunker configuration directory).
 2. Set the `MINION_DEFAULT_PROFILE` environment variable to select the default profile the daemon boots to (fallback legacy `MINION_PROFILE`, defaults to `samantha`).
 
-> **RFC-HARNESS-002 (selector por tarea)**: el daemon ya no sirve UN modelo fijo.
+> **AD-030 (selector por tarea)**: el daemon ya no sirve UN modelo fijo.
 > El body de una request puede declarar `task` (zona curada en
 > `task_profiles.yaml`), `model` (id de perfil o basename GGUF), `thinking`
 > (`off`/`on`/`low` para modelos de razonamiento como Granite 4.2), o los

@@ -1,4 +1,4 @@
-"""conduct — capa única de conducta por modelo (RFC-HARNESS-003 corte 4).
+"""conduct — capa única de conducta por modelo (AD-049 corte 4).
 
 Todo runner (battle python, battle HTTP, y los caminos de producción que se
 sumen) ejecuta al modelo COMO PRODUCCIÓN: la conducta vive en el perfil ⊕ task

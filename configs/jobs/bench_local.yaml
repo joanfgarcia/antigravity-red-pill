@@ -1,4 +1,4 @@
-# BENCHSET local v1 — MAP por elemento (modelo × variante), fail-soft (RFC-HARNESS-003 corte 6).
+# BENCHSET local v1 — MAP por elemento (modelo × variante), fail-soft (AD-049 corte 6).
 #
 # UN step = UN elemento (15): reanudable por frontera de elemento (pause/resume),
 # watchdog por elemento, y un modelo que falla NO tumba el job: el wrapper

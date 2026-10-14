@@ -1,4 +1,4 @@
-"""model_runtime — fuente única de resolución de la inferencia local (RFC-HARNESS-002 v3).
+"""model_runtime — fuente única de resolución de la inferencia local (AD-030).
 
 Selector (experimental > custom > model > task > config > env, SIN aliases),
 candidatos v2.0, merge por especificidad (cadena completa), modos
@@ -94,9 +94,9 @@ class ResolvedModel:
 	mode: str = "curated"  # curated | custom | experimental
 	last_mode: str = "curated"  # para /status.last_mode
 	extra: Dict[str, Any] = field(default_factory=dict)
-	runtime_id: Optional[str] = None  # RFC-HARNESS-003: runtime anclado (None = stock)
+	runtime_id: Optional[str] = None  # AD-049: runtime anclado (None = stock)
 	runtime: Dict[str, Any] = field(default_factory=dict)  # resuelto de RuntimeRegistry
-	reasoning_effort: Optional[str] = None  # RFC-HARNESS-003 §2.9: esfuerzo declarado (medium/xhigh...)
+	reasoning_effort: Optional[str] = None  # AD-049: esfuerzo declarado (medium/xhigh...)
 	reasoning_budget: Optional[int] = None  # tope DURO de tokens de thinking (no toca el contexto: acota la traza)
 	sampling: Dict[str, Any] = field(default_factory=dict)  # receta de samplers del modelo (top_p, top_k, min_p...)
 
@@ -478,7 +478,7 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 	if "sampling" in body:
 		resolved.sampling = {**(resolved.sampling or {}), **dict(body["sampling"] or {})}
 
-	# RFC-HARNESS-003: anclaje de runtime del perfil. Informativo aquí; el gate
+	# AD-049: anclaje de runtime del perfil. Informativo aquí; el gate
 	# de disponibilidad es require_runtime() antes de cargar el modelo.
 	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
 	if profile.get("runtime"):
@@ -489,7 +489,7 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 
 
 def require_runtime(resolved: ResolvedModel) -> dict:
-	"""Gate de carga (RFC-HARNESS-003): runtime declarado ⇒ operativo o error.
+	"""Gate de carga (AD-049): runtime declarado ⇒ operativo o error.
 
 	Devuelve el runtime resuelto; {} si el perfil no declara anclaje. Falla
 	limpio (RuntimeUnavailableError) — nunca fallback silencioso a stock.

@@ -379,7 +379,7 @@ def _with_annotate_task(transport: runtime.Transport) -> runtime.Transport:
 	"""Envuelve el transporte fijando `RP_LLM_TASK=annotate` durante cada llamada.
 
 	Annotate tiene su PROPIO contrato task (el carril refine/distill era un apaño
-	de RFC-HARNESS-002 §7). Se fija por llamada: el nocturno (stage task=distill)
+	de AD-030). Se fija por llamada: el nocturno (stage task=distill)
 	y el rebuild (task=annotate) usan el mismo contrato sin cambiar sus recipes.
 	"""
 

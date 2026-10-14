@@ -1,4 +1,4 @@
-"""runtime.py — núcleo común de ejecución de inferencia (RFC-HARNESS-002 v3).
+"""runtime.py — núcleo común de ejecución de inferencia (AD-030).
 
 Dos fronts consumen esta librería (una sola verdad de renderizado):
 

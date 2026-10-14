@@ -815,7 +815,7 @@ class DagJobDriver(ResumableJobDriver):
 			kwargs["command"] = task
 		if isinstance(stage.get("params"), dict):
 			kwargs.update({k: _render_item(v, item) if item is not None else v for k, v in stage["params"].items()})
-		# RFC-HARNESS-002 §7 (v3): el bloque `llm:` POR ETAPA en el manifest del
+		# AD-030 (v3): el bloque `llm:` POR ETAPA en el manifest del
 		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
 		# fan-out futuro declara su modelo/modo). Los minions command lo reciben
 		# como env RP_LLM_*; los agénticos hablan con el daemon directamente.

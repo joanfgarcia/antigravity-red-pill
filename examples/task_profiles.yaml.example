@@ -22,7 +22,7 @@ tasks:
       prompt_file: distiller_v3_voice.txt
   annotate:
     # Etapa annotate (MEM-006): notas desde el RAW — contrato propio (el carril
-    # refine/distill era un apaño de RFC-HARNESS-002 §7). Requerida por las
+    # refine/distill era un apaño de AD-030). Requerida por las
     # recetas memento_annotate_rebuild / memento_probe.
     temperature: 0.1
     max_tokens: 1024

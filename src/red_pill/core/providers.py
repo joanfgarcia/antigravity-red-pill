@@ -194,7 +194,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.connect(self.path)
 
 		payload = self._build_payload(
-			task=str(kwargs.get("task") or "conversation"),  # RFC-HARNESS-002 §6.1
+			task=str(kwargs.get("task") or "conversation"),  # AD-030
 			messages=kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			temperature=kwargs.get("temperature", 0.3),
 			max_tokens=kwargs.get("max_tokens"),
@@ -377,7 +377,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		import os
 		import shutil
 
-		# RFC-HARNESS-003: un perfil anclado a un runtime no-python NO se sirve
+		# AD-049: un perfil anclado a un runtime no-python NO se sirve
 		# por el camino stock. Runtime declarado y ausente → fallo limpio; y si
 		# está presente, este factory no lo sirve (el consumidor debe usar
 		# RuntimeServer, el servidor dedicado del runtime).

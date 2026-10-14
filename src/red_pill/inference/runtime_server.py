@@ -1,4 +1,4 @@
-"""runtime_server — servidor dedicado por runtime para perfiles no-python (RFC-HARNESS-003).
+"""runtime_server — servidor dedicado por runtime para perfiles no-python (AD-049).
 
 El daemon clásico (llama-cpp-python) solo puede servir modelos del runtime
 stock. Los perfiles anclados a un runtime no-python (p.ej. el fork PrismML con
@@ -79,7 +79,7 @@ def running_servers() -> List[Dict[str, Any]]:
 
 
 def stop_dedicated_servers(profile_name: Optional[str] = None, timeout: float = 10.0) -> int:
-	"""Abate servidores dedicados (todos o uno) — swap del daemon (RFC-HARNESS-003).
+	"""Abate servidores dedicados (todos o uno) — swap del daemon (AD-049).
 
 	Espera a que mueran: la VRAM debe estar liberada de verdad antes de que el
 	caller re-mida/re-evalúe el tier. Devuelve cuántos paró.
@@ -148,7 +148,7 @@ class RuntimeServer:
 		return self._proc is not None and self._proc.poll() is None
 
 	def _resolve(self) -> Dict[str, Any]:
-		"""Perfil + runtime resueltos, con gate fail-clean (RFC-HARNESS-003)."""
+		"""Perfil + runtime resueltos, con gate fail-clean (AD-049)."""
 		profile = ModelRegistry.get_profile(self.profile_name)
 		if not profile:
 			raise RuntimeServerError(f"perfil '{self.profile_name}' no existe en model_profiles.yaml")
@@ -181,7 +181,7 @@ class RuntimeServer:
 			"-c",
 			str(n_ctx),
 			"-np",
-			"1",  # 8 GB VRAM: un slot (RFC-HARNESS-003 quirks)
+			"1",  # 8 GB VRAM: un slot (AD-049 quirks)
 			"--host",
 			self.host,
 			"--port",
@@ -249,7 +249,7 @@ class RuntimeServer:
 		return self
 
 	def _plan_kv(self) -> dict:
-		"""Plan de KV por calidad del perfil (RFC-HARNESS-003 §2.7).
+		"""Plan de KV por calidad del perfil (AD-049).
 
 		{} si el perfil no declara `kv_cache`/`vram_footprint` (el caller cae al
 		kv_type explícito o a la heurística de tamaño + margen).
@@ -261,7 +261,7 @@ class RuntimeServer:
 			return {}
 
 	def _ensure_vram(self, model_path: str, required_mb: Optional[int] = None) -> None:
-		"""Gate de VRAM (RFC-HARNESS-003 §4.2): swap o defer — NUNCA degradar.
+		"""Gate de VRAM (AD-049): swap o defer — NUNCA degradar.
 
 		Decisión del operador (2026-10-08): la degradación CPU/parcial queda
 		descartada para modelos que caben en VRAM (tiempos inaceptables). Si la

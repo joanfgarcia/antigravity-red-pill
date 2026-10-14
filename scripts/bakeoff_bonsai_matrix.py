@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bakeoff_bonsai_matrix.py — matriz runtime × modelo (RFC-HARNESS-003, corte 3).
+"""bakeoff_bonsai_matrix.py — matriz runtime × modelo (AD-049, corte 3).
 
 Corre la MISMA batería de probes sobre modelos servidos por runtimes distintos:
 
@@ -118,7 +118,7 @@ def main() -> int:
 	lines = [
 		f"# Runtime matrix bake-off — {time.strftime('%Y-%m-%d %H:%M')}",
 		"",
-		"> Matriz runtime × modelo (RFC-HARNESS-003): el mismo harness sirve cada",
+		"> Matriz runtime × modelo (AD-049): el mismo harness sirve cada",
 		"> modelo por su runtime anclado — Bonsai 2 27B PTQ1_0 exige el fork",
 		"> PrismML (`llama_cpp_prism`); Granite corre por el runtime stock.",
 		">",

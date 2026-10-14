@@ -66,7 +66,7 @@
 
 - **[FEAT]** `scripts/imagegen/`: harness para correr y **clasificar por tipo
   de arte** modelos texto→imagen locales en GPUs de consumo (8 GB), hermano de
-  `bench_local.py` (RFC-HARNESS-003).
+  `bench_local.py` (AD-049).
   - `bootstrap.sh` — runtime **por-máquina** con rutas configurables
     (`IMAGE_FORGE_HOME`, `REDPILL_IMAGE_MODELS_DIR`); no versiona terceros.
   - `bench_imagegen.py` — element_job (UN modelo = UN step, fail-soft), matriz
@@ -503,7 +503,7 @@ datos reales en solo lectura, privacidad del repo público, neon-link). Lo encon
 ### 🛠️ Minion de herramientas local — el tool-calling de Granite estaba roto y en silencio (HARNESS-003)
 
 - **[FIX] `apply_chat_handler` ignoraba `minion_chat_format` y los `tools`:** desde
-  RFC-HARNESS-002 v3 el daemon aplicaba siempre el `chat_format` de destilación
+  AD-030 el daemon aplicaba siempre el `chat_format` de destilación
   (p. ej. `chatml`) aunque la request llevara tools; llama_cpp los descartaba en
   silencio y el modelo respondía en prosa o **inventaba una tool y fabricaba su
   salida**. Ahora, con `tools`/`functions`, se usa `minion_chat_format` del perfil
@@ -889,7 +889,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   como suelo del presupuesto y las etapas internas conservan su timeout propio
   (misma filosofía que el fan-out `_item`). Test: nightly 420 → 25200s.
 - **[REF] Task `annotate` propia (MEM-006)**: la etapa annotate deja el carril
-  `refine`/`distill` (apaño de RFC-HARNESS-002 §7). Nueva task `annotate`
+  `refine`/`distill` (apaño de AD-030). Nueva task `annotate`
   (`granite_8b` default, temp 0.1, thinking off) en config + example; recetas
   `memento_annotate_rebuild`/`memento_probe` → `task: annotate`; y
   `annotate_session` fija `RP_LLM_TASK=annotate` **por llamada** (así el
@@ -961,7 +961,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   parcial. Migrados los tres consumidores (`distill`, `annotate`,
   `runner.session_max_work_unit_chars`) y la fachada. Sin cambio de conducta
   en distill.
-- **[FIX] Fallback a CPU del daemon, roto desde el 2026-09-17** (RFC-HARNESS-002 v3):
+- **[FIX] Fallback a CPU del daemon, roto desde el 2026-09-17** (AD-030):
   el worker CPU, al recibir la petición, recorría la misma cascada que el
   supervisor y en el paso `cpu` intentaba lanzar **otro** worker con su mismo scope
   de systemd → "already loaded" → exited early → **500 en todas las peticiones**
@@ -1309,7 +1309,7 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   dejaba huérfanos consumiendo GPU y con el pipe abierto, colgando al runner.
   Test nuevo `test_timeout_kills_process_tree`.
 
-### 🧪 Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3, RFC MEM-006)
+### 🧪 Bake-off Granite 4.2 vs 4.1 (AD-030, RFC MEM-006)
 
 - **[NEW] `scripts/bakeoff_granite_42.py`** + `configs/jobs/bakeoff_granite_42.yaml`:
   F1 destilador (4.2-8B vs 4.1-8B, distiller_v3_voice MODE B, incl. probe de

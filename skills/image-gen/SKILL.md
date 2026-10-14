@@ -42,6 +42,7 @@ tokens deben ser **exactos** (no hay normalización): `photorealism` es un **val
 | `landscape` | `flux2_klein` | paisaje/entorno |
 | `illustration` | `flux2_klein` | ilustración/estilizado |
 | `photoreal` | `flux2_klein` | fotorrealismo/retrato |
+| `portrait` | `qwen_image_2_1_turbo` | retrato (Qwen-Image, backend sd.cpp) |
 
 ```bash
 ${RED_PILL_CMD} media resolve --task typography      # -> zimage_turbo
@@ -90,7 +91,9 @@ Reglas de la plantilla (**fail-clean**):
 El **tamaño lo adapta el router** (bloque `media:`); el harness lo recibe por env.
 
 ```bash
-${RED_PILL_CMD} job submit --recipe mi-encargo --kick
+# La receta vive en el staging: envíala por RUTA EXPLÍCITA (el resolver de
+# `--recipe` NO busca en $RP_MEDIA_STAGING, solo en .red-pill/jobs|configs|jobs).
+${RED_PILL_CMD} job submit --recipe "$RP_MEDIA_STAGING/mi-encargo/recipe.yaml" --kick
 ```
 
 ## 4. Salida: STAGING → promoción

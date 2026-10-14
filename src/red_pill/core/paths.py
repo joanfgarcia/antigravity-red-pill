@@ -452,7 +452,7 @@ def get_model_runtime_path() -> Path:
 	"""Ruta de la config en caliente del selector de inferencia
 	($XDG_CONFIG_HOME/red-pill/model_runtime.yaml).
 
-	RFC-HARNESS-002 §10: `default_model`, `fallup`, `hot_reload`. El fichero se
+	AD-030: `default_model`, `fallup`, `hot_reload`. El fichero se
 	relee por mtime en cada request (hot reload) cuando `hot_reload: true`.
 	"""
 	return get_config_dir() / "model_runtime.yaml"
@@ -461,7 +461,7 @@ def get_model_runtime_path() -> Path:
 def get_task_profiles_path() -> Path:
 	"""Ruta de la zona curada de tareas ($XDG_CONFIG_HOME/red-pill/task_profiles.yaml).
 
-	RFC-HARNESS-002 §4: conducta de tarea (prompt_file, temperature, max_tokens,
+	AD-030: conducta de tarea (prompt_file, temperature, max_tokens,
 	thinking) + candidatos de modelo (referencias a model_profiles.yaml). Se
 	relee por mtime en cada request cuando `hot_reload: true`. Se siembra
 	(copy-if-absent) desde examples/task_profiles.yaml.example en install/update.
@@ -472,7 +472,7 @@ def get_task_profiles_path() -> Path:
 def get_runtimes_path() -> Path:
 	"""Ruta del registro de runtimes de inferencia ($XDG_CONFIG_HOME/red-pill/runtimes.yaml).
 
-	RFC-HARNESS-003: catálogo de engines instalados (stock, forks de llama.cpp,
+	AD-049: catálogo de engines instalados (stock, forks de llama.cpp,
 	bitnet, npu...) al que los perfiles de modelo se anclan vía `runtime: <id>`.
 	Se siembra (copy-if-absent) desde examples/runtimes.yaml.example en
 	install/update (mismo patrón que task_profiles).
@@ -566,7 +566,7 @@ def get_containers_systemd_dir() -> Path:
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 
-	RFC-HARNESS-002 §10 (K5): clave path+size+mtime+sha256_cabecera →
+	AD-030 (K5): clave path+size+mtime+sha256_cabecera →
 	{validado_at, magic, load_verified}. Cap 100, eviction por antigüedad,
 	escritura atómica.
 	"""

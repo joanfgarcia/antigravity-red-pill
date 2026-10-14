@@ -1,7 +1,7 @@
 # scripts/imagegen — banco A/B de generación de imagen local
 
 Herramienta para correr y **clasificar por tipo de arte** modelos texto→imagen
-**locales** en GPUs de consumo. Análoga a `bench_local.py` (RFC-HARNESS-003) pero
+**locales** en GPUs de consumo. Análoga a `bench_local.py` (AD-049) pero
 para difusión en vez de LLM.
 
 ## Piezas

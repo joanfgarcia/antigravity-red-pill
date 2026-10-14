@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bakeoff_granite_42.py — Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3 §5.3).
+"""bakeoff_granite_42.py — Bake-off Granite 4.2 vs 4.1 (AD-030).
 
 F1 (destilador): granite_4_2_8b vs Granite-4.1-8B — prompt distiller_v3_voice
 MODE B. Mide voz 1ª persona, género de Joan (masculino), fidelidad (relics),

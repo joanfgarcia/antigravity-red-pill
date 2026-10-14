@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bench_local.py — BENCHSET local v1 (RFC-HARNESS-003 corte 6).
+"""bench_local.py — BENCHSET local v1 (AD-049 corte 6).
 
 Mide lo que de verdad usamos — tratamiento y síntesis de texto CON GARANTÍAS —
 no IQ genérico. Todo el benchset es SINTÉTICO y FIJO (reproducible, sin datos

@@ -398,7 +398,7 @@ class ScriptJobDriver(ResumableJobDriver):
 		from red_pill.jobs.drivers.base import sanitize_job_env
 
 		env.update(sanitize_job_env(payload.get("env")))
-		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
+		# AD-030: el bloque `llm:` del recipe → env RP_LLM_*.
 		try:
 			from red_pill.jobs.drivers.base import inject_llm_env
 

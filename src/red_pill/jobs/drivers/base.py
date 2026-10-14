@@ -239,7 +239,7 @@ def report_stage_progress(**data: Any) -> None:
 def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> Dict[str, str]:
 	"""Traduce el bloque `llm:` de un recipe a env RP_LLM_* para el proceso hijo.
 
-	RFC-HARNESS-002 §7: `llm: {task, model, thinking, fallup | custom |
+	AD-030: `llm: {task, model, thinking, fallup | custom |
 	experimental | context_file}`. Los campos simples (task/model/thinking)
 	viajan como variables; los bloques anidados (custom/experimental) se
 	escriben en un fichero de contexto `state/jobs/<job_id>/llm.json` y el env

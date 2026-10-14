@@ -20,7 +20,7 @@ los engines de media que sí traía el template.
 - **Una fuente única de máquina**: el elenco `media_profiles.yaml` declara qué es cada
   modelo **y** su dispatch de carga (`backend` + `pipeline`/`weights`/`quant`/`sampler`).
   Lo consumen el **router** y el **harness**; el harness **traduce** cada
-  `modality: image`. Se **elimina** el dict `MODELS` del código (data over branches,
+  `modality: image`. Se **deriva** el dict `MODELS` del elenco (ya no está hardcodeado; data over branches,
   CONVENTIONS §10.8.2).
 - **`backend`** (`diffusers`|`bonsai`|`sd_cpp`|…) es la clave de dispatch; un `kind`
   nuevo = un loader nuevo en `scripts/<área>/` (registro + módulo-por-implementación,
@@ -252,12 +252,12 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
-## [AD-030] Servicio de Gobierno de la Inferencia Local (RFC-HARNESS-002 v3)
+## [AD-030] Servicio de Gobierno de la Inferencia Local
 **Date**: 2026-09-15
 **Status**: ACCEPTED & IMPLEMENTED (v3 fusionado; PR-0/PR-1/PR-2 desplegados).
 **Supersedes**: AD-020 (On-Demand Model Loading) — el mecanismo (lock, unload→load, idle, `/unload`, reaper) se conserva íntegro; cambia la semántica: el daemon ya no sirve UN modelo fijo sino un **selector por tarea×modelo + zona curada + modos custom/experimental + razonamiento nativo**.
 **Context**: el pase agéntico Memento (RFC-002) necesita un modelo de contexto largo (`tiny_aya_water`, 32K) mientras el sueño y la conversación usan `granite_8b`. El daemon fijaba UN modelo por `MINION_PROFILE` (restart para cambiar) y el service file llevaba un parche temporal. Además, la llegada de **Granite 4.2** (razonamiento nativo) requería soportar modos thinking (`enable_thinking`/`low_effort`) que llama-cpp-python no expone en su API pública.
-**Decision** (v3 — fusiona RFC-HARNESS-002 + RFC_INVENTARIO_MODELOS_HARNESS):
+**Decision** (v3 — fusiona AD-030 + RFC_INVENTARIO_MODELOS_HARNESS):
 - **Selector sin aliases**: `experimental > custom > model > task > config > env`. `task`/`model`/`thinking`/`custom`/`experimental` mutuamente resolubles; id sin resolver → 400 explícito. `task`+`model` exige que el model sea candidato de la tarea (K1).
 - **Separación de registros**: `model_profiles.yaml` = calibración HARDWARE + conducta de MODELO (`chat_format`/`null` = template nativo, `tool_format`, `thinking`); `task_profiles.yaml` = curación de TAREAS (conducta + candidatos con `default: true`); `model_runtime.yaml` = config en caliente (`default_model`, `fallup`, `hot_reload`).
 - **`model_runtime.py`**: fuente única de resolución compartida daemon+clientes (merge por especificidad: candidato > tarea > perfil-conducta > perfil-calibración > config > env). Incluye parsers `toolcall`/`extract_thinking`, validación de modelos (magic bytes GGUF, `model_validation.json` K5) y presupuesto de contexto dinámico.
@@ -267,7 +267,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 - **`MINION_PROFILE` → `MINION_DEFAULT_PROFILE`** (fallback legacy con warning, eliminado tras migración verificada).
 - **`llm:` en recipes de jobs**: `inject_llm_env` traduce el bloque `llm:` a env `RP_LLM_*` (script/element/dag por etapa), incl. fichero de contexto `RP_LLM_CONTEXT_FILE` para custom/experimental. Coherencia con DAG-001 (fan-out futuro).
 - **Endpoint `/v1/tokenize`**: count de tokens reales con el tokenizer del modelo cargado (universal en GGUF) para dimensionar splits del refine por tokens en vez de chars.
-**Por qué esto y no alternativas**: no `llama-server` subproceso (cambiaría VRAM management/fallup); no alias legacy en el selector (compatibilidad se migra refactorizando clientes); no bump obligatorio (refutado empíricamente). El INVENTARIO (RFC-HARNESS-001) quedó **SUPERSEDED y archivado** — su vocabulario (`tool_format`, `thinking`, template nativo) se absorbió en `model_profiles` como conducta de modelo, y su invocador `run_battle` pasa a FASE 2 como consumidor de `model_runtime`.
+**Por qué esto y no alternativas**: no `llama-server` subproceso (cambiaría VRAM management/fallup); no alias legacy en el selector (compatibilidad se migra refactorizando clientes); no bump obligatorio (refutado empíricamente). El INVENTARIO quedó **SUPERSEDED y archivado** — su vocabulario (`tool_format`, `thinking`, template nativo) se absorbió en `model_profiles` como conducta de modelo, y su invocador `run_battle` pasa a FASE 2 como consumidor de `model_runtime`.
 
 ---
 
@@ -319,7 +319,7 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 ## [AD-041] Tool-calling local roto en silencio + Granite 4.2 soportado por parser nativo
 **Date**: 2026-09-30
 **Status**: ACCEPTED — verificado end-to-end (daemon + arnés de autonomía).
-**Context**: el backend `local-tools` (`run_local_minion`) llevaba roto desde RFC-HARNESS-002 v3 y fallaba sin señal: `apply_chat_handler` nunca leía `minion_chat_format` ni detectaba `tools`, así que el daemon aplicaba el `chat_format` de destilación (`chatml`) y llama_cpp descartaba los tools en silencio — el modelo respondía en prosa o **inventaba una tool y fabricaba su salida** (y `run_local_minion` lo daba por `ok`).
+**Context**: el backend `local-tools` (`run_local_minion`) llevaba roto desde AD-030 y fallaba sin señal: `apply_chat_handler` nunca leía `minion_chat_format` ni detectaba `tools`, así que el daemon aplicaba el `chat_format` de destilación (`chatml`) y llama_cpp descartaba los tools en silencio — el modelo respondía en prosa o **inventaba una tool y fabricaba su salida** (y `run_local_minion` lo daba por `ok`).
 **Evidence**:
 - `curl` al daemon (UDS y TCP) con `tools=` y perfil `granite_8b` → prosa, 0 tool_calls. Forzar template nativo (`chat_format=null`) → `Invalid chat handler: None` (llama_cpp 0.3.31 no autodetecta en request-time).
 - `chatml-function-calling` SÍ emite `tool_calls` válidos para Granite-4.1-Q4; el bake-off de 2026-09-11 lo acusó por error (medía el binario `llama-server`, no el daemon).
@@ -1246,7 +1246,7 @@ stale ya está prevista (rebuild `memento_annotate_rebuild` + `--replace-legacy
 
 ---
 
-## [AD-049] Afinidad de runtime por modelo + conducta unificada (RFC-HARNESS-003)
+## [AD-049] Afinidad de runtime por modelo + conducta unificada
 
 **Date**: 2026-10-08
 

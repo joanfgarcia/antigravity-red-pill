@@ -1,4 +1,4 @@
-"""RFC-HARNESS-002 — servicio de gobierno de la inferencia local (model_runtime)."""
+"""AD-030 — servicio de gobierno de la inferencia local (model_runtime)."""
 
 from red_pill.core.model_runtime import extract_thinking, extract_toolcalls
 

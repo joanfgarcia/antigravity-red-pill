@@ -105,7 +105,7 @@ class BattleRunner:
 			kwargs["flash_attn"] = mr.effective_flash_attn(resolved, "gpu")
 		self.llm = Llama(**kwargs)
 		self.load_time_s = time.time() - t0
-		# RFC-HARNESS-003 corte 4: la conducta del modelo (handlers thinking,
+		# AD-049 corte 4: la conducta del modelo (handlers thinking,
 		# chat_format) se aplica UNA vez al cargar; los samplers por probe.
 		if self.resolved is not None:
 			from red_pill.inference import conduct
@@ -216,7 +216,7 @@ def start_daemon_if_inactive(unit: str = "redpill-llm.service") -> None:
 
 
 class RuntimeBattleRunner:
-	"""BattleRunner sobre el runtime anclado del perfil (RFC-HARNESS-003).
+	"""BattleRunner sobre el runtime anclado del perfil (AD-049).
 
 	Sirve por el RuntimeServer dedicado (llama-server del runtime declarado —
 	p.ej. fork PrismML para ternarios) en vez de llama-cpp-python. Mismo
@@ -524,7 +524,7 @@ def runner_for(
 	use_mmap: bool = False,
 	extra_args: Optional[list[str]] = None,
 ):
-	"""Factory runtime-aware (RFC-HARNESS-003): RuntimeBattleRunner para perfiles
+	"""Factory runtime-aware (AD-049): RuntimeBattleRunner para perfiles
 	con runtime declarado no-default; BattleRunner clásico (llama-cpp-python)
 	para el resto. El modelo no-default no tiene camino python (fallo limpio)."""
 	from red_pill.core.model_registry import ModelRegistry

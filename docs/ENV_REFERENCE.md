@@ -29,7 +29,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `EXECUTION_PROVIDER`| `None` | Hardware acceleration strategy (e.g., `cpu`, `cuda`, `coreml`). |
 | `FASTEMBED_CACHE_PATH` | `<project>/storage/models` | Absolute path to the locally cached embedding model weights. |
 | `READ_PATH_PRUNING_ENABLED` | `False` | When `False`, `search_and_reinforce` hides eroded engrams from a result but never DELETES them — forgetting is the sleep cycle's job, not a lookup's. `True` restores the legacy destructive-read behavior. |
-| `SLEEP_CHUNK_SIZE` | `6000` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). |
+| `SLEEP_CHUNK_SIZE` | `500` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). The shipped `.env.example` overrides it to `6000`. |
 
 ### Media Generation (Forges & Staging)
 | Parameter | Default | Description |

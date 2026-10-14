@@ -1,4 +1,4 @@
-"""runtime_registry — registro de engines de inferencia local (RFC-HARNESS-003).
+"""runtime_registry — registro de engines de inferencia local (AD-049).
 
 Los perfiles de modelo (`model_profiles.yaml`) declaran QUÉ se ejecuta; este
 registro declara CON QUÉ: cada runtime describe el binario (cli/server), su
