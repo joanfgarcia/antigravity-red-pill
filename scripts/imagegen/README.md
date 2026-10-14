@@ -26,7 +26,7 @@ Modelos: **NO hardcodeados** — el harness los lee del elenco de máquina
 
 ```
 IMAGE_FORGE_HOME          ~/opt/image-forge         # venv + image-studio + caches
-REDPILL_IMAGE_MODELS_DIR  $XDG_DATA_HOME/red-pill/models/image
+REDPILL_IMAGE_MODELS_DIR  ~/opt/red-pill-custom-image-models
 HF_HOME                   $IMAGE_FORGE_HOME/hf-cache
 IMAGE_FORGE_PYTHON        3.12                       # el 3.14 del sistema no tiene wheels torch
 IMG_DIFFUSERS_QUANT       bnb4 | seqoff | bf16

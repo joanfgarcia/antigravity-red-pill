@@ -77,14 +77,22 @@ Goal: "no duplicated gigabytes" is checkable, not just a promise.
 
 ---
 
-## 5. Known inconsistency to resolve
+## 5. Custom / non-HF models — `REDPILL_IMAGE_MODELS_DIR`
 
-The repo declares `REDPILL_IMAGE_MODELS_DIR = ~/.local/share/red-pill/models/image`
-(`bootstrap.sh`, `scripts/_config_common.py`) but the **media harness ignores it**
-(it uses `HF_HOME=~/opt/<area>-forge/hf-cache` and per-elenco explicit paths). The
-declared dir is empty. Either wire it (media models under Red Pill's data dir) or
-remove it; today it is dead config — documented here so it is a known, deliberate
-state, not a surprise.
+Models that are **not a single HF repo** — non-HF sources (tar/zip/direct web) and
+**multi-repo compositions** (e.g. Sakura image = denoiser + text encoder + VAE +
+mmproj pulled from three different repos) — cannot live in the HF cache. They go to:
+
+```
+REDPILL_IMAGE_MODELS_DIR  =  ~/opt/red-pill-custom-image-models/<modelo>/
+```
+
+(Fixed as the default; overridable by env. Composed/converted models are placed
+here with **explicit file paths** referenced from the elenco `sd_cpp:` block.)
+
+The rule of thumb: a **single HF repo** → HF cache (`HF_HOME`, §2); anything we
+**compose ourselves** → `REDPILL_IMAGE_MODELS_DIR`. Both are in `~/opt`, each family
+in its own folder, and `storage_check` audits **all** of them for duplicates.
 
 ---
 

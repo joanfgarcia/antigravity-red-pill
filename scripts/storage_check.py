@@ -33,6 +33,8 @@ def _default_roots() -> list:
 	opt = Path.home() / "opt"
 	if opt.is_dir():
 		roots += [d for d in opt.glob("*-forge") if d.is_dir()]
+	# modelos custom (no-HF / composiciones multi-repo)
+	roots.append(opt / "red-pill-custom-image-models")
 	roots.append(Path.home() / ".cache" / "huggingface")
 	return [r for r in roots if r.exists()]
 

@@ -15,7 +15,7 @@ elige el loader (diffusers / bonsai / …).
 
 Rutas configurables (opción por defecto del puesto, override por entorno):
 		IMAGE_FORGE_HOME          (def ~/opt/image-forge)  — venv + repo image-studio + caches
-		REDPILL_IMAGE_MODELS_DIR  (def $XDG_DATA_HOME/red-pill/models/image)
+		REDPILL_IMAGE_MODELS_DIR  (def ~/opt/red-pill-custom-image-models)
 		HF_HOME                   (def $IMAGE_FORGE_HOME/hf-cache)
 
 Uso manual (lo normal es que lo invoque el element_job):
@@ -155,17 +155,30 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 	sd = ctx["sd"]
 	cmd = [
 		str(ctx["binary"]),
-		"--diffusion-model", str(ctx["paths"]["diffusion_model"]),
-		"--llm", str(ctx["paths"]["text_encoder"]),
-		"--vae", str(ctx["paths"]["vae"]),
-		"--backend", str(sd.get("backend_assign") or "te=cpu,diffusion=cuda0,vae=cuda0"),
-		"--steps", str(cfg.get("steps") or 8),
-		"--cfg-scale", str(cfg.get("guidance", 1.0)),
-		"--sampling-method", str(cfg.get("sampler_method") or "euler"),
-		"-W", str(width), "-H", str(height),
-		"-s", str(seed),
-		"-p", prompt,
-		"-o", str(out),
+		"--diffusion-model",
+		str(ctx["paths"]["diffusion_model"]),
+		"--llm",
+		str(ctx["paths"]["text_encoder"]),
+		"--vae",
+		str(ctx["paths"]["vae"]),
+		"--backend",
+		str(sd.get("backend_assign") or "te=cpu,diffusion=cuda0,vae=cuda0"),
+		"--steps",
+		str(cfg.get("steps") or 8),
+		"--cfg-scale",
+		str(cfg.get("guidance", 1.0)),
+		"--sampling-method",
+		str(cfg.get("sampler_method") or "euler"),
+		"-W",
+		str(width),
+		"-H",
+		str(height),
+		"-s",
+		str(seed),
+		"-p",
+		prompt,
+		"-o",
+		str(out),
 	]
 	if sd.get("sigmas"):
 		cmd += ["--sigmas", str(sd["sigmas"])]

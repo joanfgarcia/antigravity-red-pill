@@ -456,7 +456,6 @@ def _load_job_env() -> None:
 		get_laya_venv,
 		get_llmtools_venv,
 		get_media_profiles_path,
-		get_models_dir,
 		get_runtimes_path,
 		get_tmp_dir,
 	)
@@ -491,7 +490,7 @@ def _load_job_env() -> None:
 	# Rutas que el harness standalone (venv propio, sin red_pill) lee por env.
 	os.environ.setdefault("REDPILL_MEDIA_PROFILES", str(get_media_profiles_path()))
 	os.environ.setdefault("REDPILL_RUNTIMES", str(get_runtimes_path()))
-	os.environ.setdefault("REDPILL_IMAGE_MODELS_DIR", str(get_models_dir() / "image"))
+	os.environ.setdefault("REDPILL_IMAGE_MODELS_DIR", os.path.expanduser("~/opt/red-pill-custom-image-models"))
 	os.environ.setdefault("REDPILL_SOUNDFONTS_DIR", str(get_data_dir() / "soundfonts"))
 	os.environ.setdefault("MEMENTO_ROOT", str(get_data_dir() / "memento"))
 
