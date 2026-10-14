@@ -57,7 +57,7 @@ Cada modelo declara `constraints.dim_multiple`; el router ajusta con **warning**
 ## 3. Lanzar la generación
 ### 3.a Receta existente (playground de referencia)
 `configs/jobs/imagegen_playground.yaml` es un `element_job` fail-soft **concreto**
-(pantalla de carga de Joel). Sirve de plantilla, pero para un encargo arbitrario
+(pantalla de carga con prompt libre). Sirve de plantilla, pero para un encargo arbitrario
 escribe la tuya (§3.b).
 
 ### 3.b Receta propia — "prompt libre, un modelo" (recomendado)
