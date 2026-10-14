@@ -52,6 +52,7 @@ dependencies = [
 
 [project.scripts]
 red-pill = "red_pill.cli:main"
+media-gen = "red_pill.media_gen:main"
 
 [build-system]
 requires = ["hatchling"]

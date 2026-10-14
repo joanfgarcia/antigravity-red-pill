@@ -92,3 +92,19 @@ scripts/imagegen/gen.sh --role photoreal --dry-run     # resuelve, sin generar
   entorno ya viene del runner — aquí el launcher fija los defaults canónicos
   por-máquina con `setdefault`.
 
+También como **comando de consola del repo**: `uv run media-gen …` (entry point
+`media-gen` → `red_pill.media_gen`, delega en `gen_cli.py` con el python del forge).
+
+**Edición y composición** (backend `sd_cpp`; requieren el `vision`/mmproj en el
+elenco — se resuelve del `sd_cpp:` block):
+
+```sh
+uv run media-gen --model qwen_image_2_1_turbo --image foto.png "cambia la taza a azul"
+uv run media-gen --model qwen_image_2_1_turbo --image foto.png --mask zona.png "quita la taza"
+uv run media-gen --model qwen_image_2_1_turbo --ref-image a.png --ref-image b.png "compón una escena"
+uv run media-gen --model qwen_image_2_1_turbo --image foto.png --strength 0.6 "…"   # re-difusión parcial
+```
+
+Las **referencias múltiples** (`--ref-image`, repetible) usan `-r/--ref-image` de
+sd.cpp; el soporte multi-ref completo de Qwen por esa vía está **por confirmar**.
+

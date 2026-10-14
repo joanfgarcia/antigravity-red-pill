@@ -119,6 +119,7 @@ media_profiles:
       diffusion_model: "~/opt/image-forge/models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
       text_encoder: "~/opt/image-forge/models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
       vae: "~/opt/image-forge/models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
+      vision: "~/opt/image-forge/models/qwen-image-2.1/mmproj-Qwen-Image-2.1-Turbo-Uncensored-F16.gguf"  # edición/referencias
       backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"   # encoder a RAM, DiT+VAE a GPU
       extra_args: ["--flash-attn", "on", "--vae-tiling"]
       sigmas: "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"

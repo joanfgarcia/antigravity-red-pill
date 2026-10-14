@@ -132,40 +132,68 @@ def _resolve_sd_cpp(cfg: dict) -> dict:
 	for key, p in paths.items():
 		if not p.is_file():
 			raise RuntimeError(f"sd.cpp: {key} no encontrado {p} (modelo {cfg.get('id')})")
+	# Vision (mmproj): opcional para text2img; requerido para edición/referencias.
+	vision = sd.get("vision")
+	if vision:
+		vp = Path(os.path.expanduser(str(vision)))
+		if not vp.is_file():
+			raise RuntimeError(f"sd.cpp: vision (mmproj) no encontrado {vp} (modelo {cfg.get('id')})")
+		paths["vision"] = vp
 	env = dict(os.environ)
 	for k, v in (rt.get("env") or {}).items():
 		env[str(k)] = os.path.expanduser(str(v))
 	return {"binary": binary, "paths": paths, "sd": sd, "rt": rt, "env": env, "cfg": cfg}
 
 
-def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int):
+def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, out, image=None, mask=None, ref_images=None, strength=None) -> list:
+	"""Construye el argv de `sd-cli`: text2img; con `image`/`ref_images` → edición.
+
+	Editar (o usar referencias) exige el proyector de visión (`--llm_vision` →
+	`vision`/mmproj del elenco); sin él falla limpio.
+	"""
+	cfg = ctx["cfg"]
+	sd = ctx["sd"]
+	cmd = [
+		str(ctx["binary"]),
+		"--diffusion-model", str(ctx["paths"]["diffusion_model"]),
+		"--llm", str(ctx["paths"]["text_encoder"]),
+		"--vae", str(ctx["paths"]["vae"]),
+		"--backend", str(sd.get("backend_assign") or "te=cpu,diffusion=cuda0,vae=cuda0"),
+		"--steps", str(cfg.get("steps") or 8),
+		"--cfg-scale", str(cfg.get("guidance", 1.0)),
+		"--sampling-method", str(cfg.get("sampler_method") or "euler"),
+		"-W", str(width), "-H", str(height),
+		"-s", str(seed),
+		"-p", prompt,
+		"-o", str(out),
+	]
+	if sd.get("sigmas"):
+		cmd += ["--sigmas", str(sd["sigmas"])]
+	if image:
+		cmd += ["-i", str(image), "--strength", str(strength if strength is not None else sd.get("edit_strength", 0.75))]
+	if mask:
+		cmd += ["--mask", str(mask)]
+	for r in ref_images or []:
+		cmd += ["--ref-image", str(r)]
+	if image or ref_images:
+		vision = (ctx.get("paths") or {}).get("vision")
+		if not vision:
+			raise RuntimeError(f"sd.cpp: edición/referencias requieren `vision` (mmproj) en el elenco ({cfg.get('id')})")
+		cmd += ["--llm_vision", str(vision)]
+	cmd += [str(a) for a in (sd.get("extra_args") or [])]
+	return cmd
+
+
+def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int, image=None, mask=None, ref_images=None, strength=None):
 	"""Ejecuta sd-cli (subprocess) y devuelve la PIL.Image del PNG resultante."""
 	import subprocess
 	import tempfile
 
 	from PIL import Image
 
-	cfg = ctx["cfg"]
-	sd = ctx["sd"]
 	with tempfile.TemporaryDirectory() as td:
 		out = Path(td) / "out.png"
-		cmd = [
-			str(ctx["binary"]),
-			"--diffusion-model", str(ctx["paths"]["diffusion_model"]),
-			"--llm", str(ctx["paths"]["text_encoder"]),
-			"--vae", str(ctx["paths"]["vae"]),
-			"--backend", str(sd.get("backend_assign") or "te=cpu,diffusion=cuda0,vae=cuda0"),
-			"--steps", str(cfg.get("steps") or 8),
-			"--cfg-scale", str(cfg.get("guidance", 1.0)),
-			"--sampling-method", str(cfg.get("sampler_method") or "euler"),
-			"-W", str(width), "-H", str(height),
-			"-s", str(seed),
-			"-p", prompt,
-			"-o", str(out),
-		]
-		if sd.get("sigmas"):
-			cmd += ["--sigmas", str(sd["sigmas"])]
-		cmd += [str(a) for a in (sd.get("extra_args") or [])]
+		cmd = _sd_cpp_command(ctx, prompt, seed, width, height, out, image=image, mask=mask, ref_images=ref_images, strength=strength)
 		proc = subprocess.run(cmd, env=ctx["env"], capture_output=True, text=True)
 		if proc.returncode != 0 or not out.is_file():
 			tail = (proc.stderr or proc.stdout or "")[-2000:]

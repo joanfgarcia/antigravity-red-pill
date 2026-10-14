@@ -93,6 +93,10 @@ def main() -> int:
 	ap.add_argument("--height", type=int, default=int(os.environ.get("H", 1024)))
 	ap.add_argument("--seed", type=int, default=int(os.environ.get("SEED", 42)))
 	ap.add_argument("--out", default=os.environ.get("OUTDIR") or str(Path.cwd() / "out"))
+	ap.add_argument("--image", help="imagen de entrada para EDITAR (backend sd_cpp)")
+	ap.add_argument("--mask", help="máscara de inpainting (acompaña a --image)")
+	ap.add_argument("--ref-image", action="append", dest="ref_images", help="imagen de referencia (repetible; composición)")
+	ap.add_argument("--strength", type=float, help="fuerza de re-difusión en edición (def: del elenco / 0.75)")
 	ap.add_argument("--no-unload", action="store_true", help="no pedir el unload del LLM residente")
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
 	args = ap.parse_args()
@@ -119,7 +123,15 @@ def main() -> int:
 		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
 
 	kind, pipe = B._load(model)
-	img = G._gen(kind, pipe, model, prompt, args.seed, w, h)
+	editing = bool(args.image or args.mask or args.ref_images)
+	if editing and backend != "sd_cpp":
+		raise SystemExit(f"[error] edición/referencias sólo con backend sd_cpp (este modelo: {backend})")
+	if editing:
+		img = B._sd_cpp_generate(
+			pipe, prompt, args.seed, w, h, image=args.image, mask=args.mask, ref_images=args.ref_images, strength=args.strength
+		)
+	else:
+		img = G._gen(kind, pipe, model, prompt, args.seed, w, h)
 
 	outdir = Path(args.out)
 	outdir.mkdir(parents=True, exist_ok=True)
