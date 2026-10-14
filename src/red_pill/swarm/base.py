@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +19,9 @@ class Minion(BaseModel):
 	id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 	name: str
 	specialization: str
+	# Declarative kind (§10.8.2/§10.8.3): the caller dispatches by this metadata,
+	# never by importing concrete classes. Subclasses override ("agent"/"command").
+	kind: ClassVar[str] = "logic"
 	telemetry_level: str = Field(default_factory=lambda: config.SWARM_TELEMETRY_DEFAULT)
 	metadata: Dict[str, Any] = Field(default_factory=dict)
 	model_profile: Optional[str] = None

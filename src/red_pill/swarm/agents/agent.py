@@ -9,13 +9,15 @@ minion. `kwargs['backend']` selects the bridge (default: IDE_BACKEND config).
 
 import asyncio
 import time
-from typing import Any, Dict
+from typing import Any, ClassVar, Dict
 
 from red_pill.swarm.base import Minion
 
 
 class AgentMinion(Minion):
 	"""Minion that runs a task through an agent backend (agy/claude/local)."""
+
+	kind: ClassVar[str] = "agent"
 
 	name: str = "Agent-Runner"
 	specialization: str = "Agentic Task Execution"

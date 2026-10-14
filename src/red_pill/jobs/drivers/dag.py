@@ -216,18 +216,12 @@ def _resolve_minion_kind(minion_id: str) -> Optional[str]:
 	healer, smith, samantha) — no-agéntico pero sin comando externo. Distinción
 	crítica para el fail-safe de modelos: solo 'agent' exige `model`+`prompt`.
 	"""
-	from red_pill.swarm.agents.agent import AgentMinion
-	from red_pill.swarm.agents.command import CommandMinion
 	from red_pill.swarm.factory import MinionFactory
 
 	minion = MinionFactory.create(minion_id)
 	if minion is None:
 		return None
-	if isinstance(minion, AgentMinion):
-		return _TYPE_AGENT
-	if isinstance(minion, CommandMinion):
-		return _TYPE_COMMAND
-	return "logic"
+	return getattr(minion, "kind", "logic")
 
 
 def _collect_ids(stages: List[Dict[str, Any]]) -> Set[str]:

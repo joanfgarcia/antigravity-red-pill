@@ -6,7 +6,7 @@ import shutil
 import signal
 import time
 import uuid
-from typing import Any, Dict, List, Union
+from typing import Any, ClassVar, Dict, List, Union
 
 from red_pill.swarm.base import Minion
 
@@ -20,6 +20,8 @@ class CommandMinion(Minion):
 	Minion that executes shell commands.
 	Useful for Ruff, Pytest, and other CLI tools.
 	"""
+
+	kind: ClassVar[str] = "command"
 
 	name: str = "Command-Runner"
 	specialization: str = "CLI Tool Execution"
