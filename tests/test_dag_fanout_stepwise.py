@@ -43,6 +43,7 @@ def _payload(ws: str, stepwise: bool):
 	}
 	if stepwise:
 		plant["fanout_stepwise"] = True
+		plant["fanout_label"] = "sesión"
 	return {
 		"mission_id": "m",
 		"manifest": {
@@ -68,6 +69,9 @@ def test_stepwise_una_instancia_por_step(tmp_path, monkeypatch):
 	ids2 = o2.new_checkpoint["completed_stage_ids"]
 	assert "plant/plant-0" in ids2 and "plant/plant-1" not in ids2, "no debe correr todo el frente de golpe"
 	assert o2.progress["current"] == 2 and o2.progress["total"] == 4
+	# Sub-progreso del fan-out (Fase 3) → la lista muestra "· sesión k/N".
+	assert o2.progress["stage_label"] == "sesión"
+	assert o2.progress["stage_current"] == 1 and o2.progress["stage_total"] == 3
 	assert not o2.completed
 
 	o3 = d.step(payload, o2.new_checkpoint)

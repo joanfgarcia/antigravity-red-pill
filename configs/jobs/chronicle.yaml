@@ -42,6 +42,7 @@ manifest:
       minion: command_runner
       fan_out_from: discover
       fanout_stepwise: true          # 1 sesión = UN step → el progreso avanza por sesión
+      fanout_label: sesión           # etiqueta del sub-progreso: "· sesión k/N"
       command: .venv/bin/python scripts/memento_agentic.py --target {{item}}
       # RFC-HARNESS-002 §7 (v3): `llm:` POR ETAPA del dag_job — el pase
       # Memento pide task distill/refine (default granite_8b) + fallup.

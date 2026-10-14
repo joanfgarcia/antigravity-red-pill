@@ -257,6 +257,31 @@ def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 	return sum(1 for _ in _iter_leaves(stages))
 
 
+def _fanout_subprogress(stages: List[Dict[str, Any]], completed: List[str]) -> Optional[Dict[str, Any]]:
+	"""Sub-progreso del PRIMER grupo de fan-out (instancias hechas/total) para
+	exponerlo como `stage_*` en la lista de jobs (RFC-JOBDAG-002 Fase 3): el job
+	muestra "· <label> k/N" además del contador global de hojas. None si no hay
+	fan-out expandido."""
+	done_set = set(completed)
+	for node_path in _flatten_ids(stages):
+		node = _find_node_by_path(stages, node_path)
+		if not node or not node.get("_fanout"):
+			continue
+		leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
+		done = sum(1 for lp, _ in leaves if lp in done_set)
+		label = node.get("_fanout_label") or node_path.rsplit("/", 1)[-1]
+		return {"label": label, "current": done, "total": len(leaves)}
+	return None
+
+
+def _stage_fields(stages: List[Dict[str, Any]], completed: List[str]) -> Dict[str, Any]:
+	"""Campos `stage_*` a fusionar en el `progress` ({} si no hay fan-out)."""
+	fp = _fanout_subprogress(stages, completed)
+	if not fp:
+		return {}
+	return {"stage_label": fp["label"], "stage_current": fp["current"], "stage_total": fp["total"]}
+
+
 def _id_path_map(stages: List[Dict[str, Any]], prefix: str = "") -> Dict[str, str]:
 	"""Mapa id→path (DFS estable, primer match). Los ids son únicos globalmente
 	por validación; si no lo fueran, el primer match es determinista."""
@@ -729,6 +754,10 @@ class DagJobDriver(ResumableJobDriver):
 			comp = dict(s)
 			comp["type"] = _TYPE_COMPOUND
 			comp["sub_etapas"] = instances
+			# Marca de fan-out (para el sub-progreso `stage_*`, Fase 3): sobrevive la
+			# re-expansión determinista y alimenta _fanout_subprogress.
+			comp["_fanout"] = True
+			comp["_fanout_label"] = s.get("fanout_label") or s.get("id")
 			comp.pop("_item", None)
 			comp.pop("fan_out_from", None)
 			comp.pop("command", None)
@@ -912,6 +941,7 @@ class DagJobDriver(ResumableJobDriver):
 					"current": leaves_done,
 					"total": total_leaves,
 					"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
+					**_stage_fields(stages, completed),
 				},
 				concurrency={
 					"parallel_groups": 0,
@@ -1112,7 +1142,7 @@ class DagJobDriver(ResumableJobDriver):
 			completed=done and not paused,
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}" + (" (pausado a mitad de step)" if paused else ""),
-			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
+			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0, **_stage_fields(stages, new_completed)},
 			concurrency={
 				"parallel_groups": parallel_groups,
 				"parallel_stages": parallel_stages,
