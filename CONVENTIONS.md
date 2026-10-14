@@ -19,13 +19,14 @@ All path resolution across the entire codebase for configurations, databases, mo
 | Databases (SQLite) | `~/.local/share/red-pill/db/` | `get_db_dir()` |
 | AI Models (.gguf) | `~/.local/share/red-pill/models/` | `get_models_dir()` |
 | Background Queues | `~/.local/share/red-pill/queue/` | `get_queue_dir()` |
-| Ephemeral State | `~/.local/state/red-pill/` | `get_state_dir()` |
+| Ephemeral State | `~/.local/share/red-pill/state/` | `get_state_dir()` |
 | Daemon Execution | `~/.agent/model-daemon/` | `get_daemon_dir()` |
 | Model Profiles | `~/.agent/model_profiles.yaml` | `get_model_profiles_path()` |
 | Model Files | `~/.local/share/red-pill/models/<name>` | `resolve_model_path(name)` |
 
 ### Exceptions
 - **Backups**: By default, backups do NOT go to XDG. They must go to the user's defined AI directory: `<IA_DIR>/backups/red-pill/` (resolved via `get_backup_dir()`).
+- **Ephemeral state**: `get_state_dir()` returns `~/.local/share/red-pill/state/` — state is nested under the app-data root (persistent cursors live alongside their data), not `$XDG_STATE_HOME`. `get_log_dir()` does use `$XDG_STATE_HOME`.
 
 ---
 *Failure to comply with this rule will result in the `tests/test_xdg_compliance.py` Smith Filter failing the CI/CD pipeline.*
