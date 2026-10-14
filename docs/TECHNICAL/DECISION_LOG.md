@@ -6,7 +6,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ## [AD-052] El registro de modelos del harness es DATOS (elenco = fuente única) + runtime sd.cpp
 **Date**: 2026-10-14
-**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende RFC-HARNESS-004/003.
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende el router/elenco (ver `docs/CORE/MEDIA_MODELS.md`).
 **Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres
 grietas: (1) `scripts/imagegen/bench_imagegen.py` tenía el registro `MODELS`
 **hardcodeado** y `gen_image.py` lo importaba — la doc ("añadir un modelo = añadir

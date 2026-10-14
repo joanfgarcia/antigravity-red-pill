@@ -1,4 +1,4 @@
-"""TST-MEDIA-002: hook del bloque `media:` en el ensamblado (RFC-HARNESS-004 §8, F2)."""
+"""TST-MEDIA-002: hook del bloque `media:` en el ensamblado (docs/CORE/MEDIA_MODELS.md, F2)."""
 
 from __future__ import annotations
 

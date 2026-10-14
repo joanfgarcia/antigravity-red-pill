@@ -1,4 +1,4 @@
-"""media_hook — validación del bloque `media:` de una receta (RFC-HARNESS-004 §8).
+"""media_hook — validación del bloque `media:` de una receta (docs/CORE/MEDIA_MODELS.md).
 
 Enchufa el `media_router` en el **ensamblado** de la receta: `validate()` (submit)
 y `preflight()` (pre-ejecución) de los drivers llaman aquí.

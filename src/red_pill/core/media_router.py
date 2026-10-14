@@ -1,4 +1,4 @@
-"""media_router — router por tarea y adaptadores de modelo para media (RFC-HARNESS-004).
+"""media_router — router por tarea y adaptadores de modelo para media (docs/CORE/MEDIA_MODELS.md).
 
 Compartido por imagen y audio (misma estructura: pipeline + sampler + quant + VRAM).
 Espeja el contrato de `model_catalog.py` (roles/cascade/`not_capable_for`) para media
@@ -6,7 +6,7 @@ y añade `constraints`/`adapters`: cada modelo declara sus peculiaridades (divis
 resolución, topes de píxeles/VRAM) y el motor las aplica **por nombre**, sin ramas
 por modelo (añadir un modelo = añadir metadata, no código).
 
-Semántica (RFC-HARNESS-004 §7.3): lo adaptable → **warning**; lo imposible → **error
+Semántica (docs/CORE/MEDIA_MODELS.md): lo adaptable → **warning**; lo imposible → **error
 limpio** (`MediaCapabilityError`). Nunca fallback silencioso.
 
 `resolve(task, model)` resuelve **modelos** (imagen/audio). La música simbólica es un
@@ -178,7 +178,7 @@ class MediaProfiles:
 		"""Valida/rutea una petición de generación. Devuelve JSON estructurado.
 
 		`{status: ok|adapted|error, model, adapted, warnings, errors}` — interpretable
-		por el job_manager/dag en el ensamblado de la receta (RFC-HARNESS-004 §8).
+		por el job_manager/dag en el ensamblado de la receta (docs/CORE/MEDIA_MODELS.md).
 		"""
 		try:
 			model = self.resolve(task=request.get("task"), model=request.get("model"))

@@ -93,7 +93,7 @@ runtimes:
       notes: "PoC 2026-10-09 (Halo): cadena completa OK pero NO acelera — 3B XDNA 111.8pp/31.0tg vs CPU 144.5/29.2; kernels de PREFILL (decode NPU ~0.65 t/s DMA-limited, no se usa) → el path consume CPU y encima es más lento. Reproducible: mlir-aie+Peano → xclbins → cmake GGML_XDNA=ON."
     status: experimental
 
-  # ── Otro engine con VARIANTES por backend (ejemplo): BitNet b1.58 ────────
+  # Otro engine con VARIANTES por backend (ejemplo): BitNet b1.58
   # Un engine puede declarar `variants:` (cuda/vulkan/cpu…): cada variante su
   # binario, `status` (verified|incompatible), `env` de ejecución, `quirks` y
   # `measured` (del PUESTO DE REFERENCIA — recalibrar por equipo).
@@ -113,7 +113,7 @@ runtimes:
   #     npu:
   #       status: incompatible
 
-  # ── Media generativa (RFC-HARNESS-004) ───────────────────────────────────
+  # Media generativa (docs/CORE/MEDIA_MODELS.md)
   # Pipelines de imagen/audio (diffusers o backend propio) sobre un venv con
   # torch cu128. El "cómo" concreto (venv, entrypoint, dispatcher) vive en la
   # RECETA (configs/jobs/*.yaml + scripts/<área>/), no en el modelo.

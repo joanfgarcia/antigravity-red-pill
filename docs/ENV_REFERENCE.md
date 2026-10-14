@@ -31,6 +31,18 @@ This document provides a comprehensive list of all parameters available in the `
 | `READ_PATH_PRUNING_ENABLED` | `False` | When `False`, `search_and_reinforce` hides eroded engrams from a result but never DELETES them — forgetting is the sleep cycle's job, not a lookup's. `True` restores the legacy destructive-read behavior. |
 | `SLEEP_CHUNK_SIZE` | `6000` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). |
 
+### Media Generation (Forges & Staging)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `RP_TMP_DIR` | `~/tmp` | Root for harness temporaries; the media **staging** lives under `<RP_TMP_DIR>/red-pill/media/staging`. |
+| `RP_MEDIA_STAGING` | `<RP_TMP_DIR>/red-pill/media/staging` | Explicit staging root for generated media (overrides the tmp-derived default). |
+| `IMAGE_FORGE_HOME` | `~/opt/image-forge` | Image forge root (venv + models + `hf-cache`). Optional; capability inactive if unmounted. |
+| `AUDIO_FORGE_HOME` | `~/opt/audio-forge` | Audio forge root. Optional. |
+| `MUSIC_FORGE_HOME` | `~/opt/music-forge` | Music forge root. Optional. |
+| `REDPILL_IMAGE_MODELS_DIR` | `~/opt/red-pill-custom-image-models` | Composed/non-HF image models (multi-repo compositions). |
+| `REDPILL_MEDIA_PROFILES` | `<config>/red-pill/media_profiles.yaml` | The media elenco (models/roles). |
+| `REDPILL_RUNTIMES` | `<config>/red-pill/runtimes.yaml` | Inference engine registry. |
+
 ---
 
 ## 🧬 Biological & Architectural Memory (FSRS & Decay)

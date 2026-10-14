@@ -1,8 +1,8 @@
-# EJEMPLO / ESPECIFICACIÓN — loader cableado (RFC-HARNESS-004 F1). Se siembra
+# EJEMPLO / ESPECIFICACIÓN — loader cableado (docs/CORE/MEDIA_MODELS.md F1). Se siembra
 # (copy-if-absent) a ~/.config/red-pill/media_profiles.yaml como
 # model_profiles/task_profiles, en install/update.
 #
-# media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
+# media_profiles.yaml — elenco de MEDIA GENERATIVA (docs/CORE/MEDIA_MODELS.md).
 #
 # Define qué ES cada modelo de imagen/audio (declarativo) Y CÓMO lo CARGA el
 # harness: `backend` (dispatch del harness, scripts/<área>/) + `pipeline`/
@@ -11,12 +11,12 @@
 # CONVENTIONS §10.8.2). La ORQUESTACIÓN (venv, job, staging) vive en las RECETAS
 # (configs/jobs/*.yaml), no aquí.
 #
-# ── Dos esquemas de elenco (RFC-HARNESS-004) ──────────────────────────────
+# Dos esquemas de elenco (docs/CORE/MEDIA_MODELS.md)
 #   1) LLM (texto)        -> model_profiles.yaml  (llama.cpp; sin cambios)
 #   2) Media generativa   -> ESTE fichero          (imagen + audio de onda)
 #   3) Tool-chains        -> NO son modelos: son RECETAS (configs/jobs/).
 #
-# ── Discriminador ─────────────────────────────────────────────────────────
+# Discriminador
 #   modality: image | audio
 #   task:     text2image | tts | sfx | music | scene
 #   backend:  dispatch del harness (diffusers | bonsai | sd_cpp | ...) — solo imagen
@@ -27,7 +27,7 @@
 # La config viva (~/.config/red-pill/media_profiles.yaml) NO se comitea.
 
 media_profiles:
-  # ── IMAGEN ────────────────────────────────────────────────────────────
+  # IMAGEN
   flux2_klein:
     modality: image
     task: text2image
@@ -132,7 +132,7 @@ media_profiles:
       source: "https://huggingface.co/webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
     notes: "Qwen-Image-2.1-Turbo (7B DiT, 8 steps) + encoder Qwen3-VL-8B abliterado (Sakura). GGUF vía sd.cpp; encoder en CPU → cabe en 8 GB. NO COMERCIAL (Qwen Research)."
 
-  # ── AUDIO ─────────────────────────────────────────────────────────────
+  # AUDIO
   kokoro_voice:
     modality: audio
     task: tts
@@ -221,7 +221,7 @@ media_profiles:
       source: "https://huggingface.co/mispeech/Dasheng-AudioGen"
     notes: "Escena mixta (voz+música+SFX+ambiente). transformers<5. En 8 GB, justo (offload)."
 
-# ── CASCADE POR TAREA / INTENCIÓN (RFC-HARNESS-004 §4.2) ──────────────────
+# CASCADE POR TAREA / INTENCIÓN (docs/CORE/MEDIA_MODELS.md)
 # Mapa intención -> [modelo, ...] (orden = preferencia). Espejo de `roles` del
 # LLM (model_catalog.yaml). El router resuelve task -> modelo y salta los
 # `not_capable_for`. Claves = vocabulario de `capabilities`.
@@ -240,7 +240,7 @@ media_roles:
   sfx:          [moss_sfx, dasheng_scene]
   scene:        [dasheng_scene]
 
-# ── TOOL-CHAINS (NO son modelos) ──────────────────────────────────────────
+# TOOL-CHAINS (NO son modelos)
 # La música SIMBÓLICA no tiene "modelo": es una receta. Vive en configs/jobs/.
 # Ejemplos:
 #   configs/jobs/music_demo.yaml   -> LLM -> MIDI (mido) -> FluidSynth -> WAV

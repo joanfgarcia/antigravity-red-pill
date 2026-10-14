@@ -1,4 +1,4 @@
-"""TST-MEDIA-001: media_router — router por tarea y adaptadores (RFC-HARNESS-004 F1)."""
+"""TST-MEDIA-001: media_router — router por tarea y adaptadores (docs/CORE/MEDIA_MODELS.md F1)."""
 
 from __future__ import annotations
 

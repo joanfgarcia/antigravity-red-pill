@@ -474,7 +474,7 @@ def _load_job_env() -> None:
 	root = str(get_bunker_root())
 	os.environ.setdefault("IA_DIR", root)
 	os.environ.setdefault("REDPILL_DIR", root)
-	# Media (RFC-HARNESS-004/005): valor canónico de paths.py (default documentado,
+	# Media (docs/CORE/MEDIA_MODELS.md / docs/TECHNICAL/DECISION_LOG.md): valor canónico de paths.py (default documentado,
 	# overridable por `.env`). Así las plantillas usan `$VAR` sin defaults ni absolutos.
 	os.environ.setdefault("IMAGE_FORGE_HOME", str(get_forge_home("image")))
 	os.environ.setdefault("AUDIO_FORGE_HOME", str(get_forge_home("audio")))

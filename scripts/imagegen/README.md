@@ -55,7 +55,7 @@ GPU NVIDIA con ≥8 GB (probado en RTX 5070 Laptop, sm_120):
 - 4B/6B → **4-bit** obligatorio (bf16 no cabe).
 - Ternario Bonsai → cabe nativo (~6.7 GB pico a 1024²).
 
-## Router, adaptadores y staging (RFC-HARNESS-004)
+## Router, adaptadores y staging (docs/CORE/MEDIA_MODELS.md)
 
 `gen_image.py` acepta prompt libre y tamaño no cuadrado y **no fija el múltiplo**:
 el tamaño lo **adapta el router** (`red_pill/core/media_router.py`) según el modelo

@@ -153,7 +153,7 @@ class RuntimeRegistry:
 			if not os.access(path, os.X_OK):
 				return False, f"binario no ejecutable: {binary}"
 			return True, ""
-		# Contrato media (RFC-HARNESS-004 §5): engines sin binario → venv/dispatcher.
+		# Contrato media (docs/CORE/MEDIA_MODELS.md): engines sin binario → venv/dispatcher.
 		dispatcher = rt.get("dispatcher")
 		if dispatcher:
 			path = Path(str(dispatcher))

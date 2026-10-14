@@ -1371,8 +1371,8 @@ def main() -> None:
 	runtime_stop.add_argument("profile", nargs="?", help="Perfil cuyo servidor dedicado abatir")
 	runtime_stop.add_argument("--all", action="store_true", help="Abatir todos los servidores dedicados vivos")
 
-	# RFC-HARNESS-004: media generativa — router por tarea, staging y promoción
-	media_parser = subparsers.add_parser("media", help="Media generativa: router por tarea, staging y promoción (RFC-HARNESS-004)")
+	# docs/CORE/MEDIA_MODELS.md: media generativa — router por tarea, staging y promoción
+	media_parser = subparsers.add_parser("media", help="Media generativa: router por tarea, staging y promoción (docs/CORE/MEDIA_MODELS.md)")
 	media_sub = media_parser.add_subparsers(dest="media_cmd")
 	media_resolve = media_sub.add_parser("resolve", help="Resuelve task -> modelo del elenco media")
 	media_resolve.add_argument("--task")

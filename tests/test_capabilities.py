@@ -1,4 +1,4 @@
-"""TST-CAP-001: capabilities — familias media activas + gate de siembra (RFC-HARNESS-005)."""
+"""TST-CAP-001: capabilities — familias media activas + gate de siembra (docs/TECHNICAL/DECISION_LOG.md)."""
 
 from __future__ import annotations
 

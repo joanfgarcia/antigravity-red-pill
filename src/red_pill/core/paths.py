@@ -483,9 +483,9 @@ def get_runtimes_path() -> Path:
 def get_media_profiles_path() -> Path:
 	"""Ruta del elenco de media generativa ($XDG_CONFIG_HOME/red-pill/media_profiles.yaml).
 
-	RFC-HARNESS-004: elenco de modelos de imagen/audio-onda (pipeline + sampler +
+	docs/CORE/MEDIA_MODELS.md: elenco de modelos de imagen/audio-onda (pipeline + sampler +
 	quant + VRAM) con discriminador `modality`/`task`, `capabilities`, `constraints`
-	y `adapters`. El **loader lo posee RFC-HARNESS-004** (F1); RFC-HARNESS-005 lo
+	y `adapters`. El **loader lo posee docs/CORE/MEDIA_MODELS.md** (F1); docs/TECHNICAL/DECISION_LOG.md lo
 	consume. Se siembra (copy-if-absent) desde examples/media_profiles.yaml.example
 	en install/update (mismo patrón que task_profiles/runtimes).
 	"""
@@ -495,7 +495,7 @@ def get_media_profiles_path() -> Path:
 def get_tmp_dir() -> Path:
 	"""Raíz de temporales del arnés ($RP_TMP_DIR, default `~/tmp`).
 
-	RFC-HARNESS-004 §7/§10.8: los artefactos de generación van a un **staging**
+	docs/CORE/MEDIA_MODELS.md: los artefactos de generación van a un **staging**
 	temporal bajo esta raíz (`<tmp>/red-pill/...`). Es **configurable** por `.env`
 	(`RP_TMP_DIR`); install/update crean el directorio si falta. Se prefiere `~/tmp`
 	a `/tmp` (no se purga al reiniciar y es visible, no oculto como `~/.local`).
@@ -506,7 +506,7 @@ def get_tmp_dir() -> Path:
 def get_forge_home(area: str) -> Path:
 	"""Raíz del forge de un área media (`$<AREA>_FORGE_HOME`, default `~/opt/<area>-forge`).
 
-	RFC-HARNESS-005 §10.9: los forges (imagen/audio/música) son **opcionales** y
+	docs/TECHNICAL/DECISION_LOG.md: los forges (imagen/audio/música) son **opcionales** y
 	por-máquina; default documentado y **overridable** (gusto/equipo/SO).
 	`area` ∈ {image, audio, music}.
 	"""

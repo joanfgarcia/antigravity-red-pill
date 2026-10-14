@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """model_approve.py — registra la PROCEDENCIA de un modelo aprobado (proceso).
 
-No mueve ni reescribe layout (eso rompía por los symlinks; ver RFC-HARNESS-007).
+No mueve ni reescribe layout (eso rompía por los symlinks; ver docs/TECHNICAL/DECISION_LOG.md).
 Su única misión: tras **probar** un modelo, dejar constancia en un **manifiesto**
 de qué es, de dónde vino y con qué hashes — con la **revisión pinada**.
 

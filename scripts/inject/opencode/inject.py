@@ -123,7 +123,7 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 		skill_md = os.path.join(skill_src, "SKILL.md")
 		if not os.path.exists(skill_md):
 			continue
-		# Gate por capacidad (RFC-HARNESS-005): sembrar solo si la capability está
+		# Gate por capacidad (docs/TECHNICAL/DECISION_LOG.md): sembrar solo si la capability está
 		# activa en ESTA máquina (harness configurado). Fail-closed si no se puede verificar.
 		_cap = _skill_capability(skill_md)
 		if _cap is not None:

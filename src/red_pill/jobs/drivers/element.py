@@ -351,7 +351,7 @@ class ElementJobDriver(ResumableJobDriver):
 		# El elemento a tratar: JSON serializado + índice (para logs y selección).
 		env["RP_ELEMENT"] = json.dumps(element, ensure_ascii=False)
 		env["RP_ELEMENT_INDEX"] = str(index)
-		# RFC-HARNESS-004 §8: adaptación media POR ELEMENTO (multi-modelo).
+		# docs/CORE/MEDIA_MODELS.md: adaptación media POR ELEMENTO (multi-modelo).
 		try:
 			from red_pill.jobs.drivers.media_hook import media_env_for_element
 

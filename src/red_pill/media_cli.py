@@ -1,4 +1,4 @@
-"""media_cli — CLI `red-pill media` (RFC-HARNESS-004): router, staging y promoción."""
+"""media_cli — CLI `red-pill media` (docs/CORE/MEDIA_MODELS.md): router, staging y promoción."""
 
 from __future__ import annotations
 

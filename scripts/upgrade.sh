@@ -204,7 +204,7 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$CONFIG_DIR/workspace
 	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml). Edítalo o usa 'red-pill workspace enable'.${NC}"
 fi
 
-# Raíz de temporales del arnés (RFC-HARNESS-004 §10.8): ~/tmp por defecto; .env la sobreescribe.
+# Raíz de temporales del arnés (docs/CORE/MEDIA_MODELS.md): ~/tmp por defecto; .env la sobreescribe.
 RP_TMP="${RP_TMP_DIR:-$HOME/tmp}"; RP_TMP="${RP_TMP/#\~/$HOME}"; mkdir -p "$RP_TMP"
 
 # Config curada de modelos/tareas (copy-if-absent — la copia del operador SIEMPRE gana).
@@ -281,7 +281,7 @@ p._purge_leaked_duplicates()
 		done
 		for skill_dir in "$REPO_ROOT/skills/"*/; do
 			skill_name=$(basename "$skill_dir")
-			# Gate por capacidad (RFC-HARNESS-005): no sembrar si la capability está inactiva.
+			# Gate por capacidad (docs/TECHNICAL/DECISION_LOG.md): no sembrar si la capability está inactiva.
 			if grep -q '^capability:' "$skill_dir/SKILL.md" 2>/dev/null; then
 				if ! "${UV_BIN:-uv}" run --no-sync --project "$REPO_ROOT" python -c "import sys; from red_pill.core.capabilities import skill_enabled; sys.exit(0 if skill_enabled('$skill_dir/SKILL.md') else 1)" 2>/dev/null; then
 					echo -e "  ${YELLOW}skip $skill_name (capability inactiva)${NC}"; continue

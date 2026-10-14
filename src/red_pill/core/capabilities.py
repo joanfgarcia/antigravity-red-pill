@@ -1,4 +1,4 @@
-"""capabilities — capacidades media activas en ESTA máquina (RFC-HARNESS-005).
+"""capabilities — capacidades media activas en ESTA máquina (docs/TECHNICAL/DECISION_LOG.md).
 
 Una familia (image_gen/audio_gen/music_gen) está **activa** si su harness está
 **configurado en esta máquina**: el venv del forge existe y (para imagen/audio) hay

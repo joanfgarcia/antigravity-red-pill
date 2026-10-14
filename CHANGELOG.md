@@ -1,6 +1,6 @@
 ## Unreleased
 
-### 🧩 Media — el registro del harness es DATOS (elenco = fuente única) + runtime sd.cpp (RFC-HARNESS-006)
+### 🧩 Media — el registro del harness es DATOS (elenco = fuente única) + runtime sd.cpp
 
 - **[FIX]** `scripts/imagegen/bench_imagegen.py` ya **no** hardcodea el registro
   `MODELS`: lo **traduce del elenco** `media_profiles.yaml` (misma fuente que el
@@ -17,16 +17,16 @@
 - **[DOCS]** Nuevo `docs/CORE/MEDIA_MODELS.md` (añadir modelo/runtime, con el caso
   `sd.cpp` trabajado). Skills `capabilities`/`image-gen` corregidos (el harness lee el
   elenco; "sin tocar código" solo para un dispatch `backend` ya existente).
-- **[TEST]** `test_imagegen_registry.py` — el harness deriva del elenco + fallo limpio.
+- **[QA]** `test_imagegen_registry.py` — el harness deriva del elenco + fallo limpio.
 - **[DOCS]** Ops: el LLM residente del daemon (~6.8 GB) no se suelta vía `POST /unload`
   → jobs de imagen grandes quedan `PENDING` si no se cumple `min_free_vram_mb`.
 
-### 🔀 Media — router por tarea, adaptadores, staging y capabilities (RFC-HARNESS-004/005)
+### 🔀 Media — router por tarea, adaptadores, staging y capabilities (docs/CORE/MEDIA_MODELS.md / docs/TECHNICAL/DECISION_LOG.md)
 
 - **[FEAT]** `core/media_router.py` — **router por tarea** (`resolve`) + **adaptadores**
   (`constraints`/`adapters`: `snap_dims`, `reject_oversize`) + `validate()` (JSON). El
   tamaño se adapta por modelo (warning) o falla limpio (error). Loader de
-  `media_profiles.yaml` (dueño: RFC-HARNESS-004). Espejo de `model_catalog` (roles/cascade).
+  `media_profiles.yaml` (dueño: docs/CORE/MEDIA_MODELS.md). Espejo de `model_catalog` (roles/cascade).
 - **[FEAT]** Bloque `media:` en recetas: validación en el **ensamblado** (`validate()`
   en submit + `preflight()`), canal de warnings (`payload.media_warnings`), handoff al
   harness por env (`RP_MEDIA_*`). Drivers: `element_job`, `script_job`.
@@ -39,7 +39,7 @@
   el frontmatter).
 - **[DOCS]** `docs/CORE/CONVENTIONS.md` §10.8/§10.9 + §7 (rutas en `paths.py`). Elenco:
   `flux2_klein` ÷8.
-- **[TEST]** `media_router`, `media_recipe_hook`, `media_staging`, `capabilities`,
+- **[QA]** `media_router`, `media_recipe_hook`, `media_staging`, `capabilities`,
   path-sovereignty general.
 
 ### 🌙 Ciclo de sueño — contador real de producción (2026-10-11)
@@ -59,7 +59,7 @@
   `memento_agentic_state.json`, ventana 12h) — así el ciclo no oculta lo que el
   pase Memento sí ingresó. El log `LAZARUS PULSE` y el `summary` de cada fase
   dejan de imprimir el número muerto.
-- **[TEST]** Cobertura de `record`/persistencia de métricas, `_read_state`,
+- **[QA]** Cobertura de `record`/persistencia de métricas, `_read_state`,
   `_format_metrics`, `_read_memento_ascended` y el resumen del finalize.
 
 ### 🎨 ImageGen — banco A/B de generación de imagen local (2026-10-10)
@@ -117,7 +117,7 @@
   creación de pistas (diálogo "Add Track/Bus").
 - **Verificado** en la sesión del operador: marcador + transporte end-to-end.
 
-### 🗂️ Elenco media — 2 esquemas + tool-chains como recetas (RFC-HARNESS-004)
+### 🗂️ Elenco media — 2 esquemas + tool-chains como recetas (docs/CORE/MEDIA_MODELS.md)
 
 - **[FEAT]** `examples/media_profiles.yaml.example` — elenco de **media
   generativa** (imagen + audio de onda) con `modality`/`task`, `pipeline`,
@@ -274,7 +274,7 @@ janitor la frustraba >24 h después (`queue_hygiene`).
   compactación si ya hay una PENDING/PROCESSING para la misma sesión
   (`find_task_by_payload_key`) — evita duplicar trabajo del LLM local (caso real
   del 01-oct: dos jobs para la sesión `7974f3cd`).
-- **[TEST] Cobertura:** `is_idle()/wait_until_idle()`, `recover_stale_processing()`
+- **[QA] Cobertura:** `is_idle()/wait_until_idle()`, `recover_stale_processing()`
   (incl. disyuntor y acotación por source), `wait_for_samantha()` y el flujo real
   encolar→drenar→COMPLETED con DB temporal y LLM mockeado.
 
