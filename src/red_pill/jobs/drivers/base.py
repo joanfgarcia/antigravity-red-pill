@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -187,14 +188,31 @@ def job_progress_path(job_id: str) -> Path:
 	return get_state_dir() / "jobs" / f"{(job_id or 'unbound')[:8]}.progress.json"
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+	"""Write `text` to `path` atomically via a UNIQUE temp file.
+
+	`tempfile.mkstemp` uses O_EXCL with a non-predictable name, so a symlink can no
+	longer be pre-planted at the temp path (the deterministic `.tmp` follow-symlink
+	race reported in SHARD-PSEC-03). `os.replace` then swaps the name atomically.
+	"""
+	path.parent.mkdir(parents=True, exist_ok=True)
+	fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+	try:
+		with os.fdopen(fd, "w", encoding="utf-8") as fh:
+			fh.write(text)
+		os.replace(tmp_name, path)
+	except Exception:
+		try:
+			os.unlink(tmp_name)
+		except OSError:
+			pass
+		raise
+
+
 def write_job_progress(job_id: str, data: Dict[str, Any]) -> None:
 	"""Escribe (atómico, best-effort) el fichero de progreso del job."""
 	try:
-		path = job_progress_path(job_id)
-		path.parent.mkdir(parents=True, exist_ok=True)
-		tmp = path.with_suffix(".json.tmp")
-		tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-		tmp.replace(path)
+		_atomic_write_text(job_progress_path(job_id), json.dumps(data, ensure_ascii=False))
 	except Exception:
 		pass
 
@@ -222,12 +240,8 @@ def report_stage_progress(**data: Any) -> None:
 	if not path:
 		return
 	try:
-		p = Path(path)
-		p.parent.mkdir(parents=True, exist_ok=True)
 		data.setdefault("updated_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
-		tmp = p.with_suffix(p.suffix + ".tmp")
-		tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-		tmp.replace(p)
+		_atomic_write_text(Path(path), json.dumps(data, ensure_ascii=False))
 	except Exception:
 		pass
 
@@ -290,12 +304,9 @@ def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> 
 		from red_pill.core.paths import get_state_dir
 
 		ctx_dir = get_state_dir() / "jobs"
-		ctx_dir.mkdir(parents=True, exist_ok=True)
 		ctx_path = ctx_dir / f"{(job_id or 'unbound')[:16]}_llm.json"
-		tmp = ctx_path.with_suffix(".tmp")
 		try:
-			tmp.write_text(json.dumps(ctx, ensure_ascii=False), encoding="utf-8")
-			tmp.replace(ctx_path)
+			_atomic_write_text(ctx_path, json.dumps(ctx, ensure_ascii=False))
 		except OSError as e:
 			raise ValueError(f"no se pudo escribir RP_LLM_CONTEXT_FILE: {e}")
 		env["RP_LLM_CONTEXT_FILE"] = str(ctx_path)
