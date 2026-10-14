@@ -124,8 +124,8 @@ cachés sigue siendo responsabilidad de `storage_check` + `uv cache prune`).
 - `~/opt/audio-forge/hf-cache` — 43 GB.
 - `~/.cache/uv` — 30 GB (hardlink source; prunable con `uv cache prune`).
 
-**Estado de disponibilidad (offline):**
-- ✅ `qwen_image_2_1_turbo` (sd.cpp, custom), `zimage_turbo`, `bonsai_ternary`
-  (HF cache, snapshots **completos**).
-- ⏳ `flux2_klein` — **no disponible** (le faltan pesos; re-bajar ~15 GB o retirarlo
-  del elenco). `media-gen` falla limpio si se pide.
+**Estado de disponibilidad (offline):** todos los del elenco —
+- ✅ `flux2_klein` (HF cache, snapshot completo; `photoreal` por defecto, rápido),
+  `zimage_turbo`, `bonsai_ternary` (HF cache).
+- ✅ `qwen_image_2_1_turbo` (sd.cpp, custom en `~/opt/red-pill-custom-image-models`).
+- Registrados en el manifiesto de procedencia (`model_approve --list`).
