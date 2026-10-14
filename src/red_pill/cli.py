@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import yaml  # type: ignore
 
@@ -971,7 +971,7 @@ def _print_measurements(task: dict) -> None:
 	print("\n".join(lines) + "\n")
 
 
-def _read_job_progress_safe(job_id: str):
+def _read_job_progress_safe(job_id: str) -> Optional[Dict[str, Any]]:
 	try:
 		from red_pill.jobs.drivers.base import read_job_progress
 
