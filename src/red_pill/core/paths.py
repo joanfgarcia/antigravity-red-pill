@@ -533,6 +533,18 @@ def get_systemd_user_dir() -> Path:
 	return Path.home() / ".config" / "systemd" / "user"
 
 
+def get_laya_venv() -> Path:
+	"""venv de Laya (clasificador CPU) — `$LAYA_VENV` o `$XDG_DATA_HOME/red-pill/laya-venv`."""
+	env = os.environ.get("LAYA_VENV")
+	return Path(os.path.expanduser(env)) if env else get_data_dir() / "laya-venv"
+
+
+def get_llmtools_venv() -> Path:
+	"""venv de herramientas LLM — `$LLMTOOLS_VENV` o `$XDG_DATA_HOME/red-pill/llmtools-venv`."""
+	env = os.environ.get("LLMTOOLS_VENV")
+	return Path(os.path.expanduser(env)) if env else get_data_dir() / "llmtools-venv"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 

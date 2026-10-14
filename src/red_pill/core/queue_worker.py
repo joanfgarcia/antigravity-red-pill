@@ -475,6 +475,10 @@ def _load_job_env() -> None:
 		os.environ.setdefault("RP_MEDIA_STAGING", str(staging_root()))
 	except Exception:  # noqa: BLE001
 		pass
+	from red_pill.core.paths import get_laya_venv, get_llmtools_venv
+
+	os.environ.setdefault("LAYA_VENV", str(get_laya_venv()))
+	os.environ.setdefault("LLMTOOLS_VENV", str(get_llmtools_venv()))
 
 
 def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
