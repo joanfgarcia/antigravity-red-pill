@@ -525,7 +525,7 @@ datos reales en solo lectura, privacidad del repo público, neon-link). Lo encon
 - **[DOCS] Granite 4.2 fuera del loop de tools por ahora:** emite el tool-call nativo
   (`<function=...>`) como texto y llama_cpp no lo parsea; requiere parser dedicado.
 
-### 🧠 Granite 4.2 en el loop de herramientas — el parser existía sin consumir (HARNESS-004)
+### 🧠 Granite 4.2 en el loop de herramientas — el parser existía sin consumir (docs/CORE/MEDIA_MODELS.md)
 
 - **[FIX] Tool-calling nativo cableado:** `model_runtime.extract_toolcalls` /
   `extract_thinking` estaban definidos y testeados pero **sin ningún consumidor**

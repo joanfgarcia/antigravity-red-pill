@@ -96,7 +96,7 @@ profiles:
   # Granite 4.2 8B (IBM, Apache-2.0) — razonamiento nativo + tool-calling
   # Primera familia IBM con thinking (enable_thinking/low_effort). Template NATIVO
   # del GGUF (chat_format: null) — el chatml NO activa el razonamiento.
-  # TOOL-CALLING (verificado 2026-09-30, HARNESS-004): con tools usa el template
+  # TOOL-CALLING (verificado 2026-09-30, docs/CORE/MEDIA_MODELS.md): con tools usa el template
   # nativo; el modelo emite el tool-call como TEXTO
   #   <tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>
   # y `local_minion` lo parsea con model_runtime.extract_toolcalls (tool_format).
