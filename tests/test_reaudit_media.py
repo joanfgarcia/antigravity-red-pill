@@ -35,15 +35,19 @@ def test_media_console_env_paridad_paths(monkeypatch, tmp_path):
 	"""`media_console_env` (standalone) == los defaults canónicos de `core/paths.py`."""
 	import _config_common
 
-	from red_pill.core import paths
+	from red_pill.core import media_staging, paths
 
 	monkeypatch.setattr(_config_common, "config_dir", lambda: str(tmp_path))  # sin .env
+	monkeypatch.setattr(paths, "get_config_dir", lambda: tmp_path)
 	for k in ("IMAGE_FORGE_HOME", "REDPILL_IMAGE_MODELS_DIR", "RP_TMP_DIR", "RP_MEDIA_STAGING"):
 		monkeypatch.delenv(k, raising=False)
 	env = _config_common.media_console_env()
 	assert env["IMAGE_FORGE_HOME"] == str(paths.get_forge_home("image"))
 	assert env["REDPILL_IMAGE_MODELS_DIR"] == str(paths.get_image_models_dir())
 	assert env["RP_TMP_DIR"] == str(paths.get_tmp_dir())
+	assert env["RP_MEDIA_STAGING"] == str(media_staging.staging_root())
+	assert env["REDPILL_MEDIA_PROFILES"] == str(paths.get_media_profiles_path())
+	assert env["REDPILL_RUNTIMES"] == str(paths.get_runtimes_path())
 
 
 def test_console_out_dir_alineado_staging(monkeypatch, tmp_path):
