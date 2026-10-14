@@ -39,8 +39,14 @@ def _safe_component(value: str, what: str) -> str:
 
 
 def order_dir(title: str, create: bool = False) -> Path:
-	"""Directorio de staging de un encargo (`<staging_root>/<title>`)."""
-	path = staging_root() / _safe_component(title, "title")
+	"""Directorio de staging de un encargo (`<staging_root>/<title>`).
+
+	Rechaza un `title` que resuelva a un symlink o fuera de la raíz (no seguir el
+	confín del staging: un symlink podría sacar lecturas/escrituras del staging)."""
+	root = staging_root()
+	path = root / _safe_component(title, "title")
+	if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+		raise ValueError(f"staging '{title}' apunta fuera de la raíz (no permitido): {path}")
 	if create:
 		path.mkdir(parents=True, exist_ok=True)
 	return path

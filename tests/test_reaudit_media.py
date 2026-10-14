@@ -125,6 +125,20 @@ def test_sanitize_job_env_bloquea_reservadas():
 	assert out == {"FOO": "bar"}
 
 
+def test_order_dir_rechaza_symlink(monkeypatch, tmp_path):
+	"""Un `order_dir` symlinkado no debe permitir listar/promocionar fuera del staging."""
+	from red_pill.core import media_staging
+
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	(tmp_path / "stg").mkdir()
+	ext = tmp_path / "ext"
+	ext.mkdir()
+	(ext / "real.png").write_bytes(b"x")
+	(tmp_path / "stg" / "enc_sym").symlink_to(ext)
+	with pytest.raises(ValueError):
+		media_staging.list_artifacts("enc_sym")
+
+
 def test_media_staging_ignora_y_rechaza_symlinks(monkeypatch, tmp_path):
 	from red_pill.core import media_staging
 
