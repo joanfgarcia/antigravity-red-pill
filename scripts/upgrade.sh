@@ -281,6 +281,12 @@ p._purge_leaked_duplicates()
 		done
 		for skill_dir in "$REPO_ROOT/skills/"*/; do
 			skill_name=$(basename "$skill_dir")
+			# Gate por capacidad (RFC-HARNESS-005): no sembrar si la capability está inactiva.
+			if grep -q '^capability:' "$skill_dir/SKILL.md" 2>/dev/null; then
+				if ! "${UV_BIN:-uv}" run --no-sync --project "$REPO_ROOT" python -c "import sys; from red_pill.core.capabilities import skill_enabled; sys.exit(0 if skill_enabled('$skill_dir/SKILL.md') else 1)" 2>/dev/null; then
+					echo -e "  ${YELLOW}skip $skill_name (capability inactiva)${NC}"; continue
+				fi
+			fi
 			cp -r "$skill_dir" "$AGENT_DIR/skills/$skill_name"
 			# ${RED_PILL_CMD} → invocación uv (el CLI no está en el PATH del harness)
 			if grep -q '\${RED_PILL_CMD}' "$AGENT_DIR/skills/$skill_name/SKILL.md" 2>/dev/null; then

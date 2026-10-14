@@ -700,6 +700,10 @@ def bunker_update() -> None:
 			deployed = 0
 			for skill in skills_src.iterdir():
 				if skill.is_dir() and (skill / "SKILL.md").exists():
+					from red_pill.core.capabilities import skill_enabled
+
+					if not skill_enabled(skill / "SKILL.md"):
+						continue
 					dest = skills_dest / skill.name
 					if dest.exists():
 						shutil.rmtree(dest)
