@@ -96,6 +96,26 @@ in its own folder, and `storage_check` audits **all** of them for duplicates.
 
 ---
 
+## 5b. Registro de procedencia (proceso — `model_approve.py`)
+
+El valor de "instalar" no es reescribir el almacenamiento, sino **dejar constancia**.
+Tras **probar** un modelo, se registra su **procedencia** con revisión **pinada**:
+
+```sh
+# repo HF: fija el commit + sha256 (lfs.oid) de cada fichero, desde la metadata de HF
+scripts/model_approve.py --repo Tongyi-MAI/Z-Image-Turbo --note "probado 1024²"
+
+# custom / composición multi-repo: hashea los ficheros locales
+scripts/model_approve.py --name qwen-image-2.1 --file diffusion_model=ruta.gguf \
+  --file text_encoder=ruta.gguf --file vae=ruta.safetensors --note "probado"
+
+scripts/model_approve.py --list
+```
+
+Manifiesto: `~/.local/share/red-pill/model_manifest.json` (o `$REDPILL_MODEL_MANIFEST`).
+**No** mueve ni limpia nada — solo registra (el `<hash>.incomplete`/limpieza de
+cachés sigue siendo responsabilidad de `storage_check` + `uv cache prune`).
+
 ## 6. Reference numbers (this box, 2026-10-14)
 
 - `~/.local/share/red-pill/models` — 84 GB (LLM `.gguf`).
