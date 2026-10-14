@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from red_pill.core.paths import _assert_not_production_runtime, get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
@@ -755,19 +755,14 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# NEURO-AGENTIC TUNING
 	# -----------------------------------------------------------------------
-	SEMANTIC_INTENT_THRESHOLD_STR: str = "Low"
+	SEMANTIC_INTENT_THRESHOLD_STR: str = Field(
+		default="Low",
+		validation_alias=AliasChoices("SEMANTIC_INTENT_THRESHOLD_STR", "SEMANTIC_INTENT_THRESHOLD"),
+	)
 
 	@property
 	def SEMANTIC_INTENT_THRESHOLD(self) -> float:
 		return 0.75 if self.SEMANTIC_INTENT_THRESHOLD_STR.upper() == "HIGH" else 0.5
-
-	# Re-map env var name
-	model_config = SettingsConfigDict(
-		env_file=os.path.join(get_config_dir(), ".env"),
-		env_file_encoding="utf-8",
-		extra="ignore",
-		populate_by_name=True,
-	)
 
 	# -----------------------------------------------------------------------
 	# MCP INTERCEPTOR

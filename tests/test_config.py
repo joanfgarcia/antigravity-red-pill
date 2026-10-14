@@ -78,6 +78,17 @@ class TestConfigValidation:
 		cfg = _make_config(METABOLISM_STATE_FILE="/custom/path/state.json")
 		assert cfg.METABOLISM_STATE_FILE == "/custom/path/state.json"
 
+	def test_semantic_intent_threshold_env_alias(self, monkeypatch):
+		"""SHARD-PC-01: the documented env SEMANTIC_INTENT_THRESHOLD drives the _STR field."""
+		monkeypatch.setenv("SEMANTIC_INTENT_THRESHOLD", "High")
+		assert _make_config(_env_file=None).SEMANTIC_INTENT_THRESHOLD == 0.75
+		monkeypatch.setenv("SEMANTIC_INTENT_THRESHOLD", "Low")
+		assert _make_config(_env_file=None).SEMANTIC_INTENT_THRESHOLD == 0.5
+		# The canonical _STR name still works too.
+		monkeypatch.delenv("SEMANTIC_INTENT_THRESHOLD", raising=False)
+		monkeypatch.setenv("SEMANTIC_INTENT_THRESHOLD_STR", "High")
+		assert _make_config(_env_file=None).SEMANTIC_INTENT_THRESHOLD == 0.75
+
 
 class TestConfigModuleAliases:
 	def test_module_aliases_resolve(self):
