@@ -1,8 +1,10 @@
 import asyncio
 import os
 import shlex
+import shutil
 import signal
 import time
+import uuid
 from typing import Any, Dict, List, Union
 
 from red_pill.swarm.base import Minion
@@ -31,6 +33,17 @@ class CommandMinion(Minion):
 		# command ever originates from a payload. Accept a pre-split list, or split a string
 		# with shlex (covers all built-in commands: `ruff check .`, `pytest`, `git log …`).
 		argv = cmd if isinstance(cmd, list) else shlex.split(cmd)
+
+		# Scope cgroup por-job → `job kill` abate el ÁRBOL COMPLETO (no solo al líder).
+		# El element_job ya lo creaba; el CommandMinion (usado por los dag_job) NO, y su
+		# comentario lo ASUMÍA → huérfanos consumiendo GPU/CPU (SHARD-15, 2026-10-14).
+		# Sufijo único por invocación: un step puede correr varias etapas sin chocar el
+		# nombre de la unit. `job kill` para por PREFIJO `redpill-job-<short_id>`.
+		job_id = str(kwargs.get("job_id") or "")
+		if job_id and shutil.which("systemd-run"):
+			mem = str(kwargs.get("memory_max") or os.environ.get("RP_JOB_MEMORY_MAX") or "10G")
+			unit = f"redpill-job-{job_id[:8]}-{uuid.uuid4().hex[:6]}"
+			argv = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={unit}", "-p", f"MemoryMax={mem}", "--", *argv]
 
 		self.log(f"Ejecutando comando: {cmd} en {cwd}")
 		start_time = time.time()

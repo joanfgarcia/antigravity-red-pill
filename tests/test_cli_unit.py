@@ -448,12 +448,26 @@ def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 	mock_qm.return_value.kill_task.return_value = True
 	with patch("sys.argv", ["red-pill", "job", "resume", "abc"]):
 		main()
-	# El kill abate el scope con systemctl: mockeado (nunca contra el systemd real)
+	# El kill abate TODOS los scopes del job (por prefijo): primero enumera con
+	# list-units y luego para cada uno. Mockeado (nunca contra el systemd real).
 	with patch("sys.argv", ["red-pill", "job", "kill", "abc"]), patch("subprocess.run") as run:
-		run.return_value.returncode = 5  # unit no cargada
+
+		class _R:
+			def __init__(self, stdout="", returncode=0):
+				self.stdout = stdout
+				self.returncode = returncode
+
+		calls = []
+
+		def _fake(args, **kw):
+			calls.append(list(args))
+			if args[2] == "list-units":
+				return _R(stdout="redpill-job-abc-123.scope loaded active running Red Pill job\n")
+			return _R(returncode=0)
+
+		run.side_effect = _fake
 		main()
-	run.assert_called_once()
-	assert run.call_args.args[0] == ["systemctl", "--user", "stop", "redpill-job-abc-123.scope"]
+	assert ["systemctl", "--user", "stop", "redpill-job-abc-123.scope"] in calls
 	with patch("sys.argv", ["red-pill", "job", "purge", "--yes"]):
 		main()
 

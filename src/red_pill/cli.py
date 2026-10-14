@@ -1040,17 +1040,34 @@ def _kill_job(queue, task: dict, discard: bool = False) -> None:
 		print(f"[WARN] Job {job_id[:8]} en estado '{task['status']}': no se puede abatir.")
 		return
 
-	unit = f"redpill-job-{job_id[:8]}.scope"
+	short = job_id[:8]
+	# Abatir TODOS los scopes del job por PREFIJO: el element_job usa
+	# `redpill-job-<short>` y el CommandMinion del DAG `redpill-job-<short>-<uniq>`
+	# (varias etapas por step). Parar solo el exacto dejaba huérfanos (SHARD-15).
+	units: list = []
 	try:
-		result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True, timeout=30)
-		stopped = result.returncode == 0
-	except Exception as e:
-		stopped = False
-		print(f"[WARN] No se pudo parar {unit}: {e}")
+		listed = subprocess.run(
+			["systemctl", "--user", "list-units", "--all", "--plain", "--no-legend", f"redpill-job-{short}*"],
+			capture_output=True,
+			text=True,
+			timeout=10,
+		)
+		units = [ln.split()[0] for ln in listed.stdout.splitlines() if ln.strip()]
+	except Exception:
+		units = []
+	if not units:
+		units = [f"redpill-job-{short}.scope"]  # fallback: intentar el exacto
+	stopped: list = []
+	for unit in units:
+		try:
+			if subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True, timeout=30).returncode == 0:
+				stopped.append(unit)
+		except Exception:
+			pass
 
 	destino = "FRUSTRATED (descartado)" if discard else "PAUSED* (reanudable con `job resume`)"
-	print(f"[OK] Job {job_id[:8]} → {destino}.")
-	print(f"     Scope {unit}: {'abatido' if stopped else 'no estaba activo'}.")
+	print(f"[OK] Job {short} → {destino}.")
+	print(f"     Scopes abatidos: {', '.join(stopped) if stopped else 'ninguno activo'}.")
 
 
 def _purge_jobs(queue, args: argparse.Namespace) -> None:
