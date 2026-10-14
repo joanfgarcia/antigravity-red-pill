@@ -117,6 +117,19 @@ def test_gen_image_confine_out(monkeypatch, tmp_path):
 		g._confine_out(Path("/etc"))
 
 
+def test_resolve_element_out(monkeypatch, tmp_path):
+	"""`out` del payload se confina al staging; el `--out` del operador se respeta."""
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	monkeypatch.delenv("OUTDIR", raising=False)
+	g = _load(monkeypatch, "gen_image_ro", IMAGE_PATH)
+	inside = tmp_path / "stg" / "enc"
+	inside.mkdir(parents=True)
+	assert g._resolve_element_out({"out": str(inside)}, None) == str(inside.resolve())
+	with pytest.raises(SystemExit):
+		g._resolve_element_out({"out": "/etc"}, None)
+	assert g._resolve_element_out({}, "/tmp/op") == "/tmp/op"
+
+
 def test_sanitize_job_env_bloquea_reservadas():
 	"""El `env:` de una receta no puede pisar vars de política (staging/forges)."""
 	from red_pill.jobs.drivers.base import sanitize_job_env

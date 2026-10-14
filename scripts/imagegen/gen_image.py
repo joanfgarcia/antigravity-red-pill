@@ -73,6 +73,13 @@ def _default_out() -> Path:
 	return _console_out()
 
 
+def _resolve_element_out(el: dict, args_out: str | None) -> str | None:
+	"""`out` del PAYLOAD → confinado al staging; `--out` del operador → de confianza."""
+	if el.get("out"):
+		return str(_confine_out(Path(el["out"])))
+	return args_out
+
+
 def _confine_out(path: Path) -> Path:
 	"""Confina el `out` que llega del payload (RP_ELEMENT, §7/§8.2): no debe escapar del
 	staging. `$OUTDIR` (override explícito del operador) exime. La raíz NO se toma de una
@@ -267,9 +274,9 @@ def main() -> int:
 		except Exception as e:  # noqa: BLE001
 			print(f"RP_ELEMENT inválido ({e}): {raw!r}", flush=True)
 			return 1
-		el.setdefault("out", args.out)
-		if el.get("out"):
-			el["out"] = str(_confine_out(Path(el["out"])))
+		el["out"] = _resolve_element_out(el, args.out)
+		if el["out"] is None:
+			el.pop("out")
 		return _run_element(el)
 
 	prompt = _read_prompt(args)
