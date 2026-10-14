@@ -75,9 +75,9 @@ skip_exit_code: 79
 ```
 
 Reglas de la plantilla (**fail-clean**):
-- **Sin rutas absolutas ni referencias a esta máquina, y sin `${VAR:-default}`.** El
-  valor sale del **entorno** (el runner exporta el `.env`). Si `RP_MEDIA_STAGING`,
-  `IMAGE_FORGE_HOME` o `IA_DIR` **no** están configuradas → el comando **falla** (correcto).
+- **Sin rutas absolutas ni `${VAR:-default}`.** El valor sale del **entorno**: el runner
+  exporta el `.env` y, si una var no está, su **default canónico de `paths.py`**
+  (`$IA_DIR`, `$IMAGE_FORGE_HOME`, `$RP_MEDIA_STAGING`…). No las fijes a mano.
 - **`$IA_DIR`** = raíz del repo (bunker); **`$IMAGE_FORGE_HOME`** = forge (venv).
   Usa **env, no rutas relativas**: una receta en `.red-pill/jobs/` hereda **cwd = raíz
   del workspace** (no el repo).

@@ -448,7 +448,7 @@ def _load_job_env() -> None:
 	"""
 	import os
 
-	from red_pill.core.paths import get_bunker_root, get_config_dir
+	from red_pill.core.paths import get_bunker_root, get_config_dir, get_forge_home, get_tmp_dir
 
 	env_file = get_config_dir() / ".env"
 	if env_file.is_file():
@@ -463,6 +463,18 @@ def _load_job_env() -> None:
 	root = str(get_bunker_root())
 	os.environ.setdefault("IA_DIR", root)
 	os.environ.setdefault("REDPILL_DIR", root)
+	# Media (RFC-HARNESS-004/005): valor canónico de paths.py (default documentado,
+	# overridable por `.env`). Así las plantillas usan `$VAR` sin defaults ni absolutos.
+	os.environ.setdefault("IMAGE_FORGE_HOME", str(get_forge_home("image")))
+	os.environ.setdefault("AUDIO_FORGE_HOME", str(get_forge_home("audio")))
+	os.environ.setdefault("MUSIC_FORGE_HOME", str(get_forge_home("music")))
+	os.environ.setdefault("RP_TMP_DIR", str(get_tmp_dir()))
+	try:
+		from red_pill.core.media_staging import staging_root
+
+		os.environ.setdefault("RP_MEDIA_STAGING", str(staging_root()))
+	except Exception:  # noqa: BLE001
+		pass
 
 
 def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
