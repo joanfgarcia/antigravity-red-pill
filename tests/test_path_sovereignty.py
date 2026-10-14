@@ -58,6 +58,7 @@ SCRIPTS_STANDALONE_HARNESS = {
 	SCRIPTS_DIR / "imagegen" / "compat_image_studio.py",
 	SCRIPTS_DIR / "audio" / "bench_audio.py",
 	SCRIPTS_DIR / "music" / "compose.py",
+	SCRIPTS_DIR / "laya_router_bakeoff.py",
 }
 
 HARDCODED_PATTERNS = [
