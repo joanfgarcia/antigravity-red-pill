@@ -198,7 +198,7 @@ def manifest_delta(old_manifest: Optional[Dict[str, Any]], new_manifest: Dict[st
 
 def _notes_near_dups(annotate_dir: Path, threshold: float) -> int:
 	"""Pares near-dup entre las notas FINALES de la sesión (mismo cómputo que la métrica)."""
-	from .agentic.annotate import _tokens
+	from .agentic.annotation_quality import _tokens
 
 	texts: List[str] = []
 	for path in sorted(annotate_dir.glob("*.md")):
