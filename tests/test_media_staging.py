@@ -95,3 +95,17 @@ def test_cli_media_commands(monkeypatch, tmp_path, capsys):
 
 	handle_media(argparse.Namespace(media_cmd="adapt", model="m", width=1920, height=1080))
 	assert "1088" in capsys.readouterr().out
+
+
+def test_order_dir_rejects_traversal(monkeypatch, tmp_path):
+	_stg(monkeypatch, tmp_path)
+	with pytest.raises(ValueError):
+		media_staging.order_dir("../escape", create=True)
+
+
+def test_promote_rejects_traversal_name(monkeypatch, tmp_path):
+	_stg(monkeypatch, tmp_path)
+	od = media_staging.order_dir("enc1", create=True)
+	(od / "a.png").write_bytes(b"a")
+	with pytest.raises(ValueError):
+		media_staging.promote("enc1", str(tmp_path / "final"), name="../../etc/hosts")

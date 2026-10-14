@@ -47,9 +47,15 @@ def test_dag_inyecta_rp_progress_file(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	d = DagJobDriver()
 	d.bind("job-progress-1")
-	payload = {"mission_id": "m", "manifest": {"workdir": str(ws), "stages": [
-		{"id": "long", "type": "command", "minion": "command_runner", "command": "x", "progress_file": True},
-	]}}
+	payload = {
+		"mission_id": "m",
+		"manifest": {
+			"workdir": str(ws),
+			"stages": [
+				{"id": "long", "type": "command", "minion": "command_runner", "command": "x", "progress_file": True},
+			],
+		},
+	}
 	d.step(payload, {})
 	env = record[0][1].get("env") or {}
 	assert "RP_PROGRESS_FILE" in env and env["RP_PROGRESS_FILE"].endswith(".progress.json")

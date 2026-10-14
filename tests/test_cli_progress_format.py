@@ -10,9 +10,7 @@ from red_pill.cli import _format_progress
 
 
 def test_stage_fields_render():
-	text = _format_progress(
-		{"current": 5, "total": 23, "percent": 22, "stage_label": "sesión", "stage_current": 3, "stage_total": 20}
-	)
+	text = _format_progress({"current": 5, "total": 23, "percent": 22, "stage_label": "sesión", "stage_current": 3, "stage_total": 20})
 	assert "5/23" in text and "22%" in text
 	assert "sesión 3/20" in text
 

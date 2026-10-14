@@ -40,6 +40,35 @@ def test_resolve_por_rol_salta_not_capable(monkeypatch):
 	assert m._resolve_model(data, None, "r") == "b"
 
 
+def test_resolve_paridad_con_router(monkeypatch):
+	"""`_resolve_model` es un espejo standalone: debe coincidir con el router (fuente única)."""
+	import yaml
+
+	from red_pill.core import media_router
+
+	m = _load(monkeypatch)
+	data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+	router = media_router.MediaProfiles(path=EXAMPLE)
+	assert m._resolve_model(data, "flux2_klein", None) == router.resolve(model="flux2_klein")
+	assert m._resolve_model(data, None, "photoreal") == router.resolve(task="photoreal")
+
+
+def test_default_out_usa_staging(monkeypatch, tmp_path):
+	m = _load(monkeypatch)
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	monkeypatch.delenv("OUTDIR", raising=False)
+	assert m._default_out() == str(tmp_path / "stg" / "cli")
+
+
+def test_safe_stem_rechaza_traversal(monkeypatch):
+	m = _load(monkeypatch)
+	with pytest.raises(ValueError):
+		m.G._safe_stem("../x", "name")
+	with pytest.raises(ValueError):
+		m.G._safe_stem("a/b", "tag")
+	assert m.G._safe_stem("ok-name", "name") == "ok-name"
+
+
 def test_resolve_rol_por_defecto(monkeypatch):
 	m = _load(monkeypatch)
 	data = {"media_profiles": {"x": {}}, "media_roles": {m.DEFAULT_ROLE: ["x"]}}
@@ -75,4 +104,3 @@ def test_model_available_diffusers_sin_cache(monkeypatch):
 	m = _load(monkeypatch)
 	ok, _why = m._model_available({"backend": "diffusers", "weights": "org/no-existe-jamas-xyz-123"})
 	assert ok is False
-

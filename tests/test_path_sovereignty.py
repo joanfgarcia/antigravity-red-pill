@@ -53,7 +53,7 @@ INJECT_PKG = SCRIPTS_DIR / "inject"
 HARDCODED_PATTERNS = [
 	re.compile(r'["\']~/[^"\']'),  # "~/…" (a path, not a bare "~/" token)
 	re.compile(r'["\']/(?:home|Users|root)/'),  # "/home/<user>/…"
-	re.compile(r'Path\.home\(\)\s*/'),  # Path.home() / "…"
+	re.compile(r"Path\.home\(\)\s*/"),  # Path.home() / "…"
 	re.compile(r'expanduser\(\s*["\']~'),  # os.path.expanduser("~/…")
 	re.compile(r'(?:os\.environ\.get|os\.getenv)\(\s*["\']XDG_(?:DATA|CONFIG|STATE|CACHE|RUNTIME)_HOME'),  # raw XDG read
 ]
