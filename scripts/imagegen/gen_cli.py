@@ -14,6 +14,8 @@ Uso:
 	gen_cli.py --role photoreal --prompt "…" --width 1024 --height 1536 --seed -1
 	gen_cli.py --prompt "…"                 # prompt interactivo; --role por defecto
 	gen_cli.py --role photoreal --dry-run   # resuelve y muestra sin generar
+	gen_cli.py --list-models               # emite el array JSON de modelos de imagen
+	gen_cli.py --list-elements --prompt "…" # emite el array JSON de elementos (element_job)
 
 Salida: <out>/<modelo>_<fecha>_s<seed>.png
 """
@@ -21,6 +23,7 @@ Salida: <out>/<modelo>_<fecha>_s<seed>.png
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -126,7 +129,27 @@ def main() -> int:
 	ap.add_argument("--strength", type=float, help="fuerza de re-difusión en edición (def: del elenco / 0.75)")
 	ap.add_argument("--no-unload", action="store_true", help="no pedir el unload del LLM residente")
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
+	ap.add_argument("--list-models", action="store_true", help="emite el array JSON de modelos de imagen (elenco)")
+	ap.add_argument("--list-elements", action="store_true", help="emite el array JSON de elementos (para element_job)")
 	args = ap.parse_args()
+
+	if args.list_models:
+		print(json.dumps([{"model": m} for m in B.MODELS], ensure_ascii=False))
+		return 0
+
+	if args.list_elements:
+		data = _profiles()
+		model = _ensure_image(_resolve_model(data, args.model, args.role))
+		prompt = args.prompt or args.text
+		if not prompt:
+			print("[error] falta prompt (--prompt)", flush=True)
+			return 1
+		prof = (data.get("media_profiles") or {}).get(model) or {}
+		mult = int((prof.get("constraints") or {}).get("dim_multiple") or 1)
+		w, h = _snap(args.width, mult), _snap(args.height, mult)
+		print(json.dumps([{"model": model, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out}], ensure_ascii=False))
+		return 0
+
 	args.out = args.out or _default_out()
 
 	data = _profiles()

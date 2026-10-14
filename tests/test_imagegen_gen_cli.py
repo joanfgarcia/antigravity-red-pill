@@ -104,3 +104,14 @@ def test_model_available_diffusers_sin_cache(monkeypatch):
 	m = _load(monkeypatch)
 	ok, _why = m._model_available({"backend": "diffusers", "weights": "org/no-existe-jamas-xyz-123"})
 	assert ok is False
+
+
+def test_list_models_rc0(monkeypatch, capsys):
+	"""SHARD-PV-05: `--list-models` emite el array JSON del elenco sin exigir staging."""
+	import json
+
+	m = _load(monkeypatch)
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--list-models"])
+	assert m.main() == 0
+	payload = json.loads(capsys.readouterr().out)
+	assert isinstance(payload, list) and any(e["model"] == "flux2_klein" for e in payload)
