@@ -22,8 +22,7 @@ Status: enforced. Scope: `~/opt/*-forge`, `~/.local/share/red-pill`, machine con
 **Why media ≠ LLM layout:** media models are **families of several files** with a
 bespoke harness on top; keeping each family in its own forge folder is cleaner
 than mixing them with the single-file LLM `.gguf`s. (`REDPILL_IMAGE_MODELS_DIR`
-= `~/.local/share/red-pill/models/image` exists as the declared canonical but the
-media harness does not use it — see §5.)
+defaults to `~/opt/red-pill-custom-image-models` for composed/non-HF models — see §5.)
 
 ---
 
@@ -66,10 +65,10 @@ avoided** by the tooling — do not "fix" them by hand.
 
 ---
 
-## 4. Storage checker (proposed)
+## 4. Storage checker
 
-A `red-pill media storage` (or `scripts/imagegen/storage_check.py`) that:
-- walks the model dirs (`~/opt/*-forge`, `~/.local/share/red-pill/models`);
+`scripts/storage_check.py` (run directly; audits all model roots):
+- walks the model dirs (`~/opt/*-forge`, `~/.local/share/red-pill/models`, `$REDPILL_IMAGE_MODELS_DIR`);
 - clusters files by size, then confirms by hash;
 - reports **real** duplicates (same inode = hardlink → ignore), reclaimable space,
   `.incomplete` leftovers, and models present in more than one cache.

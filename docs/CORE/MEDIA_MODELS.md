@@ -69,7 +69,7 @@ per-machine and **never committed** (recalibrate timings/VRAM per box).
    red-pill media resolve  --task photoreal
    ```
 
-That is all: the router routes it, the harness loads it, the license gate sees it.
+That is all: the router routes it, the harness loads it, and the elenco records its `license` (§6).
 
 ---
 
@@ -155,9 +155,9 @@ the three GGUF/safetensors files + the backend assignment:
     constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }
     adapters: ["snap_dims", "reject_oversize"]
     sd_cpp:
-      diffusion_model: "~/opt/image-forge/models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
-      text_encoder:    "~/opt/image-forge/models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
-      vae:             "~/opt/image-forge/models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
+      diffusion_model: "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
+      text_encoder:    "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
+      vae:             "~/opt/red-pill-custom-image-models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
       backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"
       extra_args: ["--flash-attn", "on", "--vae-tiling"]
       sigmas: "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"
@@ -185,13 +185,15 @@ not evict a resident LLM).
 
 ---
 
-## 6. License gate
+## 6. License
 
-Every model **must** declare a `license:` block; the compliance gate
-(`src/red_pill/core/model_license.py`) reads `commercial_ok`. Models under a
-non-commercial license (e.g. `qwen-research`) are usable in `local`/personal
-contexts but flagged for commercial runs. Omitting the block is a failure, not a
-default.
+Every model **should** declare a `license:` block in the elenco (schema convention):
+`commercial_ok` + provenance. The compliance **gate** (`assert_commercial_ok`,
+`core/model_license.py`) is enforced on the **LLM registry** path
+(`core/model_catalog.py`). The **media path does not call the gate**: the block is
+required *data* (provenance/flagging), and non-commercial models (e.g. `qwen-research`)
+must be flagged for commercial runs. (Known doc↔code gap: wiring the gate into the
+media router is pending.)
 
 ---
 

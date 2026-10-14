@@ -39,7 +39,7 @@ fija la invariante y el fallo limpio); router intacto; `sd-cli` + Sakura genera
 **~32 s/imagen a 1024²** (DiT 4.7 GB en VRAM, encoder 8.3 GB en RAM) con VRAM libre.
 Riesgo ops documentado: el LLM residente del daemon (~6.8 GB) no se suelta vía
 `POST /unload` → los jobs de imagen grandes quedan `PENDING` (el runner no desaloja).
-Diseño completo: RFC-HARNESS-006 (desk) + `docs/CORE/MEDIA_MODELS.md`.
+Diseño completo: `docs/CORE/MEDIA_MODELS.md`.
 
 ---
 

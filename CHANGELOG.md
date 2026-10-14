@@ -6,7 +6,7 @@
   `MODELS`: lo **traduce del elenco** `media_profiles.yaml` (misma fuente que el
   router) por el campo `backend`. Añadir un modelo = editar el YAML, sin tocar
   código (data over branches, §10.8.2). Falla limpio si falta el elenco.
-- **[FEATURE]** Backend **`sd_cpp`** en el harness (GGUF vía `stable-diffusion.cpp`,
+- **[FEAT]** Backend **`sd_cpp`** en el harness (GGUF vía `stable-diffusion.cpp`,
   `sd-cli` por subprocess) + engine **`sd_cpp`** en `runtimes.yaml`. Modelo
   `qwen_image_2_1_turbo` (Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B, **qwen-research
   → no comercial**) en el elenco. Verificado: ~32 s/imagen a 1024² (DiT 4.7 GB en
@@ -18,23 +18,23 @@
   `sd.cpp` trabajado). Skills `capabilities`/`image-gen` corregidos (el harness lee el
   elenco; "sin tocar código" solo para un dispatch `backend` ya existente).
 - **[TEST]** `test_imagegen_registry.py` — el harness deriva del elenco + fallo limpio.
-- **[NOTE]** Ops: el LLM residente del daemon (~6.8 GB) no se suelta vía `POST /unload`
+- **[DOCS]** Ops: el LLM residente del daemon (~6.8 GB) no se suelta vía `POST /unload`
   → jobs de imagen grandes quedan `PENDING` si no se cumple `min_free_vram_mb`.
 
 ### 🔀 Media — router por tarea, adaptadores, staging y capabilities (RFC-HARNESS-004/005)
 
-- **[FEATURE]** `core/media_router.py` — **router por tarea** (`resolve`) + **adaptadores**
+- **[FEAT]** `core/media_router.py` — **router por tarea** (`resolve`) + **adaptadores**
   (`constraints`/`adapters`: `snap_dims`, `reject_oversize`) + `validate()` (JSON). El
   tamaño se adapta por modelo (warning) o falla limpio (error). Loader de
   `media_profiles.yaml` (dueño: RFC-HARNESS-004). Espejo de `model_catalog` (roles/cascade).
-- **[FEATURE]** Bloque `media:` en recetas: validación en el **ensamblado** (`validate()`
+- **[FEAT]** Bloque `media:` en recetas: validación en el **ensamblado** (`validate()`
   en submit + `preflight()`), canal de warnings (`payload.media_warnings`), handoff al
   harness por env (`RP_MEDIA_*`). Drivers: `element_job`, `script_job`.
-- **[FEATURE]** **Staging + promoción**: `core/media_staging.py` + CLI `red-pill media
+- **[FEAT]** **Staging + promoción**: `core/media_staging.py` + CLI `red-pill media
   {resolve,validate,adapt,staging,promote}` (`RP_MEDIA_STAGING`).
-- **[FEATURE]** El **runner exporta el `.env`** (+ `IA_DIR`/`REDPILL_DIR` y los defaults
+- **[FEAT]** El **runner exporta el `.env`** (+ `IA_DIR`/`REDPILL_DIR` y los defaults
   canónicos de forges/tmp) a los jobs — las recetas usan `$VAR` sin fallbacks ni absolutos.
-- **[FEATURE]** **Skills** `image-gen`/`audio-gen`/`music-gen`/`capabilities` (Agent Skills
+- **[FEAT]** **Skills** `image-gen`/`audio-gen`/`music-gen`/`capabilities` (Agent Skills
   standard) con **siembra gateada por capacidad** (`core/capabilities.py`; `capability:` en
   el frontmatter).
 - **[DOCS]** `docs/CORE/CONVENTIONS.md` §10.8/§10.9 + §7 (rutas en `paths.py`). Elenco:
@@ -54,7 +54,7 @@
   podados/lavados (washout), reclasificados (revision), y artefactos publicados
   (operator-profile/recent-activity). `erode_work_hubs` y
   `run_rhizodb_washout_and_pruning` ahora devuelven sus conteos.
-- **[FEATURE]** El `finalize` compone un **desglose honesto** por fase y suma las
+- **[FEAT]** El `finalize` compone un **desglose honesto** por fase y suma las
   **ascensiones estáticas de Memento** (persistidas por `memento_agentic.py` en
   `memento_agentic_state.json`, ventana 12h) — así el ciclo no oculta lo que el
   pase Memento sí ingresó. El log `LAZARUS PULSE` y el `summary` de cada fase
@@ -64,7 +64,7 @@
 
 ### 🎨 ImageGen — banco A/B de generación de imagen local (2026-10-10)
 
-- **[FEATURE]** `scripts/imagegen/`: harness para correr y **clasificar por tipo
+- **[FEAT]** `scripts/imagegen/`: harness para correr y **clasificar por tipo
   de arte** modelos texto→imagen locales en GPUs de consumo (8 GB), hermano de
   `bench_local.py` (RFC-HARNESS-003).
   - `bootstrap.sh` — runtime **por-máquina** con rutas configurables
@@ -76,7 +76,7 @@
     en bloque; sin tocar el repo de terceros).
   - `benchgenres.json` — 6 tipos de arte (fotorrealismo, tipografía,
     ilustración, paisaje, producto, concepto).
-- **[FEATURE]** Recetas `configs/jobs/imagegen_setup.yaml` (script_job) e
+- **[FEAT]** Recetas `configs/jobs/imagegen_setup.yaml` (script_job) e
   `imagegen_bench.yaml` (element_job).
 - **[FIX]** Path ternario en Blackwell **sm_120**: torch 2.10+cu128 + gemlite
   0.6.0 + `backend_gpu` (`Flux2KleinPipeline`/`ZImagePipeline` en diffusers main).
@@ -86,7 +86,7 @@
 
 ### 🔊 AudioGen — banco A/B de audio generativo local (2026-10-10)
 
-- **[FEATURE]** `scripts/audio/`: harness para correr y clasificar modelos de
+- **[FEAT]** `scripts/audio/`: harness para correr y clasificar modelos de
   audio locales por eje (**voz / música / SFX**), hermano de `scripts/imagegen/`.
   - `bootstrap.sh` — **cuatro** venvs (los stacks chocan): `venv` (diffusers
     main, torch cu128), `venv-tts` (kokoro, chatterbox-tts), `venv-moss`
@@ -106,10 +106,10 @@
 
 ### 🎵 MusicGen — cadena de música simbólica 100% libre (2026-10-10)
 
-- **[FEATURE]** `scripts/music/`: música **sin modelos de onda ni GPU** —
+- **[FEAT]** `scripts/music/`: música **sin modelos de onda ni GPU** —
   `compose.py` (LLM → MIDI vía `mido` → WAV vía **FluidSynth** + soundfont libre).
   El LLM local (:8760) devuelve el arreglo (tempo/clave/progresión) en JSON.
-- **[FEATURE]** `scripts/music/ardour_mcp_lite.py` — servidor **MCP** (FastMCP,
+- **[FEAT]** `scripts/music/ardour_mcp_lite.py` — servidor **MCP** (FastMCP,
   `mcp<2`) que controla **Ardour** (GPL) por OSC: transporte, marcadores, mezcla,
   undo, `/access_action` y escotilla `osc` cruda. El `ardour-mcp` upstream usa el
   SDK MCP antiguo (protocolo 2024-11-05) y no conecta con clientes modernos.
@@ -119,10 +119,10 @@
 
 ### 🗂️ Elenco media — 2 esquemas + tool-chains como recetas (RFC-HARNESS-004)
 
-- **[FEATURE]** `examples/media_profiles.yaml.example` — elenco de **media
+- **[FEAT]** `examples/media_profiles.yaml.example` — elenco de **media
   generativa** (imagen + audio de onda) con `modality`/`task`, `pipeline`,
   `quant`, `sampler`, `capabilities` (tipo de arte/sonido) y `license`.
-- **[FEATURE]** `examples/runtimes.yaml.example` — nuevos `kind: diffusers` /
+- **[FEAT]** `examples/runtimes.yaml.example` — nuevos `kind: diffusers` /
   `pipeline_custom` / `symbolic_chain`.
 - **Decisión**: el elenco se parte en **LLM** (`model_profiles.yaml`, sin cambios)
   y **media generativa** (`media_profiles.yaml`); los **tool-chains** (música
@@ -143,27 +143,27 @@
 
 ### 🧠 Memento — gating previo de rebuilds (MEM-010 F1–F3, 2026-10-06)
 
-- **[FEATURE]** Manifest estructurado del pipeline `annotate`
+- **[FEAT]** Manifest estructurado del pipeline `annotate`
   (`gate-manifest-v1`): componentes por separado + contratos partidos
   `extract_contract`/`score_contract` (`annotate_manifest()` /
   `annotate_manifest_hash()` en `runtime.py`). El fingerprint legacy
   `annotate_prompt_version()` **no cambia** (verificado idéntico al del rebuild
   vivo: `p1:49f12414…`), así que F1 no invalida ninguna sesión.
-- **[FEATURE]** Métricas por sesión al anotar (`annotate/_meta.json` + espejo
+- **[FEAT]** Métricas por sesión al anotar (`annotate/_meta.json` + espejo
   `_session.json`): `pct_gt_600`, `pct_primera_persona`, `near_dups` (umbral
   efectivo guardado), `min_margin`, `bio_leaks` — `compute_note_metrics()`.
-- **[FEATURE]** `input_hash` normativo de la entrada (mismo cómputo que el
+- **[FEAT]** `input_hash` normativo de la entrada (mismo cómputo que el
   `memento_hash` del render: `compute_hash(extract_body(index.md))`) con
   `input_hash_source`, más fallback defensivo por unidades.
 - **[CHANGE]** Umbral de dedup P1-A con fuente única
   (`runtime.memento_dedup_threshold()`, config `MEMENTO_ANNOTATE_DEDUP_THRESHOLD`
   default 0.6), usado tanto por el dedup como por la métrica `near_dups`.
-- **[FEATURE]** Motor de gating (`memento/gating.py`): decisión por sesión
+- **[FEAT]** Motor de gating (`memento/gating.py`): decisión por sesión
   (fast-path idempotente por firma+input, regla del parcial MEM-009, `failed`
   terminal, deltas por manifest y predicados extract/voz/bio/scopes/dedup/scorer)
   sellada en `_session.json` (`stages.gate`, upsert por `run_id`, cap 10);
   `mark_outcome` cierra el estado por paso.
-- **[FEATURE]** CLI (`scripts/memento_annotate.py`): `--list` con
+- **[FEAT]** CLI (`scripts/memento_annotate.py`): `--list` con
   `MEMENTO_ANNOTATE_GATE=ON` emite `{dir, action}` (solo process/rescore/forced)
   y sella decisiones; `--status` desglosa saltadas por razón; `--gate-migrate
   [--dry-run]` adopta metas legacy de la versión vigente (manifest + métricas +
@@ -172,18 +172,18 @@
 - **[CHANGE]** `record.py`: RMW serializado con `flock` por fichero + tmp único
   (`mkstemp`); fin de las carreras de escritores medidas por el panel (12 hilos:
   160/160 incrementos, cero crashes).
-- **[FEATURE]** Ledger de rebuilds (`state/rebuilds.json`, cap 10, modo 0600):
+- **[FEAT]** Ledger de rebuilds (`state/rebuilds.json`, cap 10, modo 0600):
   índice run→sesiones (`decisions`), counts por acción, cierre con señal
   (`closed`/`closed-incomplete`/`aborted`, terminalidad primero) y saneado de
   textos libres (scrub + basename + ANSI/control + caps 512/1024).
-- **[FEATURE]** Remediación de un run: `--rebuild-run <run_id> [--actions ...]`
+- **[FEAT]** Remediación de un run: `--rebuild-run <run_id> [--actions ...]`
   re-sella el subconjunto como `forced` bajo un run nuevo y emite la lista
   congelada; helper `scripts/memento_rebuild_run.py` (element_job con
   `elements_command` custom) y `--runs` para consultar el ledger.
 - **[CHANGE]** Los elementos del job llevan `run_id`; el sweep mantiene su run
   al día, cierra los obsoletos con la precedencia del RFC y re-emite fielmente
   los pendientes (cubre `forced` entre re-invocaciones de `--list`).
-- **[FEATURE]** Backfill F4: `--backfill-run <job_id> [--checkpoint ckpt.json]`
+- **[FEAT]** Backfill F4: `--backfill-run <job_id> [--checkpoint ckpt.json]`
   reconstruye en el ledger un run ya ejecutado desde su log (`state/jobs/`) y
   su checkpoint; lo no alcanzado queda `unknown` (dato ausente ≠ skip).
 - **[FIX]** Ronda adversarial de implementación (zero-trust, 5 lentes): input_hash
@@ -198,10 +198,10 @@
 
 ### 🎛️ Jobs — pin GPU sin fallback CPU (2026-10-05)
 
-- **[FEATURE]** `llm.device_fallback` en recipes → `RP_LLM_DEVICE_FALLBACK`: el
+- **[FEAT]** `llm.device_fallback` en recipes → `RP_LLM_DEVICE_FALLBACK`: el
   transporte Memento lo envía como `device_fallback` del request, así el daemon
   NUNCA cae a CPU (con `[gpu]`, si no cabe devuelve error y el job difiere).
-- **[FEATURE]** `preflight.min_free_vram_mb` en `element_job` (resident-aware):
+- **[FEAT]** `preflight.min_free_vram_mb` en `element_job` (resident-aware):
   si el modelo del recipe ya está residente en GPU pasa sin coste; si no, exige
   VRAM libre suficiente; si no cabe → `JobDeferred` (jamás CPU disfrazada).
 - **[CHANGE]** `memento_annotate_rebuild` (rebuild de 900 sesiones stale) pasa a
@@ -209,7 +209,7 @@
 
 ### 🧩 Prompts — F5: perímetro completo por composición (RULE 5, 2026-10-05)
 
-- **[FEATURE]** Migración total del resto del perímetro a manifiestos y
+- **[FEAT]** Migración total del resto del perímetro a manifiestos y
   fragmentos: `distiller_v3`/`distiller_v3_voice` (idioma por fragmento +
   `voice_distiller`/`voice_distiller_b`), `situation_semaphore` (plantilla),
   Samantha (`inference`, `samantha_queue` muerto eliminado), `interceptors`
@@ -224,10 +224,10 @@
 
 ### 🧩 Prompts — composición por fragmentos (PROMPT-001 F1–F2, 2026-10-04)
 
-- **[FEATURE]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
+- **[FEAT]** Leyenda emocional curada (`fragments/emotion_legend.txt`) inyectada
   en los 8 prompts que piden `emotion`, con **gate de consistencia** contra
   `EMOTION_CHROMA_MAP` (la leyenda ya no se improvisa: el color tiene semántica).
-- **[FEATURE]** Idioma configurable (F3): fragmento `language` con
+- **[FEAT]** Idioma configurable (F3): fragmento `language` con
   `MEMENTO_PROMPT_LANGUAGE=auto|es|en|ca|...` (default `auto` = idioma de la
   fuente; forzar uno entra en la firma → stale). La frase de idioma se retira de
   los prompts y del voice rule (una sola directiva).
@@ -236,7 +236,7 @@
   muerto fuera). RULE 5 en `CONVENTIONS.md`; RFC-003 marcado **superseded**
   (AD-047); CI `validate_all` + anti-huérfanos/duplicación/inline.
 
-- **[FEATURE]** Loader de composición (`core/prompts.py`): fragmentos globales
+- **[FEAT]** Loader de composición (`core/prompts.py`): fragmentos globales
   curados (`src/red_pill/prompts/fragments/`) + `manifest.yaml` por componente;
   render en UNA pasada (`string.Template`, `${var}`) y valores de runtime como
   sentinelas (seguro ante `$` en Bio/scopes).
@@ -249,7 +249,7 @@
   Equivalencia verificada contra goldens pre-migración: byte-exacta en los
   prompts no tocados por F2/F3 y reconstrucción controlada (solo inserciones de
   leyenda/idioma) en los 13 restantes (`tests/test_core_prompts.py`).
-- **[FEATURE]** Prompt efectivo materializado en
+- **[FEAT]** Prompt efectivo materializado en
   `~/.local/share/red-pill/prompts/` (tmp+replace; 0700/0600 por la Bio).
 
 ### 🔧 Carril Samantha — drain-wait del pulse y recuperación de huérfanos (2026-10-04)
