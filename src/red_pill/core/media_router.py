@@ -47,7 +47,6 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 	return data
 
 
-# ── Registro de adapters (plugins por nombre) ─────────────────────────────────
 # Un adapter recibe (params, profile) y devuelve (params_mutado, warnings) o levanta
 # MediaCapabilityError si no puede satisfacer la petición.
 

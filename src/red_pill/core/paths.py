@@ -241,6 +241,14 @@ def get_models_dir() -> Path:
 	return path
 
 
+def get_image_models_dir() -> Path:
+	"""Raíz de modelos de imagen custom/no-HF (`$REDPILL_IMAGE_MODELS_DIR`,
+	default `~/opt/red-pill-custom-image-models`). Modelos multi-repo/composición
+	que no siguen el layout HF blob-store (docs/CORE/MODEL_STORAGE.md)."""
+	env = os.environ.get("REDPILL_IMAGE_MODELS_DIR")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "opt" / "red-pill-custom-image-models"
+
+
 def get_session_db() -> Path:
 	"""Ruta de `session.db`, la BD propia del subsistema de sesiones.
 

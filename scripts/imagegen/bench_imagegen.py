@@ -277,34 +277,49 @@ def _load_diffusers_4bit(cls, hf_id: str):
 	return None
 
 
-def _load(model_id: str):
-	cfg = MODELS[model_id]
+def _load_backend_diffusers(cfg: dict):
 	import torch
 
-	if cfg["backend"] == "diffusers":
-		cls = _diffusers_pipe_class(cfg["pipeline"])
-		# 8 GB (7.53 GiB útiles): bf16 no cabe para 4B/6B → 4-bit NF4 (bitsandbytes).
-		# IMG_DIFFUSERS_QUANT: bnb4 (def) | seqoff (bf16 + offload secuencial) | bf16
-		quant = os.environ.get("IMG_DIFFUSERS_QUANT", "bnb4")
-		if quant == "bnb4":
-			pipe = _load_diffusers_4bit(cls, cfg["hf_id"])
-			if pipe is not None:
-				return "diffusers", pipe
-			print("  [quant] bnb4 no disponible → fallback bf16 + offload secuencial (más lento)", flush=True)
-		pipe = cls.from_pretrained(cfg["hf_id"], torch_dtype=torch.bfloat16)
-		if quant == "bf16":
-			pipe.to("cuda")
-		else:
-			pipe.enable_sequential_cpu_offload()
-		return "diffusers", pipe
+	cls = _diffusers_pipe_class(cfg["pipeline"])
+	# 8 GB (7.53 GiB útiles): bf16 no cabe para 4B/6B → 4-bit NF4 (bitsandbytes).
+	# IMG_DIFFUSERS_QUANT: bnb4 (def) | seqoff (bf16 + offload secuencial) | bf16
+	quant = os.environ.get("IMG_DIFFUSERS_QUANT", "bnb4")
+	if quant == "bnb4":
+		pipe = _load_diffusers_4bit(cls, cfg["hf_id"])
+		if pipe is not None:
+			return "diffusers", pipe
+		print("  [quant] bnb4 no disponible → fallback bf16 + offload secuencial (más lento)", flush=True)
+	pipe = cls.from_pretrained(cfg["hf_id"], torch_dtype=torch.bfloat16)
+	if quant == "bf16":
+		pipe.to("cuda")
+	else:
+		pipe.enable_sequential_cpu_offload()
+	return "diffusers", pipe
 
-	if cfg["backend"] == "bonsai":
-		return "bonsai", _load_bonsai(cfg)
 
-	if cfg["backend"] == "sd_cpp":
-		return "sd_cpp", _resolve_sd_cpp(cfg)
+def _load_backend_bonsai(cfg: dict):
+	return "bonsai", _load_bonsai(cfg)
 
-	raise RuntimeError(f"backend desconocido: {cfg['backend']}")
+
+def _load_backend_sd_cpp(cfg: dict):
+	return "sd_cpp", _resolve_sd_cpp(cfg)
+
+
+# Registro backend→loader (data over branches, AD-052): un runtime nuevo = una
+# entrada aquí + su loader, sin tocar un if/elif. `backend` (del elenco) es la clave.
+_BACKEND_LOADERS = {
+	"diffusers": _load_backend_diffusers,
+	"bonsai": _load_backend_bonsai,
+	"sd_cpp": _load_backend_sd_cpp,
+}
+
+
+def _load(model_id: str):
+	cfg = MODELS[model_id]
+	loader = _BACKEND_LOADERS.get(cfg["backend"])
+	if loader is None:
+		raise RuntimeError(f"backend desconocido: {cfg['backend']}")
+	return loader(cfg)
 
 
 def _read_json(path: Path):

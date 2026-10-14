@@ -53,25 +53,47 @@ def _snap(v: int) -> int:
 	return max(SNAP, round(v / SNAP) * SNAP) if SNAP > 1 else v
 
 
-def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int):
+def _safe_stem(value: str, what: str) -> str:
+	"""Rechaza nombres que escapan del dir de salida (path traversal / separadores)."""
+	v = (value or "").strip()
+	if not v or Path(v).is_absolute() or "/" in v or "\\" in v or ".." in Path(v).parts or v.startswith("."):
+		raise ValueError(f"{what} inválido (sin separadores ni '..'): {value!r}")
+	return v
+
+
+def _default_out() -> Path:
+	"""Destino por defecto: el STAGING (nunca el repo — RFC-HARNESS-004 §8.2)."""
+	env_out = os.environ.get("OUTDIR")
+	if env_out:
+		return Path(env_out)
+	staging = os.environ.get("RP_MEDIA_STAGING")
+	if not staging and os.environ.get("RP_TMP_DIR"):
+		staging = str(Path(os.environ["RP_TMP_DIR"]) / "red-pill" / "media" / "staging")
+	if not staging:
+		raise SystemExit("[error] sin OUTDIR/RP_MEDIA_STAGING: exporta el staging o pasa --out")
+	return Path(staging) / "cli"
+
+
+def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+	return BENCH._sd_cpp_generate(pipe, prompt, seed, width, height)
+
+
+def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	import torch
+
+	gen = torch.Generator(device="cuda").manual_seed(seed)
+	return pipe(
+		prompt=prompt,
+		height=height,
+		width=width,
+		num_inference_steps=cfg["steps"],
+		guidance_scale=cfg["guidance"],
+		generator=gen,
+	).images[0]
+
+
+def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	from PIL import Image
-
-	cfg = MODELS[model_id]
-	if kind == "sd_cpp":
-		return BENCH._sd_cpp_generate(pipe, prompt, seed, width, height)
-
-	if kind == "diffusers":
-		gen = torch.Generator(device="cuda").manual_seed(seed)
-		img = pipe(
-			prompt=prompt,
-			height=height,
-			width=width,
-			num_inference_steps=cfg["steps"],
-			guidance_scale=cfg["guidance"],
-			generator=gen,
-		).images[0]
-		return img
 
 	buf = pipe.generate_png(
 		prompt=prompt,
@@ -82,6 +104,22 @@ def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, hei
 		guidance=cfg["guidance"],
 	)
 	return Image.open(io.BytesIO(buf))
+
+
+# Registro kind→generador (data over branches, AD-052).
+_GEN_DISPATCH = {
+	"sd_cpp": _gen_sd_cpp,
+	"diffusers": _gen_diffusers,
+	"bonsai": _gen_bonsai,
+}
+
+
+def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int):
+	cfg = MODELS[model_id]
+	fn = _GEN_DISPATCH.get(kind)
+	if fn is None:
+		raise RuntimeError(f"kind desconocido: {kind}")
+	return fn(cfg, pipe, prompt, seed, width, height)
 
 
 def _run_element(el: dict) -> int:
@@ -103,14 +141,14 @@ def _run_element(el: dict) -> int:
 	seed = int(el.get("seed") or 42)
 	width = _snap(int(os.environ.get("RP_MEDIA_WIDTH") or el.get("width") or 1024))
 	height = _snap(int(os.environ.get("RP_MEDIA_HEIGHT") or el.get("height") or 1024))
-	out_dir = Path(el.get("out") or (BENCH._forge_home() / "output"))
+	out_dir = Path(el.get("out") or _default_out())
 	out_dir.mkdir(parents=True, exist_ok=True)
 	metrics = out_dir / "metrics.jsonl"
 
 	# Nombre: `--name` exacto si viene; si no, patrón <modelo>__<tag>__s<seed>.
 	name = el.get("name")
 	tag = str(el.get("tag") or "out")
-	stem = str(name) if name else f"{model_id}__{tag}__s{seed}"
+	stem = _safe_stem(str(name), "name") if name else f"{model_id}__{_safe_stem(tag, 'tag')}__s{seed}"
 	png = out_dir / f"{stem}.png"
 	if png.exists():
 		print(f"[skip] {png.name} (ya existe)", flush=True)
@@ -178,11 +216,12 @@ def main() -> int:
 	ap.add_argument("--seed", type=int, default=42)
 	ap.add_argument("--width", type=int, default=1024)
 	ap.add_argument("--height", type=int, default=1024)
-	ap.add_argument("--out", default=str(BENCH._forge_home() / "output"))
+	ap.add_argument("--out", default=None, help="dir de salida (def: staging — $OUTDIR/$RP_MEDIA_STAGING/cli)")
 	ap.add_argument("--tag", default="out", help="etiqueta de variante en el nombre del PNG (def: out)")
 	ap.add_argument("--name", help="nombre EXACTO del PNG (sin extensión); anula el patrón modelo__tag__seed")
 	ap.add_argument("--snap", type=int, default=None, help="múltiplo al que ajustar ancho/alto (def: 32; env RP_IMAGE_SNAP)")
 	args = ap.parse_args()
+	args.out = args.out or str(_default_out())
 
 	global SNAP
 	if args.snap:

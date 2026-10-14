@@ -28,9 +28,19 @@ def staging_root() -> Path:
 	return get_tmp_dir() / "red-pill" / "media" / "staging"
 
 
+def _safe_component(value: str, what: str) -> str:
+	"""Rechaza componentes que escapan del staging (path traversal / rutas absolutas)."""
+	v = (value or "").strip()
+	if not v:
+		raise ValueError(f"{what} vacío")
+	if Path(v).is_absolute() or "/" in v or "\\" in v or ".." in Path(v).parts or v.startswith("."):
+		raise ValueError(f"{what} inválido (sin separadores ni '..'): {value!r}")
+	return v
+
+
 def order_dir(title: str, create: bool = False) -> Path:
 	"""Directorio de staging de un encargo (`<staging_root>/<title>`)."""
-	path = staging_root() / title
+	path = staging_root() / _safe_component(title, "title")
 	if create:
 		path.mkdir(parents=True, exist_ok=True)
 	return path
@@ -57,7 +67,7 @@ def promote(title: str, to: str, name: Optional[str] = None, move: bool = False)
 
 	artifacts = list_artifacts(title)
 	if name:
-		picked = origin / name
+		picked = origin / _safe_component(name, "name")
 		if not picked.is_file():
 			raise FileNotFoundError(f"artefacto '{name}' no existe en {origin}")
 	elif len(artifacts) == 1:

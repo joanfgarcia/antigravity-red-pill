@@ -240,3 +240,43 @@ def workspace_memory_dirs():
 		if resolved not in dirs:
 			dirs.append(resolved)
 	return dirs
+
+
+def config_dir() -> str:
+	"""`$XDG_CONFIG_HOME/red-pill` (o `~/.config/red-pill`) — standalone (sin red_pill)."""
+	base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+	return os.path.join(base, "red-pill")
+
+
+def opt_dir() -> str:
+	"""`~/opt` — raíz de forges y modelos custom (standalone, sin red_pill)."""
+	return os.path.join(os.path.expanduser("~"), "opt")
+
+
+def default_hf_cache() -> str:
+	"""Caché HF por defecto (`$XDG_CACHE_HOME/huggingface` o `~/.cache/huggingface`).
+	Solo para AUDITAR duplicados: el proyecto exige `HF_HOME` por forge."""
+	base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+	return os.path.join(base, "huggingface")
+
+
+def media_console_env() -> dict:
+	"""Env mínimo para el launcher de consola de media (`gen_cli.py`), que corre
+	standalone (venv del forge, sin `red_pill`). Resuelve las rutas canónicas SIN
+	literales en el consumidor (§10.8.1): el default vive aquí / en el `.env`, no en
+	el script. Lee el `.env` del operador y aplica los defaults de forja si faltan."""
+	cfg = config_dir()
+	vals = parse_env_file(os.path.join(cfg, ".env"))
+	home = os.path.expanduser("~")
+
+	def pick(key, default):
+		return os.environ.get(key) or vals.get(key) or default
+
+	return {
+		"IMAGE_FORGE_HOME": os.path.expanduser(pick("IMAGE_FORGE_HOME", os.path.join(home, "opt", "image-forge"))),
+		"REDPILL_MEDIA_PROFILES": pick("REDPILL_MEDIA_PROFILES", os.path.join(cfg, "media_profiles.yaml")),
+		"REDPILL_RUNTIMES": pick("REDPILL_RUNTIMES", os.path.join(cfg, "runtimes.yaml")),
+		"REDPILL_IMAGE_MODELS_DIR": os.path.expanduser(pick("REDPILL_IMAGE_MODELS_DIR", os.path.join(home, "opt", "red-pill-custom-image-models"))),
+		"RP_MEDIA_STAGING": pick("RP_MEDIA_STAGING", ""),
+		"RP_TMP_DIR": pick("RP_TMP_DIR", ""),
+	}

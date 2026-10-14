@@ -9,10 +9,10 @@ modelos ni backends: los lee del elenco y delega en el harness
 Antes de generar, libera la VRAM del LLM residente (los backends GPU la necesitan).
 
 Uso:
-  gen_cli.py --model qwen_image_2_1_turbo --prompt "…"
-  gen_cli.py --role photoreal --prompt "…" --width 1024 --height 1536 --seed -1
-  gen_cli.py --prompt "…"                 # prompt interactivo; --role por defecto
-  gen_cli.py --role photoreal --dry-run   # resuelve y muestra sin generar
+	gen_cli.py --model qwen_image_2_1_turbo --prompt "…"
+	gen_cli.py --role photoreal --prompt "…" --width 1024 --height 1536 --seed -1
+	gen_cli.py --prompt "…"                 # prompt interactivo; --role por defecto
+	gen_cli.py --role photoreal --dry-run   # resuelve y muestra sin generar
 
 Salida: <out>/<modelo>_<fecha>_s<seed>.png
 """
@@ -31,12 +31,16 @@ sys.path.insert(0, str(HERE))
 
 
 def _bootstrap_env() -> None:
-	"""Defaults canónicos por-máquina. En un job los exporta el runner; aquí, para
-	uso de consola. `setdefault`: nunca pisa lo que ya venga del entorno."""
-	cfg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-	os.environ.setdefault("REDPILL_MEDIA_PROFILES", str(Path(cfg) / "red-pill" / "media_profiles.yaml"))
-	os.environ.setdefault("REDPILL_RUNTIMES", str(Path(cfg) / "red-pill" / "runtimes.yaml"))
-	os.environ.setdefault("IMAGE_FORGE_HOME", str(Path.home() / "opt" / "image-forge"))
+	"""Defaults canónicos por-máquina. En un job los exporta el runner; para uso de
+	consola los resuelve el helper compartido `_config_common` (que lee el `.env` del
+	operador y aplica los defaults de forja) — SIN literales de ruta en este script
+	(§10.8.1). `setdefault`: nunca pisa lo que ya venga del entorno."""
+	sys.path.insert(0, str(HERE.parent))
+	from _config_common import media_console_env
+
+	for key, val in media_console_env().items():
+		if val:
+			os.environ.setdefault(key, val)
 
 
 _bootstrap_env()
@@ -70,6 +74,22 @@ def _resolve_model(data: dict, model: str | None, role: str | None) -> str:
 
 def _snap(v: int, mult: int) -> int:
 	return max(mult, round(v / mult) * mult) if mult > 1 else v
+
+
+def _default_out() -> str:
+	"""Destino por defecto: el STAGING (nunca el repo/cwd — RFC-HARNESS-004 §8.2).
+
+	`$OUTDIR` > `$RP_MEDIA_STAGING/cli`. Sin staging configurado, falla limpio.
+	"""
+	env_out = os.environ.get("OUTDIR")
+	if env_out:
+		return env_out
+	staging = os.environ.get("RP_MEDIA_STAGING")
+	if not staging and os.environ.get("RP_TMP_DIR"):
+		staging = str(Path(os.environ["RP_TMP_DIR"]) / "red-pill" / "media" / "staging")
+	if not staging:
+		raise SystemExit("[error] sin OUTDIR/RP_MEDIA_STAGING: exporta el staging o pasa --out (RFC-HARNESS-004 §8.2)")
+	return str(Path(staging) / "cli")
 
 
 def _unload_vram(base_url: str) -> None:
@@ -117,7 +137,7 @@ def main() -> int:
 	ap.add_argument("--width", type=int, default=int(os.environ.get("W", 1024)))
 	ap.add_argument("--height", type=int, default=int(os.environ.get("H", 1024)))
 	ap.add_argument("--seed", type=int, default=int(os.environ.get("SEED", 42)))
-	ap.add_argument("--out", default=os.environ.get("OUTDIR") or str(Path.cwd() / "out"))
+	ap.add_argument("--out", default=None, help="dir de salida (def: staging — $OUTDIR/$RP_MEDIA_STAGING/cli)")
 	ap.add_argument("--image", help="imagen de entrada para EDITAR (backend sd_cpp)")
 	ap.add_argument("--mask", help="máscara de inpainting (acompaña a --image)")
 	ap.add_argument("--ref-image", action="append", dest="ref_images", help="imagen de referencia (repetible; composición)")
@@ -125,6 +145,7 @@ def main() -> int:
 	ap.add_argument("--no-unload", action="store_true", help="no pedir el unload del LLM residente")
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
 	args = ap.parse_args()
+	args.out = args.out or _default_out()
 
 	data = _profiles()
 	model = _resolve_model(data, args.model, args.role)
@@ -160,9 +181,7 @@ def main() -> int:
 	if editing and backend != "sd_cpp":
 		raise SystemExit(f"[error] edición/referencias sólo con backend sd_cpp (este modelo: {backend})")
 	if editing:
-		img = B._sd_cpp_generate(
-			pipe, prompt, args.seed, w, h, image=args.image, mask=args.mask, ref_images=args.ref_images, strength=args.strength
-		)
+		img = B._sd_cpp_generate(pipe, prompt, args.seed, w, h, image=args.image, mask=args.mask, ref_images=args.ref_images, strength=args.strength)
 	else:
 		img = G._gen(kind, pipe, model, prompt, args.seed, w, h)
 
