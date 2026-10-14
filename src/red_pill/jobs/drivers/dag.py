@@ -851,21 +851,14 @@ class DagJobDriver(ResumableJobDriver):
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
 		kwargs["job_id"] = self.job_id  # hard: neither payload nor params may divert it (SHARD-PSEC-01)
 
-		# Phase 4 (RFC-JOBDAG-002): fine-grained intra-stage progress channel. If the
-		# stage asks for it (`progress_file: true`), it gets a file to publish its
-		# progress while it runs; `job list` reads it ONLY for PROCESSING jobs and it
-		# serves as forensics. Deliberately outside the DB → no concurrency/threading.
-		if stage.get("progress_file") and self.job_id:
-			from red_pill.jobs.drivers.base import job_progress_path
+		# Fine intra-stage progress channel (RFC-JOBDAG-002): a single helper enables
+		# `$RP_PROGRESS_FILE` for the child; `job list` reads it (best-effort) only for
+		# PROCESSING jobs. Uniform across the script/element/dag drivers — the child
+		# decides whether to publish, so no per-stage opt-in is required.
+		if self.job_id:
+			from red_pill.core.progress import enable_stage_progress
 
-			ppath = job_progress_path(self.job_id)
-			try:
-				ppath.unlink(missing_ok=True)  # evitar dato rancio de un run previo
-			except OSError:
-				pass
-			env = dict(kwargs.get("env") or os.environ)
-			env["RP_PROGRESS_FILE"] = str(ppath)
-			kwargs["env"] = env
+			kwargs["env"] = enable_stage_progress(dict(kwargs.get("env") or os.environ), self.job_id)
 
 		result = asyncio.run(minion.execute(task, **kwargs))
 

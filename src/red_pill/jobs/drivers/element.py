@@ -344,6 +344,11 @@ class ElementJobDriver(ResumableJobDriver):
 			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
 		except ValueError as e:
 			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
+		# Fine progress channel (RFC-JOBDAG-002): uniform with dag_job/script_job, so a
+		# child that calls report_stage_progress() is no longer a silent no-op.
+		from red_pill.core.progress import enable_stage_progress
+
+		enable_stage_progress(env, self.job_id)
 		# El elemento a tratar: JSON serializado + índice (para logs y selección).
 		env["RP_ELEMENT"] = json.dumps(element, ensure_ascii=False)
 		env["RP_ELEMENT_INDEX"] = str(index)

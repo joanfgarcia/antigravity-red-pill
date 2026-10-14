@@ -33,7 +33,7 @@ def distill_session(
 		stale.unlink()  # regeneración completa, jamás parcheo (§4.5.1)
 
 	import red_pill.config as cfg
-	from red_pill.jobs.drivers.base import report_stage_progress
+	from red_pill.core.progress import report_stage_progress
 
 	if max_chars is None:
 		max_chars = int(getattr(cfg, "MEMENTO_FRAGMENT_MAX_CHARS", 12000))

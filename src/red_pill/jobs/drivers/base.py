@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
+
+from red_pill.core.progress import atomic_write_text as _atomic_write_text
 
 # Vars de POLÍTICA: el bloque `env:` de una receta NO puede pisarlas — un payload no
 # debe poder ensanchar el confín de escritura/caché del harness (§7). Filtrmos por
@@ -171,77 +172,6 @@ def append_job_log(job_id: str, message: str) -> None:
 		path.parent.mkdir(parents=True, exist_ok=True)
 		with open(path, "a", encoding="utf-8") as log_file:
 			log_file.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
-	except Exception:
-		pass
-
-
-def job_progress_path(job_id: str) -> Path:
-	"""Fichero de control del job: avance FINO intra-etapa + detalle forense.
-
-	**Fuera de la DB a propósito** (RFC-JOBDAG-002 Fase 4): el proceso hijo lo
-	escribe sin concurrencia (nadie más lo toca mientras el job corre) y `job list`
-	lo lee SOLO para los PROCESSING. Persistente (junto al log) para conservar el
-	detalle en un FRUSTRATED.
-	"""
-	from red_pill.core.paths import get_state_dir
-
-	return get_state_dir() / "jobs" / f"{(job_id or 'unbound')[:8]}.progress.json"
-
-
-def _atomic_write_text(path: Path, text: str) -> None:
-	"""Write `text` to `path` atomically via a UNIQUE temp file.
-
-	`tempfile.mkstemp` uses O_EXCL with a non-predictable name, so a symlink can no
-	longer be pre-planted at the temp path (the deterministic `.tmp` follow-symlink
-	race reported in SHARD-PSEC-03). `os.replace` then swaps the name atomically.
-	"""
-	path.parent.mkdir(parents=True, exist_ok=True)
-	fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
-	try:
-		with os.fdopen(fd, "w", encoding="utf-8") as fh:
-			fh.write(text)
-		os.replace(tmp_name, path)
-	except Exception:
-		try:
-			os.unlink(tmp_name)
-		except OSError:
-			pass
-		raise
-
-
-def write_job_progress(job_id: str, data: Dict[str, Any]) -> None:
-	"""Escribe (atómico, best-effort) el fichero de progreso del job."""
-	try:
-		_atomic_write_text(job_progress_path(job_id), json.dumps(data, ensure_ascii=False))
-	except Exception:
-		pass
-
-
-def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
-	"""Lee el fichero de progreso del job (None si no existe o es ilegible)."""
-	try:
-		path = job_progress_path(job_id)
-		if path.is_file():
-			return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
-	except Exception:
-		pass
-	return None
-
-
-def report_stage_progress(**data: Any) -> None:
-	"""Publica avance FINO en `$RP_PROGRESS_FILE` (si la etapa habilitó el canal).
-
-	Lo llaman los scripts de etapas largas; **no-op** si `RP_PROGRESS_FILE` no está
-	(etapa sin `progress_file: true`). Best-effort atómico: la telemetría nunca rompe
-	el trabajo. Convención de campos para el render: `label`, `current`, `total`
-	(+ lo que quieras para forense).
-	"""
-	path = os.environ.get("RP_PROGRESS_FILE")
-	if not path:
-		return
-	try:
-		data.setdefault("updated_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
-		_atomic_write_text(Path(path), json.dumps(data, ensure_ascii=False))
 	except Exception:
 		pass
 

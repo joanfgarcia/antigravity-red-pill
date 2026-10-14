@@ -552,7 +552,7 @@ def annotate_session(
 	fase reutilizando el estado persistido de las anteriores (parcial o notas).
 	"""
 	import red_pill.config as cfg
-	from red_pill.jobs.drivers.base import report_stage_progress
+	from red_pill.core.progress import report_stage_progress
 	from red_pill.memento.render import compute_hash
 
 	# 2026-09-24: contrato propio de annotate (ver `_with_annotate_task`).

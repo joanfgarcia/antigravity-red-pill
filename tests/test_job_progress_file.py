@@ -7,7 +7,7 @@ los PROCESSING (como `stage_*`) y sirve de forense. Sin threading ni escrituras 
 from __future__ import annotations
 
 from red_pill import cli
-from red_pill.jobs.drivers.base import job_progress_path, read_job_progress, write_job_progress
+from red_pill.core.progress import job_progress_path, read_job_progress, write_job_progress
 from red_pill.jobs.drivers.dag import DagJobDriver
 
 
@@ -59,3 +59,17 @@ def test_dag_inyecta_rp_progress_file(tmp_path, monkeypatch):
 	d.step(payload, {})
 	env = record[0][1].get("env") or {}
 	assert "RP_PROGRESS_FILE" in env and env["RP_PROGRESS_FILE"].endswith(".progress.json")
+
+
+def test_script_y_element_inyectan_rp_progress_file(tmp_path):
+	"""SHARD-PA-01: el canal de progreso es uniforme en los 3 drivers (no no-op silencioso)."""
+	from red_pill.jobs.drivers.element import ElementJobDriver
+	from red_pill.jobs.drivers.script import ScriptJobDriver
+
+	s = ScriptJobDriver()
+	s.bind("job-script-1")
+	assert (s._build_env({}, cwd=str(tmp_path)).get("RP_PROGRESS_FILE") or "").endswith(".progress.json")
+
+	e = ElementJobDriver()
+	e.bind("job-element-1")
+	assert (e._build_env({}, cwd=str(tmp_path), element={"id": "x"}, index=0).get("RP_PROGRESS_FILE") or "").endswith(".progress.json")

@@ -973,7 +973,7 @@ def _print_measurements(task: dict) -> None:
 
 def _read_job_progress_safe(job_id: str) -> Optional[Dict[str, Any]]:
 	try:
-		from red_pill.jobs.drivers.base import read_job_progress
+		from red_pill.core.progress import read_job_progress
 
 		return read_job_progress(job_id)
 	except Exception:

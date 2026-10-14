@@ -397,6 +397,11 @@ class ScriptJobDriver(ResumableJobDriver):
 			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
 		except ValueError as e:
 			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
+		# Fine progress channel (RFC-JOBDAG-002): uniform with dag_job/element_job, so a
+		# child that calls report_stage_progress() is no longer a silent no-op.
+		from red_pill.core.progress import enable_stage_progress
+
+		enable_stage_progress(env, self.job_id)
 		# Exponer los códigos de salida declarativos al proceso hijo: el satélite
 		# puede salir con defer_exit_code ("ahora no puedo, reintenta") o
 		# pause_exit_code ("revisión del operador") sin hardcodear el número.
