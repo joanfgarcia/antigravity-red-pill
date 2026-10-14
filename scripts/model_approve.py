@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""model_approve.py — registra la PROCEDENCIA de un modelo aprobado (proceso).
+"""model_approve.py — records the PROVENANCE of an approved model (process).
 
-No mueve ni reescribe layout (eso rompía por los symlinks; ver docs/TECHNICAL/DECISION_LOG.md).
-Su única misión: tras **probar** un modelo, dejar constancia en un **manifiesto**
-de qué es, de dónde vino y con qué hashes — con la **revisión pinada**.
+Does not move or rewrite layout (that broke on the symlinks; see docs/TECHNICAL/DECISION_LOG.md).
+Its single job: after **testing** a model, leave a record in a **manifest** of what it
+is, where it came from and with which hashes — with the **pinned revision**.
 
-Manifiesto: `~/.local/share/red-pill/model_manifest.json` (o `$REDPILL_MODEL_MANIFEST`).
+Manifest: `~/.local/share/red-pill/model_manifest.json` (or `$REDPILL_MODEL_MANIFEST`).
 
-Modos:
-	# Repo HF (fija el commit + sha256/lfs.oid de cada fichero, desde la metadata de HF)
-	model_approve.py --repo Tongyi-MAI/Z-Image-Turbo [--revision main] [--note "probado"]
+Modes:
+	# HF repo (pins the commit + sha256/lfs.oid of each file, from HF metadata)
+	model_approve.py --repo Tongyi-MAI/Z-Image-Turbo [--revision main] [--note "tested"]
 
-	# Modelo custom / composición multi-repo (hashea los ficheros locales)
+	# Custom model / multi-repo composition (hashes the local files)
 	model_approve.py --name qwen-image-2.1 --file a.gguf --file b.gguf [:role=path ...]
 
-	model_approve.py --list            # ver lo registrado
+	model_approve.py --list            # show what is registered
 """
 
 from __future__ import annotations
@@ -31,12 +31,13 @@ MANIFEST_VERSION = 1
 
 
 def manifest_path(explicit: str | None = None) -> Path:
+	"""Resolve the manifest path: explicit arg → $REDPILL_MODEL_MANIFEST → default."""
 	if explicit:
 		return Path(explicit).expanduser()
 	env = os.environ.get("REDPILL_MODEL_MANIFEST")
 	if env:
 		return Path(env).expanduser()
-	# Ruta por defecto vía el helper compartido (sin literales XDG/home — §7).
+	# Default path via the shared helper (no XDG/home literals — §7).
 	import sys
 
 	sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -46,6 +47,7 @@ def manifest_path(explicit: str | None = None) -> Path:
 
 
 def load_manifest(path: Path) -> dict:
+	"""Load the manifest, returning an empty skeleton if it is absent or corrupt."""
 	if not path.is_file():
 		return {"version": MANIFEST_VERSION, "models": {}}
 	try:
@@ -58,14 +60,15 @@ def load_manifest(path: Path) -> dict:
 
 
 def save_manifest(path: Path, data: dict) -> None:
+	"""Write the manifest atomically (temp file + replace)."""
 	path.parent.mkdir(parents=True, exist_ok=True)
 	tmp = path.with_suffix(path.suffix + ".tmp")
 	tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-	tmp.replace(path)  # escritura atómica
+	tmp.replace(path)  # atomic write
 
 
 def record_model(data: dict, model_id: str, entry: dict) -> dict:
-	"""Inserta/actualiza la entrada de `model_id` en el manifiesto (devuelve data)."""
+	"""Insert/update the entry for `model_id` in the manifest (returns data)."""
 	data.setdefault("models", {})[model_id] = entry
 	return data
 
@@ -79,7 +82,7 @@ def _sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def local_components(specs: list) -> dict:
-	"""`specs` = ["rol=ruta", "ruta", …] → {rol|basename: sha256}."""
+	"""`specs` = ["role=path", "path", …] → {role|basename: sha256}."""
 	out = {}
 	for spec in specs:
 		role, _, raw = spec.partition("=")
@@ -93,7 +96,7 @@ def local_components(specs: list) -> dict:
 
 
 def hf_components(repo: str, revision: str | None) -> tuple:
-	"""(commit_sha, {fichero: oid/sha256}, license_id) desde la metadata de HF. Requiere red."""
+	"""(commit_sha, {filename: oid/sha256}, license_id) from HF metadata. Requires network."""
 	try:
 		from huggingface_hub import HfApi
 	except Exception:
@@ -112,6 +115,7 @@ def hf_components(repo: str, revision: str | None) -> tuple:
 
 
 def main() -> int:
+	"""Parse args, build the provenance entry and persist it in the manifest."""
 	ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	ap.add_argument("--repo", help="repo HF (org/name)")
 	ap.add_argument("--revision", help="revisión a PINAR (def: la actual → se fija el commit resultante)")

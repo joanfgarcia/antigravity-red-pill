@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Etapa FUENTE del fan-out del pase Memento nocturno (delta).
+"""Source stage of the nocturnal Memento pass fan-out (delta).
 
-Lista las sesiones que el pase agéntico nocturno procesaría — EXACTAMENTE la
-misma selección que `memento_agentic.py` SIN `--target`:
+Lists the sessions the nightly agentic pass would process — EXACTLY the same
+selection as `memento_agentic.py` WITHOUT `--target`:
 
-	pending = pending_agentic(force=False)   # delta (no re-destilado)
-	orden   = stale primero                  # line refs muertos primero
-	tope    = MEMENTO_AGENTIC_NIGHT_LIMIT     # igual que el pase clásico
+	pending = pending_agentic(force=False)   # delta (no re-distill)
+	order   = stale first                    # dead line refs first
+	cap     = MEMENTO_AGENTIC_NIGHT_LIMIT     # same as the classic pass
 
-Emite `{"items": ["source:session_id", ...]}` en stdout (contrato de la fuente
-del fan-out por items del dag_job, RFC-JOBDAG-001 §4.6). Así CADA sesión es un
-step del DAG → el progreso del job avanza por sesión (RFC-JOBDAG-002) en vez de
-quedar clavado mientras un único comando recorre el bucle por dentro.
+Emits `{"items": ["source:session_id", ...]}` on stdout (the fan-out source
+contract of the dag_job item fan-out, RFC-JOBDAG-001 §4.6). This way EACH session
+is a DAG step → the job progress advances per session (RFC-JOBDAG-002) instead of
+staying stuck while a single command loops over it internally.
 
-NO es el `list_memento_pending.py` del re-destilado: aquel usa `force=True` y sin
-tope (reprocesa todo); este espeja el DELTA diario.
+NOT the re-distill `list_memento_pending.py`: that one uses `force=True` and no
+cap (reprocesses everything); this one mirrors the daily DELTA.
 """
 
 import argparse
@@ -23,12 +23,13 @@ import sys
 
 
 def select_targets(pending, limit: int) -> list:
-	"""Selección espejo de `memento_agentic.py` sin --target: stale primero + tope."""
+	"""Selection mirroring `memento_agentic.py` without --target: stale first + cap."""
 	ordered = sorted(pending, key=lambda t: t[2] != "stale")
 	return [f"{src}:{sid}" for src, sid, _reason in ordered[:limit]]
 
 
 def main() -> int:
+	"""Emit the fan-out source item list as JSON on stdout."""
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--limit", type=int, default=None, help="Máx. sesiones (def: MEMENTO_AGENTIC_NIGHT_LIMIT)")
 	args = parser.parse_args()

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""storage_check.py — detecta DUPLICADOS REALES de modelos en el disco.
+"""storage_check.py — finds REAL model duplicates on disk.
 
-Regla del proyecto: *un componente, un fichero* (docs/CORE/MODEL_STORAGE.md).
-Esta herramienta lo verifica agrupando por tamaño, confirmando por hash (sha256)
-e **ignorando hardlinks** (mismo inodo = un solo dato en disco, no es duplicado).
+Project rule: *one component, one file* (docs/CORE/MODEL_STORAGE.md).
+This tool verifies it by grouping by size, confirming by hash (sha256)
+and **ignoring hardlinks** (same inode = a single copy on disk, not a duplicate).
 
-Reporta:
-	- **duplicados reales** (mismo contenido, inodos distintos) + bytes recuperables;
-	- **hardlinks** (mismo inodo) → informativo (no ocupan de más);
-	- restos **`.incomplete`** (descargas abortadas de HF) → basura;
-	- **modelos en >1 caché HF** (mismo repo en sitios distintos) → doble copia.
+Reports:
+	- **real duplicates** (same content, distinct inodes) + reclaimable bytes;
+	- **hardlinks** (same inode) → informational (they take no extra space);
+	- leftover **`.incomplete`** (aborted HF downloads) → junk;
+	- **models in >1 HF cache** (same repo in different places) → double copy.
 
-Uso:
+Usage:
 	storage_check.py [--roots R [R ...]] [--min-size MB] [--json]
-Defaults de roots: ~/.local/share/red-pill/models, ~/opt/*-forge, ~/.cache/huggingface
+Default roots: ~/.local/share/red-pill/models, ~/opt/*-forge, ~/.cache/huggingface
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def _default_roots() -> list:
 	roots = [Path(_data_dir()) / "models"]
 	if opt.is_dir():
 		roots += [d for d in opt.glob("*-forge") if d.is_dir()]
-	# modelos custom (no-HF / composiciones multi-repo)
+	# custom models (non-HF / multi-repo compositions)
 	roots.append(opt / "red-pill-custom-image-models")
 	roots.append(Path(default_hf_cache()))
 	return [r for r in roots if r.exists()]
@@ -53,9 +53,9 @@ def _sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def _scan(roots: list, min_size: int):
-	"""Devuelve (por_tamano {size: [(path, inode)]}, incompletes []).
+	"""Return (by_size {size: [(path, inode)]}, incompletes []).
 
-	Ignora symlinks (en HF los snapshots son punteros; el dato real es el blob).
+	Ignores symlinks (in HF the snapshots are pointers; the real data is the blob).
 	"""
 	by_size: dict = defaultdict(list)
 	incompletes: list = []
@@ -78,11 +78,11 @@ def _scan(roots: list, min_size: int):
 
 
 def _duplicates(by_size: dict):
-	"""Duplicados reales (mismo hash, INODOS distintos) + grupos hardlink.
+	"""Real duplicates (same hash, DISTINCT inodes) + hardlink groups.
 
-	Dentro de un grupo de contenido, las rutas que comparten inodo son hardlinks
-	(un solo dato) → se colapsan a una; solo cuenta como duplicado real si hay
-	**más de un inodo**.
+	Within a content group, paths sharing an inode are hardlinks (a single copy)
+	→ collapsed to one; it only counts as a real duplicate if there is
+	**more than one inode**.
 	"""
 	real, hardlinks = [], []
 	for size, entries in by_size.items():
@@ -101,16 +101,16 @@ def _duplicates(by_size: dict):
 			for p, ino in group:
 				inode_paths[ino].append(str(p))
 			if len(inode_paths) > 1:
-				# un representante DETERMINISTA por inodo (ordenado)
+				# a DETERMINISTIC representative per inode (sorted)
 				real.append({"size": size, "sha256": digest, "paths": sorted(sorted(v)[0] for v in inode_paths.values())})
 			else:
-				# todas las rutas comparten inodo → hardlink (no ocupan de más)
+				# all paths share an inode → hardlink (takes no extra space)
 				hardlinks.append({"size": size, "paths": sorted(p for p, _ in group)})
 	return real, hardlinks
 
 
 def _hf_models_in_multiple_caches(roots: list) -> dict:
-	"""Repos HF (models--org--name) presentes en más de un root."""
+	"""HF repos (models--org--name) present in more than one root."""
 	where: dict = defaultdict(set)
 	for root in roots:
 		for m in Path(root).rglob("models--*"):
@@ -120,6 +120,7 @@ def _hf_models_in_multiple_caches(roots: list) -> dict:
 
 
 def main() -> int:
+	"""Scan the roots and report real duplicates, hardlinks, incompletes and multi-cache models."""
 	ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	ap.add_argument("--roots", nargs="+", help="directorios a escanear (def: LLM + forges + ~/.cache)")
 	ap.add_argument("--min-size", type=int, default=50, help="tamaño mínimo en MB (def 50)")
