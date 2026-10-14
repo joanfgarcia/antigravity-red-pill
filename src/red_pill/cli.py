@@ -1001,30 +1001,30 @@ def _progress_display(task: dict) -> dict:
 
 
 def _format_progress(progress) -> str:
-	"""Progreso honesto: porcentaje solo cuando hay total, fase cuando se declara.
+	"""Progreso honesto: contador solo cuando lo hay; fase/item cuando se declara.
 
-	Un trabajo sin total conocido muestra su contador, no un porcentaje inventado.
+	El avance **fino** del fichero de control (Fase 4) llega como `stage_*` y debe
+	verse AUNQUE la DB no tenga `current` todavía (etapa larga en su primer step).
 	"""
 	if not isinstance(progress, dict) or not progress:
 		return "-"
 
-	if progress.get("current") is None:
-		current = progress.get("current_step")
-		total = progress.get("total_steps")
-	else:
-		current, total = progress.get("current"), progress.get("total")
-
+	current = progress.get("current")
+	total = progress.get("total")
 	if current is None:
-		return "-"
+		current, total = progress.get("current_step"), progress.get("total_steps")
 
-	text = f"{current}/{total}" if total else str(current)
-	if progress.get("percent") is not None:
-		text += f" ({progress['percent']}%)"
+	text = ""
+	if current is not None:
+		text = f"{current}/{total}" if total else str(current)
+		if progress.get("percent") is not None:
+			text += f" ({progress['percent']}%)"
 	if progress.get("stage_current") is not None:
-		text += f" · {progress.get('stage_label', 'fase')} {progress['stage_current']}/{progress.get('stage_total')}"
+		segment = f"{progress.get('stage_label', 'fase')} {progress['stage_current']}/{progress.get('stage_total')}"
+		text = f"{text} · {segment}" if text else segment
 	if progress.get("eta_seconds"):
 		text += f" ~{round(progress['eta_seconds'] / 60)}m"
-	return text
+	return text or "-"
 
 
 def _kill_job(queue, task: dict, discard: bool = False) -> None:

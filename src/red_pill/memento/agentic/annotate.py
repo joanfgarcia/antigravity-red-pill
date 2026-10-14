@@ -552,6 +552,7 @@ def annotate_session(
 	fase reutilizando el estado persistido de las anteriores (parcial o notas).
 	"""
 	import red_pill.config as cfg
+	from red_pill.jobs.drivers.base import report_stage_progress
 	from red_pill.memento.render import compute_hash
 
 	# 2026-09-24: contrato propio de annotate (ver `_with_annotate_task`).
@@ -594,7 +595,8 @@ def annotate_session(
 		keys = [unit.key for unit in units]
 		fresh_splits: Dict[str, Any] = {}
 		reused = extracted = 0
-		for unit in units:
+		for i_unit, unit in enumerate(units, 1):
+			report_stage_progress(label="extract", current=i_unit, total=len(units), session=session_id)
 			key, nnn, ref, content = unit.key, unit.nnn, unit.ref, unit.content
 			chash = compute_hash(content)
 			saved = partial["splits"].get(key)

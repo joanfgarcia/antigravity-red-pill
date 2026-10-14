@@ -186,6 +186,28 @@ def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
 	return None
 
 
+def report_stage_progress(**data: Any) -> None:
+	"""Publica avance FINO en `$RP_PROGRESS_FILE` (si la etapa habilitó el canal).
+
+	Lo llaman los scripts de etapas largas; **no-op** si `RP_PROGRESS_FILE` no está
+	(etapa sin `progress_file: true`). Best-effort atómico: la telemetría nunca rompe
+	el trabajo. Convención de campos para el render: `label`, `current`, `total`
+	(+ lo que quieras para forense).
+	"""
+	path = os.environ.get("RP_PROGRESS_FILE")
+	if not path:
+		return
+	try:
+		p = Path(path)
+		p.parent.mkdir(parents=True, exist_ok=True)
+		data.setdefault("updated_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
+		tmp = p.with_suffix(p.suffix + ".tmp")
+		tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+		tmp.replace(p)
+	except Exception:
+		pass
+
+
 def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> Dict[str, str]:
 	"""Traduce el bloque `llm:` de un recipe a env RP_LLM_* para el proceso hijo.
 
