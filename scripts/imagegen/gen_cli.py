@@ -84,7 +84,7 @@ def _snap(v: int, mult: int) -> int:
 
 
 def _default_out() -> str:
-	"""Destino por defecto: el STAGING (§8.2) — resuelto por `_config_common` (fuente única)."""
+	"""Destino por defecto: el STAGING (CONVENTIONS §7) — resuelto por `_config_common` (fuente única)."""
 	from _config_common import console_out_dir
 
 	return console_out_dir()

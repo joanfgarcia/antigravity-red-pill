@@ -285,7 +285,7 @@ def media_console_env() -> dict:
 
 
 def console_out_dir() -> str:
-	"""Destino de consola para la generación media: el **STAGING** (§8.2), nunca el repo.
+	"""Destino de consola para la generación media: el **STAGING** (CONVENTIONS §7), nunca el repo.
 
 	`$OUTDIR` > `$RP_MEDIA_STAGING` > `$RP_TMP_DIR/red-pill/media/staging` (o `~/tmp/...`).
 	Espejo de `core.media_staging.staging_root()` (+ subdir `cli`), verificado por test."""

@@ -68,7 +68,7 @@ def _console_out() -> Path:
 
 
 def _default_out() -> Path:
-	"""Destino por defecto: el STAGING (§8.2) — resuelto por `_config_common` (fuente única)."""
+	"""Destino por defecto: el STAGING (CONVENTIONS §7) — resuelto por `_config_common` (fuente única)."""
 	return _console_out()
 
 
@@ -80,7 +80,7 @@ def _resolve_element_out(el: dict, args_out: str | None) -> str | None:
 
 
 def _confine_out(path: Path) -> Path:
-	"""Confina el `out` que llega del payload (RP_ELEMENT, §7/§8.2): no debe escapar del
+	"""Confina el `out` que llega del payload (RP_ELEMENT, CONVENTIONS §7): no debe escapar del
 	staging. `$OUTDIR` (override explícito del operador) exime. La raíz NO se toma de una
 	fuente que el payload pueda ensanchar (el driver filtra `RP_MEDIA_STAGING`/`OUTDIR`)."""
 	if os.environ.get("OUTDIR"):

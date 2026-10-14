@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, cast
 
 # Vars RESERVADAS de política: el bloque `env:` de una receta NO puede pisarlas —
-# un payload no debe poder ensanchar el confín de escritura del harness (§7/§8.2)
+# un payload no debe poder ensanchar el confín de escritura del harness (CONVENTIONS §7)
 # fijando p.ej. `RP_MEDIA_STAGING=/` o `OUTDIR=/etc`. Las fija el runner/host.
 RESERVED_JOB_ENV = frozenset(
 	{
