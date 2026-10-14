@@ -56,7 +56,7 @@ def main() -> int:
 		res = runner.run(probe)
 	finally:
 		runner.close()
-	out = Path(os.path.expanduser("~/Documents/IA/Aleth_Core/notes/2026-10-08-benchset/reason_probes.jsonl"))
+	out = Path(os.environ.get("RP_TMP_DIR") or os.path.expanduser("~/tmp")) / "red-pill" / "benchset" / "reason_probes.jsonl"
 	out.parent.mkdir(parents=True, exist_ok=True)
 	with out.open("a", encoding="utf-8") as f:
 		f.write(

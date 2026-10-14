@@ -12,7 +12,7 @@ priority: 3
 title: AudioGen A/B — voz+música+SFX (element_job, fail-soft)
 mission_id: audiogen-ab
 elements_command: ["sh", "-c", '"$AUDIO_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/audio/bench_audio.py" --list-models']
-step_command: ["sh", "-c", 'OUT="$RP_MEDIA_STAGING/audiogen-ab"; mkdir -p "$OUT"; sh "$IA_DIR/scripts/audio/run_element.sh"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+step_command: ["sh", "-c", 'export AUDIOGEN_OUT="$RP_MEDIA_STAGING/audiogen-ab"; OUT="$AUDIOGEN_OUT"; mkdir -p "$OUT"; sh "$IA_DIR/scripts/audio/run_element.sh"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
 skip_exit_code: 79
 progress:
   mode: single
