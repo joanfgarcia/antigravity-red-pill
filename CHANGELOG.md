@@ -1342,7 +1342,7 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
 - **[FIX] `configs/jobs/memento_reseed.yaml`**: actualizado al cierre de la
   ronda granite (719 sesiones). Ejecutada: backup → drop → ascenso → `work 4992`
   / `social 4349` (~53/47, category_score del frontmatter). Auditoría de calidad
-  y RFC de mejoras en `Aleth_Core/planner/design/memento_promotion/`.
+  y RFC de mejoras aplicadas al pipeline de promoción de memento.
 
 ### 🔗 JOB-001 — trazabilidad de jobs (parent, progreso, doble salida)
 
