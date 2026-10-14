@@ -37,7 +37,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 BENCH_JSON = Path(__file__).resolve().parent / "benchgenres.json"
 
-# ── Registro de modelos: DATOS, no código (CONVENTIONS §10.8.2) ──────────────
+# Registro de modelos: DATOS, no código (CONVENTIONS §10.8.2)
 # El harness NO hardcodea modelos: los traduce desde el elenco de máquina
 # (media_profiles.yaml, la MISMA fuente que consume el router). Añadir un modelo
 # = añadir su entrada al YAML (backend + pipeline/weights/sampler), sin tocar
@@ -241,7 +241,7 @@ def _diffusers_pipe_class(name: str):
 	return cls
 
 
-# ── Carga per-backend ───────────────────────────────────────────────────────
+# Carga per-backend
 def _load_diffusers_4bit(cls, hf_id: str):
 	"""Carga 4-bit probando las dos APIs de diffusers (varían por pipeline).
 
@@ -397,28 +397,28 @@ def _load_bonsai(cfg: dict):
 	return pipe
 
 
-# ── Generación ──────────────────────────────────────────────────────────────
-def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
+# Generación
+def _gen_sd_cpp_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
+	return _sd_cpp_generate(pipe, prompt, seed, size, size)
+
+
+def _gen_diffusers_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
 	import torch
+
+	gen = torch.Generator(device="cuda").manual_seed(seed)
+	return pipe(
+		prompt=prompt,
+		height=size,
+		width=size,
+		num_inference_steps=cfg["steps"],
+		guidance_scale=cfg["guidance"],
+		generator=gen,
+	).images[0]
+
+
+def _gen_bonsai_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
 	from PIL import Image
 
-	cfg = MODELS[model_id]
-	if kind == "sd_cpp":
-		return _sd_cpp_generate(pipe, prompt, seed, size, size)
-
-	if kind == "diffusers":
-		gen = torch.Generator(device="cuda").manual_seed(seed)
-		img = pipe(
-			prompt=prompt,
-			height=size,
-			width=size,
-			num_inference_steps=cfg["steps"],
-			guidance_scale=cfg["guidance"],
-			generator=gen,
-		).images[0]
-		return img
-
-	# bonsai (backend_gpu): devuelve PNG bytes
 	buf = pipe.generate_png(
 		prompt=prompt,
 		seed=seed,
@@ -428,6 +428,22 @@ def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int)
 		guidance=cfg["guidance"],
 	)
 	return Image.open(io.BytesIO(buf))
+
+
+# Registro kind→generador del benchmark (data over branches, AD-052).
+_GEN_BENCH_DISPATCH = {
+	"sd_cpp": _gen_sd_cpp_bench,
+	"diffusers": _gen_diffusers_bench,
+	"bonsai": _gen_bonsai_bench,
+}
+
+
+def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
+	cfg = MODELS[model_id]
+	fn = _GEN_BENCH_DISPATCH.get(kind)
+	if fn is None:
+		raise RuntimeError(f"kind desconocido: {kind}")
+	return fn(cfg, pipe, prompt, seed, size)
 
 
 def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Path) -> int:
@@ -490,7 +506,7 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 	return 0 if (n_ok + n_skip) > 0 else 1
 
 
-# ── CLI ─────────────────────────────────────────────────────────────────────
+# CLI
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Banco A/B de generación de imagen local")
 	ap.add_argument("--list-models", action="store_true", help="imprime el array JSON de elementos (para element_job)")

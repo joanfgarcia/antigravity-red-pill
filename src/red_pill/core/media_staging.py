@@ -1,4 +1,4 @@
-"""media_staging — staging de generación y promoción a destino definitivo (RFC-HARNESS-004 §8.2).
+"""media_staging — staging de generación y promoción a destino definitivo (docs/CORE/MEDIA_MODELS.md).
 
 La generación media va a un **staging** temporal (no al desk ni a un destino
 final); cuando el Operador/QA aprueba, `promote()` **mueve/copia el artefacto
@@ -47,11 +47,11 @@ def order_dir(title: str, create: bool = False) -> Path:
 
 
 def list_artifacts(title: str) -> List[Path]:
-	"""Artefactos media presentes en el staging de un encargo."""
+	"""Artefactos media presentes en el staging de un encargo (ignora symlinks)."""
 	origin = order_dir(title)
 	if not origin.is_dir():
 		return []
-	return sorted(p for p in origin.iterdir() if p.is_file() and p.suffix.lower() in ARTIFACT_SUFFIXES)
+	return sorted(p for p in origin.iterdir() if p.is_file() and not p.is_symlink() and p.suffix.lower() in ARTIFACT_SUFFIXES)
 
 
 def promote(title: str, to: str, name: Optional[str] = None, move: bool = False) -> Path:
@@ -68,6 +68,8 @@ def promote(title: str, to: str, name: Optional[str] = None, move: bool = False)
 	artifacts = list_artifacts(title)
 	if name:
 		picked = origin / _safe_component(name, "name")
+		if picked.is_symlink():
+			raise ValueError(f"artefacto '{name}' es un symlink (no permitido): {picked}")
 		if not picked.is_file():
 			raise FileNotFoundError(f"artefacto '{name}' no existe en {origin}")
 	elif len(artifacts) == 1:
@@ -76,6 +78,10 @@ def promote(title: str, to: str, name: Optional[str] = None, move: bool = False)
 		raise FileNotFoundError(f"sin artefactos media en {origin}")
 	else:
 		raise ValueError(f"hay {len(artifacts)} artefactos en {origin}; usa --name para elegir uno ({', '.join(a.name for a in artifacts)})")
+
+	# Confín: el artefacto debe resolver DENTRO del staging (no seguir symlinks fuera).
+	if not picked.resolve().is_relative_to(origin.resolve()):
+		raise ValueError(f"artefacto fuera del staging (no permitido): {picked}")
 
 	dest_dir = Path(os.path.expanduser(to))
 	dest_dir.mkdir(parents=True, exist_ok=True)

@@ -43,7 +43,7 @@ def _bench():
 BENCH = _bench()
 MODELS = BENCH.MODELS
 
-# El ajuste de múltiplos por modelo lo resuelve el ROUTER (RFC-HARNESS-004 §7) en
+# El ajuste de múltiplos por modelo lo resuelve el ROUTER (docs/CORE/MEDIA_MODELS.md) en
 # el lado red-pill y llega por env RP_MEDIA_WIDTH/HEIGHT ya adaptado. Aquí queda un
 # `--snap`/`RP_IMAGE_SNAP` OPCIONAL (default 1 = sin ajuste) para uso standalone.
 SNAP = int(os.environ.get("RP_IMAGE_SNAP", "1"))
@@ -61,17 +61,28 @@ def _safe_stem(value: str, what: str) -> str:
 	return v
 
 
+def _console_out() -> Path:
+	sys.path.insert(0, str(HERE.parent))
+	from _config_common import console_out_dir
+
+	return Path(console_out_dir())
+
+
 def _default_out() -> Path:
-	"""Destino por defecto: el STAGING (nunca el repo — RFC-HARNESS-004 §8.2)."""
-	env_out = os.environ.get("OUTDIR")
-	if env_out:
-		return Path(env_out)
-	staging = os.environ.get("RP_MEDIA_STAGING")
-	if not staging and os.environ.get("RP_TMP_DIR"):
-		staging = str(Path(os.environ["RP_TMP_DIR"]) / "red-pill" / "media" / "staging")
-	if not staging:
-		raise SystemExit("[error] sin OUTDIR/RP_MEDIA_STAGING: exporta el staging o pasa --out")
-	return Path(staging) / "cli"
+	"""Destino por defecto: el STAGING (§8.2) — resuelto por `_config_common` (fuente única)."""
+	return _console_out()
+
+
+def _confine_out(path: Path) -> Path:
+	"""Confina el `out` que llega del payload (RP_ELEMENT, §8.2): no debe escapar del
+	staging. `$OUTDIR` (override explícito del operador) exime."""
+	if os.environ.get("OUTDIR"):
+		return Path(path)
+	root = _console_out().parent
+	resolved = Path(path).expanduser().resolve()
+	if not resolved.is_relative_to(root.expanduser().resolve()):
+		raise SystemExit(f"[error] 'out' fuera del staging: {resolved} ∉ {root} (§8.2)")
+	return resolved
 
 
 def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
@@ -221,7 +232,6 @@ def main() -> int:
 	ap.add_argument("--name", help="nombre EXACTO del PNG (sin extensión); anula el patrón modelo__tag__seed")
 	ap.add_argument("--snap", type=int, default=None, help="múltiplo al que ajustar ancho/alto (def: 32; env RP_IMAGE_SNAP)")
 	args = ap.parse_args()
-	args.out = args.out or str(_default_out())
 
 	global SNAP
 	if args.snap:
@@ -255,12 +265,15 @@ def main() -> int:
 			print(f"RP_ELEMENT inválido ({e}): {raw!r}", flush=True)
 			return 1
 		el.setdefault("out", args.out)
+		if el.get("out"):
+			el["out"] = str(_confine_out(Path(el["out"])))
 		return _run_element(el)
 
 	prompt = _read_prompt(args)
 	if not prompt:
 		print("falta prompt (--prompt o --prompt-file)", flush=True)
 		return 1
+	out = args.out or str(_default_out())
 	rc = 0
 	for m in [x.strip() for x in (args.models or ",".join(MODELS)).split(",") if x.strip()]:
 		rc |= _run_element(
@@ -270,7 +283,7 @@ def main() -> int:
 				"seed": args.seed,
 				"width": args.width,
 				"height": args.height,
-				"out": args.out,
+				"out": out,
 				"tag": args.tag,
 				"name": args.name,
 			}

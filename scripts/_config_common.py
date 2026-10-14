@@ -263,8 +263,8 @@ def default_hf_cache() -> str:
 def media_console_env() -> dict:
 	"""Env mínimo para el launcher de consola de media (`gen_cli.py`), que corre
 	standalone (venv del forge, sin `red_pill`). Resuelve las rutas canónicas SIN
-	literales en el consumidor (§10.8.1): el default vive aquí / en el `.env`, no en
-	el script. Lee el `.env` del operador y aplica los defaults de forja si faltan."""
+	literales en el consumidor (§10.8.1). Es un **espejo verificado** de
+	`core/paths.py` (paridad por test): el default del `.env`/forja, no una 2ª verdad."""
 	cfg = config_dir()
 	vals = parse_env_file(os.path.join(cfg, ".env"))
 	home = os.path.expanduser("~")
@@ -272,11 +272,28 @@ def media_console_env() -> dict:
 	def pick(key, default):
 		return os.environ.get(key) or vals.get(key) or default
 
+	tmp = os.path.expanduser(pick("RP_TMP_DIR", os.path.join(home, "tmp")))
+	staging = pick("RP_MEDIA_STAGING", os.path.join(tmp, "red-pill", "media", "staging"))
 	return {
 		"IMAGE_FORGE_HOME": os.path.expanduser(pick("IMAGE_FORGE_HOME", os.path.join(home, "opt", "image-forge"))),
 		"REDPILL_MEDIA_PROFILES": pick("REDPILL_MEDIA_PROFILES", os.path.join(cfg, "media_profiles.yaml")),
 		"REDPILL_RUNTIMES": pick("REDPILL_RUNTIMES", os.path.join(cfg, "runtimes.yaml")),
 		"REDPILL_IMAGE_MODELS_DIR": os.path.expanduser(pick("REDPILL_IMAGE_MODELS_DIR", os.path.join(home, "opt", "red-pill-custom-image-models"))),
-		"RP_MEDIA_STAGING": pick("RP_MEDIA_STAGING", ""),
-		"RP_TMP_DIR": pick("RP_TMP_DIR", ""),
+		"RP_TMP_DIR": tmp,
+		"RP_MEDIA_STAGING": staging,
 	}
+
+
+def console_out_dir() -> str:
+	"""Destino de consola para la generación media: el **STAGING** (§8.2), nunca el repo.
+
+	`$OUTDIR` > `$RP_MEDIA_STAGING` > `$RP_TMP_DIR/red-pill/media/staging` (o `~/tmp/...`).
+	Espejo de `core.media_staging.staging_root()` (+ subdir `cli`), verificado por test."""
+	out = os.environ.get("OUTDIR")
+	if out:
+		return out
+	staging = os.environ.get("RP_MEDIA_STAGING")
+	if not staging:
+		tmp = os.environ.get("RP_TMP_DIR") or os.path.join(os.path.expanduser("~"), "tmp")
+		staging = os.path.join(tmp, "red-pill", "media", "staging")
+	return os.path.join(staging, "cli")

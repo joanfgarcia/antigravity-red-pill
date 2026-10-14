@@ -1,4 +1,4 @@
-"""TST-MEDIA-003: staging y promoción (RFC-HARNESS-004 §8.2, F4)."""
+"""TST-MEDIA-003: staging y promoción (docs/CORE/MEDIA_MODELS.md, F4)."""
 
 from __future__ import annotations
 

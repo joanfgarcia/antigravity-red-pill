@@ -72,24 +72,22 @@ def _resolve_model(data: dict, model: str | None, role: str | None) -> str:
 	raise SystemExit(f"[error] rol '{role}' sin modelos utilizables en media_roles")
 
 
+def _ensure_image(model: str) -> str:
+	"""El launcher SÓLO genera imagen: un modelo de audio del elenco falla limpio."""
+	if model not in B.MODELS:
+		raise SystemExit(f"[error] modelo '{model}' no es de imagen (el launcher sólo genera imagen)")
+	return model
+
+
 def _snap(v: int, mult: int) -> int:
 	return max(mult, round(v / mult) * mult) if mult > 1 else v
 
 
 def _default_out() -> str:
-	"""Destino por defecto: el STAGING (nunca el repo/cwd — RFC-HARNESS-004 §8.2).
+	"""Destino por defecto: el STAGING (§8.2) — resuelto por `_config_common` (fuente única)."""
+	from _config_common import console_out_dir
 
-	`$OUTDIR` > `$RP_MEDIA_STAGING/cli`. Sin staging configurado, falla limpio.
-	"""
-	env_out = os.environ.get("OUTDIR")
-	if env_out:
-		return env_out
-	staging = os.environ.get("RP_MEDIA_STAGING")
-	if not staging and os.environ.get("RP_TMP_DIR"):
-		staging = str(Path(os.environ["RP_TMP_DIR"]) / "red-pill" / "media" / "staging")
-	if not staging:
-		raise SystemExit("[error] sin OUTDIR/RP_MEDIA_STAGING: exporta el staging o pasa --out (RFC-HARNESS-004 §8.2)")
-	return str(Path(staging) / "cli")
+	return console_out_dir()
 
 
 def _unload_vram(base_url: str) -> None:
@@ -148,7 +146,7 @@ def main() -> int:
 	args.out = args.out or _default_out()
 
 	data = _profiles()
-	model = _resolve_model(data, args.model, args.role)
+	model = _ensure_image(_resolve_model(data, args.model, args.role))
 	prof = (data.get("media_profiles") or {}).get(model) or {}
 	mult = int((prof.get("constraints") or {}).get("dim_multiple") or 1)
 	w, h = _snap(args.width, mult), _snap(args.height, mult)
