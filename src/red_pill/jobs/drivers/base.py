@@ -14,14 +14,19 @@ historial del propio job y duplicadas por intento.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import shutil
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from red_pill.core.progress import atomic_write_text as _atomic_write_text
+
+logger = logging.getLogger(__name__)
 
 # Vars de POLÍTICA: el bloque `env:` de una receta NO puede pisarlas — un payload no
 # debe poder ensanchar el confín de escritura/caché del harness (§7). Filtrmos por
@@ -333,6 +338,90 @@ class ResumableJobDriver(ABC):
 	def short_id(self) -> str:
 		"""Id corto — nombra el scope de systemd y el fichero de log del job."""
 		return (self.job_id or "unbound")[:8]
+
+	# ── Mecánica común de subproceso (script/element/dag comparten esto) ──────
+	# Prefijo de log por driver (sobreescribible). El MECANISMO vive AQUÍ, no en cada
+	# driver: un cambio en el scope systemd o en el detector de timeout no se duplica.
+	_LOG_TAG: ClassVar[str] = "[JOB]"
+
+	@staticmethod
+	def _has_systemd() -> bool:
+		return shutil.which("systemd-run") is not None
+
+	def _log_path(self) -> Path:
+		return job_log_path(self.job_id)
+
+	def _log_tail(self, lines: int = 25) -> str:
+		"""Cola del log — el error real del hijo, no el banner del envoltorio."""
+		try:
+			content = self._log_path().read_text(encoding="utf-8", errors="replace").strip().splitlines()
+			return "\n".join(content[-lines:]) if content else "(sin salida)"
+		except Exception:
+			return "(log no disponible)"
+
+	def _clear_stale_scope(self) -> None:
+		"""Retira un scope homónimo huérfano de un crash previo (el flock impide concurrencia real)."""
+		unit = f"redpill-job-{self.short_id}.scope"
+		try:
+			active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=5).returncode == 0
+			if active:
+				logger.warning(f"{self._LOG_TAG} Retirando scope huérfano {unit}.")
+				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
+			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
+		except Exception:
+			pass
+
+	def _looks_like_timeout(self, elapsed: float, returncode: int) -> bool:
+		"""¿Lo abatió la cota o falló por sus propios medios?
+
+		Detección por tiempo transcurrido (robusta ante el código de salida que
+		propague systemd) y por los códigos canónicos de muerte por señal.
+		"""
+		if not self.step_timeout_s:
+			return False
+		if returncode in (124, 137, 143, -9, -15) and elapsed >= self.step_timeout_s * 0.9:
+			return True
+		return elapsed >= self.step_timeout_s
+
+	@staticmethod
+	def _llm_port() -> int:
+		"""Puerto del LLM local (fuente única: red_pill.core.llm_endpoint)."""
+		from red_pill.core.llm_endpoint import llm_port
+
+		return llm_port()
+
+	@staticmethod
+	def _llm_healthy() -> bool:
+		"""Health-check del LLM local: /health o /v1/models (mismo patrón que check_sip)."""
+		import urllib.error
+		import urllib.request
+
+		from red_pill.core.llm_endpoint import llm_base_url
+
+		for path in ("/health", "/v1/models"):
+			try:
+				resp = urllib.request.urlopen(f"{llm_base_url()}{path}", timeout=3)
+				if resp.status == 200:
+					return True
+			except urllib.error.HTTPError as he:
+				if he.code != 404:
+					continue  # 404 en /health → probar /v1/models
+			except Exception:
+				continue
+		return False
+
+	def _request_vram_unload(self, base_url: str) -> None:
+		"""POST /v1/unload al proxy dual-bind (paridad script/element/dag)."""
+		import urllib.request
+
+		try:
+			request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/unload", method="POST")
+			with urllib.request.urlopen(request, timeout=5) as response:
+				if response.status == 200:
+					logger.info(f"{self._LOG_TAG} VRAM liberada en el proxy dual-bind.")
+					time.sleep(2.0)
+		except Exception as e:  # noqa: BLE001 — proxy inalcanzable no debe romper el preflight
+			logger.debug(f"{self._LOG_TAG} Proxy dual-bind inalcanzable para unload: {e}")
 
 	@classmethod
 	def validate(cls, payload: Dict[str, Any]) -> None:

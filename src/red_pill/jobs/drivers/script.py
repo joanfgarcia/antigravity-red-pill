@@ -14,7 +14,6 @@ import json
 import logging
 import os
 import shlex
-import shutil
 import subprocess
 import threading
 import time
@@ -29,7 +28,6 @@ from red_pill.jobs.drivers.base import (
 	StepOutcome,
 	append_job_log,
 	human_duration,
-	job_log_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +110,7 @@ class ScriptJobDriver(ResumableJobDriver):
 	source = "script_job"
 	min_vram_mb = 0  # El preflight declarativo decide; el gate genérico del runner no aplica aquí
 	checkpoint_poll_seconds = 1.0  # Sondeo del vigilante de checkpoints (un stat() por segundo)
+	_LOG_TAG = "[SCRIPT JOB]"
 
 	# ── Validación en el submit ────────────────────────────────────────────
 
@@ -203,46 +202,6 @@ class ScriptJobDriver(ResumableJobDriver):
 		"""Restaura servicios en TODAS las salidas (incluido el deferral nocturno)."""
 		for service in (payload.get("teardown") or {}).get("restore_services") or []:
 			self._systemctl("start", service)
-
-	@staticmethod
-	def _llm_port() -> Optional[int]:
-		"""Puerto del LLM local (fuente única: red_pill.core.llm_endpoint)."""
-		from red_pill.core.llm_endpoint import llm_port
-
-		return llm_port()
-
-	@staticmethod
-	def _llm_healthy() -> bool:
-		"""Health-check del LLM local: /health o /v1/models (mismo patrón que check_sip)."""
-		import urllib.error
-		import urllib.request
-
-		from red_pill.core.llm_endpoint import llm_base_url
-
-		for path in ("/health", "/v1/models"):
-			try:
-				resp = urllib.request.urlopen(f"{llm_base_url()}{path}", timeout=3)
-				if resp.status == 200:
-					return True
-			except urllib.error.HTTPError as he:
-				if he.code != 404:
-					continue  # 404 en /health → probar /v1/models
-			except Exception:
-				continue
-		return False
-
-	@staticmethod
-	def _request_vram_unload(base_url: str) -> None:
-		import urllib.request
-
-		try:
-			request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/unload", method="POST")
-			with urllib.request.urlopen(request, timeout=5) as response:
-				if response.status == 200:
-					logger.info("[SCRIPT JOB] VRAM liberada en el proxy dual-bind.")
-					time.sleep(2.0)  # El driver CUDA no devuelve la memoria al instante
-		except Exception as e:
-			logger.debug(f"[SCRIPT JOB] Proxy dual-bind inalcanzable para unload: {e}")
 
 	@staticmethod
 	def _systemctl(action: str, unit: str) -> None:
@@ -424,34 +383,6 @@ class ScriptJobDriver(ResumableJobDriver):
 		env["PYTHONUNBUFFERED"] = "1"  # Sin esto el log del job llega a trozos y tarde
 		return env
 
-	@staticmethod
-	def _has_systemd() -> bool:
-		return shutil.which("systemd-run") is not None
-
-	def _clear_stale_scope(self) -> None:
-		"""Retira un scope homónimo huérfano de un crash previo (el flock impide concurrencia real)."""
-		unit = f"redpill-job-{self.short_id}.scope"
-		try:
-			active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=5).returncode == 0
-			if active:
-				logger.warning(f"[SCRIPT JOB] Retirando scope huérfano {unit}.")
-				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
-			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
-		except Exception:
-			pass
-
-	def _looks_like_timeout(self, elapsed: float, returncode: int) -> bool:
-		"""¿Lo abatió la cota o falló por sus propios medios?
-
-		Detección por tiempo transcurrido (robusta ante el código de salida que
-		propague systemd) y por los códigos canónicos de muerte por señal.
-		"""
-		if not self.step_timeout_s:
-			return False
-		if returncode in (124, 137, 143, -9, -15) and elapsed >= self.step_timeout_s * 0.9:
-			return True
-		return elapsed >= self.step_timeout_s
-
 	# ── Estado, progreso y finalización ────────────────────────────────────
 
 	@staticmethod
@@ -631,14 +562,3 @@ class ScriptJobDriver(ResumableJobDriver):
 		return f"{title}: {''.join(parts)} — {state} (step {elapsed / 60:.1f} min){skip_note}."
 
 	# ── Log por job ────────────────────────────────────────────────────────
-
-	def _log_path(self) -> Path:
-		return job_log_path(self.job_id)
-
-	def _log_tail(self, lines: int = 25) -> str:
-		"""Cola del log — el error real del hijo, no el banner del envoltorio."""
-		try:
-			content = self._log_path().read_text(encoding="utf-8", errors="replace").strip().splitlines()
-			return "\n".join(content[-lines:]) if content else "(sin salida)"
-		except Exception:
-			return "(log no disponible)"

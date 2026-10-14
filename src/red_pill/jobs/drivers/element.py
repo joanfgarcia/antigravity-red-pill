@@ -29,7 +29,6 @@ import json
 import logging
 import os
 import shlex
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -42,7 +41,6 @@ from red_pill.jobs.drivers.base import (
 	JobStepTimeout,
 	ResumableJobDriver,
 	StepOutcome,
-	job_log_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +50,7 @@ logger = logging.getLogger(__name__)
 class ElementJobDriver(ResumableJobDriver):
 	source = "element_job"
 	min_vram_mb = 0  # El preflight declarativo decide (igual que script_job)
+	_LOG_TAG = "[ELEMENT JOB]"
 
 	# ── Validación en el submit ────────────────────────────────────────────
 
@@ -129,45 +128,6 @@ class ElementJobDriver(ResumableJobDriver):
 		except Exception:
 			return False
 		return str(data.get("loaded_profile") or "") == model and str(data.get("mode") or "") == "gpu"
-
-	@staticmethod
-	def _request_vram_unload(base_url: str) -> None:
-		"""POST /v1/unload al proxy dual-bind (paridad con script_job).
-
-		Libera la VRAM del LLM residente sin tumbar el servicio (recarga bajo
-		demanda). El driver CUDA no devuelve la memoria al instante → breve espera.
-		"""
-		import urllib.request
-
-		try:
-			request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/unload", method="POST")
-			with urllib.request.urlopen(request, timeout=5) as response:
-				if response.status == 200:
-					logger.info("[ELEMENT JOB] VRAM liberada en el proxy dual-bind.")
-					time.sleep(2.0)
-		except Exception as e:  # noqa: BLE001 — proxy inalcanzable no debe romper el preflight
-			logger.debug(f"[ELEMENT JOB] Proxy dual-bind inalcanzable para unload: {e}")
-
-	@staticmethod
-	def _llm_port() -> int:
-		from red_pill.core.llm_endpoint import llm_port
-
-		return llm_port()
-
-	@staticmethod
-	def _llm_healthy() -> bool:
-		import urllib.request
-
-		from red_pill.core.llm_endpoint import llm_base_url
-
-		for path in ("/health", "/v1/models"):
-			try:
-				resp = urllib.request.urlopen(f"{llm_base_url()}{path}", timeout=3)
-				if resp.status == 200:
-					return True
-			except Exception:
-				continue
-		return False
 
 	# ── Inicialización: origen de los elementos ────────────────────────────
 
@@ -367,34 +327,3 @@ class ElementJobDriver(ResumableJobDriver):
 			env["RP_SKIP_EXIT_CODE"] = str(payload["skip_exit_code"])
 		env["PYTHONUNBUFFERED"] = "1"
 		return env
-
-	@staticmethod
-	def _has_systemd() -> bool:
-		return shutil.which("systemd-run") is not None
-
-	def _clear_stale_scope(self) -> None:
-		unit = f"redpill-job-{self.short_id}.scope"
-		try:
-			active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=5).returncode == 0
-			if active:
-				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
-			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
-		except Exception:
-			pass
-
-	def _looks_like_timeout(self, elapsed: float, returncode: int) -> bool:
-		if not self.step_timeout_s:
-			return False
-		if returncode in (124, 137, 143, -9, -15) and elapsed >= self.step_timeout_s * 0.9:
-			return True
-		return elapsed >= self.step_timeout_s
-
-	def _log_path(self) -> Path:
-		return job_log_path(self.job_id)
-
-	def _log_tail(self, lines: int = 25) -> str:
-		try:
-			content = self._log_path().read_text(encoding="utf-8", errors="replace").strip().splitlines()
-			return "\n".join(content[-lines:]) if content else "(sin salida)"
-		except Exception:
-			return "(log no disponible)"
