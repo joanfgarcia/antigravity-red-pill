@@ -2,6 +2,8 @@ import os
 import subprocess
 import sys
 
+from red_pill.core.paths import get_launchd_dir, get_systemd_user_dir
+
 
 def deploy_linux():
 	print("Deploying for Linux (Systemd Timer)...")
@@ -23,7 +25,7 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 """
-	config_dir = os.path.expanduser("~/.config/systemd/user")
+	config_dir = get_systemd_user_dir()
 	os.makedirs(config_dir, exist_ok=True)
 
 	with open(os.path.join(config_dir, "redpill-pulse.service"), "w") as f:
@@ -61,7 +63,7 @@ def deploy_mac():
 	<true/>
 </dict>
 </plist>"""
-	launch_dir = os.path.expanduser("~/Library/LaunchAgents")
+	launch_dir = str(get_launchd_dir())
 	os.makedirs(launch_dir, exist_ok=True)
 	plist_path = os.path.join(launch_dir, "com.redpill.pulse.plist")
 

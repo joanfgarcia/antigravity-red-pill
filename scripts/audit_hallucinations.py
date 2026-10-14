@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
-from pathlib import Path
 
+from red_pill.core.paths import get_antigravity_root
 from red_pill.core.storage import StorageEngine
 
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +43,7 @@ def audit_collection(collection_name: str, md_file):
 
 
 def main():
-	out_path = Path.home() / ".gemini" / "antigravity" / "artifacts" / "audit_results.md"
+	out_path = get_antigravity_root() / "artifacts" / "audit_results.md"
 	out_path.parent.mkdir(parents=True, exist_ok=True)
 
 	with open(out_path, "w", encoding="utf-8") as f:

@@ -39,7 +39,7 @@ def _state_path() -> Path:
 
 		base = Path(get_state_dir())
 	except Exception:
-		base = Path(os.path.expanduser("~/.local/state/red-pill"))
+		base = get_state_dir()
 	base.mkdir(parents=True, exist_ok=True)
 	return base / "graphify-state.yaml"
 

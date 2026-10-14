@@ -3,6 +3,8 @@ import sys
 
 import numpy as np
 
+from red_pill.core.paths import get_workspace_root
+
 try:
 	from llama_cpp import Llama, llama_get_logits
 
@@ -68,7 +70,7 @@ def sample_token(logits, temperature=0.7, top_p=0.9, top_k=50, blacklist=None):
 
 
 def run_diagnostics():
-	workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+	workspace = str(get_workspace_root())
 	model_path = os.path.join(workspace, "sharing", "models", "gguf", "Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf")
 
 	if not os.path.exists(model_path):

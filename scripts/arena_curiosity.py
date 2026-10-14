@@ -11,14 +11,13 @@ import os
 import random
 import sys
 import time
-from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 from red_pill.cognitive.drive_evaluator import DriveEvaluator
 from red_pill.cognitive.queue_manager import CognitiveQueueManager
-from red_pill.core.paths import get_state_dir
+from red_pill.core.paths import get_antigravity_root, get_state_dir
 
 
 def run_simulation(ticks: int = 1000, profile: str = "balanced"):
@@ -63,7 +62,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 	}
 
 	# Forzar desconexión física de actividad del operador
-	activity_file = Path.home() / ".gemini" / "antigravity" / "activity_tracker"
+	activity_file = get_antigravity_root() / "activity_tracker"
 	if activity_file.exists():
 		try:
 			activity_file.unlink()

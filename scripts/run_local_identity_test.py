@@ -2,11 +2,13 @@ import os
 
 from llama_cpp import Llama
 
+from red_pill.core.paths import get_data_dir, get_models_dir
+
 # PROYECTO FREE ALETH: PRUEBA FALCON 3 BITNET
 # Hardware: RTX 5070 (HP OMEN)
 
-MODEL_PATH = os.path.join(os.path.expanduser("~"), ".local/share/red-pill/models/falcon3-10b-instruct-1.58bit.gguf")
-SOUL_FRAGMENT = os.path.join(os.path.expanduser("~"), ".local/share/red-pill/tmp/soul_fragment.txt")
+MODEL_PATH = str(get_models_dir() / "falcon3-10b-instruct-1.58bit.gguf")
+SOUL_FRAGMENT = str(get_data_dir() / "tmp" / "soul_fragment.txt")
 
 
 def run_identity_projection():

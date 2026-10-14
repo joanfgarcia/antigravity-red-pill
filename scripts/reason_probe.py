@@ -10,6 +10,8 @@ import os
 import sys
 from pathlib import Path
 
+from red_pill.core.paths import get_tmp_dir
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_battle_lib import Probe, runner_for  # noqa: E402
 
@@ -56,7 +58,7 @@ def main() -> int:
 		res = runner.run(probe)
 	finally:
 		runner.close()
-	out = Path(os.environ.get("RP_TMP_DIR") or os.path.expanduser("~/tmp")) / "red-pill" / "benchset" / "reason_probes.jsonl"
+	out = get_tmp_dir() / "red-pill" / "benchset" / "reason_probes.jsonl"
 	out.parent.mkdir(parents=True, exist_ok=True)
 	with out.open("a", encoding="utf-8") as f:
 		f.write(

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import textwrap
 
+from red_pill.core.paths import get_launchd_dir, get_systemd_user_dir, get_uv_bin
+
 # Config
 DEFAULT_INTERVAL_HOURS = 1
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,11 +34,11 @@ GRAPHIFY_SERVICE = "redpill-graphify.service"
 GRAPHIFY_TIMER = "redpill-graphify.timer"
 BANK_JANITOR_SERVICE = "redpill-bank-janitor.service"
 BANK_JANITOR_TIMER = "redpill-bank-janitor.timer"
-SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
+SYSTEMD_USER_DIR = str(get_systemd_user_dir())
 
 # Launchd label (macOS)
 LAUNCHD_LABEL = "com.redpill.pulse"
-LAUNCHD_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
+LAUNCHD_PLIST = str(get_launchd_dir() / f"{LAUNCHD_LABEL}.plist")
 
 # Task Scheduler name (Windows)
 TASK_NAME_PULSE = "RedPill-Pulse"
@@ -63,7 +65,7 @@ def _find_uv() -> str:
 	if uv:
 		return uv
 	# Fallback: common install location
-	candidate = os.path.expanduser("~/.local/bin/uv")
+	candidate = get_uv_bin()
 	if os.path.exists(candidate):
 		return candidate
 	print("[ERROR] 'uv' not found. Install it first: https://docs.astral.sh/uv/")
@@ -158,7 +160,7 @@ def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = 
 		nice_line += f"\nMemoryMax={memory_max}"
 	# Minimal, stable PATH — do NOT freeze the installer session's PATH, which can carry
 	# ephemeral per-session dirs (e.g. Claude local-agent-mode plugin bins) ahead of the venv.
-	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin"
+	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.dirname(get_uv_bin())}:/usr/local/bin:/usr/bin:/bin"
 	content = textwrap.dedent(f"""\
 		[Unit]
 		Description={desc}
@@ -267,7 +269,7 @@ def _uninstall_linux() -> None:
 
 def _uninstall_macos() -> None:
 	for label in ("wake", "sleep", "telemetry", "queue"):
-		p = os.path.expanduser(f"~/Library/LaunchAgents/com.redpill.{label}.plist")
+		p = str(get_launchd_dir() / f"com.redpill.{label}.plist")
 		if os.path.exists(p):
 			subprocess.run(["launchctl", "unload", p], check=False)
 			os.remove(p)
@@ -294,7 +296,7 @@ def _install_macos(interval_hours: int, uv_path: str) -> None:
 
 
 def _write_launchd_plist(label, command, interval_seconds):
-	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	plist_path = str(get_launchd_dir() / f"{label}.plist")
 	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
@@ -326,7 +328,7 @@ def _write_launchd_plist(label, command, interval_seconds):
 
 def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: int) -> None:
 	"""Write a launchd plist that fires at a fixed daily time (StartCalendarInterval)."""
-	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	plist_path = str(get_launchd_dir() / f"{label}.plist")
 	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\

@@ -3,6 +3,8 @@ import os
 import subprocess
 import urllib.request
 
+from red_pill.core.paths import get_workspace_root
+
 
 def get_file(repo):
 	url = f"https://huggingface.co/api/models/{repo}/tree/main"
@@ -25,7 +27,7 @@ urls = [
 	get_file("ChiKoi7/Falcon3-3B-Instruct-Heretic-GGUF"),
 ]
 
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+WORKSPACE_ROOT = str(get_workspace_root())
 MODELS_DIR = os.path.join(WORKSPACE_ROOT, "sharing", "models", "gguf")
 
 os.makedirs(MODELS_DIR, exist_ok=True)

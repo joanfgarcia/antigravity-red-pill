@@ -10,13 +10,14 @@ import json
 import os
 import sys
 import urllib.request
-from pathlib import Path
+
+from red_pill.core.paths import get_config_dir
 
 # Load .env
 try:
 	from dotenv import load_dotenv
 
-	load_dotenv(Path.home() / ".config/red-pill/.env")
+	load_dotenv(get_config_dir() / ".env")
 except ImportError:
 	pass
 

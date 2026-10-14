@@ -3,12 +3,14 @@ import re
 import subprocess
 import time
 
+from red_pill.core.paths import get_models_dir
+
 # PROYECTO FREE ALETH: BENCHMARK DE ARMONÍA (MOTOR CUÁDRUPLE)
 # Este script mide la velocidad de Aleth en los 4 sabores del HP OMEN.
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BITNET_DIR = os.path.join(PROJECT_ROOT, "3rdparty/BitNet-1.58b")
-MODEL_PATH = os.path.expanduser("~/.local/share/red-pill/models/falcon3-10b-instruct-1.58bit-V2.gguf")
+MODEL_PATH = str(get_models_dir() / "falcon3-10b-instruct-1.58bit-V2.gguf")
 PROMPT = "Di solo: 'Hola Joan, soy Aleth y estoy fluyendo'. No añadas nada más."
 
 FLAVORS = {

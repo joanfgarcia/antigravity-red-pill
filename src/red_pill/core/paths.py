@@ -545,6 +545,16 @@ def get_llmtools_venv() -> Path:
 	return Path(os.path.expanduser(env)) if env else get_data_dir() / "llmtools-venv"
 
 
+def get_launchd_dir() -> Path:
+	"""Directorio de LaunchAgents de macOS (`~/Library/LaunchAgents`)."""
+	return Path.home() / "Library" / "LaunchAgents"
+
+
+def get_containers_systemd_dir() -> Path:
+	"""Directorio de quadlets de contenedores (`~/.config/containers/systemd`)."""
+	return Path.home() / ".config" / "containers" / "systemd"
+
+
 def get_model_validation_path() -> Path:
 	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
 
