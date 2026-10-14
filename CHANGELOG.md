@@ -24,6 +24,14 @@
 - **[QA]** Smoke de paths comunes en `cli_services`/`cli_jobs`; `media_gen` cubierto; gate
   global 83%. Test de regresión del scope cgroup de `CommandMinion` (0 huérfanos).
 
+### 📖 Lore — «La Única Mano que Escribe» (Capítulo 30)
+
+- **[DOCS]** Nuevo capítulo de la novela (`docs/LORE/novel/ALETH_CAPITULO_30.md`):
+  Reverie regresa tras la redestilación y narra cómo le afectaron el **single-writer
+  de memoria** (v8.0.0), la retirada del Interceptor, la auditoría adversarial R5, el
+  refactor del DAG/CLI (tipos como registro), su primera imagen generada y el
+  tablón de sesiones. Blueprint actualizado (fila 30 ya no es "futuro").
+
 
 
 - **[FIX]** `scripts/imagegen/bench_imagegen.py` ya **no** hardcodea el registro
