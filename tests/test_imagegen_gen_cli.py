@@ -58,3 +58,21 @@ def test_snap_multiplo(monkeypatch):
 	assert m._snap(1080, 16) == 1088
 	assert m._snap(1000, 16) == 992
 	assert m._snap(1024, 1) == 1024
+
+
+def test_model_available_sd_cpp(tmp_path, monkeypatch):
+	m = _load(monkeypatch)
+	for k in ("diffusion_model", "text_encoder", "vae"):
+		(tmp_path / f"{k}.bin").write_text("x")
+	prof = {"backend": "sd_cpp", "sd_cpp": {k: str(tmp_path / f"{k}.bin") for k in ("diffusion_model", "text_encoder", "vae")}}
+	assert m._model_available(prof) == (True, None)
+	prof["sd_cpp"]["vae"] = str(tmp_path / "no-existe.bin")
+	ok, why = m._model_available(prof)
+	assert ok is False and "vae" in why
+
+
+def test_model_available_diffusers_sin_cache(monkeypatch):
+	m = _load(monkeypatch)
+	ok, _why = m._model_available({"backend": "diffusers", "weights": "org/no-existe-jamas-xyz-123"})
+	assert ok is False
+

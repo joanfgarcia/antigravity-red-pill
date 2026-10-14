@@ -83,6 +83,31 @@ def _unload_vram(base_url: str) -> None:
 		print(f"[gen] aviso: no se pudo pedir el unload ({e})", file=sys.stderr)
 
 
+def _model_available(prof: dict) -> tuple:
+	"""¿Está el modelo EN EL SISTEMA? sd_cpp → ficheros presentes; resto → snapshot cacheado.
+
+	El CLI NO descarga: si el modelo no está, esto devuelve (False, motivo) y el
+	llamador falla limpio.
+	"""
+	if prof.get("backend") == "sd_cpp":
+		sd = prof.get("sd_cpp") or {}
+		for key in ("diffusion_model", "text_encoder", "vae"):
+			p = os.path.expanduser(str(sd.get(key) or ""))
+			if not p or not os.path.isfile(p):
+				return False, f"falta {key}"
+		return True, None
+	hf_id = prof.get("weights")
+	if not hf_id:
+		return False, "sin 'weights' declarado"
+	try:
+		from huggingface_hub import snapshot_download
+
+		snapshot_download(hf_id, local_files_only=True)
+		return True, None
+	except Exception:
+		return False, f"snapshot incompleto en la caché ({hf_id})"
+
+
 def main() -> int:
 	ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	ap.add_argument("--model", help="id exacto del elenco")
@@ -108,25 +133,28 @@ def main() -> int:
 	w, h = _snap(args.width, mult), _snap(args.height, mult)
 	backend = prof.get("backend")
 
+	B._setup_caches()  # HF_HOME = caché del forge (misma que los jobs)
+	# Política del CLI: NO descargar nunca. Trabaja con lo que ya esté en la caché.
+	os.environ["HF_HUB_OFFLINE"] = "1"
+	os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+	# El modelo escogido (o el por defecto del rol) DEBE estar en el sistema.
+	ok, why = _model_available(prof)
+	if not ok:
+		raise SystemExit(f"[error] modelo '{model}' no está disponible localmente ({why}). El CLI no descarga: instálalo aparte.")
+
 	print(f"[gen] modelo={model} backend={backend} {w}x{h} seed={args.seed}", file=sys.stderr)
 	if args.dry_run:
 		return 0
 
+	# El prompt es OBLIGATORIO y en UN solo argumento (entrecomíllalo en el shell).
 	prompt = args.prompt or args.text
 	if not prompt:
-		if sys.stdin.isatty():
-			prompt = input("Prompt: ")
-		if not prompt:
-			raise SystemExit("[error] prompt vacío")
+		raise SystemExit('[error] falta el prompt — entrécomíllalo: media-gen --model <ID> "<prompt>"')
 
 	if not args.no_unload:
 		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
 
-	B._setup_caches()  # HF_HOME = caché del forge (misma que los jobs)
-	# Política del CLI: NO descargar. Trabaja con lo que ya esté en la caché; si
-	# el modelo no está, falla limpio (instálalo aparte: bootstrap/hf download).
-	os.environ["HF_HUB_OFFLINE"] = "1"
-	os.environ["TRANSFORMERS_OFFLINE"] = "1"
 	kind, pipe = B._load(model)
 	editing = bool(args.image or args.mask or args.ref_images)
 	if editing and backend != "sd_cpp":
