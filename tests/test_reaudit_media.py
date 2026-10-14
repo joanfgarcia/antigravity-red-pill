@@ -39,7 +39,7 @@ def test_media_console_env_paridad_paths(monkeypatch, tmp_path):
 
 	monkeypatch.setattr(_config_common, "config_dir", lambda: str(tmp_path))  # sin .env
 	monkeypatch.setattr(paths, "get_config_dir", lambda: tmp_path)
-	for k in ("IMAGE_FORGE_HOME", "REDPILL_IMAGE_MODELS_DIR", "RP_TMP_DIR", "RP_MEDIA_STAGING"):
+	for k in ("IMAGE_FORGE_HOME", "REDPILL_IMAGE_MODELS_DIR", "RP_TMP_DIR", "RP_MEDIA_STAGING", "REDPILL_MEDIA_PROFILES", "REDPILL_RUNTIMES"):
 		monkeypatch.delenv(k, raising=False)
 	env = _config_common.media_console_env()
 	assert env["IMAGE_FORGE_HOME"] == str(paths.get_forge_home("image"))
