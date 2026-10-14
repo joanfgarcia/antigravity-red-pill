@@ -240,8 +240,6 @@ def main() -> int:
 	if args.snap:
 		SNAP = args.snap
 
-	BENCH._setup_caches()
-
 	if args.list_models:
 		print(json.dumps([{"model": m} for m in MODELS], ensure_ascii=False))
 		return 0
@@ -259,6 +257,8 @@ def main() -> int:
 		]
 		print(json.dumps(els, ensure_ascii=False))
 		return 0
+
+	BENCH._setup_caches()
 
 	if args.element:
 		raw = os.environ.get("RP_ELEMENT") or ""
