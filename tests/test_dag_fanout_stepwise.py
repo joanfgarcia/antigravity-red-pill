@@ -14,7 +14,6 @@ from red_pill.jobs.drivers.dag import DagJobDriver
 
 
 def _fake_factory(monkeypatch):
-	import red_pill.jobs.drivers.dag as dag
 	import red_pill.swarm.factory as fac
 
 	class _Cmd:
@@ -29,7 +28,7 @@ def _fake_factory(monkeypatch):
 		return _Src() if minion_id == "source" else _Cmd()
 
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(_create))
-	monkeypatch.setattr(dag, "_resolve_minion_kind", lambda mid: "command")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "command")
 
 
 def _payload(ws: str, stepwise: bool):

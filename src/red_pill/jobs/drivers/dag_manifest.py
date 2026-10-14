@@ -18,6 +18,10 @@ _TYPE_COMPOUND = "compound"
 _TYPE_DAG = "dag"  # cuarto tipo (RFC_JOB_DAG §4.5): composición por referencia
 _VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
 
+# Scheduling ceilings (used by the step scheduler; overridable per payload).
+_MAX_PARALLEL_LEVEL_DEFAULT = 2
+_MAX_CONCURRENCY_DEFAULT = 4
+
 # A stage `id` becomes a path component under .cell/reports — restrict the charset
 # so it can never traverse out of the confín (§7; SHARD-PSEC-02).
 _SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")

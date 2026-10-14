@@ -37,11 +37,10 @@ def test_dag_inyecta_rp_progress_file(tmp_path, monkeypatch):
 			record.append((task, kwargs))
 			return {"status": "success", "returncode": 0, "stdout": "ok", "summary": "ok"}
 
-	import red_pill.jobs.drivers.dag as dag
 	import red_pill.swarm.factory as fac
 
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda mid, **kw: _Cmd()))
-	monkeypatch.setattr(dag, "_resolve_minion_kind", lambda mid: "command")
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "command")
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
