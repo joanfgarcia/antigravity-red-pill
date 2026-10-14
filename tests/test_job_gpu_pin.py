@@ -51,7 +51,7 @@ def _payload() -> dict:
 
 @pytest.fixture()
 def driver_healthy(monkeypatch):
-	monkeypatch.setattr(ElementJobDriver, "_llm_healthy", staticmethod(lambda port: True))
+	monkeypatch.setattr(ElementJobDriver, "_llm_healthy", staticmethod(lambda: True))
 	return ElementJobDriver()
 
 
