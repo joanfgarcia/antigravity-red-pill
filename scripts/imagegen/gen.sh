@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # gen.sh — lanzador de consola GENÉRICO, dirigido por el elenco (media_profiles.yaml).
 #
-# Sirve para cualquier modelo o familia instalada. Wrapper delgado sobre gen_cli.py
+# Sirve para cualquier modelo o familia de IMAGEN instalada. Wrapper delgado sobre gen_cli.py
 # (usa el python del forge). Antes de generar, libera la VRAM del LLM residente.
 #
 # Uso:

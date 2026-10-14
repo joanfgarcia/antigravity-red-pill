@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """gen_cli.py — lanzador de consola DIRIGIDO POR EL ELENCO (media_profiles.yaml).
 
-Genérico: sirve para cualquier modelo del elenco (`--model ID`) o cualquier
-familia/tarea (`--role TASK`, resuelto por la cascade `media_roles`). No hardcodea
-modelos ni backends: los lee del elenco y delega en el harness
-(`bench_imagegen` + `gen_image`), que ya despacha por `backend`.
+Genérico DENTRO DE IMAGEN (`modality: image`): sirve para cualquier modelo de imagen
+del elenco (`--model ID`) o cualquier familia/tarea de imagen (`--role TASK`, resuelto
+por la cascade `media_roles`). No hardcodea modelos ni backends: los lee del elenco y
+delega en el harness (`bench_imagegen` + `gen_image`), que ya despacha por `backend`.
+Un modelo que no sea de imagen (p.ej. audio) falla limpio.
 
 Antes de generar, libera la VRAM del LLM residente (los backends GPU la necesitan).
 

@@ -1,4 +1,4 @@
-"""`media-gen` — launcher de consola de generación de media, dirigido por el elenco.
+"""`media-gen` — launcher de consola de generación de IMAGEN, dirigido por el elenco.
 
 `[project.scripts] media-gen = "red_pill.media_gen:main"` → `uv run media-gen …`
 desde el repo. Delega en el launcher genérico (`scripts/imagegen/gen_cli.py`)
