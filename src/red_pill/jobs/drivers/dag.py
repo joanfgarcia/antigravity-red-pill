@@ -268,10 +268,10 @@ def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 
 
 def _fanout_subprogress(stages: List[Dict[str, Any]], completed: List[str]) -> Optional[Dict[str, Any]]:
-	"""Sub-progreso del PRIMER grupo de fan-out (instancias hechas/total) para
-	exponerlo como `stage_*` en la lista de jobs (RFC-JOBDAG-002 Fase 3): el job
-	muestra "· <label> k/N" además del contador global de hojas. None si no hay
-	fan-out expandido."""
+	"""Sub-progress of the FIRST fan-out group (done instances/total), to
+	expose it as `stage_*` in the job list (RFC-JOBDAG-002 Phase 3): the job
+	shows "· <label> k/N" alongside the global leaf counter. None if there is no
+	expanded fan-out."""
 	done_set = set(completed)
 	for node_path in _flatten_ids(stages):
 		node = _find_node_by_path(stages, node_path)
@@ -402,9 +402,9 @@ class DagJobDriver(ResumableJobDriver):
 			recipe_stack = []
 		if all_ids is None:
 			all_ids = set()
-		# fan_out_from referencia una fuente HERMANA (mismo nivel, RFC §4.6). El
-		# scope LOCAL importa al COMPONER (`type: dag` incrusta otra receta): el id
-		# local 'discover' no está en el `all_ids` del nivel superior.
+		# fan_out_from references a SIBLING source (same level, RFC §4.6). The
+		# LOCAL scope matters when COMPOSING (`type: dag` embeds another recipe): the
+		# local id 'discover' is not in the top-level `all_ids`.
 		sibling_ids = {x.get("id") for x in stages}
 		for s in stages:
 			sid = s.get("id")
@@ -766,8 +766,8 @@ class DagJobDriver(ResumableJobDriver):
 			comp = dict(s)
 			comp["type"] = _TYPE_COMPOUND
 			comp["sub_etapas"] = instances
-			# Marca de fan-out (para el sub-progreso `stage_*`, Fase 3): sobrevive la
-			# re-expansión determinista y alimenta _fanout_subprogress.
+			# Fan-out marker (for the `stage_*` sub-progress, Phase 3): survives the
+			# deterministic re-expansion and feeds _fanout_subprogress.
 			comp["_fanout"] = True
 			comp["_fanout_label"] = s.get("fanout_label") or s.get("id")
 			comp.pop("_item", None)
@@ -857,10 +857,10 @@ class DagJobDriver(ResumableJobDriver):
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
 		kwargs["job_id"] = self.job_id  # hard: neither payload nor params may divert it (SHARD-PSEC-01)
 
-		# Fase 4 (RFC-JOBDAG-002): canal de avance FINO intra-etapa. Si la etapa lo
-		# pide (`progress_file: true`), se le da un fichero donde publicar su
-		# progreso mientras corre; `job list` lo lee SOLO para los PROCESSING y sirve
-		# de forense. Fuera de la DB a propósito → sin concurrencia ni threading.
+		# Phase 4 (RFC-JOBDAG-002): fine-grained intra-stage progress channel. If the
+		# stage asks for it (`progress_file: true`), it gets a file to publish its
+		# progress while it runs; `job list` reads it ONLY for PROCESSING jobs and it
+		# serves as forensics. Deliberately outside the DB → no concurrency/threading.
 		if stage.get("progress_file") and self.job_id:
 			from red_pill.jobs.drivers.base import job_progress_path
 
