@@ -196,7 +196,7 @@ class ScriptJobDriver(ResumableJobDriver):
 			llm_port = self._llm_port()
 			if not llm_port:
 				raise JobDeferred("LLM local no disponible (sin puerto de inferencia detectado)")
-			if not self._llm_healthy(llm_port):
+			if not self._llm_healthy():
 				raise JobDeferred(f"LLM local no responde (puerto {llm_port}) — se difiere hasta que la GPU/LLM se libere")
 
 	def teardown(self, payload: Dict[str, Any]) -> None:
@@ -206,30 +206,22 @@ class ScriptJobDriver(ResumableJobDriver):
 
 	@staticmethod
 	def _llm_port() -> Optional[int]:
-		"""Puerto del LLM local (por config o 8760 por convención del dual-bind)."""
-		try:
-			import red_pill.config as cfg
+		"""Puerto del LLM local (fuente única: red_pill.core.llm_endpoint)."""
+		from red_pill.core.llm_endpoint import llm_port
 
-			env = getattr(cfg, "MLX_LM_URL", "") or ""
-			if env and ":" in env:
-				import re
-
-				m = re.search(r":(\d+)", env)
-				if m:
-					return int(m.group(1))
-		except Exception:
-			pass
-		return 8760
+		return llm_port()
 
 	@staticmethod
-	def _llm_healthy(port: int) -> bool:
+	def _llm_healthy() -> bool:
 		"""Health-check del LLM local: /health o /v1/models (mismo patrón que check_sip)."""
 		import urllib.error
 		import urllib.request
 
+		from red_pill.core.llm_endpoint import llm_base_url
+
 		for path in ("/health", "/v1/models"):
 			try:
-				resp = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=3)
+				resp = urllib.request.urlopen(f"{llm_base_url()}{path}", timeout=3)
 				if resp.status == 200:
 					return True
 			except urllib.error.HTTPError as he:

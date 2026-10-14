@@ -169,7 +169,7 @@ def test_preflight_llm_required_defers_when_llm_down(queue, clean_registry, tmp_
 	from unittest.mock import patch
 
 	register_driver(ScriptJobDriver)
-	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda port: False)):
+	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda: False)):
 		cmd = _script(tmp_path, "print('no debería correr')")
 		job_id = queue.enqueue_task(
 			source="script_job",
@@ -186,7 +186,7 @@ def test_preflight_llm_required_runs_when_llm_up(queue, clean_registry, tmp_path
 	from unittest.mock import patch
 
 	register_driver(ScriptJobDriver)
-	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda port: True)):
+	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda: True)):
 		cmd = _script(tmp_path, "print('ok')")
 		job_id = queue.enqueue_task(
 			source="script_job",
@@ -229,7 +229,7 @@ def test_preflight_llm_healthy_fallback_v1models(monkeypatch):
 
 	monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 	# /health → 404 → /v1/models → también falla → False
-	assert driver._llm_healthy(8760) is False
+	assert driver._llm_healthy() is False
 	assert any("/health" in c for c in calls) and any("/v1/models" in c for c in calls)
 
 

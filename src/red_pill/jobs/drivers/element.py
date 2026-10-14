@@ -97,7 +97,7 @@ class ElementJobDriver(ResumableJobDriver):
 
 			self._request_vram_unload(str(cfg.DUAL_BIND_PROXY_URL))
 
-		if pre.get("llm_required") and not self._llm_healthy(self._llm_port()):
+		if pre.get("llm_required") and not self._llm_healthy():
 			raise JobDeferred("LLM local no responde — se difiere hasta que la GPU/LLM se libere")
 
 		# Gate GPU (2026-10-05): con `min_free_vram_mb`, el step solo arranca si el
@@ -121,8 +121,10 @@ class ElementJobDriver(ResumableJobDriver):
 		import json as _json
 		import urllib.request
 
+		from red_pill.core.llm_endpoint import llm_base_url
+
 		try:
-			with urllib.request.urlopen(f"http://127.0.0.1:{ElementJobDriver._llm_port()}/status", timeout=3) as resp:
+			with urllib.request.urlopen(f"{llm_base_url()}/status", timeout=3) as resp:
 				data = _json.loads(resp.read().decode("utf-8"))
 		except Exception:
 			return False
@@ -148,27 +150,19 @@ class ElementJobDriver(ResumableJobDriver):
 
 	@staticmethod
 	def _llm_port() -> int:
-		try:
-			import red_pill.config as cfg
+		from red_pill.core.llm_endpoint import llm_port
 
-			env = getattr(cfg, "MLX_LM_URL", "") or ""
-			if env and ":" in env:
-				import re
-
-				m = re.search(r":(\d+)", env)
-				if m:
-					return int(m.group(1))
-		except Exception:
-			pass
-		return 8760
+		return llm_port()
 
 	@staticmethod
-	def _llm_healthy(port: int) -> bool:
+	def _llm_healthy() -> bool:
 		import urllib.request
+
+		from red_pill.core.llm_endpoint import llm_base_url
 
 		for path in ("/health", "/v1/models"):
 			try:
-				resp = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=3)
+				resp = urllib.request.urlopen(f"{llm_base_url()}{path}", timeout=3)
 				if resp.status == 200:
 					return True
 			except Exception:

@@ -11,11 +11,13 @@ from . import prompts
 
 logger = logging.getLogger(__name__)
 
+# Endpoint from the single resolver (CONVENTIONS §10.8.1) — no hardcoded host/port.
+from red_pill.core.llm_endpoint import llm_chat_url, llm_health_url  # noqa: E402
 
-EDGE_ENGINE_URL = "http://localhost:8760/v1/chat/completions"
+EDGE_ENGINE_URL = llm_chat_url()
 
 
-EDGE_HEALTH_URL = "http://localhost:8760/v1/models"
+EDGE_HEALTH_URL = llm_health_url()
 
 
 EDGE_MODEL = "Granite-4.1-8B-Q4_K_M.gguf"
