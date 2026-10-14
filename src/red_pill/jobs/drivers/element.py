@@ -87,6 +87,16 @@ class ElementJobDriver(ResumableJobDriver):
 
 		validate_media_payload(payload)
 		pre = payload.get("preflight") or {}
+
+		# Paridad con script_job: si la receta pide `vram_unload`, liberar la VRAM
+		# del LLM residente ANTES de medir `min_free_vram_mb`. Sin esto, el gate
+		# difiere para siempre (nadie pide el unload): bug 2026-10-14 — element_job
+		# ignoraba la clave en silencio (solo script_job la implementaba).
+		if pre.get("vram_unload"):
+			import red_pill.config as cfg
+
+			self._request_vram_unload(str(cfg.DUAL_BIND_PROXY_URL))
+
 		if pre.get("llm_required") and not self._llm_healthy(self._llm_port()):
 			raise JobDeferred("LLM local no responde — se difiere hasta que la GPU/LLM se libere")
 
@@ -117,6 +127,24 @@ class ElementJobDriver(ResumableJobDriver):
 		except Exception:
 			return False
 		return str(data.get("loaded_profile") or "") == model and str(data.get("mode") or "") == "gpu"
+
+	@staticmethod
+	def _request_vram_unload(base_url: str) -> None:
+		"""POST /v1/unload al proxy dual-bind (paridad con script_job).
+
+		Libera la VRAM del LLM residente sin tumbar el servicio (recarga bajo
+		demanda). El driver CUDA no devuelve la memoria al instante → breve espera.
+		"""
+		import urllib.request
+
+		try:
+			request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/unload", method="POST")
+			with urllib.request.urlopen(request, timeout=5) as response:
+				if response.status == 200:
+					logger.info("[ELEMENT JOB] VRAM liberada en el proxy dual-bind.")
+					time.sleep(2.0)
+		except Exception as e:  # noqa: BLE001 — proxy inalcanzable no debe romper el preflight
+			logger.debug(f"[ELEMENT JOB] Proxy dual-bind inalcanzable para unload: {e}")
 
 	@staticmethod
 	def _llm_port() -> int:
