@@ -137,6 +137,17 @@ def test_gen_image_confine_out(monkeypatch, tmp_path):
 		g._confine_out(Path("/etc"))
 
 
+def test_gen_image_confine_out_outdir_bypass(monkeypatch, tmp_path):
+	"""Con `$OUTDIR` (override del operador) `_confine_out` NO confina; sin él, sí."""
+	monkeypatch.setenv("OUTDIR", str(tmp_path / "custom"))
+	g = _load(monkeypatch, "gen_image_ob", IMAGE_PATH)
+	assert g._confine_out(Path("/etc")) == Path("/etc")
+	monkeypatch.delenv("OUTDIR", raising=False)
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	with pytest.raises(SystemExit):
+		g._confine_out(Path("/etc"))
+
+
 def test_resolve_element_out(monkeypatch, tmp_path):
 	"""`out` del payload se confina al staging; el `--out` del operador se respeta."""
 	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
