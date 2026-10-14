@@ -346,7 +346,7 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `SWARM_SHARED_SECRET` | `""` | **Required.** The community admission password. Used as the HMAC-SHA256 key to sign/verify every `KeyPackage` published to Firebase. Agents without this secret cannot fake a valid `admission_token` and will be silently dropped on `resolve_alias()`. Must be identical between all community members (distributed out-of-band by the operator). |
-| `SWARM_TELEMETRY_LEVEL`| `MINIMUM` | Controls Swarm-level logging verbosity. Options: `NONE`, `MINIMUM`, `FULL`. |
+| `SWARM_TELEMETRY_DEFAULT`| `NONE` | Controls Swarm-level logging verbosity. Options: `NONE`, `MINIMUM`, `FULL`. |
 
 ### How MLS B1 Works (Quick Reference)
 
