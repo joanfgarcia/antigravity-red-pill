@@ -54,9 +54,9 @@ def _meta():
 
 
 def test_sanitize_quita_ansi_rutas_y_capa():
-	raw = "\x1b[31mfallo en /home/joan/Documents/IA/sharing/src/x.py\x1b[0m"
+	raw = "\x1b[31mfallo en /home/user/proj/src/x.py\x1b[0m"
 	out = ledger.sanitize_text(raw, ledger.ERROR_CAP)
-	assert "\x1b" not in out and "/home/joan" not in out and "x.py" in out
+	assert "\x1b" not in out and "/home/user" not in out and "x.py" in out
 	assert len(ledger.sanitize_text("palabra " * 200, 512)) == 512
 	assert len(ledger.sanitize_text("x" * 5000, 512)) <= 512  # scrub puede redactar antes del cap
 
