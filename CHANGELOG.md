@@ -1,5 +1,26 @@
 ## Unreleased
 
+### 🔀 Media — router por tarea, adaptadores, staging y capabilities (RFC-HARNESS-004/005)
+
+- **[FEATURE]** `core/media_router.py` — **router por tarea** (`resolve`) + **adaptadores**
+  (`constraints`/`adapters`: `snap_dims`, `reject_oversize`) + `validate()` (JSON). El
+  tamaño se adapta por modelo (warning) o falla limpio (error). Loader de
+  `media_profiles.yaml` (dueño: RFC-HARNESS-004). Espejo de `model_catalog` (roles/cascade).
+- **[FEATURE]** Bloque `media:` en recetas: validación en el **ensamblado** (`validate()`
+  en submit + `preflight()`), canal de warnings (`payload.media_warnings`), handoff al
+  harness por env (`RP_MEDIA_*`). Drivers: `element_job`, `script_job`.
+- **[FEATURE]** **Staging + promoción**: `core/media_staging.py` + CLI `red-pill media
+  {resolve,validate,adapt,staging,promote}` (`RP_MEDIA_STAGING`).
+- **[FEATURE]** El **runner exporta el `.env`** (+ `IA_DIR`/`REDPILL_DIR` y los defaults
+  canónicos de forges/tmp) a los jobs — las recetas usan `$VAR` sin fallbacks ni absolutos.
+- **[FEATURE]** **Skills** `image-gen`/`audio-gen`/`music-gen`/`capabilities` (Agent Skills
+  standard) con **siembra gateada por capacidad** (`core/capabilities.py`; `capability:` en
+  el frontmatter).
+- **[DOCS]** `docs/CORE/CONVENTIONS.md` §10.8/§10.9 + §7 (rutas en `paths.py`). Elenco:
+  `flux2_klein` ÷16.
+- **[TEST]** `media_router`, `media_recipe_hook`, `media_staging`, `capabilities`,
+  path-sovereignty general.
+
 ### 🌙 Ciclo de sueño — contador real de producción (2026-10-11)
 
 - **[FIX]** El resumen del sueño reportaba `(0 engramas)` todas las noches: el
