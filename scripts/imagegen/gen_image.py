@@ -196,7 +196,7 @@ def main() -> int:
 	ap.add_argument("--out", default=None, help="dir de salida (def: staging — $OUTDIR/$RP_MEDIA_STAGING/cli)")
 	ap.add_argument("--tag", default="out", help="etiqueta de variante en el nombre del PNG (def: out)")
 	ap.add_argument("--name", help="nombre EXACTO del PNG (sin extensión); anula el patrón modelo__tag__seed")
-	ap.add_argument("--snap", type=int, default=None, help="múltiplo al que ajustar ancho/alto (def: 32; env RP_IMAGE_SNAP)")
+	ap.add_argument("--snap", type=int, default=None, help="múltiplo al que ajustar ancho/alto (def: 1 = sin ajuste; env RP_IMAGE_SNAP)")
 	args = ap.parse_args()
 
 	global SNAP

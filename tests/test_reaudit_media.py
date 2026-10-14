@@ -78,6 +78,14 @@ def test_snap_paridad_adapter_router(monkeypatch):
 			assert m._snap(v, mult) == media_router._adapter_snap_dims({"width": v}, {"constraints": {"dim_multiple": mult}})[0]["width"]
 
 
+def test_gen_image_snap_default_1(monkeypatch):
+	"""El default de `--snap`/`RP_IMAGE_SNAP` es 1 (sin ajuste), no 32."""
+	monkeypatch.delenv("RP_IMAGE_SNAP", raising=False)
+	g = _load(monkeypatch, "gen_image_snapdef", IMAGE_PATH)
+	assert g.SNAP == 1
+	assert g._snap(1080) == 1080
+
+
 def test_gen_image_snap_paridad_adapter(monkeypatch):
 	"""`gen_image._snap` == `media_router._adapter_snap_dims` (3ª copia, ahora guardada)."""
 	from red_pill.core import media_router
