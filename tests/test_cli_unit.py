@@ -20,7 +20,7 @@ def test_get_collection():
 def test_handle_mode_unit(mock_input):
 	"""Unit test for mode switching logic."""
 	args = argparse.Namespace(skin="760")
-	with patch("red_pill.cli.switch_skin", return_value="Switched to 760") as mock_switch:
+	with patch("red_pill.cli_commands.switch_skin", return_value="Switched to 760") as mock_switch:
 		handle_mode(args)
 		mock_switch.assert_called_once_with("760")
 
@@ -29,7 +29,7 @@ def test_handle_mode_unit(mock_input):
 def test_handle_mode_abort(mock_input):
 	"""Unit test for aborting mode switch."""
 	args = argparse.Namespace(skin="matrix")
-	with patch("red_pill.cli.switch_skin") as mock_switch:
+	with patch("red_pill.cli_commands.switch_skin") as mock_switch:
 		handle_mode(args)
 		mock_switch.assert_not_called()
 
@@ -352,42 +352,42 @@ def test_handle_p2p_commands(mock_get_key, mock_add_alias, mock_engine):
 	mock_engine.from_default.return_value.process_incoming_syncs.assert_called_once()
 
 
-@patch("red_pill.cli.MemoryManager")
+@patch("red_pill.cli_commands.MemoryManager")
 def test_seal_pact_delega_en_core(mock_mgr):
 	"""cli.seal_pact delega en core.pact con las dos llaves."""
 	from red_pill.cli import seal_pact
 
-	with patch("red_pill.cli.pact_core.seal_pact", return_value="[OK]") as mock_core:
+	with patch("red_pill.cli_commands.pact_core.seal_pact", return_value="[OK]") as mock_core:
 		result = seal_pact("770", grant=True, accept=True)
 
 	assert result == "[OK]"
 	mock_core.assert_called_once_with(mock_mgr.return_value, "770", grant=True, accept=True)
 
 
-@patch("red_pill.cli.MemoryManager")
+@patch("red_pill.cli_commands.MemoryManager")
 @patch("builtins.input", return_value="770")
 def test_handle_pact_seal_confirmed(mock_input, mock_mgr):
 	from red_pill.cli import handle_pact
 
 	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False, grant=True, accept=False)
-	with patch("red_pill.cli.seal_pact", return_value="[OK] sealed") as mock_seal:
+	with patch("red_pill.cli_commands.seal_pact", return_value="[OK] sealed") as mock_seal:
 		handle_pact(args)
 		mock_seal.assert_called_once_with("770", grant=True, accept=False)
 
 
-@patch("red_pill.cli.MemoryManager")
+@patch("red_pill.cli_commands.MemoryManager")
 @patch("builtins.input", return_value="nope")
 def test_handle_pact_seal_aborted(mock_input, mock_mgr):
 	"""El covenant (grant) se confirma; input incorrecto -> no sella."""
 	from red_pill.cli import handle_pact
 
 	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False, grant=True, accept=False)
-	with patch("red_pill.cli.seal_pact") as mock_seal:
+	with patch("red_pill.cli_commands.seal_pact") as mock_seal:
 		handle_pact(args)
 		mock_seal.assert_not_called()
 
 
-@patch("red_pill.cli.MemoryManager")
+@patch("red_pill.cli_commands.MemoryManager")
 def test_handle_pact_naming_inscribe_identidad(mock_mgr, tmp_path, capsys):
 	from red_pill.cli import handle_pact
 
@@ -399,7 +399,7 @@ def test_handle_pact_naming_inscribe_identidad(mock_mgr, tmp_path, capsys):
 	assert mock_mgr.return_value.add_memory.call_count == 2  # identidad + pacto 760
 
 
-@patch("red_pill.cli.MemoryManager")
+@patch("red_pill.cli_commands.MemoryManager")
 def test_handle_pact_show_nivel_e_instruccion(mock_mgr, capsys):
 	from red_pill.cli import handle_pact
 
@@ -501,7 +501,7 @@ def test_cli_job_list(mock_qm):
 		main()
 
 
-@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.cli_jobs.subprocess.run")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_kick_dispara_runner(mock_qm, mock_run):
 	"""'red-pill job kick' dispara el service con --no-block (sin esperar al timer)."""
@@ -514,7 +514,7 @@ def test_cli_job_kick_dispara_runner(mock_qm, mock_run):
 	assert "--no-block" in args[0]
 
 
-@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.cli_jobs.subprocess.run")
 @patch("red_pill.jobs.drivers.get_driver_class")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_submit_kick(mock_qm, mock_driver, mock_run):
@@ -533,7 +533,7 @@ def test_cli_job_submit_kick(mock_qm, mock_driver, mock_run):
 	assert "--no-block" in args[0]
 
 
-@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.cli_jobs.subprocess.run")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_submit_sin_kick_no_dispara(mock_qm, mock_run):
 	cls = MagicMock()

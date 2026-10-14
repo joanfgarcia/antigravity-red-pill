@@ -24,7 +24,7 @@ def test_cli_switch_skin_behavior(skin):
 	"""Test that CLI switch_skin function correctly handles all 12 preset skins."""
 	from unittest.mock import patch
 
-	with patch("red_pill.cli.MemoryManager") as mock_mgr:
+	with patch("red_pill.cli_commands.MemoryManager") as mock_mgr:
 		from red_pill.cli import switch_skin
 
 		report = switch_skin(skin)
