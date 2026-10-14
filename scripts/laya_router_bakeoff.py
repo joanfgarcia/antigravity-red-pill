@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import subprocess
@@ -27,8 +28,8 @@ import sys
 import time
 from pathlib import Path
 
-LAYA_VENV_PY = Path.home() / ".local/share/red-pill/laya-venv/bin/python"
-DEFAULT_MEMO_ROOT = Path.home() / ".local/share/red-pill/memento"
+LAYA_VENV_PY = Path(os.environ["LAYA_VENV"]) / "bin" / "python"
+DEFAULT_MEMO_ROOT = Path(os.environ["MEMENTO_ROOT"])
 DEFAULT_OUT = Path("state/laya_bakeoff")
 
 QUESTIONS = {

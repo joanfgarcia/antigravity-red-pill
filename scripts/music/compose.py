@@ -101,7 +101,7 @@ def _default_sf2() -> str:
 	env = os.environ.get("MUSIC_SF2")
 	if env:
 		return env
-	base = Path.home() / ".local" / "share" / "red-pill" / "soundfonts"
+	base = Path(os.environ["REDPILL_SOUNDFONTS_DIR"])
 	for c in (base / "MuseScore_General.sf2", base / "GeneralUser-GS.sf2", Path("/usr/share/sounds/sf2/TimGM6mb.sf2")):
 		if c.exists():
 			return str(c)
@@ -247,7 +247,7 @@ def main() -> int:
 	out_base = Path(args.out)
 	mid = out_base.with_suffix(".mid")
 	compose_midi(spec, mid)
-	wav = _proc(Path(os.environ.get("MUSIC_FORGE_HOME", Path.home() / "opt" / "music-forge")), sf2, out_base, mid)
+	wav = _proc(Path(os.environ["MUSIC_FORGE_HOME"]), sf2, out_base, mid)
 	print(f"[ok] spec={spec}")
 	print(f"[ok] midi={mid}")
 	print(f"[ok] wav ={wav}")

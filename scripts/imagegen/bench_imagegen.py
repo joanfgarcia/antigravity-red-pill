@@ -46,11 +46,7 @@ BENCH_JSON = Path(__file__).resolve().parent / "benchgenres.json"
 
 
 def _media_profiles_path() -> Path:
-	env = os.environ.get("REDPILL_MEDIA_PROFILES")
-	if env:
-		return Path(env)
-	cfg = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
-	return Path(cfg) / "red-pill" / "media_profiles.yaml"
+	return Path(os.environ["REDPILL_MEDIA_PROFILES"])
 
 
 def _load_media_models() -> dict:
@@ -105,11 +101,7 @@ MODELS = _load_media_models()
 
 
 def _runtimes_path() -> Path:
-	env = os.environ.get("REDPILL_RUNTIMES")
-	if env:
-		return Path(env)
-	cfg = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
-	return Path(cfg) / "red-pill" / "runtimes.yaml"
+	return Path(os.environ["REDPILL_RUNTIMES"])
 
 
 def _resolve_runtime(runtime_id: str) -> dict:
@@ -182,15 +174,11 @@ def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int)
 
 
 def _forge_home() -> Path:
-	return Path(os.environ.get("IMAGE_FORGE_HOME") or (Path.home() / "opt" / "image-forge"))
+	return Path(os.environ["IMAGE_FORGE_HOME"])
 
 
 def _models_dir() -> Path:
-	env = os.environ.get("REDPILL_IMAGE_MODELS_DIR")
-	if env:
-		return Path(env)
-	base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
-	return Path(base) / "red-pill" / "models" / "image"
+	return Path(os.environ["REDPILL_IMAGE_MODELS_DIR"])
 
 
 def _setup_caches() -> None:

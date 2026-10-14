@@ -50,17 +50,6 @@ SCRIPTS_PRE_SEED = {
 }
 INJECT_PKG = SCRIPTS_DIR / "inject"
 
-# BOUNDED list of standalone harness scripts: run in their OWN forge venv (torch,
-# no `red_pill` importable) → resolve env/paths by hand. A NEW one must be added here.
-SCRIPTS_STANDALONE_HARNESS = {
-	SCRIPTS_DIR / "imagegen" / "bench_imagegen.py",
-	SCRIPTS_DIR / "imagegen" / "gen_image.py",
-	SCRIPTS_DIR / "imagegen" / "compat_image_studio.py",
-	SCRIPTS_DIR / "audio" / "bench_audio.py",
-	SCRIPTS_DIR / "music" / "compose.py",
-	SCRIPTS_DIR / "laya_router_bakeoff.py",
-}
-
 HARDCODED_PATTERNS = [
 	re.compile(r'["\']~/[^"\']'),  # "~/…" (a path, not a bare "~/" token)
 	re.compile(r'["\']/(?:home|Users|root)/'),  # "/home/<user>/…"
@@ -72,8 +61,6 @@ HARDCODED_PATTERNS = [
 
 def _is_allowed(py: Path) -> bool:
 	if py in ALLOWED_FILES or py in EXTERNAL_TOOL_FILES or py in SCRIPTS_PRE_SEED:
-		return True
-	if py in SCRIPTS_STANDALONE_HARNESS:
 		return True
 	return INJECT_PKG in py.parents  # the whole scripts/inject/** package (IDE injectors)
 

@@ -59,7 +59,7 @@ MODELS = {
 
 
 def _forge_home() -> Path:
-	return Path(os.environ.get("AUDIO_FORGE_HOME") or (Path.home() / "opt" / "audio-forge"))
+	return Path(os.environ["AUDIO_FORGE_HOME"])
 
 
 def _setup_caches() -> None:
