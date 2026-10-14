@@ -28,7 +28,7 @@ los engines de media que sí traía el template.
 - **Engines en `runtimes.yaml`** (LLM y media): se añade `sd_cpp` (binary/env/build).
   Runtime declarado y no disponible = fallo limpio.
 - El elenco pasa a ser **obligatorio** para el harness (falla limpio sin él).
-- Corregido `flux2 ÷8` en template+skill+README; vivo re-sembrado; modelo nuevo con
+- Corregido `flux2 ÷8` en template+skill; vivo re-sembrado; modelo nuevo con
   bloque `license` (`qwen-research`, `commercial_ok: false`).
 **Alternatives**: (a) mantener `MODELS` en código + duplicar en YAML — es la
 enfermedad; (b) YAML dedicado `media_models.yaml` — duplicaría id/pipeline/weights con

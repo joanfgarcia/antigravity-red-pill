@@ -12,7 +12,7 @@
   → no comercial**) en el elenco. Verificado: ~32 s/imagen a 1024² (DiT 4.7 GB en
   VRAM, encoder 8.3 GB en RAM) en RTX 5070 Laptop 8 GB.
 - **[FIX]** Elenco: `flux2_klein` es **÷8** (conserva 1080), no ÷16 — corregido en
-  template, skill `image-gen` y README. `runtimes.yaml` vivo completa los engines de
+  template y skill `image-gen`. `runtimes.yaml` vivo completa los engines de
   media (`diffusers_cuda`, `pipeline_custom`).
 - **[DOCS]** Nuevo `docs/CORE/MEDIA_MODELS.md` (añadir modelo/runtime, con el caso
   `sd.cpp` trabajado). Skills `capabilities`/`image-gen` corregidos (el harness lee el
