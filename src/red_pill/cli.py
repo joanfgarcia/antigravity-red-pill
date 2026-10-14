@@ -14,16 +14,9 @@ from red_pill.cli_commands import (  # noqa: F401  (re-exported for `red_pill.cl
 	handle_benchmark,
 	handle_daemon,
 	handle_heal,
-	handle_ide,
-	handle_identity,
 	handle_interceptor,
-	handle_license,
-	handle_memory,
 	handle_mode,
-	handle_p2p,
 	handle_pact,
-	handle_runtime,
-	handle_telegram,
 	handle_telemetry,
 	load_plugins,
 	seal_pact,
@@ -31,6 +24,15 @@ from red_pill.cli_commands import (  # noqa: F401  (re-exported for `red_pill.cl
 )
 from red_pill.cli_jobs import handle_job
 from red_pill.cli_parser import build_parser
+from red_pill.cli_services import (  # noqa: F401  (re-exported for `red_pill.cli.X` compat)
+	handle_ide,
+	handle_identity,
+	handle_license,
+	handle_memory,
+	handle_p2p,
+	handle_runtime,
+	handle_telegram,
+)
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
