@@ -4,9 +4,12 @@
 #
 # media_profiles.yaml — elenco de MEDIA GENERATIVA (RFC-HARNESS-004).
 #
-# Define qué ES cada modelo de imagen/audio (declarativo). El CÓMO se ejecuta
-# (runtime, venv, pipeline de herramientas) vive en las RECETAS
-# (configs/jobs/*.yaml + scripts/<área>/), NO aquí.
+# Define qué ES cada modelo de imagen/audio (declarativo) Y CÓMO lo CARGA el
+# harness: `backend` (dispatch del harness, scripts/<área>/) + `pipeline`/
+# `weights`/`quant`/`sampler`. Es la ÚNICA fuente de verdad del elenco de máquina
+# — el harness NO hardcodea modelos, los lee de aquí (data over branches,
+# CONVENTIONS §10.8.2). La ORQUESTACIÓN (venv, job, staging) vive en las RECETAS
+# (configs/jobs/*.yaml), no aquí.
 #
 # ── Dos esquemas de elenco (RFC-HARNESS-004) ──────────────────────────────
 #   1) LLM (texto)        -> model_profiles.yaml  (llama.cpp; sin cambios)
@@ -16,6 +19,7 @@
 # ── Discriminador ─────────────────────────────────────────────────────────
 #   modality: image | audio
 #   task:     text2image | tts | sfx | music | scene
+#   backend:  dispatch del harness (diffusers | bonsai | sd_cpp | ...) — solo imagen
 #   capabilities: clasificación por TIPO DE ARTE / TIPO DE SONIDO (roles).
 #
 # ⚠️ AVISO: EJEMPLO del PUESTO DE REFERENCIA (RTX 5070 Laptop 8 GB, sm_120,
@@ -28,6 +32,7 @@ media_profiles:
     modality: image
     task: text2image
     pipeline: Flux2KleinPipeline           # clase diffusers (o backend propio)
+    backend: diffusers                     # dispatch del harness (scripts/imagegen)
     runtime: diffusers_cuda
     weights: "black-forest-labs/FLUX.2-klein-4B"
     quant: { scheme: bnb4, dtype: bfloat16 }
@@ -36,7 +41,7 @@ media_profiles:
     capabilities: ["photorealism", "concept", "landscape", "fast"]
     not_capable_for: []
     priority: 1
-    constraints: { dim_multiple: 16 }       # ÷16 (Flux2KleinPipeline exige múltiplo de 16)
+    constraints: { dim_multiple: 8 }        # ÷8 (Flux2 stride 8 → conserva 1080)
     adapters: ["snap_dims"]
     license:
       id: "apache-2.0"
@@ -51,6 +56,7 @@ media_profiles:
     modality: image
     task: text2image
     pipeline: ZImagePipeline
+    backend: diffusers                     # dispatch del harness
     runtime: diffusers_cuda
     weights: "Tongyi-MAI/Z-Image-Turbo"
     quant: { scheme: seqoff, dtype: bfloat16 }
@@ -74,6 +80,8 @@ media_profiles:
     modality: image
     task: text2image
     pipeline: GpuPipeline                  # image-studio/backend_gpu (gemlite INT2)
+    backend: bonsai                        # dispatch del harness
+    backend_name: bonsai-ternary-gemlite
     runtime: pipeline_custom
     weights: "prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
     quant: { scheme: gemlite_int2, dtype: bfloat16 }
@@ -92,6 +100,36 @@ media_profiles:
       share_alike: false
       source: "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-gemlite-2bit"
     notes: "Ternario 1.58-bit (transformer 1.5 GB). Requiere shim torch>=2.10 (compat_image_studio.py)."
+
+  qwen_image_2_1_turbo:
+    modality: image
+    task: text2image
+    pipeline: sd_cpp                       # vía stable-diffusion.cpp (GGUF)
+    backend: sd_cpp                        # dispatch del harness
+    runtime: sd_cpp
+    weights: "webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
+    sampler: { steps: 8, guidance: 1.0, size: 1024, sampler: euler }
+    vram_footprint: { peak_mb: 4707 }
+    capabilities: ["photorealism", "typography", "portrait"]
+    not_capable_for: []
+    priority: 2
+    constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16 (VAE scale 16)
+    adapters: ["snap_dims", "reject_oversize"]
+    sd_cpp:
+      diffusion_model: "~/opt/image-forge/models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
+      text_encoder: "~/opt/image-forge/models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
+      vae: "~/opt/image-forge/models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
+      backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"   # encoder a RAM, DiT+VAE a GPU
+      extra_args: ["--flash-attn", "on", "--vae-tiling"]
+      sigmas: "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"
+    license:
+      id: "qwen-research"
+      commercial_ok: false
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: false
+      source: "https://huggingface.co/webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
+    notes: "Qwen-Image-2.1-Turbo (7B DiT, 8 steps) + encoder Qwen3-VL-8B abliterado (Sakura). GGUF vía sd.cpp; encoder en CPU → cabe en 8 GB. NO COMERCIAL (Qwen Research)."
 
   # ── AUDIO ─────────────────────────────────────────────────────────────
   kokoro_voice:

@@ -4,6 +4,45 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-052] El registro de modelos del harness es DATOS (elenco = fuente única) + runtime sd.cpp
+**Date**: 2026-10-14
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende RFC-HARNESS-004/003.
+**Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres
+grietas: (1) `scripts/imagegen/bench_imagegen.py` tenía el registro `MODELS`
+**hardcodeado** y `gen_image.py` lo importaba — la doc ("añadir un modelo = añadir
+metadata, no código") era **falsa**, con dos fuentes de verdad desincronizables;
+(2) `runtimes.yaml` no tenía `kind` para GGUF/sd.cpp, ni bootstrap, ni doc;
+(3) discrepancias template↔vivo: `flux2_klein.constraints.dim_multiple` era **16** en
+`examples/…` (comentario erróneo) y **8** en el vivo (la verdad: ÷8, conserva 1080,
+fijada en `tests/test_media_recipe_hook.py`), y el `runtimes.yaml` vivo **carecía** de
+los engines de media que sí traía el template.
+**Decision**:
+- **Una fuente única de máquina**: el elenco `media_profiles.yaml` declara qué es cada
+  modelo **y** su dispatch de carga (`backend` + `pipeline`/`weights`/`quant`/`sampler`).
+  Lo consumen el **router** y el **harness**; el harness **traduce** cada
+  `modality: image`. Se **elimina** el dict `MODELS` del código (data over branches,
+  CONVENTIONS §10.8.2).
+- **`backend`** (`diffusers`|`bonsai`|`sd_cpp`|…) es la clave de dispatch; un `kind`
+  nuevo = un loader nuevo en `scripts/<área>/` (registro + módulo-por-implementación,
+  §10.8.3). Único sitio con código.
+- **Engines en `runtimes.yaml`** (LLM y media): se añade `sd_cpp` (binary/env/build).
+  Runtime declarado y no disponible = fallo limpio.
+- El elenco pasa a ser **obligatorio** para el harness (falla limpio sin él).
+- Corregido `flux2 ÷8` en template+skill+README; vivo re-sembrado; modelo nuevo con
+  bloque `license` (`qwen-research`, `commercial_ok: false`).
+**Alternatives**: (a) mantener `MODELS` en código + duplicar en YAML — es la
+enfermedad; (b) YAML dedicado `media_models.yaml` — duplicaría id/pipeline/weights con
+el elenco; (c) solo diffusers, sin GGUF — pierde Qwen-Image, que **sí** corre en 8 GB
+vía sd.cpp; (d) derivar `backend` de `runtime` — conflaciona engine con loader.
+**Rationale / Evidence**: 41 tests verdes (incl. `tests/test_imagegen_registry.py`, que
+fija la invariante y el fallo limpio); router intacto; `sd-cli` + Sakura genera
+**~32 s/imagen a 1024²** (DiT 4.7 GB en VRAM, encoder 8.3 GB en RAM) con VRAM libre.
+Riesgo ops documentado: el LLM residente del daemon (~6.8 GB) no se suelta vía
+`POST /unload` → los jobs de imagen grandes quedan `PENDING` (el runner no desaloja).
+Diseño completo: RFC-HARNESS-006 (desk) + `docs/CORE/MEDIA_MODELS.md`.
+
+---
+
 ## [AD-051] El ciclo de sueño reporta producción real (contador de engramas vestigial)
 **Date**: 2026-10-11
 **Status**: ACCEPTED & IMPLEMENTED (rama `fix/sleep-cycle-real-engram-counter`).

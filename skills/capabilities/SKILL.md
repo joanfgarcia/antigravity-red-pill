@@ -1,6 +1,6 @@
 ---
 name: capabilities
-description: Orienta sobre las capacidades locales de media de Red-Pill (imagen/audio/música) — qué hay instalado, cómo consultarlo (router/elenco), cómo añadir un modelo o capacidad sin tocar código, y el modelo de staging/promoción.
+description: Orienta sobre las capacidades locales de media de Red-Pill (imagen/audio/música) — qué hay instalado, cómo consultarlo (router/elenco), cómo añadir un modelo o un runtime (engine) siguiendo el patrón data-over-code, y el modelo de staging/promoción.
 capability: media
 ---
 
@@ -18,30 +18,30 @@ ${RED_PILL_CMD} media adapt --model <id> --width W --height H            # ajust
 El router (`red_pill/core/media_router.py`) resuelve **tarea → modelo** (cascade
 `media_roles`) y aplica **adapters** por modelo (`constraints`).
 
-## Añadir un modelo (imagen/audio) — SIN tocar código
-El elenco es la única fuente; el harness/router lo consumen genéricamente (patrón
-registro+plugin). Pasos:
+## Añadir un modelo o un runtime (imagen/audio)
+El elenco (`media_profiles.yaml`) es la **única fuente de verdad de máquina**: lo
+consume el **router** *y* el **harness** (`scripts/<area>/`, que traduce cada
+entrada a su loader por el campo `backend`). Añadir un modelo = editar el YAML.
+Guía completa con ejemplo trabajado: `docs/CORE/MEDIA_MODELS.md`.
 
-1. **Runtime**: el modelo se ancla a un engine de `~/.config/red-pill/runtimes.yaml`
-   (`runtime: <id>`). Si el engine no existe (backend nuevo), añádelo ahí y móntalo
-   con `scripts/<area>/bootstrap.sh`.
-2. **Pesos**: descárgalos al `hf-cache` del forge (o donde declare el runtime). Sin
-   pesos, la familia no se dará por activa.
-3. **Entrada en el elenco** (`~/.config/red-pill/media_profiles.yaml`). Campos:
-   `modality` (image|audio), `task`, `pipeline`, `runtime`, `weights`, `quant`,
-   `sampler`, `vram_footprint`, `capabilities` (tipo de arte/sonido), `constraints`
-   (`dim_multiple`, `max_pixels`/`max_vram_mb`…), `adapters` (`snap_dims`,
-   `reject_oversize`…), `not_capable_for`, `priority`, `license`, `notes`.
-4. **Cascade**: añádelo a `media_roles.<task>` (orden = preferencia).
-5. **Verifica**: `${RED_PILL_CMD} media validate --task <t> --width W --height H` (JSON)
+### Modelo nuevo (sin tocar código)
+1. **Entrada en el elenco** (`~/.config/red-pill/media_profiles.yaml`): `modality`,
+   `task`, **`backend`** (dispatch del harness: `diffusers` / `bonsai` / `sd_cpp`…),
+   `pipeline`, `runtime`, `weights`, `quant`, `sampler`, `vram_footprint`,
+   `capabilities` (tipo de arte/sonido), `constraints` (`dim_multiple`,
+   `max_pixels`/`max_vram_mb`…), `adapters` (`snap_dims`, `reject_oversize`…),
+   `not_capable_for`, `priority`, `license`, `notes`.
+2. **Cascade**: añádelo a `media_roles.<task>` (orden = preferencia).
+3. **Verifica**: `${RED_PILL_CMD} media validate --model <id> --width W --height H` (JSON)
    y `${RED_PILL_CMD} media resolve --task <t>`.
 
 ```yaml
 mi_modelo:
   modality: image
   task: text2image
-  pipeline: MiPipeline
+  backend: diffusers            # dispatch del harness (docs/CORE/MEDIA_MODELS.md §4)
   runtime: diffusers_cuda
+  pipeline: MiPipeline
   weights: "org/mi-modelo"
   quant: { scheme: bnb4, dtype: bfloat16 }
   sampler: { steps: 8, guidance: 1.0, size: 1024 }
@@ -54,8 +54,18 @@ mi_modelo:
   license: { id: apache-2.0, commercial_ok: true, source: "..." }
   notes: "..."
 ```
-Referencia de campos: `examples/media_profiles.yaml.example`. Nada más: no se toca
-el harness ni el router (`docs/CORE/CONVENTIONS.md` §10.8).
+Referencia de campos: `examples/media_profiles.yaml.example`.
+
+### Runtime nuevo (engine)
+Si el modelo necesita un engine que no está en `runtimes.yaml` (p.ej. GGUF vía
+`stable-diffusion.cpp`):
+1. **Declara el engine** en `~/.config/red-pill/runtimes.yaml` (`kind`, `binary`/
+   `venv`, `env`, `build`, `status`). Un runtime declarado y no disponible = fallo
+   limpio (sin fallback silencioso).
+2. **Backend del harness**: asegura que existe un `backend` para ese `kind`. Si es
+   nuevo, añade su loader en `scripts/<area>/` — el único sitio con código (patrón
+   registro+plugin, `CONVENTIONS.md` §10.8.3). Ejemplo real, backend `sd_cpp`:
+   `docs/CORE/MEDIA_MODELS.md` §5.
 
 ## Modelo de ejecución
 - Config viva por-máquina en `~/.config/red-pill/`; artefactos en `~/opt/*`.

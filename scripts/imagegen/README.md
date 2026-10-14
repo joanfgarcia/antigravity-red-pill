@@ -13,11 +13,14 @@ para difusión en vez de LLM.
 | `compat_image_studio.py` | shim para `image-studio/backend_gpu` bajo torch≥2.10 + gemlite 0.6.x (el tensor ternario se reconstruye y carga en bloque). |
 | `benchgenres.json` | matriz fija de tipos de arte (congelada por versión). |
 
-Modelos (todos **Apache-2.0**):
+Modelos: **NO hardcodeados** — el harness los lee del elenco de máquina
+(`~/.config/red-pill/media_profiles.yaml`, campo `backend`; ver
+`docs/CORE/MEDIA_MODELS.md`). Ejemplo del puesto:
 
-- `flux2_klein` — `Flux2KleinPipeline` (diffusers), FLUX.2 klein 4B, 4-bit NF4.
-- `zimage_turbo` — `ZImagePipeline` (diffusers), Z-Image-Turbo 6B.
-- `bonsai_ternary` — `GpuPipeline` (image-studio/backend_gpu), Bonsai Image 4B ternario (gemlite INT2).
+- `flux2_klein` — `Flux2KleinPipeline` (diffusers), FLUX.2 klein 4B, 4-bit NF4 (Apache-2.0).
+- `zimage_turbo` — `ZImagePipeline` (diffusers), Z-Image-Turbo 6B (Apache-2.0).
+- `bonsai_ternary` — `GpuPipeline` (image-studio/backend_gpu), Bonsai Image 4B ternario (gemlite INT2) (Apache-2.0).
+- `qwen_image_2_1_turbo` — backend `sd_cpp` (stable-diffusion.cpp, GGUF), Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B (qwen-research, **no comercial**).
 
 ## Rutas configurables (opción por defecto del puesto; override por entorno)
 

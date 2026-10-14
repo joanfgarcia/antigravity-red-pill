@@ -58,6 +58,9 @@ def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, hei
 	from PIL import Image
 
 	cfg = MODELS[model_id]
+	if kind == "sd_cpp":
+		return BENCH._sd_cpp_generate(pipe, prompt, seed, width, height)
+
 	if kind == "diffusers":
 		gen = torch.Generator(device="cuda").manual_seed(seed)
 		img = pipe(

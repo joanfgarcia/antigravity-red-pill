@@ -1,5 +1,26 @@
 ## Unreleased
 
+### 🧩 Media — el registro del harness es DATOS (elenco = fuente única) + runtime sd.cpp (RFC-HARNESS-006)
+
+- **[FIX]** `scripts/imagegen/bench_imagegen.py` ya **no** hardcodea el registro
+  `MODELS`: lo **traduce del elenco** `media_profiles.yaml` (misma fuente que el
+  router) por el campo `backend`. Añadir un modelo = editar el YAML, sin tocar
+  código (data over branches, §10.8.2). Falla limpio si falta el elenco.
+- **[FEATURE]** Backend **`sd_cpp`** en el harness (GGUF vía `stable-diffusion.cpp`,
+  `sd-cli` por subprocess) + engine **`sd_cpp`** en `runtimes.yaml`. Modelo
+  `qwen_image_2_1_turbo` (Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B, **qwen-research
+  → no comercial**) en el elenco. Verificado: ~32 s/imagen a 1024² (DiT 4.7 GB en
+  VRAM, encoder 8.3 GB en RAM) en RTX 5070 Laptop 8 GB.
+- **[FIX]** Elenco: `flux2_klein` es **÷8** (conserva 1080), no ÷16 — corregido en
+  template, skill `image-gen` y README. `runtimes.yaml` vivo completa los engines de
+  media (`diffusers_cuda`, `pipeline_custom`).
+- **[DOCS]** Nuevo `docs/CORE/MEDIA_MODELS.md` (añadir modelo/runtime, con el caso
+  `sd.cpp` trabajado). Skills `capabilities`/`image-gen` corregidos (el harness lee el
+  elenco; "sin tocar código" solo para un dispatch `backend` ya existente).
+- **[TEST]** `test_imagegen_registry.py` — el harness deriva del elenco + fallo limpio.
+- **[NOTE]** Ops: el LLM residente del daemon (~6.8 GB) no se suelta vía `POST /unload`
+  → jobs de imagen grandes quedan `PENDING` si no se cumple `min_free_vram_mb`.
+
 ### 🔀 Media — router por tarea, adaptadores, staging y capabilities (RFC-HARNESS-004/005)
 
 - **[FEATURE]** `core/media_router.py` — **router por tarea** (`resolve`) + **adaptadores**
@@ -17,7 +38,7 @@
   standard) con **siembra gateada por capacidad** (`core/capabilities.py`; `capability:` en
   el frontmatter).
 - **[DOCS]** `docs/CORE/CONVENTIONS.md` §10.8/§10.9 + §7 (rutas en `paths.py`). Elenco:
-  `flux2_klein` ÷16.
+  `flux2_klein` ÷8.
 - **[TEST]** `media_router`, `media_recipe_hook`, `media_staging`, `capabilities`,
   path-sovereignty general.
 

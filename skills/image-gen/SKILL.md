@@ -101,5 +101,10 @@ ${RED_PILL_CMD} media promote <title> --to /ruta/definitiva    # copia (o --move
 ```
 
 ## Modelos del elenco (referencia)
-`flux2_klein` (apache-2.0, ÷16, rápido) · `zimage_turbo` (÷16, tipografía) ·
-`bonsai_ternary` (÷32, OOM a resolución ancha — el router lo rechaza limpio).
+La lista NO vive en el skill: sale del elenco de máquina
+(`~/.config/red-pill/media_profiles.yaml`), que lee el harness. Los del puesto de
+referencia: `flux2_klein` (apache-2.0, ÷8, rápido) · `zimage_turbo` (÷16,
+tipografía) · `bonsai_ternary` (÷32, OOM a resolución ancha — el router lo rechaza
+limpio) · `qwen_image_2_1_turbo` (backend `sd_cpp`, GGUF vía stable-diffusion.cpp,
+**qwen-research → NO comercial**). Regla + ejemplo para añadir modelos/runtimes:
+`docs/CORE/MEDIA_MODELS.md`.
