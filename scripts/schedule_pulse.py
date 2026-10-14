@@ -48,7 +48,6 @@ TASK_NAME_QUEUE = "RedPill-Queue"
 # Scripts
 TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
 TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "bunker_telemetry.py")
-QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
 
 # Recetas de los ciclos nocturnos: los timers de calendario ENCOLAN el job en la
 # cola central en vez de ejecutar el ciclo directamente — el runner serializa
@@ -371,8 +370,8 @@ def _install_windows(interval_hours: int, uv_path: str) -> None:
 	_create_win_daily_task("RedPill-Nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', "03:00")
 	# 3. Telemetry
 	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)
-	# 4. Queue
-	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 1)
+	# 4. Queue (module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)
+	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python -m red_pill.core.queue_worker --oneshot', 1)
 	print("[OK] Windows Tasks created. Protocol Zero-Daemon active.")
 
 
