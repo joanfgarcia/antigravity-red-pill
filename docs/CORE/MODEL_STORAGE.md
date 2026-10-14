@@ -119,7 +119,13 @@ cachés sigue siendo responsabilidad de `storage_check` + `uv cache prune`).
 ## 6. Reference numbers (this box, 2026-10-14)
 
 - `~/.local/share/red-pill/models` — 84 GB (LLM `.gguf`).
-- `~/opt/image-forge/hf-cache` — 50 GB (image blobs, deduped); `models/` 15 GB (Qwen/Sakura parts).
+- `~/opt/image-forge/hf-cache` — ~50 GB (image blobs, **deduplicados** por HF).
+- `~/opt/red-pill-custom-image-models/` — 15 GB (Sakura: denoiser + encoder + VAE + mmproj).
 - `~/opt/audio-forge/hf-cache` — 43 GB.
-- `~/.cache/uv` — 30 GB (hardlink source; prunable).
-- Venvs share torch/CUDA via hardlinks → not counted as duplicates.
+- `~/.cache/uv` — 30 GB (hardlink source; prunable con `uv cache prune`).
+
+**Estado de disponibilidad (offline):**
+- ✅ `qwen_image_2_1_turbo` (sd.cpp, custom), `zimage_turbo`, `bonsai_ternary`
+  (HF cache, snapshots **completos**).
+- ⏳ `flux2_klein` — **no disponible** (le faltan pesos; re-bajar ~15 GB o retirarlo
+  del elenco). `media-gen` falla limpio si se pide.
