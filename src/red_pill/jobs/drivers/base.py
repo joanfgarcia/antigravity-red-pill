@@ -19,7 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 
 @dataclass
@@ -180,7 +180,7 @@ def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
 	try:
 		path = job_progress_path(job_id)
 		if path.is_file():
-			return json.loads(path.read_text(encoding="utf-8"))
+			return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 	except Exception:
 		pass
 	return None
