@@ -103,28 +103,11 @@ def _unload_vram(base_url: str) -> None:
 
 
 def _model_available(prof: dict) -> tuple:
-	"""¿Está el modelo EN EL SISTEMA? sd_cpp → ficheros presentes; resto → snapshot cacheado.
+	"""¿Está el modelo EN EL SISTEMA? Delega en la disponibilidad del backend (harness).
 
-	El CLI NO descarga: si el modelo no está, esto devuelve (False, motivo) y el
-	llamador falla limpio.
-	"""
-	if prof.get("backend") == "sd_cpp":
-		sd = prof.get("sd_cpp") or {}
-		for key in ("diffusion_model", "text_encoder", "vae"):
-			p = os.path.expanduser(str(sd.get(key) or ""))
-			if not p or not os.path.isfile(p):
-				return False, f"falta {key}"
-		return True, None
-	hf_id = prof.get("weights")
-	if not hf_id:
-		return False, "sin 'weights' declarado"
-	try:
-		from huggingface_hub import snapshot_download
-
-		snapshot_download(hf_id, local_files_only=True)
-		return True, None
-	except Exception:
-		return False, f"snapshot incompleto en la caché ({hf_id})"
+	El CLI NO descarga: si el modelo no está, devuelve (False, motivo) y el llamador
+	falla limpio. La política por-backend vive en `bench_imagegen` (A42)."""
+	return B.backend_available(prof)
 
 
 def main() -> int:

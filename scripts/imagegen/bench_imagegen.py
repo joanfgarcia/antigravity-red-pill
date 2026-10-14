@@ -97,6 +97,19 @@ def _load_media_models() -> dict:
 	return models
 
 
+def _bootstrap_env() -> None:
+	"""Defaults de política por-máquina (elenco/forges) para uso de CONSOLA/directo.
+	En un job los exporta el runner; aquí los resuelve `_config_common` (§10.8.1)."""
+	sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+	from _config_common import media_console_env
+
+	for key, val in media_console_env().items():
+		if val:
+			os.environ.setdefault(key, val)
+
+
+_bootstrap_env()
+
 MODELS = _load_media_models()
 
 
@@ -305,21 +318,12 @@ def _load_backend_sd_cpp(cfg: dict):
 	return "sd_cpp", _resolve_sd_cpp(cfg)
 
 
-# Registro backend→loader (data over branches, AD-052): un runtime nuevo = una
-# entrada aquí + su loader, sin tocar un if/elif. `backend` (del elenco) es la clave.
-_BACKEND_LOADERS = {
-	"diffusers": _load_backend_diffusers,
-	"bonsai": _load_backend_bonsai,
-	"sd_cpp": _load_backend_sd_cpp,
-}
-
-
 def _load(model_id: str):
 	cfg = MODELS[model_id]
-	loader = _BACKEND_LOADERS.get(cfg["backend"])
-	if loader is None:
+	entry = BACKEND_DISPATCH.get(cfg["backend"])
+	if entry is None:
 		raise RuntimeError(f"backend desconocido: {cfg['backend']}")
-	return loader(cfg)
+	return entry["load"](cfg)
 
 
 def _read_json(path: Path):
@@ -430,20 +434,53 @@ def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int
 	return Image.open(io.BytesIO(buf))
 
 
-# Registro kind→generador del harness (data over branches, AD-052): fuente ÚNICA que
-# comparten bench_imagegen y gen_image. Añadir un runtime = su loader + una entrada.
-GEN_DISPATCH = {
-	"sd_cpp": _gen_sd_cpp,
-	"diffusers": _gen_diffusers,
-	"bonsai": _gen_bonsai,
+# Registro ÚNICO backend→(loader, generador) (data over branches, AD-052): fuente única
+# que comparten bench_imagegen y gen_image. Añadir un runtime = sus 2 funciones + 1 entrada.
+BACKEND_DISPATCH = {
+	"diffusers": {"load": _load_backend_diffusers, "generate": _gen_diffusers},
+	"bonsai": {"load": _load_backend_bonsai, "generate": _gen_bonsai},
+	"sd_cpp": {"load": _load_backend_sd_cpp, "generate": _gen_sd_cpp},
 }
 
 
 def generate(kind: str, cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	fn = GEN_DISPATCH.get(kind)
-	if fn is None:
+	entry = BACKEND_DISPATCH.get(kind)
+	if entry is None:
 		raise RuntimeError(f"kind desconocido: {kind}")
-	return fn(cfg, pipe, prompt, seed, width, height)
+	return entry["generate"](cfg, pipe, prompt, seed, width, height)
+
+
+def _avail_sd_cpp(prof: dict):
+	sd = prof.get("sd_cpp") or {}
+	for key in ("diffusion_model", "text_encoder", "vae"):
+		p = os.path.expanduser(str(sd.get(key) or ""))
+		if not p or not os.path.isfile(p):
+			return False, f"falta {key}"
+	return True, None
+
+
+def _avail_snapshot(prof: dict):
+	hf_id = prof.get("weights")
+	if not hf_id:
+		return False, "sin 'weights' declarado"
+	try:
+		from huggingface_hub import snapshot_download
+
+		snapshot_download(hf_id, local_files_only=True)
+		return True, None
+	except Exception:
+		return False, f"snapshot incompleto en la caché ({hf_id})"
+
+
+# Disponibilidad por backend (el CLI NO descarga): política en el harness (A42).
+BACKEND_AVAILABILITY = {"sd_cpp": _avail_sd_cpp, "diffusers": _avail_snapshot, "bonsai": _avail_snapshot}
+
+
+def backend_available(prof: dict) -> tuple:
+	fn = BACKEND_AVAILABILITY.get(prof.get("backend"))
+	if fn is None:
+		return False, f"backend desconocido: {prof.get('backend')}"
+	return fn(prof)
 
 
 def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
@@ -522,12 +559,12 @@ def main() -> int:
 	ap.add_argument("--out", default=str(_forge_home() / "output"))
 	args = ap.parse_args()
 
-	_setup_caches()
-	bench = _load_bench()
-
 	if args.list_models:
 		print(json.dumps([{"model": m} for m in MODELS], ensure_ascii=False))
 		return 0
+
+	_setup_caches()
+	bench = _load_bench()
 
 	if args.element:
 		raw = os.environ.get("RP_ELEMENT") or ""

@@ -21,27 +21,33 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, cast
 
-# Vars RESERVADAS de política: el bloque `env:` de una receta NO puede pisarlas —
-# un payload no debe poder ensanchar el confín de escritura del harness (CONVENTIONS §7)
-# fijando p.ej. `RP_MEDIA_STAGING=/` o `OUTDIR=/etc`. Las fija el runner/host.
+# Vars de POLÍTICA: el bloque `env:` de una receta NO puede pisarlas — un payload no
+# debe poder ensanchar el confín de escritura/caché del harness (§7). Filtrmos por
+# PREFIJO (`RP_`/`REDPILL_`) + nombres explícitos: permite vars legítimas de receta
+# (CUDA_VISIBLE_DEVICES, PYTHONPATH…) y bloquea las de política.
+RESERVED_JOB_ENV_PREFIXES = ("RP_", "REDPILL_")
 RESERVED_JOB_ENV = frozenset(
 	{
-		"RP_MEDIA_STAGING",
+		"IA_DIR",
+		"MEMENTO_ROOT",
+		"HF_HOME",
+		"LAYA_VENV",
+		"LLMTOOLS_VENV",
 		"OUTDIR",
-		"RP_TMP_DIR",
 		"IMAGE_FORGE_HOME",
 		"AUDIO_FORGE_HOME",
 		"MUSIC_FORGE_HOME",
-		"REDPILL_IMAGE_MODELS_DIR",
-		"REDPILL_MEDIA_PROFILES",
-		"REDPILL_RUNTIMES",
 	}
 )
 
 
 def sanitize_job_env(raw: Any) -> Dict[str, str]:
 	"""Filtra el bloque `env:` de una receta quitando las vars reservadas de política."""
-	return {str(k): str(v) for k, v in (raw or {}).items() if str(k) not in RESERVED_JOB_ENV}
+	return {
+		str(k): str(v)
+		for k, v in (raw or {}).items()
+		if str(k) not in RESERVED_JOB_ENV and not str(k).startswith(RESERVED_JOB_ENV_PREFIXES)
+	}
 
 
 @dataclass

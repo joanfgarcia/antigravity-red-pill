@@ -152,25 +152,38 @@ def test_gen_image_confine_out_outdir_bypass(monkeypatch, tmp_path):
 		g._confine_out(Path("/etc"))
 
 
-def test_resolve_element_out(monkeypatch, tmp_path):
-	"""`out` del payload se confina al staging; el `--out` del operador se respeta."""
+def test_element_out_confina(monkeypatch, tmp_path):
+	"""En `--element` TODO el payload (el `out` del elemento Y `--out`) se confina al staging."""
 	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
 	monkeypatch.delenv("OUTDIR", raising=False)
 	g = _load(monkeypatch, "gen_image_ro", IMAGE_PATH)
 	inside = tmp_path / "stg" / "enc"
 	inside.mkdir(parents=True)
-	assert g._resolve_element_out({"out": str(inside)}, None) == str(inside.resolve())
+	assert g._element_out({"out": str(inside)}, None) == str(inside.resolve())
 	with pytest.raises(SystemExit):
-		g._resolve_element_out({"out": "/etc"}, None)
-	assert g._resolve_element_out({}, "/tmp/op") == "/tmp/op"
+		g._element_out({"out": "/etc"}, None)
+	with pytest.raises(SystemExit):
+		g._element_out({}, "/etc")
 
 
 def test_sanitize_job_env_bloquea_reservadas():
-	"""El `env:` de una receta no puede pisar vars de política (staging/forges)."""
+	"""El `env:` de una receta no puede pisar vars de política (prefijos RP_/REDPILL_ + nombres)."""
 	from red_pill.jobs.drivers.base import sanitize_job_env
 
-	out = sanitize_job_env({"RP_MEDIA_STAGING": "/", "OUTDIR": "/etc", "RP_TMP_DIR": "/", "FOO": "bar"})
-	assert out == {"FOO": "bar"}
+	raw = {
+		"RP_MEDIA_STAGING": "/",
+		"OUTDIR": "/etc",
+		"RP_TMP_DIR": "/",
+		"RP_MEDIA_WIDTH": "9",
+		"IA_DIR": "/x",
+		"MEMENTO_ROOT": "/m",
+		"HF_HOME": "/h",
+		"LAYA_VENV": "/l",
+		"REDPILL_DIR": "/r",
+		"FOO": "bar",
+		"CUDA_VISIBLE_DEVICES": "0",
+	}
+	assert sanitize_job_env(raw) == {"FOO": "bar", "CUDA_VISIBLE_DEVICES": "0"}
 
 
 def test_order_dir_rechaza_symlink(monkeypatch, tmp_path):

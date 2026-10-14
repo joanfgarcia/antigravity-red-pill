@@ -72,11 +72,10 @@ def _default_out() -> Path:
 	return _console_out()
 
 
-def _resolve_element_out(el: dict, args_out: str | None) -> str | None:
-	"""`out` del PAYLOAD → confinado al staging; `--out` del operador → de confianza."""
-	if el.get("out"):
-		return str(_confine_out(Path(el["out"])))
-	return args_out
+def _element_out(el: dict, args_out: str | None) -> str:
+	"""Modo `--element`: TODO el payload es no confiable (el `out` del elemento Y el
+	`--out` del step_command) → confinado al staging."""
+	return str(_confine_out(Path(el.get("out") or args_out or _default_out())))
 
 
 def _confine_out(path: Path) -> Path:
@@ -127,6 +126,9 @@ def _run_element(el: dict) -> int:
 	tag = str(el.get("tag") or "out")
 	stem = _safe_stem(str(name), "name") if name else f"{model_id}__{_safe_stem(tag, 'tag')}__s{seed}"
 	png = out_dir / f"{stem}.png"
+	if png.is_symlink():
+		print(f"[error] destino es un symlink (no permitido): {png}", flush=True)
+		return 1
 	if png.exists():
 		print(f"[skip] {png.name} (ya existe)", flush=True)
 		return 0
@@ -230,9 +232,7 @@ def main() -> int:
 		except Exception as e:  # noqa: BLE001
 			print(f"RP_ELEMENT inválido ({e}): {raw!r}", flush=True)
 			return 1
-		el["out"] = _resolve_element_out(el, args.out)
-		if el["out"] is None:
-			el.pop("out")
+		el["out"] = _element_out(el, args.out)
 		return _run_element(el)
 
 	prompt = _read_prompt(args)
