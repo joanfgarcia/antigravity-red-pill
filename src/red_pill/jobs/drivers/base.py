@@ -150,6 +150,42 @@ def append_job_log(job_id: str, message: str) -> None:
 		pass
 
 
+def job_progress_path(job_id: str) -> Path:
+	"""Fichero de control del job: avance FINO intra-etapa + detalle forense.
+
+	**Fuera de la DB a propósito** (RFC-JOBDAG-002 Fase 4): el proceso hijo lo
+	escribe sin concurrencia (nadie más lo toca mientras el job corre) y `job list`
+	lo lee SOLO para los PROCESSING. Persistente (junto al log) para conservar el
+	detalle en un FRUSTRATED.
+	"""
+	from red_pill.core.paths import get_state_dir
+
+	return get_state_dir() / "jobs" / f"{(job_id or 'unbound')[:8]}.progress.json"
+
+
+def write_job_progress(job_id: str, data: Dict[str, Any]) -> None:
+	"""Escribe (atómico, best-effort) el fichero de progreso del job."""
+	try:
+		path = job_progress_path(job_id)
+		path.parent.mkdir(parents=True, exist_ok=True)
+		tmp = path.with_suffix(".json.tmp")
+		tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+		tmp.replace(path)
+	except Exception:
+		pass
+
+
+def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
+	"""Lee el fichero de progreso del job (None si no existe o es ilegible)."""
+	try:
+		path = job_progress_path(job_id)
+		if path.is_file():
+			return json.loads(path.read_text(encoding="utf-8"))
+	except Exception:
+		pass
+	return None
+
+
 def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> Dict[str, str]:
 	"""Traduce el bloque `llm:` de un recipe a env RP_LLM_* para el proceso hijo.
 

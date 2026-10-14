@@ -842,6 +842,22 @@ class DagJobDriver(ResumableJobDriver):
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
 		kwargs.setdefault("job_id", self.job_id)
 
+		# Fase 4 (RFC-JOBDAG-002): canal de avance FINO intra-etapa. Si la etapa lo
+		# pide (`progress_file: true`), se le da un fichero donde publicar su
+		# progreso mientras corre; `job list` lo lee SOLO para los PROCESSING y sirve
+		# de forense. Fuera de la DB a propósito → sin concurrencia ni threading.
+		if stage.get("progress_file") and self.job_id:
+			from red_pill.jobs.drivers.base import job_progress_path
+
+			ppath = job_progress_path(self.job_id)
+			try:
+				ppath.unlink(missing_ok=True)  # evitar dato rancio de un run previo
+			except OSError:
+				pass
+			env = dict(kwargs.get("env") or os.environ)
+			env["RP_PROGRESS_FILE"] = str(ppath)
+			kwargs["env"] = env
+
 		result = asyncio.run(minion.execute(task, **kwargs))
 
 		reports_dir = workdir / ".cell" / "reports"
@@ -1142,7 +1158,12 @@ class DagJobDriver(ResumableJobDriver):
 			completed=done and not paused,
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}" + (" (pausado a mitad de step)" if paused else ""),
-			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0, **_stage_fields(stages, new_completed)},
+			progress={
+				"current": leaves_done,
+				"total": total_leaves,
+				"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
+				**_stage_fields(stages, new_completed),
+			},
 			concurrency={
 				"parallel_groups": parallel_groups,
 				"parallel_stages": parallel_stages,

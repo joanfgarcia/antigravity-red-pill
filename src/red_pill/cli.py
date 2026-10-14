@@ -819,7 +819,7 @@ def handle_job(args: argparse.Namespace) -> None:
 			# reanudable con el mismo verbo, pero la limpieza no está garantizada.
 			status = f"{t['status']}*" if t.get("dirty_kill") else t["status"]
 			print(
-				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {(t.get('mission_id') or '-')[:9]:<10} {_format_progress(t.get('progress')):<24} {t.get('title') or '-'}"
+				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {(t.get('mission_id') or '-')[:9]:<10} {_format_progress(_progress_display(t)):<24} {t.get('title') or '-'}"
 			)
 
 	elif args.job_cmd == "status":
@@ -828,6 +828,7 @@ def handle_job(args: argparse.Namespace) -> None:
 			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
 			return
 		_print_measurements(task)
+		task["file_progress"] = _read_job_progress_safe(task.get("id") or "")
 		print(_json.dumps(task, indent=2, ensure_ascii=False, default=str))
 
 	elif args.job_cmd in ("pause", "resume"):
@@ -968,6 +969,35 @@ def _print_measurements(task: dict) -> None:
 		)
 
 	print("\n".join(lines) + "\n")
+
+
+def _read_job_progress_safe(job_id: str):
+	try:
+		from red_pill.jobs.drivers.base import read_job_progress
+
+		return read_job_progress(job_id)
+	except Exception:
+		return None
+
+
+def _progress_display(task: dict) -> dict:
+	"""Progreso a mostrar: el de la DB + (si PROCESSING) el avance fino del fichero.
+
+	El fichero (RFC-JOBDAG-002 Fase 4) lo escribe el propio job **fuera de la DB**;
+	para los PROCESSING se fusiona como `stage_*` ("· <label> k/N") y queda como
+	forense. Nunca bloquea ni rompe el listado (best-effort).
+	"""
+	prog = dict(task.get("progress") or {})
+	if task.get("status") == "PROCESSING":
+		fp = _read_job_progress_safe(task.get("id") or "")
+		if isinstance(fp, dict):
+			if fp.get("label") is not None:
+				prog["stage_label"] = fp["label"]
+			if fp.get("current") is not None:
+				prog["stage_current"] = fp["current"]
+			if fp.get("total") is not None:
+				prog["stage_total"] = fp["total"]
+	return prog
 
 
 def _format_progress(progress) -> str:
