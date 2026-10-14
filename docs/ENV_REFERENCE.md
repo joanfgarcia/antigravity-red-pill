@@ -309,11 +309,7 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `CLOUD_VAULT_ENABLED` | `False` | Toggles AES-256 encrypted auto-exports to cloud services. |
-| `CLOUD_VAULT_PROVIDER`| `google_drive` | Only `google_drive` supported. |
 | `CLOUD_VAULT_FOLDER_ID`| `""` | The absolute folder ID in the Drive account to stage exports. |
-| `CLOUD_SERVICE_ACCOUNT_FILE`| `*/service_account.json`| Auto-generated path to G-Cloud credentials. |
-| `CLOUD_VAULT_QUOTA_MB` | `500` | Maximum size in MB stored on the cloud. |
-| `CLOUD_VAULT_RESERVE_COUNT`| `4` | How many recent full Soul Kits to keep before pruning older ones. |
 | `CLOUD_VAULT_GPG_PASSPHRASE`| `N/A` | Critical: Sets the symmetric AES-256 payload password. Used dynamically but not printed in `.env.example`. |
 
 ---
