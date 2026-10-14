@@ -74,14 +74,17 @@ def _default_out() -> Path:
 
 
 def _confine_out(path: Path) -> Path:
-	"""Confina el `out` que llega del payload (RP_ELEMENT, §8.2): no debe escapar del
-	staging. `$OUTDIR` (override explícito del operador) exime."""
+	"""Confina el `out` que llega del payload (RP_ELEMENT, §7/§8.2): no debe escapar del
+	staging. `$OUTDIR` (override explícito del operador) exime. La raíz NO se toma de una
+	fuente que el payload pueda ensanchar (el driver filtra `RP_MEDIA_STAGING`/`OUTDIR`)."""
 	if os.environ.get("OUTDIR"):
 		return Path(path)
 	root = _console_out().parent
+	if root.resolve() == Path(root.anchor):  # raíz '/' → staging inválido
+		raise SystemExit(f"[error] staging inválido (raíz de disco): {root}")
 	resolved = Path(path).expanduser().resolve()
 	if not resolved.is_relative_to(root.expanduser().resolve()):
-		raise SystemExit(f"[error] 'out' fuera del staging: {resolved} ∉ {root} (§8.2)")
+		raise SystemExit(f"[error] 'out' fuera del staging: {resolved} ∉ {root} (§7)")
 	return resolved
 
 

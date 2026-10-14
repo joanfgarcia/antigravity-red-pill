@@ -340,7 +340,9 @@ class ElementJobDriver(ResumableJobDriver):
 
 	def _build_env(self, payload: Dict[str, Any], cwd: str, element: Any, index: int) -> Dict[str, str]:
 		env = dict(os.environ)
-		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
+		from red_pill.jobs.drivers.base import sanitize_job_env
+
+		env.update(sanitize_job_env(payload.get("env")))
 		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
 		try:
 			from red_pill.jobs.drivers.base import inject_llm_env

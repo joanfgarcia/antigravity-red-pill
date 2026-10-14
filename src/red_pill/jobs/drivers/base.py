@@ -22,6 +22,29 @@ from pathlib import Path
 from typing import Any, Dict, Optional, cast
 
 
+# Vars RESERVADAS de política: el bloque `env:` de una receta NO puede pisarlas —
+# un payload no debe poder ensanchar el confín de escritura del harness (§7/§8.2)
+# fijando p.ej. `RP_MEDIA_STAGING=/` o `OUTDIR=/etc`. Las fija el runner/host.
+RESERVED_JOB_ENV = frozenset(
+	{
+		"RP_MEDIA_STAGING",
+		"OUTDIR",
+		"RP_TMP_DIR",
+		"IMAGE_FORGE_HOME",
+		"AUDIO_FORGE_HOME",
+		"MUSIC_FORGE_HOME",
+		"REDPILL_IMAGE_MODELS_DIR",
+		"REDPILL_MEDIA_PROFILES",
+		"REDPILL_RUNTIMES",
+	}
+)
+
+
+def sanitize_job_env(raw: Any) -> Dict[str, str]:
+	"""Filtra el bloque `env:` de una receta quitando las vars reservadas de política."""
+	return {str(k): str(v) for k, v in (raw or {}).items() if str(k) not in RESERVED_JOB_ENV}
+
+
 @dataclass
 class StepOutcome:
 	"""Resultado de un step atómico."""

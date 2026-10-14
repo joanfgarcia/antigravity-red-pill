@@ -118,6 +118,14 @@ def test_gen_image_confine_out(monkeypatch, tmp_path):
 		g._confine_out(Path("/etc"))
 
 
+def test_sanitize_job_env_bloquea_reservadas():
+	"""El `env:` de una receta no puede pisar vars de política (staging/forges)."""
+	from red_pill.jobs.drivers.base import sanitize_job_env
+
+	out = sanitize_job_env({"RP_MEDIA_STAGING": "/", "OUTDIR": "/etc", "RP_TMP_DIR": "/", "FOO": "bar"})
+	assert out == {"FOO": "bar"}
+
+
 def test_media_staging_ignora_y_rechaza_symlinks(monkeypatch, tmp_path):
 	from red_pill.core import media_staging
 
