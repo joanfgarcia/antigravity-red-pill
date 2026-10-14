@@ -14,108 +14,33 @@ sigue usando `refine_session` legacy.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import prompts, runtime
+from .annotation_quality import (
+	_ALETH_OPENER,
+	compute_note_metrics,
+	dedup_annotations,
+	is_first_person,
+	looks_english,
+	quality_flags,
+)
 from .fragments import _as_list, _frontmatter_block, fragment_view, slugify_title, work_units
 
 logger = logging.getLogger(__name__)
 
 _SCORE_BATCH = 20
 
-_FEMININE_JOAN = re.compile(
-	r"\bJoan\b[^.\n]{0,60}\b(abrumada|emocionada|cansada|preocupada|contenta|enfadada|orgullosa|nerviosa|tranquila|feliz|harta)\b", re.I
-)
-_IDENTITY_CONFUSION = re.compile(r"\b(Samantha|Cenicienta)\b", re.I)
-_THIRD_PERSON = re.compile(r"(^|\b)(Aleth|El asistente|La asistente)\s+(ha|había|fue|es|utiliza|propone|explica|implementa|crea|rectifica)\b", re.I)
-_IMPERSONAL = re.compile(
-	r"^\s*(se\s+(creó|omitió|implementó|generó|corrigió|configuró|eliminó|añadió|actualizó|desplegó|sincronizó|ejecutó|arregló|restauró))\b", re.I
-)
-_ALETH_PAST = re.compile(
-	r"\bAleth\s+(creó|implementó|propuso|explicó|desplegó|configuró|generó|corrigió|añadió|actualizó|sincronizó|ejecutó|arregló|restauró|omitió)\b",
-	re.I,
-)
-_FIRST_PERSON = re.compile(
-	r"\b(me|mi|mis|nos|le|les|he|creé|implementé|propuso|expliqué|dije|hice|desplegué|generé|corregí|configuré|actualicé|sincronicé|ejecuté|arreglé|restauré)\b",
-	re.I,
-)
-
-
-_ALETH_OPENER = re.compile(r"^\s*Aleth\s+\w+", re.I)
-_EN_WORDS = set("the and of to in is was for with that this from have has had were are by on as it he she they".split())
-_ES_WORDS = set("el la los las de que y en un una por para con me le lo se del al es fue su sus como".split())
-
-
-def looks_english(text: str) -> bool:
-	"""¿La nota está en inglés? Recuento de palabras vacías EN vs ES (determinista)."""
-	words = re.findall(r"[a-záéíóúüñ]+", text.lower())
-	en = sum(w in _EN_WORDS for w in words)
-	es = sum(w in _ES_WORDS for w in words)
-	return en > es and en >= 3
-
-
-def is_first_person(text: str) -> bool:
-	"""True si la nota tiene marcadores de 1ª persona (criterio del rewrite)."""
-	return bool(_FIRST_PERSON.search(text))
-
-
-def quality_flags(text: str) -> List[str]:
-	"""Detectores MEM-006 P2: género femenino de Joan, identidad confundida, voz 3ª."""
-	flags: List[str] = []
-	if _FEMININE_JOAN.search(text):
-		flags.append("gender")
-	if _IDENTITY_CONFUSION.search(text):
-		flags.append("identity")
-	if _THIRD_PERSON.search(text) or _IMPERSONAL.search(text) or _ALETH_PAST.search(text):
-		flags.append("voice")
-	return flags
-
 
 # ── MEM-010 F1: métricas por sesión para el gating (RFC §3.2) ────────────────
 # Se computan SIEMPRE sobre las notas FINALES (post rewrite/dedup) y con el
 # umbral de dedup efectivo guardado junto a la métrica, para que vivo y
 # backfill comparen like-for-like (enmienda r3 del panel).
-
-_BIO_LEAK_PATTERNS = (
-	re.compile(r"\bcomo narradora\b", re.I),
-	re.compile(r"\bla narradora del b[úu]nker\b", re.I),
-	re.compile(r"\bel (?:operador|ingeniero) catal[áa]n\b", re.I),
-)
-
-
-def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: float) -> Dict[str, Any]:
-	"""Métricas de calidad de una sesión anotada (deterministas, sin IO)."""
-	texts = [str(a.get("text") or "") for a in annotations]
-	n = len(texts)
-	lens = [len(t) for t in texts]
-	toks = [_tokens(t + " " + str(a.get("title") or "")) for t, a in zip(texts, annotations)]
-	near_dups = 0
-	for i in range(len(toks)):
-		for j in range(i + 1, len(toks)):
-			a, b = toks[i], toks[j]
-			if a and b and len(a & b) / min(len(a), len(b)) > dedup_threshold:
-				near_dups += 1
-	margins = [
-		abs(float(a.get("work_score", 0.0) or 0.0) - float(a.get("social_score", 0.0) or 0.0))
-		for a in annotations
-		if "work_score" in a and "social_score" in a
-	]
-	return {
-		"notas": n,
-		"pct_gt_600": round(100 * sum(1 for x in lens if x > 600) / max(1, n), 1),
-		"pct_primera_persona": round(100 * sum(1 for t in texts if is_first_person(t)) / max(1, n), 1),
-		"near_dups": near_dups,
-		"dedup_threshold": float(dedup_threshold),
-		"min_margin": round(min(margins), 3) if margins else None,
-		"bio_leaks": sum(1 for t in texts if any(p.search(t) for p in _BIO_LEAK_PATTERNS)),
-	}
 
 
 def session_input_hash(root: Path, dir_rel: str, units: List[Any]) -> Tuple[Optional[str], str]:
@@ -137,47 +62,6 @@ def session_input_hash(root: Path, dir_rel: str, units: List[Any]) -> Tuple[Opti
 		return None, "none"
 	payload = "\x1e".join(f"{u.key}:{compute_hash(u.content)}" for u in units)
 	return hashlib.sha256(payload.encode("utf-8")).hexdigest(), "units"
-
-
-def _normalize(text: str) -> str:
-	return re.sub(r"[^a-z0-9áéíóúüñ ]+", " ", text.lower()).strip()
-
-
-def _tokens(text: str) -> set:
-	return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
-
-
-def _rank(a: Dict[str, Any]) -> Tuple[int, float, int]:
-	flags = a.get("flags") or []
-	voice_ok = 0 if "voice" in flags else 1
-	try:
-		sig = float(a.get("significance") or 0)
-	except (TypeError, ValueError):
-		sig = 0.0
-	return (voice_ok, sig, len(str(a.get("text") or "")))
-
-
-def dedup_annotations(annotations: List[Dict[str, Any]], threshold: float = 0.6) -> List[Dict[str, Any]]:
-	"""P1-A: colapsa duplicados exactos (hash normalizado) y near-dups (tokens).
-
-	Conserva la mejor variante: 1ª persona > significance > longitud. Los gemelos
-	work/social del mismo evento se funden aquí.
-	"""
-	kept: List[Dict[str, Any]] = []
-	kept_tokens: List[set] = []
-	seen: set = set()
-	for a in sorted(annotations, key=_rank, reverse=True):
-		text = str(a.get("text") or "")
-		h = hashlib.sha256(_normalize(text).encode("utf-8")).hexdigest()
-		if h in seen:
-			continue
-		t = _tokens(text + " " + str(a.get("title") or ""))
-		if any(t and kt and len(t & kt) / min(len(t), len(kt)) > threshold for kt in kept_tokens):
-			continue
-		seen.add(h)
-		kept.append(a)
-		kept_tokens.append(t)
-	return kept
 
 
 def _route(work: float, social: float, th_work: float, th_social: float, dead_zone: float) -> Optional[str]:
