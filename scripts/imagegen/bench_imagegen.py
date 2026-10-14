@@ -398,52 +398,56 @@ def _load_bonsai(cfg: dict):
 
 
 # Generación
-def _gen_sd_cpp_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
-	return _sd_cpp_generate(pipe, prompt, seed, size, size)
+def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+	return _sd_cpp_generate(pipe, prompt, seed, width, height)
 
 
-def _gen_diffusers_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
+def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	import torch
 
 	gen = torch.Generator(device="cuda").manual_seed(seed)
 	return pipe(
 		prompt=prompt,
-		height=size,
-		width=size,
+		height=height,
+		width=width,
 		num_inference_steps=cfg["steps"],
 		guidance_scale=cfg["guidance"],
 		generator=gen,
 	).images[0]
 
 
-def _gen_bonsai_bench(cfg: dict, pipe, prompt: str, seed: int, size: int):
+def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
 	from PIL import Image
 
 	buf = pipe.generate_png(
 		prompt=prompt,
 		seed=seed,
 		steps=cfg["steps"],
-		height=size,
-		width=size,
+		height=height,
+		width=width,
 		guidance=cfg["guidance"],
 	)
 	return Image.open(io.BytesIO(buf))
 
 
-# Registro kind→generador del benchmark (data over branches, AD-052).
-_GEN_BENCH_DISPATCH = {
-	"sd_cpp": _gen_sd_cpp_bench,
-	"diffusers": _gen_diffusers_bench,
-	"bonsai": _gen_bonsai_bench,
+# Registro kind→generador del harness (data over branches, AD-052): fuente ÚNICA que
+# comparten bench_imagegen y gen_image. Añadir un runtime = su loader + una entrada.
+GEN_DISPATCH = {
+	"sd_cpp": _gen_sd_cpp,
+	"diffusers": _gen_diffusers,
+	"bonsai": _gen_bonsai,
 }
 
 
-def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
-	cfg = MODELS[model_id]
-	fn = _GEN_BENCH_DISPATCH.get(kind)
+def generate(kind: str, cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+	fn = GEN_DISPATCH.get(kind)
 	if fn is None:
 		raise RuntimeError(f"kind desconocido: {kind}")
-	return fn(cfg, pipe, prompt, seed, size)
+	return fn(cfg, pipe, prompt, seed, width, height)
+
+
+def _generate(kind: str, pipe, model_id: str, prompt: str, seed: int, size: int):
+	return generate(kind, MODELS[model_id], pipe, prompt, seed, size, size)
 
 
 def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Path) -> int:

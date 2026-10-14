@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import io
 import json
 import os
 import sys
@@ -95,52 +94,9 @@ def _confine_out(path: Path) -> Path:
 	return resolved
 
 
-def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	return BENCH._sd_cpp_generate(pipe, prompt, seed, width, height)
-
-
-def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	import torch
-
-	gen = torch.Generator(device="cuda").manual_seed(seed)
-	return pipe(
-		prompt=prompt,
-		height=height,
-		width=width,
-		num_inference_steps=cfg["steps"],
-		guidance_scale=cfg["guidance"],
-		generator=gen,
-	).images[0]
-
-
-def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	from PIL import Image
-
-	buf = pipe.generate_png(
-		prompt=prompt,
-		seed=seed,
-		steps=cfg["steps"],
-		height=height,
-		width=width,
-		guidance=cfg["guidance"],
-	)
-	return Image.open(io.BytesIO(buf))
-
-
-# Registro kind→generador (data over branches, AD-052).
-_GEN_DISPATCH = {
-	"sd_cpp": _gen_sd_cpp,
-	"diffusers": _gen_diffusers,
-	"bonsai": _gen_bonsai,
-}
-
-
 def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int):
-	cfg = MODELS[model_id]
-	fn = _GEN_DISPATCH.get(kind)
-	if fn is None:
-		raise RuntimeError(f"kind desconocido: {kind}")
-	return fn(cfg, pipe, prompt, seed, width, height)
+	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052)."""
+	return BENCH.generate(kind, MODELS[model_id], pipe, prompt, seed, width, height)
 
 
 def _run_element(el: dict) -> int:
