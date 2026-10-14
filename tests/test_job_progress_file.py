@@ -6,7 +6,7 @@ los PROCESSING (como `stage_*`) y sirve de forense. Sin threading ni escrituras 
 
 from __future__ import annotations
 
-from red_pill import cli
+from red_pill.cli_jobs import _progress_display
 from red_pill.core.progress import job_progress_path, read_job_progress, write_job_progress
 from red_pill.jobs.drivers.dag import DagJobDriver
 
@@ -20,12 +20,12 @@ def test_progress_file_roundtrip(tmp_path):
 
 def test_cli_merge_solo_processing():
 	write_job_progress("proc0001", {"label": "sesión", "current": 4, "total": 10})
-	prog = cli._progress_display({"id": "proc0001", "status": "PROCESSING", "progress": {"current": 2, "total": 5, "percent": 40}})
+	prog = _progress_display({"id": "proc0001", "status": "PROCESSING", "progress": {"current": 2, "total": 5, "percent": 40}})
 	assert prog["stage_label"] == "sesión" and prog["stage_current"] == 4 and prog["stage_total"] == 10
 	assert prog["current"] == 2  # el contador de la DB no se toca
 
 	write_job_progress("done0001", {"label": "x", "current": 1, "total": 2})
-	prog2 = cli._progress_display({"id": "done0001", "status": "COMPLETED", "progress": {"current": 1, "total": 2}})
+	prog2 = _progress_display({"id": "done0001", "status": "COMPLETED", "progress": {"current": 1, "total": 2}})
 	assert "stage_label" not in prog2  # no-PROCESSING ignora el fichero
 
 

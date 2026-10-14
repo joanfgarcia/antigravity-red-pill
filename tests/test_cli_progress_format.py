@@ -6,7 +6,7 @@ fan-out; la columna PROGRESS del `job list` los renderiza como "· sesión k/N".
 
 from __future__ import annotations
 
-from red_pill.cli import _format_progress
+from red_pill.cli_jobs import _format_progress
 
 
 def test_stage_fields_render():

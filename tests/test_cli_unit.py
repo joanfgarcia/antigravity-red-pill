@@ -410,7 +410,7 @@ def test_handle_pact_show_nivel_e_instruccion(mock_mgr, capsys):
 	assert "THE BOND" in out and "ENGRAMA DE IDENTIDAD" in out
 
 
-@patch("red_pill.cli._find_job")
+@patch("red_pill.cli_jobs._find_job")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_skip(mock_qm, mock_find):
 	"""'red-pill job skip' marca el siguiente step (JOBS-001)."""
@@ -422,7 +422,7 @@ def test_cli_job_skip(mock_qm, mock_find):
 	mock_qm.return_value.skip_next_task.assert_called_once_with("abc-123")
 
 
-@patch("red_pill.cli._find_job")
+@patch("red_pill.cli_jobs._find_job")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_skip_no_encontrado(mock_qm, mock_find):
 	mock_find.return_value = None
@@ -430,7 +430,7 @@ def test_cli_job_skip_no_encontrado(mock_qm, mock_find):
 		main()  # no lanza
 
 
-@patch("red_pill.cli._find_job")
+@patch("red_pill.cli_jobs._find_job")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_status(mock_qm, mock_find):
 	mock_find.return_value = {"id": "abc-123", "status": "PROCESSING", "checkpoint_data": "{}"}
@@ -439,7 +439,7 @@ def test_cli_job_status(mock_qm, mock_find):
 		main()
 
 
-@patch("red_pill.cli._find_job")
+@patch("red_pill.cli_jobs._find_job")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 	mock_find.return_value = {"id": "abc-123"}
@@ -472,7 +472,7 @@ def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 		main()
 
 
-@patch("red_pill.cli._find_job")
+@patch("red_pill.cli_jobs._find_job")
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_logs_y_sin_log(mock_qm, mock_find, tmp_path):
 	import red_pill.jobs.drivers as drv
