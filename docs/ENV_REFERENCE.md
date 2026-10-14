@@ -53,7 +53,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `METABOLISM_ENABLED` | `True` | Activates the core engine that forgets over time (entropic background decay). |
 | `METABOLISM_STRATEGY`| `LAZY` | Calculation mode: `CLASSIC` run as a loop, `LAZY` calculated at query time. |
 | `METABOLISM_COOLDOWN`| `3600` | Minimum seconds between global erosion cycles. |
-| `ABSENCE_THRESHOLD`| `604800` (7 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
+| `ABSENCE_THRESHOLD`| `259200` (3 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
 | `MAX_SINK_TIME` | `2592000` (30 days)| Total max time an engram survives before a `Gran Purge` irrevocably destroys it. |
 | `DECAY_STRATEGY` | `linear` | Mathematical model to apply score reduction (`linear` or `exponential`). |
 | `EROSION_RATE` | `0.01` | How much reinforcement score is removed per cycle. At 0.01, standard memories last ~4 days without reinforcement. |
