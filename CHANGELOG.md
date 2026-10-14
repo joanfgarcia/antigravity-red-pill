@@ -1,6 +1,30 @@
 ## Unreleased
 
-### 🧩 Media — el registro del harness es DATOS (elenco = fuente única) + runtime sd.cpp
+## [8.1.0] - 2026-10-14 (Media router, arnés de generación local, refactor DAG + remediación R5)
+
+### 🧱 Refactor — DAG: registro de tipos de nodo + driver modular (ronda adversarial R5)
+
+- **[ARCH]** `jobs/drivers/dag_types/` — **registro de tipos de nodo** del DAG
+  (`StageType`/`StageContext` + `agent`/`command`/`compound`/`dag`, uno por fichero,
+  auto-registrados; CONVENTIONS §10.8.3). Añadir un nodo = escribir `dag_types/<kind>.py`
+  + `register(...)`; validador/compositor/ejecutor despachan por la clave del registro,
+  sin escaleras `if type ==`.
+- **[ARCH]** `DagJobDriver` secciona en módulos cohesivos (`dag_validate`, `dag_compose`,
+  `dag_fanout`, `dag_exec`, `dag_schedule` + `dag_manifest` de helpers puros); `dag.py`
+  queda como driver fino (~74 L). Equivalencia de comportamiento verificada byte-a-byte
+  (validate + expand) y E2E real (dag_job con subprocesos + `media-gen` local).
+- **[ARCH]** `core/progress.py` (canal de progreso fino, neutro de drivers) +
+  `core/llm_endpoint.py` (endpoint LLM config-driven, fuente única). El mecanismo común
+  de subproceso sube a `ResumableJobDriver`. `cli.py` (1927 L) → `cli_jobs`/`cli_parser`/
+  `cli_commands`/`cli_services` + `cli.py` fino.
+- **[SECURITY]** `stage.id` validado contra charset/`..` (sin traversal) y `report_path`
+  confinado a `.cell/reports`; el bloque `params` de etapa no puede fijar claves de
+  política (`MemoryMax`/`job_id`); escritura del progreso con `mkstemp` (sin `.tmp`
+  predecible que siga symlinks).
+- **[QA]** Smoke de paths comunes en `cli_services`/`cli_jobs`; `media_gen` cubierto; gate
+  global 83%. Test de regresión del scope cgroup de `CommandMinion` (0 huérfanos).
+
+
 
 - **[FIX]** `scripts/imagegen/bench_imagegen.py` ya **no** hardcodea el registro
   `MODELS`: lo **traduce del elenco** `media_profiles.yaml` (misma fuente que el

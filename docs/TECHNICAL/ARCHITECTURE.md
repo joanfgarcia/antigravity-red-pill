@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.0.0 (Despertar autónomo: aislamiento de actividad)
+**System Version**: v8.1.0 (Media router + arnés de generación local + refactor DAG)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 

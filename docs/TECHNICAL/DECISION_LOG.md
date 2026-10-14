@@ -4,7 +4,19 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
-## [AD-052] El registro de modelos del harness es DATOS (elenco = fuente única) + runtime sd.cpp
+## [AD-053] El tipo de nodo del DAG es un REGISTRO + el driver secciona en módulos
+**Date**: 2026-10-14
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`, release 8.1.0). Extiende `RFC_JOB_DAG` (ver `docs/TECHNICAL/`).
+**Context**: `jobs/drivers/dag.py` (1178 L) mezclaba tres concerns (validación/composición del árbol, ejecución atómica, planificación del step) y decidía el **tipo de etapa** con cuatro escaleras `if type ==` (tipos válidos, validación, expansión, ejecución). Añadir un nodo del DAG nuevo obligaba a tocar los cuatro sitios — el anti-patrón que CONVENTIONS §10.8.2/§10.8.3 prohíbe.
+**Decision**:
+- El **tipo de nodo** (`agent`/`command`/`compound`/`dag`) vive en `jobs/drivers/dag_types/`: un `StageType` (protocolo con `validate`/`compose`/`kind`/`report_suffix`) **uno por fichero**, que se **auto-registra** (`register(...)`) al importar. El validador (`dag_validate`), el compositor (`dag_compose`) y el ejecutor despachan por la **clave del registro** — sin `if type ==`.
+- **Añadir un nodo = escribir `dag_types/<kind>.py` + `register(...)`**; el call site no se toca (§10.8.3).
+- El driver se **secciona** en módulos cohesivos (`dag_manifest`/`dag_validate`/`dag_compose`/`dag_fanout`/`dag_exec`/`dag_schedule`), compuestos por **mixins** (call sites intactos); `dag.py` queda como espina fina. Equivalencia de comportamiento verificada byte-a-byte (validate+expand) + suite completa + E2E real.
+- Mismo criterio aplicado a `cli.py` (→ `cli_jobs`/`cli_parser`/`cli_commands`/`cli_services`), `annotate.py` (→ `annotation_quality`/`annotate_state`/`annotate_phases`), `core/progress.py` (canal de progreso neutro) y `core/llm_endpoint.py` (endpoint LLM fuente única).
+**Consequences**: unidades pequeñas, autocontenidas y de bajo blast-radius; el elenco de tipos del DAG es datos+registro, no ramas. Deuda menor declarada: cobertura por-fichero de la superficie CLI por debajo de 80% (el gate aplicable es global, verde).
+
+---
+
 **Date**: 2026-10-14
 **Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende el router/elenco (ver `docs/CORE/MEDIA_MODELS.md`).
 **Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres
