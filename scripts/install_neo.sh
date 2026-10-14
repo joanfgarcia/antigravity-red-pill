@@ -207,7 +207,7 @@ echo "------------------------------------------------------------------"
 echo -e "${BLUE}👔 DRESS CODE (PUNTUACIÓN Y TYPOS):${NC}"
 echo "La calidad de tu memoria a largo plazo depende de cómo escribes."
 echo "Los Agentes usan tu puntuación para el Chunking Semántico."
-echo "Por favor, lee: docs/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
+echo "Por favor, lee: docs/GUIDES/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
 echo "------------------------------------------------------------------"
 
 
