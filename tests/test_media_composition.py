@@ -89,3 +89,28 @@ def test_gate_is_noop_without_composition(tmp_path):
 def test_gate_rejects_non_mapping():
 	with pytest.raises(MediaCapabilityError):
 		_adapter_gate_composition({"composition": [1, 2, 3]}, {"id": "x", "composition": []})
+
+
+def test_parity_router_vs_harness(tmp_path, monkeypatch):
+	"""Paridad: el harness (espejo) y el router filtran igual la composición para el mismo modelo/elenco."""
+	import importlib.util
+	from pathlib import Path
+
+	path = tmp_path / "media_profiles.yaml"
+	path.write_text(ELENCO, encoding="utf-8")
+	monkeypatch.setenv("REDPILL_MEDIA_PROFILES", str(path))
+	monkeypatch.setenv("RP_MEDIA_COMPOSITION_POLICY", "compatible")
+
+	bench_path = Path(__file__).resolve().parents[1] / "scripts" / "imagegen" / "bench_imagegen.py"
+	spec = importlib.util.spec_from_file_location("bench_imagegen_parity", bench_path)
+	harness = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(harness)
+
+	model = harness.MODELS["flux2_klein"]
+	meta = {"reference_image": "a.png", "img2img": "b.png"}
+	kept, hwarns = harness.apply_composition(dict(meta), model)
+	rparams, rwarns = _adapter_gate_composition(
+		{"composition": dict(meta)}, {**model, "_policy": "compatible"}
+	)
+	assert rparams["composition"] == kept == {"reference_image": "a.png"}
+	assert len(rwarns) == len(hwarns) == 1

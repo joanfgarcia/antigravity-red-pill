@@ -234,11 +234,12 @@ def main() -> int:
 				comp = json.loads(raw)
 			except Exception:  # noqa: BLE001
 				comp = None
-		els = [
-			{"model": m, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out, "tag": args.tag, "name": args.name,
-			 **({"composition": comp} if comp else {})}
-			for m in ids
-		]
+		els = []
+		for m in ids:
+			el = {"model": m, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out, "tag": args.tag, "name": args.name}
+			if comp:
+				el["composition"] = comp
+			els.append(el)
 		print(json.dumps(els, ensure_ascii=False))
 		return 0
 
