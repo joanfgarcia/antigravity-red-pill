@@ -21,6 +21,11 @@
 #   task:     text2image | tts | sfx | music | scene
 #   backend:  dispatch del harness (diffusers | bonsai | sd_cpp | ...) — solo imagen
 #   capabilities: clasificación por TIPO DE ARTE / TIPO DE SONIDO (roles).
+#   composition:  operaciones de CONDICIONAMIENTO POR IMAGEN que el modelo soporta (solo imagen).
+#                 Vocabulario canónico: reference_image, multi_reference, img2img, inpaint, mask, strength,
+#                 negative_prompt, controlnet, lora. Lo que no esté aquí, `gate_composition` lo descarta con
+#                 warning (o falla si MEDIA_COMPOSITION_POLICY=strict). `composition_pipelines` mapea una
+#                 operación a OTRO pipeline del venv (p.ej. inpaint → Flux2KleinInpaintPipeline).
 #
 # ⚠️ AVISO: EJEMPLO del PUESTO DE REFERENCIA (RTX 5070 Laptop 8 GB, sm_120,
 # 2026-10-10). VRAM/tiempos son de ese puesto — recalibrar por equipo.
@@ -42,7 +47,9 @@ media_profiles:
     not_capable_for: []
     priority: 1
     constraints: { dim_multiple: 8 }        # ÷8 (Flux2 stride 8 → conserva 1080)
-    adapters: ["snap_dims"]
+    adapters: ["snap_dims", "gate_composition"]
+    composition: [reference_image, multi_reference, inpaint, mask, strength]
+    composition_pipelines: { inpaint: Flux2KleinInpaintPipeline }   # el resto sale del pipeline base (image=)
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -66,7 +73,9 @@ media_profiles:
     not_capable_for: []
     priority: 2
     constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16
-    adapters: ["snap_dims", "reject_oversize"]
+    adapters: ["snap_dims", "reject_oversize", "gate_composition"]
+    composition: [negative_prompt, img2img, inpaint, mask, strength, controlnet]
+    composition_pipelines: { img2img: ZImageImg2ImgPipeline, inpaint: ZImageInpaintPipeline, controlnet: ZImageControlNetPipeline }
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -91,7 +100,8 @@ media_profiles:
     not_capable_for: []
     priority: 3
     constraints: { dim_multiple: 32, max_pixels: 1600000 }   # ÷32; OOM por encima de ~1.5 MPix
-    adapters: ["snap_dims", "reject_oversize"]
+    adapters: ["snap_dims", "reject_oversize", "gate_composition"]
+    composition: []   # sin ruta de condicionamiento por imagen (límite real del binding GpuPipeline)
     license:
       id: "apache-2.0"
       commercial_ok: true
@@ -114,7 +124,8 @@ media_profiles:
     not_capable_for: []
     priority: 2
     constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16 (VAE scale 16)
-    adapters: ["snap_dims", "reject_oversize"]
+    adapters: ["snap_dims", "reject_oversize", "gate_composition"]
+    composition: [reference_image, img2img, inpaint, mask, strength, negative_prompt]   # controlnet/lora: reservados (faltan artefactos)
     sd_cpp:
       diffusion_model: "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-Image-2.1-Turbo-Q5_K_M-4.60GiB.gguf"
       text_encoder: "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"

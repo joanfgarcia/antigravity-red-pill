@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -432,6 +433,21 @@ class RedPillConfig(BaseSettings):
 	# herede el latido (heartbeat D21): sin latido, un techo alto deja colgado al
 	# agente comiéndose la cuota. El despertar auto-empaqueta lo largo en dag_job.
 	AWAKENING_TIMEOUT: int = int(os.getenv("AWAKENING_TIMEOUT", "600"))
+	# MEDIA_COMPOSITION_POLICY: política ante composición/capability NO soportada por el modelo del elenco media
+	# (docs/CORE/MEDIA_MODELS.md, RFC-HARNESS-004 §composición):
+	#   compatible (def) → avisa (warning) y renderiza ignorando ese valor (fail-soft);
+	#   strict           → error limpio (aborta). Un valor desconocido cae a `compatible` con aviso (fail-soft
+	#   del propio ajuste); nunca tumba la carga del config.
+	MEDIA_COMPOSITION_POLICY: str = os.getenv("MEDIA_COMPOSITION_POLICY", "compatible")
+
+	@field_validator("MEDIA_COMPOSITION_POLICY", mode="before")
+	@classmethod
+	def _media_composition_policy_valid(cls, v: Any) -> str:
+		if isinstance(v, str) and v.strip().lower() in ("compatible", "strict"):
+			return v.strip().lower()
+		if v not in (None, ""):
+			logging.getLogger(__name__).warning("MEDIA_COMPOSITION_POLICY=%r desconocido → compatible", v)
+		return "compatible"
 	# AWAKENING_SILENCE_COUNTS: si False (default), un despertar que ejerce el
 	# Derecho al Silencio NO consume el tope diario (`MAX_AWAKENINGS_PER_DAY`);
 	# solo cuentan los despertares productivos (con trabajo real) y los errores.

@@ -93,9 +93,9 @@ def _confine_out(path: Path) -> Path:
 	return resolved
 
 
-def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int):
+def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int, meta: dict = None):
 	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052)."""
-	return BENCH.generate(kind, MODELS[model_id], pipe, prompt, seed, width, height)
+	return BENCH.generate(kind, MODELS[model_id], pipe, prompt, seed, width, height, meta)
 
 
 def _run_element(el: dict) -> int:
@@ -144,10 +144,21 @@ def _run_element(el: dict) -> int:
 		return 1
 	load_s = time.perf_counter() - t0
 
+	# Composición (condicionamiento por imagen): el elemento manda sobre el env del job (precedencia).
+	meta = el.get("composition")
+	if meta is None:
+		raw = os.environ.get("RP_MEDIA_COMPOSITION")
+		if raw:
+			try:
+				meta = json.loads(raw)
+			except Exception:  # noqa: BLE001
+				meta = None
+	meta = meta or {}
+
 	try:
 		torch.cuda.reset_peak_memory_stats()
 		t1 = time.perf_counter()
-		img = _gen(kind, pipe, model_id, prompt, seed, width, height)
+		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta)
 		wall = time.perf_counter() - t1
 		peak = torch.cuda.max_memory_allocated() / (1024**2)
 		img.save(png)
@@ -216,8 +227,16 @@ def main() -> int:
 			return 1
 		ids = [m.strip() for m in (args.models or ",".join(MODELS)).split(",") if m.strip()]
 		w, h = _snap(args.width), _snap(args.height)
+		comp = None
+		raw = os.environ.get("RP_MEDIA_COMPOSITION")
+		if raw:
+			try:
+				comp = json.loads(raw)
+			except Exception:  # noqa: BLE001
+				comp = None
 		els = [
-			{"model": m, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out, "tag": args.tag, "name": args.name}
+			{"model": m, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out, "tag": args.tag, "name": args.name,
+			 **({"composition": comp} if comp else {})}
 			for m in ids
 		]
 		print(json.dumps(els, ensure_ascii=False))

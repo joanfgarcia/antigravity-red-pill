@@ -87,6 +87,22 @@ def _snap(v: int, mult: int) -> int:
 	return max(mult, round(v / mult) * mult) if mult > 1 else v
 
 
+def _composition_from_args(args) -> dict:
+	"""Bloque `composition` (vocabulario canónico del elenco) a partir de los flags del CLI."""
+	meta: dict = {}
+	if args.ref_images:
+		meta["reference_image"] = args.ref_images[0] if len(args.ref_images) == 1 else list(args.ref_images)
+	if getattr(args, "image", None):
+		meta["img2img"] = args.image
+	if getattr(args, "mask", None):
+		meta["mask"] = args.mask
+	if getattr(args, "strength", None) is not None:
+		meta["strength"] = args.strength
+	if getattr(args, "negative_prompt", None):
+		meta["negative_prompt"] = args.negative_prompt
+	return meta
+
+
 def _default_out() -> str:
 	"""Destino por defecto: el STAGING (CONVENTIONS §7) — resuelto por `_config_common` (fuente única)."""
 	from _config_common import console_out_dir
@@ -127,6 +143,7 @@ def main() -> int:
 	ap.add_argument("--mask", help="máscara de inpainting (acompaña a --image)")
 	ap.add_argument("--ref-image", action="append", dest="ref_images", help="imagen de referencia (repetible; composición)")
 	ap.add_argument("--strength", type=float, help="fuerza de re-difusión en edición (def: del elenco / 0.75)")
+	ap.add_argument("--negative-prompt", dest="negative_prompt", help="prompt negativo (si el modelo lo soporta)")
 	ap.add_argument("--no-unload", action="store_true", help="no pedir el unload del LLM residente")
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
 	ap.add_argument("--list-models", action="store_true", help="emite el array JSON de modelos de imagen (elenco)")
@@ -147,7 +164,11 @@ def main() -> int:
 		prof = (data.get("media_profiles") or {}).get(model) or {}
 		mult = int((prof.get("constraints") or {}).get("dim_multiple") or 1)
 		w, h = _snap(args.width, mult), _snap(args.height, mult)
-		print(json.dumps([{"model": model, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out}], ensure_ascii=False))
+		comp = _composition_from_args(args)
+		el = {"model": model, "prompt": prompt, "seed": args.seed, "width": w, "height": h, "out": args.out}
+		if comp:
+			el["composition"] = comp
+		print(json.dumps([el], ensure_ascii=False))
 		return 0
 
 	args.out = args.out or _default_out()
@@ -182,13 +203,12 @@ def main() -> int:
 		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
 
 	kind, pipe = B._load(model)
-	editing = bool(args.image or args.mask or args.ref_images)
-	if editing and backend != "sd_cpp":
-		raise SystemExit(f"[error] edición/referencias sólo con backend sd_cpp (este modelo: {backend})")
-	if editing:
-		img = B._sd_cpp_generate(pipe, prompt, args.seed, w, h, image=args.image, mask=args.mask, ref_images=args.ref_images, strength=args.strength)
-	else:
-		img = G._gen(kind, pipe, model, prompt, args.seed, w, h)
+	# Composición (referencia/edición) unificada: la filtra el harness según lo que declara el elenco. Lo no
+	# soportado AVISA (soft-fail, política `compatible`) y se renderiza igual; en `strict`, falla.
+	meta = _composition_from_args(args)
+	if meta:
+		print(f"[gen] composición: {', '.join(meta)} (política {os.environ.get('RP_MEDIA_COMPOSITION_POLICY', 'compatible')})", file=sys.stderr)
+	img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta)
 
 	outdir = Path(args.out)
 	outdir.mkdir(parents=True, exist_ok=True)
