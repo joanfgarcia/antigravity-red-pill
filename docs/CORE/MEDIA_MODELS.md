@@ -94,7 +94,9 @@ Un modelo de imagen declara qué operaciones de **composición** soporta y con q
   la política por `RP_MEDIA_COMPOSITION_POLICY`. El pipeline alternativo (`composition_pipelines`) lo monta el harness
   con `from_pipe` — nota: **`from_pipe` no conserva la cuantización 4-bit** del base (medir VRAM en 8 GB).
 - **Cómo se pasa**: CLI `--ref-image`/`--image`/`--mask`/`--strength`/`--negative-prompt`; en una receta, bloque
-  `media: {composition: {...}}`.
+  `media: {composition: {...}}`. Para encargos largos: **`media-gen --config encargo.yaml`** (YAML o TOML) lleva
+  toda la config —modelo, tamaño, semilla, **prompt en bloque literal** y `composition`— en un fichero; un flag
+  del CLI manda sobre el fichero (plantilla: `examples/media_gen_config.yaml.example`).
 
 ---
 

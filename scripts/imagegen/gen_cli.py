@@ -103,6 +103,50 @@ def _composition_from_args(args) -> dict:
 	return meta
 
 
+_CONFIG_KEYS = frozenset({
+	"model", "role", "width", "height", "seed", "out", "prompt", "text",
+	"image", "mask", "ref_image", "ref_images", "strength", "negative_prompt",
+	"no_unload", "dry_run",
+})
+
+
+def _load_config_file(path: str) -> dict:
+	"""Carga un fichero de configuración del encargo: **YAML** (`.yaml`/`.yml`, def) o TOML (`.toml`)."""
+	p = Path(path).expanduser()
+	if not p.is_file():
+		raise SystemExit(f"[error] --config no existe: {p}")
+	text = p.read_text(encoding="utf-8")
+	if p.suffix.lower() == ".toml":
+		import tomllib
+
+		return tomllib.loads(text) or {}
+	import yaml
+
+	return yaml.safe_load(text) or {}
+
+
+def _config_to_defaults(cfg: dict) -> dict:
+	"""Traduce el fichero de config a valores por defecto de los flags (el CLI, si se pasa, manda).
+
+	Acepta la forma plana (mismas claves que los flags: `width`, `prompt`, `ref_image`…) y, además, un bloque
+	`composition:` con el vocabulario canónico, que se mapea a los flags de composición.
+	"""
+	cfg = dict(cfg or {})
+	comp = cfg.pop("composition", None) or {}
+	if isinstance(comp, dict):
+		if "reference_image" in comp and not ({"ref_image", "ref_images"} & set(cfg)):
+			cfg["ref_images"] = comp["reference_image"] if isinstance(comp["reference_image"], list) else [comp["reference_image"]]
+		if "img2img" in comp and "image" not in cfg:
+			cfg["image"] = comp["img2img"]
+		if "mask" in comp and "mask" not in cfg:
+			cfg["mask"] = comp["mask"]
+		if "strength" in comp and "strength" not in cfg:
+			cfg["strength"] = comp["strength"]
+		if "negative_prompt" in comp and "negative_prompt" not in cfg:
+			cfg["negative_prompt"] = comp["negative_prompt"]
+	return {k: v for k, v in cfg.items() if k in _CONFIG_KEYS}
+
+
 def _default_out() -> str:
 	"""Destino por defecto: el STAGING (CONVENTIONS §7) — resuelto por `_config_common` (fuente única)."""
 	from _config_common import console_out_dir
@@ -148,6 +192,11 @@ def main() -> int:
 	ap.add_argument("--dry-run", action="store_true", help="resolver y mostrar, sin generar")
 	ap.add_argument("--list-models", action="store_true", help="emite el array JSON de modelos de imagen (elenco)")
 	ap.add_argument("--list-elements", action="store_true", help="emite el array JSON de elementos (para element_job)")
+	ap.add_argument("--config", help="fichero YAML/TOML con toda la configuración (model, tamaño, seed, prompt, composición…)")
+	# Fichero de config primero (como defaults); los flags del CLI, si se pasan, mandan.
+	_pre, _ = ap.parse_known_args()
+	if _pre.config:
+		ap.set_defaults(**_config_to_defaults(_load_config_file(_pre.config)))
 	args = ap.parse_args()
 
 	if args.list_models:
