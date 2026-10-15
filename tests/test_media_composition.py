@@ -91,6 +91,40 @@ def test_gate_rejects_non_mapping():
 		_adapter_gate_composition({"composition": [1, 2, 3]}, {"id": "x", "composition": []})
 
 
+def test_transport_media_env_survives_sanitize(tmp_path, monkeypatch):
+	"""H1: la composición viaja en `media_env` (no en `env`, que el sanitizador de script_job borra) y `_build_env`
+	la aplica DESPUÉS del sanitizado → llega al hijo."""
+	from red_pill.core import media_router
+	from red_pill.jobs.drivers import script
+	from red_pill.jobs.drivers.base import sanitize_job_env
+	from red_pill.jobs.drivers.media_hook import validate_media_payload
+
+	path = tmp_path / "media_profiles.yaml"
+	path.write_text(ELENCO, encoding="utf-8")
+	monkeypatch.setattr(media_router, "_MEDIA_SINGLETON", MediaProfiles(path=path))
+
+	payload = {
+		"step_command": "x",
+		"media": {"model": "flux2_klein", "width": 768, "height": 768,
+		          "composition": {"reference_image": "a.png", "img2img": "b.png"}},
+	}
+	validate_media_payload(payload)
+	# 1) El env media va en su clave, NO en `payload['env']`.
+	assert "RP_MEDIA_MODEL" not in (payload.get("env") or {})
+	assert payload["media_env"]["RP_MEDIA_MODEL"] == "flux2_klein"
+	assert payload["media_env"]["RP_MEDIA_WIDTH"] == "768"
+	assert "reference_image" in payload["media_env"]["RP_MEDIA_COMPOSITION"]
+	assert payload["media_env"]["RP_MEDIA_COMPOSITION_POLICY"] in ("compatible", "strict")
+	# 2) El sanitizador borraría los RP_* (por eso el transporte va aparte).
+	assert sanitize_job_env({"RP_MEDIA_MODEL": "x", "KEEP": "y"}) == {"KEEP": "y"}
+	# 3) `_build_env` los aplica después del sanitizado → llegan al proceso hijo.
+	driver = object.__new__(script.ScriptJobDriver)
+	driver.job_id = "t"
+	env = driver._build_env(payload, cwd=str(tmp_path))
+	assert env["RP_MEDIA_MODEL"] == "flux2_klein"
+	assert env["RP_MEDIA_WIDTH"] == "768"
+
+
 def test_parity_router_vs_harness(tmp_path, monkeypatch):
 	"""Paridad: el harness (espejo) y el router filtran igual la composición para el mismo modelo/elenco."""
 	import importlib.util
