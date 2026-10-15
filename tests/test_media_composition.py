@@ -49,8 +49,12 @@ def _profiles(tmp_path) -> MediaProfiles:
 def test_compatible_keep_supported_drop_unsupported(tmp_path):
 	p = _profiles(tmp_path)
 	r = p.validate(
-		{"model": "flux2_klein", "width": 768, "height": 768,
-		 "composition": {"reference_image": "a.png", "img2img": "b.png"}},
+		{
+			"model": "flux2_klein",
+			"width": 768,
+			"height": 768,
+			"composition": {"reference_image": "a.png", "img2img": "b.png"},
+		},
 		policy="compatible",
 	)
 	assert r["status"] == "adapted"
@@ -105,8 +109,12 @@ def test_transport_media_env_survives_sanitize(tmp_path, monkeypatch):
 
 	payload = {
 		"step_command": "x",
-		"media": {"model": "flux2_klein", "width": 768, "height": 768,
-		          "composition": {"reference_image": "a.png", "img2img": "b.png"}},
+		"media": {
+			"model": "flux2_klein",
+			"width": 768,
+			"height": 768,
+			"composition": {"reference_image": "a.png", "img2img": "b.png"},
+		},
 	}
 	validate_media_payload(payload)
 	# 1) El env media va en su clave, NO en `payload['env']`.
