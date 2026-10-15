@@ -1,5 +1,32 @@
 ## Unreleased
 
+## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
+
+### 🎨 Media — condicionamiento por imagen y encargos en fichero
+
+- **[NEW]** **Eje de composición** en el elenco media (`composition` + `composition_pipelines`): cada modelo
+  declara qué operaciones de condicionamiento por imagen soporta (`reference_image`, `multi_reference`, `img2img`,
+  `inpaint`, `mask`, `strength`, `negative_prompt`, `controlnet`, `lora`). El **dato manda**; el código solo dice
+  *cómo* por backend (data over branches, §10.8.2).
+- **[NEW]** Adapter **`gate_composition`** en el router (agnóstico: lee el dato, no el vocabulario) y **política
+  `MEDIA_COMPOSITION_POLICY`** en el `.env`: `compatible` (def) → **avisa** y renderiza ignorando lo no soportado
+  (fail-soft); `strict` → **error limpio**. La política la leen router (config) y harness (env), con el mismo valor.
+- **[FIX]** **`script_job` borraba los `RP_MEDIA_*`**: el sanitizador de env filtra `RP_*`/`REDPILL_*`, así que el env
+  media del harness nunca llegaba al hijo. Ahora viaja en `payload["media_env"]` y se inyecta **después** del
+  sanitizado (`script.py::_build_env`). Con test de transporte real.
+- **[FIX]** **`sd_cpp` recibía PIL en vez de rutas** para `--ref-image`/`--image` (edición rota: `load image from
+  '<PIL.Image…>' failed`). Ahora pasa rutas.
+- **[NEW]** **Plugins por backend con soft-fail**: diffusers (flux2 `image=`/inpaint; zimage `negative_prompt`),
+  bonsai (warn-only) y sd_cpp (ref/img2img/mask/strength). `zimage` img2img/inpaint/controlnet **retirados del
+  dato** (el `from_pipe` rompe: tensor 96 vs 24) hasta tener loader propio; `controlnet`/`lora` **reservados**.
+- **[NEW]** **`media-gen --config <fichero.yaml|.toml>`**: todo el encargo (modelo/rol, tamaño, semilla, **prompt en
+  bloque** y `composition`) en un fichero; un flag del CLI **manda** sobre el fichero (plantilla en
+  `examples/media_gen_config.yaml.example`).
+- **[QA]** Tests: gate `compatible`/`strict`, **paridad router↔harness** y **transporte real** del fix H1 (`pytest`
+  media/router/hook/staging en verde; `ruff` + `mypy` limpios). Smoke real en GPU (flux2 ref/inpaint, zimage
+  negative_prompt, bonsai soft-fail, qwen ref).
+- **[DOCS]** `docs/CORE/MEDIA_MODELS.md` §2b (eje de composición + política) y `.env.example`.
+
 ## [8.1.0] - 2026-10-14 (Media router, arnés de generación local, refactor DAG + remediación R5)
 
 ### 🧱 Refactor — DAG: registro de tipos de nodo + driver modular (ronda adversarial R5)
