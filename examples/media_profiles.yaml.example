@@ -74,8 +74,7 @@ media_profiles:
     priority: 2
     constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 6500 }   # ÷16
     adapters: ["snap_dims", "reject_oversize", "gate_composition"]
-    composition: [negative_prompt, img2img, inpaint, mask, strength, controlnet]
-    composition_pipelines: { img2img: ZImageImg2ImgPipeline, inpaint: ZImageInpaintPipeline, controlnet: ZImageControlNetPipeline }
+    composition: [negative_prompt]   # img2img/inpaint/controlnet: pendientes (from_pipe rompe en ZImage; se probará un loader propio)
     license:
       id: "apache-2.0"
       commercial_ok: true

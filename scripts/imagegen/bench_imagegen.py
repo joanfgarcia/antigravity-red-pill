@@ -476,10 +476,13 @@ def _diffusers_alt_pipeline(cfg: dict, pipe, meta: dict):
 
 def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int, meta: dict = None):
 	meta = meta or {}
+	# sd-cli espera RUTAS (no PIL): se pasan tal cual (ruta o lista de rutas).
+	ref = meta.get("reference_image")
+	refs = ref if isinstance(ref, list) else ([ref] if ref else None)
 	return _sd_cpp_generate(
 		pipe, prompt, seed, width, height,
 		image=meta.get("img2img"), mask=meta.get("mask"),
-		ref_images=_src_images(meta.get("reference_image")), strength=meta.get("strength"),
+		ref_images=refs, strength=meta.get("strength"),
 	)
 
 
