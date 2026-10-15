@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.1.0 (Media router + arnés de generación local + refactor DAG)
+**System Version**: v8.2.0 (Composición por imagen en el arnés media + media-gen --config)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 
