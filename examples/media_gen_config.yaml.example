@@ -1,0 +1,36 @@
+# EJEMPLO — fichero de encargo para `media-gen --config <este.yaml>` (o `.toml`).
+#
+# Copia a tu carpeta de trabajo y edita. Todo lo que aceptan los flags del CLI vale aquí con el mismo nombre;
+# un flag pasado por línea de comandos MANDA sobre el fichero. El prompt largo va en bloque literal (`|`),
+# que conserva saltos de línea y comillas sin escapar nada.
+#
+#   uv run media-gen --config obra.yaml                 # tal cual
+#   uv run media-gen --config obra.yaml --seed 1234     # el flag manda sobre el fichero
+#
+# También admite un bloque `composition:` (vocabulario del elenco: reference_image, img2img, mask, strength,
+# negative_prompt…); lo que el modelo no soporte se AVISA y se ignora (o falla si MEDIA_COMPOSITION_POLICY=strict).
+
+model: qwen_image_2_1_turbo      # id exacto del elenco (o `role:` para resolver por tarea)
+# role: photoreal                # alternativa a `model`
+width: 1620
+height: 1920
+seed: 871
+out: ~/tmp/red-pill/media/staging/obra   # destino (def: staging)
+
+prompt: |
+  A cinematic dark-fantasy illustration for a Dungeon Keeper-style game.
+  Foreground left: a seductive succubus mistress with large leathery bat wings,
+  long curved horns, glowing amber eyes, vivid reddish-pink demon skin.
+  Foreground right: a towering Horned Reaper demon, hulking crimson muscled body,
+  huge spiraling horns, fanged grin, wielding a massive jagged scythe.
+  Setting: a torch-lit underground stone throne room, lava glow, floating embers.
+  Moody volumetric lighting, magenta and ember-orange accents, painterly game art.
+  No text, no letters, no words, no logo, no watermark, no signature.
+
+# Condicionamiento por imagen (opcional) — borra este bloque si no lo usas:
+# composition:
+#   reference_image: /ruta/a/referencia.png     # ruta (o lista de rutas)
+#   img2img: /ruta/a/fuente.png                  # fuente para edición/img2img
+#   mask: /ruta/a/mascara.png                    # máscara para inpaint
+#   strength: 0.6
+#   negative_prompt: "blurry, watermark, text"

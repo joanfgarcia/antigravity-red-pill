@@ -74,6 +74,32 @@ That is all: the router routes it, the harness loads it, and the elenco records 
 
 ---
 
+## 2b. Composición — condicionamiento por imagen (refs / img2img / inpaint / controlnet)
+
+Un modelo de imagen declara qué operaciones de **composición** soporta y con qué pipeline:
+
+```yaml
+    composition: [reference_image, multi_reference, img2img, inpaint, mask, strength, negative_prompt, controlnet, lora]
+    composition_pipelines: { inpaint: MiPipelineInpaint }   # solo si la operación usa OTRO pipeline del venv
+    adapters: ["snap_dims", "reject_oversize", "gate_composition"]
+```
+
+- **Vocabulario canónico** (solo lo que algún pipeline implemente de verdad): `reference_image`, `multi_reference`,
+  `img2img`, `inpaint`, `mask`, `strength`, `negative_prompt`, `controlnet`, `lora`.
+- **Quién decide**: el **dato** (`composition`). Lo leen el router (`gate_composition`) y el harness; **el router no
+  conoce el vocabulario** (data over branches, §10.8.2 de CONVENTIONS).
+- **Política** `MEDIA_COMPOSITION_POLICY` (`.env`): `compatible` (def) → descarta con **warning** (fail-soft) lo no
+  soportado y **renderiza**; `strict` → **error limpio** (aborta).
+- **Transporte**: la composición ya gateada viaja al harness por `RP_MEDIA_COMPOSITION` (JSON con rutas/escalares) y
+  la política por `RP_MEDIA_COMPOSITION_POLICY`. El pipeline alternativo (`composition_pipelines`) lo monta el harness
+  con `from_pipe` — nota: **`from_pipe` no conserva la cuantización 4-bit** del base (medir VRAM en 8 GB).
+- **Cómo se pasa**: CLI `--ref-image`/`--image`/`--mask`/`--strength`/`--negative-prompt`; en una receta, bloque
+  `media: {composition: {...}}`. Para encargos largos: **`media-gen --config encargo.yaml`** (YAML o TOML) lleva
+  toda la config —modelo, tamaño, semilla, **prompt en bloque literal** y `composition`— en un fichero; un flag
+  del CLI manda sobre el fichero (plantilla: `examples/media_gen_config.yaml.example`).
+
+---
+
 ## 3. Add a RUNTIME (new engine)
 
 When the model needs an engine that is not yet declared in `runtimes.yaml`

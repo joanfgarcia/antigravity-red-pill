@@ -88,9 +88,38 @@ def _adapter_reject_oversize(params: Dict[str, Any], profile: Dict[str, Any]) ->
 	return params, []
 
 
+def _adapter_gate_composition(params: Dict[str, Any], profile: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+	"""Fail-soft de composición: descarta (o falla, en `strict`) lo que el modelo no declara soportar.
+
+	El **vocabulario NO vive aquí**: sale de `profile["composition"]` (dato del elenco). La **política** sale de
+	`profile["_policy"]` (`compatible` por defecto → warning + se ignora; `strict` → `MediaCapabilityError`).
+	Lo estructural (geometría) lo cubren `snap_dims`/`reject_oversize`, no esta política.
+	"""
+	comp = params.get("composition")
+	if not comp:
+		return params, []
+	if not isinstance(comp, dict):
+		raise MediaCapabilityError("composition debe ser un mapping")
+	supported = set(profile.get("composition") or [])
+	policy = str(profile.get("_policy") or "compatible")
+	mid = profile.get("id") or "?"
+	kept: Dict[str, Any] = {}
+	warnings: List[str] = []
+	for key, value in comp.items():
+		if key in supported:
+			kept[key] = value
+		elif policy == "strict":
+			raise MediaCapabilityError(f"{mid}: composición «{key}» no soportada (política strict)")
+		else:
+			warnings.append(f"composición «{key}» no soportada por {mid}: ignorada")
+	params["composition"] = kept
+	return params, warnings
+
+
 ADAPTERS: Dict[str, Adapter] = {
 	"snap_dims": _adapter_snap_dims,
 	"reject_oversize": _adapter_reject_oversize,
+	"gate_composition": _adapter_gate_composition,
 }
 
 
@@ -159,11 +188,16 @@ class MediaProfiles:
 			return mid
 		raise MediaCapabilityError(f"todos los modelos para task='{task}' están en not_capable_for")
 
-	def adapt(self, model_id: str, params: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
-		"""Aplica (por nombre) los adapters declarados por el modelo. Puede levantar MediaCapabilityError."""
+	def adapt(self, model_id: str, params: Dict[str, Any], *, policy: str = "compatible") -> Tuple[Dict[str, Any], List[str]]:
+		"""Aplica (por nombre) los adapters declarados por el modelo. Puede levantar MediaCapabilityError.
+
+		`policy` (`compatible`|`strict`) entra por parámetro (el router NO importa la config): se inyecta en el
+		perfil como `_policy` para que `gate_composition` la lea. El contrato `Adapter=(params, profile)` no cambia.
+		"""
 		profile = self.get(model_id)
 		if not profile:
 			raise MediaCapabilityError(f"modelo '{model_id}' no está en el elenco")
+		profile = {**profile, "_policy": policy}
 		out = dict(params)
 		warnings: List[str] = []
 		for name in profile.get("adapters") or []:
@@ -174,11 +208,15 @@ class MediaProfiles:
 			warnings.extend(warns)
 		return out, warnings
 
-	def validate(self, request: Dict[str, Any]) -> Dict[str, Any]:
+	def validate(self, request: Dict[str, Any], *, policy: str = "compatible") -> Dict[str, Any]:
 		"""Valida/rutea una petición de generación. Devuelve JSON estructurado.
 
 		`{status: ok|adapted|error, model, adapted, warnings, errors}` — interpretable
 		por el job_manager/dag en el ensamblado de la receta (docs/CORE/MEDIA_MODELS.md).
+
+		La **composición** (`request["composition"]`, dict) viaja al adapter `gate_composition`, que la
+		filtra según `profile["composition"]` y `policy` (`compatible` → warning; `strict` → error). El router
+		**no conoce el vocabulario** (es dato).
 		"""
 		try:
 			model = self.resolve(task=request.get("task"), model=request.get("model"))
@@ -186,8 +224,10 @@ class MediaProfiles:
 			return {"status": "error", "model": None, "adapted": {}, "warnings": [], "errors": [str(e)]}
 
 		params = {k: request[k] for k in ("width", "height") if request.get(k) is not None}
+		if request.get("composition") is not None:
+			params["composition"] = request["composition"]
 		try:
-			adapted, warnings = self.adapt(model, params)
+			adapted, warnings = self.adapt(model, params, policy=policy)
 		except MediaCapabilityError as e:
 			return {"status": "error", "model": model, "adapted": {}, "warnings": [], "errors": [str(e)]}
 

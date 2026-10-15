@@ -84,6 +84,10 @@ def _load_media_models() -> dict:
 			"guidance": sampler.get("guidance"),
 			"license": (profile.get("license") or {}).get("id"),
 			"note": profile.get("notes"),
+			# Composición (condicionamiento por imagen): el DATO manda. `composition` = operaciones
+			# soportadas; `composition_pipelines` = operación → pipeline alternativo del venv.
+			"composition": list(profile.get("composition") or []),
+			"composition_pipelines": dict(profile.get("composition_pipelines") or {}),
 		}
 		if profile.get("backend_name"):
 			entry["backend_name"] = profile["backend_name"]
@@ -402,27 +406,122 @@ def _load_bonsai(cfg: dict):
 
 
 # Generación
-def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	return _sd_cpp_generate(pipe, prompt, seed, width, height)
+def _media_policy() -> str:
+	"""Política de composición (`compatible`|`strict`): del entorno (el runner la exporta desde la config)."""
+	return os.environ.get("RP_MEDIA_COMPOSITION_POLICY", "compatible")
 
 
-def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
-	import torch
+def apply_composition(meta: dict, model_cfg: dict) -> tuple:
+	"""Filtra `meta` (composición) contra lo que el modelo declara soportar (`model_cfg['composition']`).
 
-	gen = torch.Generator(device="cuda").manual_seed(seed)
-	return pipe(
-		prompt=prompt,
-		height=height,
-		width=width,
-		num_inference_steps=cfg["steps"],
-		guidance_scale=cfg["guidance"],
-		generator=gen,
-	).images[0]
+	`compatible` → descarta lo no soportado con warning; `strict` → RuntimeError. Devuelve `(meta_ok, warnings)`.
+	El **vocabulario NO vive aquí**: sale del elenco (dato). Es la lógica **espejo** del adapter `gate_composition`
+	del router (defensa en profundidad; el harness no importa `red_pill`).
+	"""
+	if not meta:
+		return {}, []
+	supported = set(model_cfg.get("composition") or [])
+	policy = _media_policy()
+	mid = model_cfg.get("id") or "?"
+	kept: dict = {}
+	warnings: list = []
+	for key, value in meta.items():
+		if key in supported:
+			kept[key] = value
+		elif policy == "strict":
+			raise RuntimeError(f"{mid}: composición «{key}» no soportada (política strict)")
+		else:
+			warnings.append(f"composición «{key}» no soportada por {mid}: ignorada")
+	return kept, warnings
 
 
-def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+def _as_pil(path):
 	from PIL import Image
 
+	return Image.open(os.path.expanduser(str(path))).convert("RGB")
+
+
+def _src_images(value):
+	"""`reference_image`/`img2img` pueden venir como ruta o lista de rutas → lista de PIL (o None)."""
+	if not value:
+		return None
+	if isinstance(value, (list, tuple)):
+		return [_as_pil(p) for p in value]
+	return [_as_pil(value)]
+
+
+def _diffusers_alt_pipeline(cfg: dict, pipe, meta: dict):
+	"""Si la operación necesita OTRO pipeline (inpaint/img2img/controlnet), lo monta desde el base.
+
+	El pipeline alternativo lo declara el **elenco** (`composition_pipelines`), no el código. Si no se puede
+	montar, avisa y se sigue con el base (soft). Nota: `from_pipe` **no** garantiza la cuantización 4-bit del base.
+	"""
+	cp = cfg.get("composition_pipelines") or {}
+	op = None
+	if meta.get("mask") or meta.get("inpaint"):
+		op = "inpaint"
+	elif meta.get("img2img"):
+		op = "img2img"
+	elif meta.get("controlnet"):
+		op = "controlnet"
+	if not op or op not in cp:
+		return pipe
+	try:
+		cls = _diffusers_pipe_class(cp[op])
+		return cls.from_pipe(pipe)
+	except Exception as e:  # noqa: BLE001 — fail-soft: se sigue con el base
+		print(f"  [soft] no se pudo montar {cp[op]} desde el base ({e}); se usa el base", flush=True)
+		return pipe
+
+
+def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int, meta: dict = None):
+	meta = meta or {}
+	# sd-cli espera RUTAS (no PIL): se pasan tal cual (ruta o lista de rutas).
+	ref = meta.get("reference_image")
+	refs = ref if isinstance(ref, list) else ([ref] if ref else None)
+	return _sd_cpp_generate(
+		pipe, prompt, seed, width, height,
+		image=meta.get("img2img"), mask=meta.get("mask"),
+		ref_images=refs, strength=meta.get("strength"),
+	)
+
+
+def _gen_diffusers(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int, meta: dict = None):
+	import inspect
+
+	import torch
+
+	meta = meta or {}
+	pipe = _diffusers_alt_pipeline(cfg, pipe, meta)
+	gen = torch.Generator(device="cuda").manual_seed(seed)
+	kwargs: dict = {
+		"prompt": prompt,
+		"height": height,
+		"width": width,
+		"num_inference_steps": cfg["steps"],
+		"guidance_scale": cfg["guidance"],
+		"generator": gen,
+	}
+	accepts = set(inspect.signature(pipe.__call__).parameters)
+	# Referencias/edición (Flux2Klein base: `image=`).
+	if "image" in accepts:
+		src = _src_images(meta.get("img2img") or meta.get("reference_image"))
+		if src:
+			kwargs["image"] = src
+	if "mask_image" in accepts and meta.get("mask"):
+		kwargs["mask_image"] = _as_pil(meta["mask"])
+	if "strength" in accepts and meta.get("strength") is not None:
+		kwargs["strength"] = float(meta["strength"])
+	if "negative_prompt" in accepts and meta.get("negative_prompt"):
+		kwargs["negative_prompt"] = meta["negative_prompt"]
+	return pipe(**kwargs).images[0]
+
+
+def _gen_bonsai(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int, meta: dict = None):
+	from PIL import Image
+
+	if meta:
+		print(f"  [soft] bonsai_ternary sin composición ({', '.join(meta)}): ignorada", flush=True)
 	buf = pipe.generate_png(
 		prompt=prompt,
 		seed=seed,
@@ -443,11 +542,15 @@ BACKEND_DISPATCH = {
 }
 
 
-def generate(kind: str, cfg: dict, pipe, prompt: str, seed: int, width: int, height: int):
+def generate(kind: str, cfg: dict, pipe, prompt: str, seed: int, width: int, height: int, meta: dict = None):
 	entry = BACKEND_DISPATCH.get(kind)
 	if entry is None:
 		raise RuntimeError(f"kind desconocido: {kind}")
-	return entry["generate"](cfg, pipe, prompt, seed, width, height)
+	# Gate de composición (soft-fail) contra lo que el modelo declara en el elenco; el warning se imprime.
+	meta_ok, warns = apply_composition(meta or {}, cfg)
+	for w in warns:
+		print(f"  [soft] {w}", flush=True)
+	return entry["generate"](cfg, pipe, prompt, seed, width, height, meta_ok)
 
 
 def _avail_sd_cpp(prof: dict):

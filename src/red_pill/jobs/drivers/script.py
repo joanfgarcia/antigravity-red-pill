@@ -278,6 +278,9 @@ class ScriptJobDriver(ResumableJobDriver):
 		from red_pill.jobs.drivers.base import sanitize_job_env
 
 		env.update(sanitize_job_env(payload.get("env")))
+		# Media: el env adaptado (RP_MEDIA_*) que dejó `validate_media_payload`. Va aparte porque el sanitizador
+		# de arriba borra los `RP_*`; aquí, tras él, sí llega al hijo (harness de imagen/audio).
+		env.update({str(k): str(v) for k, v in (payload.get("media_env") or {}).items()})
 		# AD-030: el bloque `llm:` del recipe → env RP_LLM_*.
 		try:
 			from red_pill.jobs.drivers.base import inject_llm_env
