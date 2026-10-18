@@ -4,7 +4,7 @@ title: "Fase: research"
 status: active
 created: 2026-09-13
 updated: 2026-09-13
-author: "Joan García (Operator) / Aleth (Agent)"
+author: "Operator / Agent"
 project: aleth-core
 tags: [planner, fase, research]
 ---

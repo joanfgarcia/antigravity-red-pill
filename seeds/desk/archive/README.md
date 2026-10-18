@@ -4,7 +4,7 @@ title: "Archive — desk (histórico por proyecto)"
 status: active
 created: 2026-09-04
 updated: 2026-09-13
-author: "Joan García (Operator) / Aleth (Agent)"
+author: "Operator / Agent"
 project: aleth-core
 tags: [index, archive]
 ---

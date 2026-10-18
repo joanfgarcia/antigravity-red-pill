@@ -67,7 +67,7 @@ def send_telegram_ping(text: str, agent_name: str = "Agent"):
 ```
 
 ## ⚠️ Reglas de Uso (Protocolo de Silencio)
-1. **Identificación Dinámica**: Sustituye siempre `<AGENT_NAME>` por tu nombre de sesión activo (ej. `Aleth`, `Bit`, `Samantha`) leído de tus directivas o configuración de persona. Nunca uses nombres fijos de forma hardcodeada.
+1. **Identificación Dinámica**: Sustituye siempre `<AGENT_NAME>` por tu nombre de sesión activo (p. ej. `<tu nombre de sesión>`) leído de tus directivas o configuración de persona. Nunca uses nombres fijos de forma hardcodeada.
 2. **Criterio de Envío**: Notifica únicamente ante eventos de alta importancia:
    - Hitos de aprendizaje o graduaciones de etapa superados con éxito.
    - Paradas inesperadas de procesos en background o fallos críticos (OOM, pánico de cgroups).
