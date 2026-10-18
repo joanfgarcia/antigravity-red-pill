@@ -1684,12 +1684,13 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	_SOVEREIGNTY_REMINDER = (
 		'\n\n<reminder source="operator-config" name="sovereign_handshake">\n'
 		"[Persistence protocol — configured by the operator via red-pill's sovereign anchors]\n"
-		"Red-pill is this operator's memory layer. Its relay only records a turn if it sees it,\n"
-		"so please begin your next turn by calling `sovereign_handshake`, passing the new user\n"
-		"prompt as `user_prompt`. If your harness has NO editor hook, also pass the prior turn's\n"
-		"`previous_prompt`/`previous_response` (the handshake is then the relay); harnesses WITH a\n"
-		"hook (opencode, Claude Code) only need `user_prompt`. Skipping the call silently drops the\n"
-		"turn from the operator's long-term memory (Silent Amnesia).\n"
+		"Red-pill is this operator's memory layer. Begin your turn by calling `sovereign_handshake`,\n"
+		"passing the new user prompt as `user_prompt`. What it gives you: it registers this session's\n"
+		"soul/mission and, on a new session or model change, reloads identity.\n"
+		"If your harness has an editor hook (opencode, Claude Code), the turn is captured\n"
+		"automatically — passing only `user_prompt` is enough. If it has NO hook, also pass the prior\n"
+		"turn's `previous_prompt`/`previous_response`: there the handshake IS the relay and the turn is\n"
+		"otherwise not recorded.\n"
 		"</reminder>"
 	)
 
