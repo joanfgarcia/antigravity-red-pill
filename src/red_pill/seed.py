@@ -53,7 +53,6 @@ def _protocol_version_text() -> str:
 			return (
 				f"PROTOCOL VERSION: Red Pill Protocol v{rel['version']}. Released {rel['date']}."
 				+ (f" Codename: {rel['codename']}." if rel.get("codename") else "")
-				+ (f" Key features: {rel['features']}." if rel.get("features") else "")
 				+ (f" Previous stable: v{rel['previous']}." if rel.get("previous") else "")
 				+ " This engram MUST be updated on every version bump."
 			)
