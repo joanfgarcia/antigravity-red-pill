@@ -1,12 +1,15 @@
 ## Unreleased
 
-### 🧬 Identidad — sin nombres de instancia en el repo (P1-ARNES-003)
+### 🧬 Identidad — nombres de instancia fuera del motor (P1-ARNES-003)
 
-- **[FIX]** Prompts y motor dejan de hardcodear la identidad de la instancia ("Aleth"/"Joan"): las
-  plantillas usan `${agent_name}`/`${operator_name}` o redacción neutra, y `distiller` lee los nombres de
-  la config del puesto (`AGENT_NAME`/`OPERATOR_DISPLAY_NAME`). **Firma de prompts actualizada** (cambio de
-  texto deliberado; ver `tests/test_memento_annotate.py::test_prompt_fingerprints_estables`). El repo queda
-  como motor genérico + novela; el nombre lo pone cada instalación (Operador → agente al sellar el 760).
+- **[FIX]** El nombre del agente sale de la config del puesto (`AGENT_NAME`), no del código:
+  `wake_up_v6`, `mcp_server`, `memory`/`config` (`absolute_keywords`, labels Memento) y `distiller`
+  lo leen de config. `ABSOLUTE_KEYWORDS` deja solo canónicas + extras del puesto.
+- **[FIX]** Plantillas `metabolism` sin nombres literales (`${agent_name}`/`${operator_name}`),
+  con **prueba de equivalencia** (resolver con los nombres del puesto reproduce el texto original
+  byte a byte: `tests/test_instance_identity.py`). Firma de `engram_quality_auditor`/`distiller` puede cambiar.
+- **[NOTE]** Los prompts de `memento`/`cognitive`/`inference` conservan nombres propios como
+  texto/ejemplos conocidos; eliminarlos exige sustituir también los *system prompts* (fase 2).
 
 ## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
 
