@@ -16,21 +16,21 @@ prompts:
     template: annotate_work_user.txt
     system: annotate_work_system.txt
     fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [identity, prompt_language]
+    static: [identity, prompt_language, agent_name, operator_name]
     runtime: [fragment]
 
   annotate_social_user:
     template: annotate_social_user.txt
     system: annotate_social_system.txt
     fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [identity, prompt_language]
+    static: [identity, prompt_language, agent_name, operator_name]
     runtime: [fragment]
 
   annotate_work_user_v2:
     template: annotate_work_user_v2.txt
     system: annotate_work_system.txt
     fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [identity, work_scope, prompt_language]
+    static: [identity, work_scope, prompt_language, agent_name, operator_name]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
@@ -38,7 +38,7 @@ prompts:
     template: annotate_social_user_v2.txt
     system: annotate_social_system.txt
     fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [identity, social_scope, prompt_language]
+    static: [identity, social_scope, prompt_language, agent_name, operator_name]
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
@@ -46,67 +46,68 @@ prompts:
     template: voice_rewrite_user.txt
     system: voice_rewrite_system.txt
     fragments: {language: language.txt}
-    static: [identity, prompt_language]
+    static: [identity, prompt_language, agent_name, operator_name]
     runtime: [notes]
 
   voice_rewrite_user_v2:
     template: voice_rewrite_user_v2.txt
     system: voice_rewrite_system.txt
     fragments: {language: language.txt}
-    static: [identity, prompt_language]
+    static: [identity, prompt_language, agent_name, operator_name]
     runtime: [notes]
 
   dual_score_user:
     template: dual_score_user.txt
     system: dual_score_system.txt
+    static: [operator_name]
     runtime: [memories]
 
   dual_score_user_v2:
     template: dual_score_user_v2.txt
     system: dual_score_system.txt
-    static: [work_scope, social_scope]
+    static: [work_scope, social_scope, operator_name]
     runtime: [memories]
 
   distill_user:
     template: distill_user.txt
     system: distill_system.txt
     fragments: {voice: voice.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [content]
 
   distill_user_opening:
     template: distill_user_opening.txt
     system: distill_system.txt
     fragments: {voice: voice.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [content]
 
   distill_user_continuation:
     template: distill_user_continuation.txt
     system: distill_system.txt
     fragments: {voice: voice.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [content, previous]
 
   refine_work_user:
     template: refine_work_user.txt
     system: refine_work_system.txt
     fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [candidates, fragments]
 
   refine_social_user:
     template: refine_social_user.txt
     system: refine_social_system.txt
     fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [candidates, fragments]
 
   refine_multi_user:
     template: refine_multi_user.txt
     system: refine_multi_system.txt
     fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
-    static: [prompt_language]
+    static: [prompt_language, agent_name, operator_name]
     runtime: [candidates, fragments]
 
   refine_user:
@@ -119,4 +120,5 @@ prompts:
   content_validate_user:
     template: content_validate_user.txt
     system: content_validate_system.txt
+    static: [operator_name]
     runtime: [notes]

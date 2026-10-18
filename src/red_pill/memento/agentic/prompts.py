@@ -94,7 +94,18 @@ ANNOTATE_SOCIAL_USER_V2 = _load_prompt_file("annotate_social_user_v2.txt")
 DUAL_SCORE_USER_V2 = _load_prompt_file("dual_score_user_v2.txt")
 
 
-DISTILL_SYSTEM = _load_prompt_file("distill_system.txt")
+def _system_const(prompt_id: str, filename: str) -> str:
+	"""Constante de system prompt RESUELTA (proveedores de config aplicados), igual
+	que lo que emite el motor en producción (`prompts.system`). Fallback: fichero."""
+	try:
+		from red_pill.core import prompts as _core
+
+		return _core.system_text("memento/agentic", prompt_id) or _load_prompt_file(filename)
+	except Exception:
+		return _load_prompt_file(filename)
+
+
+DISTILL_SYSTEM = _system_const("distill_user", "distill_system.txt")
 
 
 DISTILL_USER = _load_prompt_file("distill_user.txt")
@@ -109,7 +120,7 @@ DISTILL_USER_OPENING = _load_prompt_file("distill_user_opening.txt")
 DISTILL_USER_CONTINUATION = _load_prompt_file("distill_user_continuation.txt")
 
 
-REFINE_SYSTEM = _load_prompt_file("refine_system.txt")
+REFINE_SYSTEM = _system_const("refine_user", "refine_system.txt")
 
 
 REFINE_USER = _load_prompt_file("refine_user.txt")
@@ -118,25 +129,25 @@ REFINE_USER = _load_prompt_file("refine_user.txt")
 # Fase 4 §5.4.2: refine MULTI-IDEA. Devuelve un ARRAY de ideas (0..N, lo decide el
 # LLM). 2-3 destills que forman una idea → 1 refine (no redundantes); 1 destill
 # con 100 ideas → 100 refine. Cada idea lleva `fragment_ref` (origen).
-REFINE_MULTI_SYSTEM = _load_prompt_file("refine_multi_system.txt")
+REFINE_MULTI_SYSTEM = _system_const("refine_multi_user", "refine_multi_system.txt")
 
 
 # Dos llamadas especializadas (2026-09-15, bake-off): granite/aya se confunden si un
 # solo prompt pide extraer work Y social a la vez (devuelven [] en contenido mixto).
 # Cada llamada se enfoca en UN tipo; `_refine_multi` las combina.
-REFINE_WORK_SYSTEM = _load_prompt_file("refine_work_system.txt")
+REFINE_WORK_SYSTEM = _system_const("refine_work_user", "refine_work_system.txt")
 
 
 REFINE_WORK_USER = _load_prompt_file("refine_work_user.txt")
 
 
-REFINE_SOCIAL_SYSTEM = _load_prompt_file("refine_social_system.txt")
+REFINE_SOCIAL_SYSTEM = _system_const("refine_social_user", "refine_social_system.txt")
 
 
 REFINE_SOCIAL_USER = _load_prompt_file("refine_social_user.txt")
 
 
-DUAL_SCORE_SYSTEM = _load_prompt_file("dual_score_system.txt")
+DUAL_SCORE_SYSTEM = _system_const("dual_score_user", "dual_score_system.txt")
 
 
 DUAL_SCORE_USER = _load_prompt_file("dual_score_user.txt")
@@ -148,19 +159,19 @@ REFINE_MULTI_USER = _load_prompt_file("refine_multi_user.txt")
 # A diferencia del refine (que leía summaries de distill y producía re-resúmenes),
 # annotate lee el fragmento crudo y materializa la idea como texto propio (≤600).
 # Incluye la Bio de identidad (P0) para voz/género correctos.
-ANNOTATE_WORK_SYSTEM = _load_prompt_file("annotate_work_system.txt")
+ANNOTATE_WORK_SYSTEM = _system_const("annotate_work_user", "annotate_work_system.txt")
 ANNOTATE_WORK_USER = _load_prompt_file("annotate_work_user.txt")
 
-ANNOTATE_SOCIAL_SYSTEM = _load_prompt_file("annotate_social_system.txt")
+ANNOTATE_SOCIAL_SYSTEM = _system_const("annotate_social_user", "annotate_social_system.txt")
 ANNOTATE_SOCIAL_USER = _load_prompt_file("annotate_social_user.txt")
 
 # ── CONTENT VALIDATE (MEM-006): revisa notas rechazadas por el filtro de ruido ──
 # Prompts en fichero propio (RFC-003): prompts/content_validate_{system,user}.txt
-CONTENT_VALIDATE_SYSTEM = _load_prompt_file("content_validate_system.txt")
+CONTENT_VALIDATE_SYSTEM = _system_const("content_validate_user", "content_validate_system.txt")
 CONTENT_VALIDATE_USER = _load_prompt_file("content_validate_user.txt")
 
 # ── VOICE REWRITE (MEM-006): re-escribe en 1ª persona las notas que no lo están ──
-VOICE_REWRITE_SYSTEM = _load_prompt_file("voice_rewrite_system.txt")
+VOICE_REWRITE_SYSTEM = _system_const("voice_rewrite_user", "voice_rewrite_system.txt")
 VOICE_REWRITE_USER = _load_prompt_file("voice_rewrite_user.txt")
 
 

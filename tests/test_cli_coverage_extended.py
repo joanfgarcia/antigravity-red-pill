@@ -7,7 +7,8 @@ import pytest
 from red_pill.cli import handle_audit, handle_benchmark, handle_heal, handle_identity, main, switch_skin
 
 
-def test_switch_skin_invalid():
+def test_switch_skin_invalid(monkeypatch):
+	monkeypatch.setenv("SKINS_ENABLED", "true")  # role-play opt-in: sin el flag no se llega al catálogo
 	result = switch_skin("non_existent_skin")
 	assert "Invalid mode" in result
 

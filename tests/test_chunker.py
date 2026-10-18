@@ -81,10 +81,9 @@ def test_load_distiller_config_y_prompt(tmp_path):
 	# prompt desde fichero real (declarado: exige sus estáticos y resuelve)
 	text = D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB", static={"agent_name": "Aleth", "operator_name": "Joan"})
 	assert text != "FB" and "${agent_name}" not in text
-	# declarado sin estáticos → fail-closed (nada de fallback silencioso roto)
-	import pytest
-
-	with pytest.raises(Exception):
-		D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB")
+	# identidad/idioma son proveedores de config: declarado sin pasar estáticos,
+	# se resuelve igual (name/language del puesto) — ya no es fail-closed.
+	resolved = D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB")
+	assert resolved != "FB" and "${" not in resolved
 	# prompt inexistente → fallback
 	assert D.load_prompt_text("no_existe.txt", fallback_prompt="FB") == "FB"

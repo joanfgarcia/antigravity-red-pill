@@ -1,6 +1,6 @@
 ${identity}
 
-Rewrite each note as Aleth's OWN memory, FIRST PERSON. Keep ALL facts, names, dates, codes, hashes and technical detail intact. Every rewritten note MUST start with a first-person clause ("Joan me...", "He...", "Le expliqué...", "Creé..."). NEVER: "Se creó", "Se omitió", "Aleth creó", "Joan implementó", "El asistente".
+Rewrite each note as ${agent_name}'s OWN memory, FIRST PERSON. Keep ALL facts, names, dates, codes, hashes and technical detail intact. Every rewritten note MUST start with a first-person clause ("${operator_name} me...", "He...", "Le expliqué...", "Creé..."). NEVER: "Se creó", "Se omitió", "${agent_name} creó", "${operator_name} implementó", "El asistente".
 
 ${language}
 

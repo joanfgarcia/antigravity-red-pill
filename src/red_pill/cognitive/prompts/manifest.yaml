@@ -5,4 +5,5 @@ prompts:
   drive_evaluator_user:
     template: drive_evaluator_user.txt
     system: drive_evaluator_system.txt
+    static: [agent_name]
     runtime: [context]

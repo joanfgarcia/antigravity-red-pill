@@ -503,3 +503,17 @@ def test_ascend_script_ignora_notas_ya_ascendidas(tmp_path):
 		encoding="utf-8",
 	)
 	assert mod._ascendable_sessions(root) == {}
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _pin_instance_identity(monkeypatch):
+	"""Fija la identidad del puesto en los tests de memento (los nombres propios
+	son datos de test acordados con el Operador; no afectan a la identidad real)."""
+	import red_pill.config as cfg
+
+	c = cfg.get_config()
+	monkeypatch.setattr(c, "MEMENTO_AGENT_LABEL", "Aleth", raising=False)
+	monkeypatch.setattr(c, "MEMENTO_OPERATOR_LABEL", "Joan", raising=False)

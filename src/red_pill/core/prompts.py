@@ -62,7 +62,27 @@ def _prompt_language_value() -> str:
 	return _LANGUAGE_VALUES.get(raw.lower(), raw)
 
 
-_STATIC_PROVIDERS = {"prompt_language": _prompt_language_value}
+def _agent_name_value() -> str:
+	"""Nombre del agente de la instancia (config; nunca hardcodeado en el repo)."""
+	import red_pill.config as cfg
+
+	c = cfg.get_config()
+	return str(getattr(c, "MEMENTO_AGENT_LABEL", "") or getattr(c, "AGENT_NAME", "") or "Agente")
+
+
+def _operator_name_value() -> str:
+	"""Nombre del Operador de la instancia (config)."""
+	import red_pill.config as cfg
+
+	c = cfg.get_config()
+	return str(getattr(c, "MEMENTO_OPERATOR_LABEL", "") or getattr(c, "OPERATOR_DISPLAY_NAME", "") or "Operador")
+
+
+_STATIC_PROVIDERS = {
+	"prompt_language": _prompt_language_value,
+	"agent_name": _agent_name_value,
+	"operator_name": _operator_name_value,
+}
 
 
 @dataclass(frozen=True)
@@ -200,6 +220,15 @@ def _system_cached(component: str, prompt_id: str) -> Optional[str]:
 		raise PromptError(f"system ilegible: {path}: {e}") from e
 
 
+def _substitute_system(raw: Optional[str]) -> Optional[str]:
+	"""Sustituye en un system prompt los placeholders de proveedores de config
+	(identidad/idioma). Deja intacto cualquier `${…}` no provisto (los system no
+	declaran runtime). Se aplica FUERA de la caché para no congelar los nombres."""
+	if not raw or "${" not in raw:
+		return raw
+	return Template(raw).safe_substitute({name: str(fn()) for name, fn in _STATIC_PROVIDERS.items()})
+
+
 @lru_cache(maxsize=None)
 def _render_cached(component: str, prompt_id: str, static_items: Tuple[Tuple[str, str], ...]) -> EffectivePrompt:
 	spec = spec_of(component, prompt_id)
@@ -224,7 +253,7 @@ def _render_cached(component: str, prompt_id: str, static_items: Tuple[Tuple[str
 		prompt_id=prompt_id,
 		text=text,
 		signature=_hash(f"{component}\x1e{prompt_id}\x1e{text}"),
-		system=_system_cached(component, prompt_id),
+		system=_substitute_system(_system_cached(component, prompt_id)),
 		fragments=tuple(sorted((spec.get("fragments") or {}).keys())),
 		static=tuple(sorted(spec.get("static") or [])),
 		runtime=tuple(sorted(spec.get("runtime") or [])),
@@ -296,8 +325,8 @@ def stage_signature(parts: Sequence[Tuple[str, str, Optional[Mapping[str, str]]]
 
 
 def system_text(component: str, prompt_id: str) -> Optional[str]:
-	"""System prompt del manifiesto, sin exigir valores estáticos."""
-	return _system_cached(component, prompt_id)
+	"""System prompt del manifiesto (proveedores de config resueltos)."""
+	return _substitute_system(_system_cached(component, prompt_id))
 
 
 def _artifacts_dir() -> Path:
@@ -418,8 +447,9 @@ def validate_all() -> list:
 						errors.append(f"{component}/{pid}: system no existe ({spec['system']})")
 					else:
 						sys_fields, sys_invalid = _template_fields(_normalize(sys_path.read_text(encoding="utf-8")))
-						if sys_fields or sys_invalid:
-							errors.append(f"{component}/{pid}: system no admite placeholders")
+						unsupported = sorted(f for f in sys_fields if f not in _STATIC_PROVIDERS)
+						if unsupported or sys_invalid:
+							errors.append(f"{component}/{pid}: system con placeholders no soportados {unsupported or 'invalid $'}")
 			except Exception as e:  # noqa: BLE001 — un prompt roto no tumba el gate
 				errors.append(f"{component}/{pid}: {e}")
 	return errors

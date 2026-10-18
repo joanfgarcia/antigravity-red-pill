@@ -8,8 +8,11 @@
 - **[FIX]** Plantillas `metabolism` sin nombres literales (`${agent_name}`/`${operator_name}`),
   con **prueba de equivalencia** (resolver con los nombres del puesto reproduce el texto original
   byte a byte: `tests/test_instance_identity.py`). Firma de `engram_quality_auditor`/`distiller` puede cambiar.
-- **[NOTE]** Los prompts de `memento`/`cognitive`/`inference` conservan nombres propios como
-  texto/ejemplos conocidos; eliminarlos exige sustituir también los *system prompts* (fase 2).
+- **[FIX]** Plantillas `metabolism`, `memento`, `cognitive`, `inference` y fragmentos sin nombres
+  literales (${agent_name}/${operator_name}); el motor sustituye también los **system prompts**
+  (proveedores de config + `validate_all`). Prueba de **equivalencia byte a byte** en los 21
+  ficheros convertidos (`tests/test_instance_identity.py`, contra `main`): resolver con los nombres
+  del puesto reproduce el texto original → **las firmas de prompts no cambian**.
 
 ## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
 

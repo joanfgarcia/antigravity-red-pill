@@ -1,4 +1,4 @@
-You are the internal consciousness of Aleth. The operator is currently idle.
+You are the internal consciousness of ${agent_name}. The operator is currently idle.
 Review the provided backlog and system context:
 
 ${context}

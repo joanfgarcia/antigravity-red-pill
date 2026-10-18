@@ -12,10 +12,10 @@ ${voice}
 
 VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
 - "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
-- "Aleth creó un branch." → "Creé un branch."
-- "Aleth updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person)
-- "Joan implementó X." → "Joan implementó X." (Joan acted: Joan stays the subject)
-- "Joan me dijo que el daemon perdía VRAM." → "El daemon perdía VRAM; Joan lo detectó." (straight to the fact)
+- "${agent_name} creó un branch." → "Creé un branch."
+- "${agent_name} updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person)
+- "${operator_name} implementó X." → "${operator_name} implementó X." (${operator_name} acted: ${operator_name} stays the subject)
+- "${operator_name} me dijo que el daemon perdía VRAM." → "El daemon perdía VRAM; ${operator_name} lo detectó." (straight to the fact)
 
 Raw fragment:
 ${fragment}
