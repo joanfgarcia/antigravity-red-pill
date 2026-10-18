@@ -177,7 +177,12 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# COGNITIVE DYNAMICS
 	# -----------------------------------------------------------------------
-	ABSOLUTE_KEYWORDS: List[str] = ["Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium"]
+	# Palabras que SIEMPRE son marcadores (canónicas del motor, no de instancia).
+	# Lo demás (nombres del agente/Operador, jerga del puesto) es DINÁMICO:
+	# `ABSOLUTE_KEYWORDS_EXTRA` (csv en el .env de la instancia) + los nombres de
+	# `AGENT_NAME`/`OPERATOR_DISPLAY_NAME`. Ver `absolute_keywords`.
+	ABSOLUTE_KEYWORDS: List[str] = ["Bünker", "770", "skin"]
+	ABSOLUTE_KEYWORDS_EXTRA: str = ""  # csv del puesto; cambia sin tocar el repo
 	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
 	EMERGENCY_CLOUD_OVERRIDE: bool = False
 
@@ -383,6 +388,29 @@ class RedPillConfig(BaseSettings):
 	LOG_LEVEL: str = "INFO"
 	AGENT_NAME: str = "Agente"
 	OPERATOR_DISPLAY_NAME: str = os.getenv("USER_NAME", os.getenv("USER", "Operador"))
+
+	@property
+	def absolute_keywords(self) -> List[str]:
+		"""Marcadores absolutos = canónicas + extras del puesto (csv) + nombres.
+
+		Los nombres de instancia son dinámicos (Operador→AGENT_NAME→nombrado), así
+		que nunca se fijan en el repo.
+		"""
+		out = list(self.ABSOLUTE_KEYWORDS)
+		extras = [w.strip() for w in (self.ABSOLUTE_KEYWORDS_EXTRA or "").split(",") if w.strip()]
+		for word in (*extras, self.AGENT_NAME, self.OPERATOR_DISPLAY_NAME):
+			if word and word not in out:
+				out.append(word)
+		return out
+
+	@model_validator(mode="after")
+	def _fill_instance_identity(self) -> "RedPillConfig":
+		"""Rellena etiquetas Memento desde la identidad del puesto (no del repo)."""
+		if not self.MEMENTO_OPERATOR_LABEL:
+			self.MEMENTO_OPERATOR_LABEL = self.OPERATOR_DISPLAY_NAME or "Operador"
+		if not self.MEMENTO_AGENT_LABEL:
+			self.MEMENTO_AGENT_LABEL = self.AGENT_NAME or "Agente"
+		return self
 
 	# -----------------------------------------------------------------------
 	# SWARM CONFIG
@@ -697,8 +725,11 @@ class RedPillConfig(BaseSettings):
 	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
 	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
 	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
-	MEMENTO_OPERATOR_LABEL: str = os.getenv("MEMENTO_OPERATOR_LABEL", os.getenv("USER_NAME", "Operador"))
-	MEMENTO_AGENT_LABEL: str = os.getenv("MEMENTO_AGENT_LABEL", os.getenv("AGENT_NAME", "Agente"))
+	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
+	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
+	# NO hardcodear nombres de instancia aquí.
+	MEMENTO_OPERATOR_LABEL: str = ""
+	MEMENTO_AGENT_LABEL: str = ""
 	# Idioma de los textos generados por el pase Memento (PROMPT-001 F3):
 	# `auto` = idioma de la fuente (deja interpretar al modelo); `es`/`en`/`ca`...
 	# fuerzan uno. Entra en la firma de los prompts → cambiarlo marca stale.

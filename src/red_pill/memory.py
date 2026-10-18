@@ -242,12 +242,9 @@ class MemoryManager:
 		for q in quotes:
 			if len(q.split()) <= 3:
 				markers.add(q)
-		# 2. Absolute Keywords (Dynamic from settings + instance identity)
-		keywords = list(getattr(self.cfg, "ABSOLUTE_KEYWORDS", ["Bünker", "770"]))
-		for attr in ("AGENT_NAME", "OPERATOR_DISPLAY_NAME"):
-			name = getattr(self.cfg, attr, "")
-			if name and name not in keywords:
-				keywords.append(name)
+		# 2. Absolute Keywords (canónicas + extras del puesto + nombres de instancia)
+		kw_prop = getattr(self.cfg, "absolute_keywords", None)
+		keywords = list(kw_prop) if isinstance(kw_prop, list) else list(getattr(self.cfg, "ABSOLUTE_KEYWORDS", ["Bünker", "770", "skin"]))
 		for kw in keywords:
 			if kw.lower() in text.lower():
 				markers.add(kw)
