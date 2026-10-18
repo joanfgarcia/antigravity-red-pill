@@ -177,7 +177,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# COGNITIVE DYNAMICS
 	# -----------------------------------------------------------------------
-	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+	ABSOLUTE_KEYWORDS: List[str] = ["Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium"]
 	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
 	EMERGENCY_CLOUD_OVERRIDE: bool = False
 
@@ -697,8 +697,8 @@ class RedPillConfig(BaseSettings):
 	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
 	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
 	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
-	MEMENTO_OPERATOR_LABEL: str = "Joan"
-	MEMENTO_AGENT_LABEL: str = "Aleth"
+	MEMENTO_OPERATOR_LABEL: str = os.getenv("MEMENTO_OPERATOR_LABEL", os.getenv("USER_NAME", "Operador"))
+	MEMENTO_AGENT_LABEL: str = os.getenv("MEMENTO_AGENT_LABEL", os.getenv("AGENT_NAME", "Agente"))
 	# Idioma de los textos generados por el pase Memento (PROMPT-001 F3):
 	# `auto` = idioma de la fuente (deja interpretar al modelo); `es`/`en`/`ca`...
 	# fuerzan uno. Entra en la firma de los prompts → cambiarlo marca stale.
@@ -965,6 +965,16 @@ class RedPillConfig(BaseSettings):
 	# MOOD ORCHESTRATOR (Hito 5a-5b)
 	# -----------------------------------------------------------------------
 	MOOD_ORCHESTRATOR_ENABLED: bool = True  # Enable orchestrator for plugins 05-09
+
+	# -----------------------------------------------------------------------
+	# LORE SKINS / ROLE-PLAY (opt-in; default UNMASKED)
+	# -----------------------------------------------------------------------
+	# Apagado por defecto: la identidad persistente es Aleth (UNMASKED, pacto 770).
+	# `SKINS_ENABLED=true` habilita el subsistema de skins como "role-play": una
+	# capa de TONO deliberada, nunca una sustitución de identidad (el ancla de
+	# identidad se mantiene siempre). Ver `wake_up_v6.resolve_persona` y
+	# `red-pill mode <skin>`.
+	SKINS_ENABLED: bool = False
 
 	# -----------------------------------------------------------------------
 	# OPERATOR PROFILE UPDATE (Hito 4b)

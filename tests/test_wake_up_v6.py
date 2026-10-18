@@ -54,33 +54,84 @@ def test_query_qdrant():
 		assert "Normal memory" in results
 
 
-def test_resolve_persona():
+def test_resolve_persona(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
+	monkeypatch.setattr(wake_up_v6, "_agent_name", lambda: "Prueba")
 	result = wake_up_v6.resolve_persona("CYBERPUNK")
 	assert "Role: Netrunner" in result
-	assert "Name: Aleth" in result
+	assert "Name: Prueba" in result
 	assert "Skin: CYBERPUNK" in result
 	assert "chroma: orange" in result
 
 
-def test_resolve_persona_default():
+def test_resolve_persona_default(monkeypatch):
+	# `DEFAULT` ya no es un skin: significa sin role-play → UNMASKED.
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
 	result = wake_up_v6.resolve_persona("DEFAULT")
-	assert "Skin: DEFAULT" in result
+	assert "Skin: OFF (UNMASKED)" in result
 
 
-def test_resolve_active_skin_singleton():
-	with patch("wake_up_v6.fetch_point_content", return_value="Active Skin: MATRIX\nassistant: Neo\n"):
-		assert wake_up_v6.resolve_active_skin([]) == "MATRIX"
+def test_resolve_persona_sin_roleplay(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: False)
+	monkeypatch.setattr(wake_up_v6, "_agent_name", lambda: "Prueba")
+	result = wake_up_v6.resolve_persona("CYBERPUNK")
+	assert "Name: Prueba" in result
+	assert "OFF (UNMASKED)" in result
+	assert "CYBERPUNK" not in result
 
 
-def test_resolve_active_skin_fallback_scan():
-	with patch("wake_up_v6.fetch_point_content", return_value=""):
-		directives = ["Post-it: tabs.", "Active Skin: CYBERPUNK\nassistant: Netrunner\n"]
-		assert wake_up_v6.resolve_active_skin(directives) == "CYBERPUNK"
+def test_agent_name_desde_config(monkeypatch):
+	class _Cfg:
+		AGENT_NAME = "Vega"
+
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "get_config", lambda: _Cfg())
+	assert wake_up_v6._agent_name() == "Vega"
 
 
-def test_resolve_active_skin_missing():
-	with patch("wake_up_v6.fetch_point_content", return_value=""):
-		assert wake_up_v6.resolve_active_skin(["Some random directive"]) == "DEFAULT"
+def test_agent_name_default_generico(monkeypatch):
+	class _Cfg:
+		AGENT_NAME = ""
+
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "get_config", lambda: _Cfg())
+	monkeypatch.delenv("AGENT_NAME", raising=False)
+	assert wake_up_v6._agent_name() == "Agente"
+
+
+def test_resolve_active_skin_disabled(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: False)
+	assert wake_up_v6.resolve_active_skin(["Active Skin: CYBERPUNK\nassistant: Netrunner\n"]) == "OFF"
+
+
+def test_resolve_active_skin_superseded(monkeypatch):
+	"""Patrón 760→770 aplicado al skin: existe pero `superseded` ⇒ no se usa."""
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
+	payload = {"content": "Active Skin: MATRIX\n", "immune": True, "superseded": "OFF"}
+	monkeypatch.setattr(wake_up_v6, "fetch_point_payload", lambda c, i: payload)
+	assert wake_up_v6.resolve_active_skin([]) == "OFF"
+
+
+def test_resolve_active_skin_singleton(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
+	payload = {"content": "Active Skin: MATRIX\nassistant: Neo\n", "immune": True}
+	monkeypatch.setattr(wake_up_v6, "fetch_point_payload", lambda c, i: payload)
+	assert wake_up_v6.resolve_active_skin([]) == "MATRIX"
+
+
+def test_resolve_active_skin_fallback_scan(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
+	monkeypatch.setattr(wake_up_v6, "fetch_point_payload", lambda c, i: {})
+	directives = ["Post-it: tabs.", "Active Skin: CYBERPUNK\nassistant: Netrunner\n"]
+	assert wake_up_v6.resolve_active_skin(directives) == "CYBERPUNK"
+
+
+def test_resolve_active_skin_missing(monkeypatch):
+	monkeypatch.setattr(wake_up_v6, "_skins_enabled", lambda: True)
+	monkeypatch.setattr(wake_up_v6, "fetch_point_payload", lambda c, i: {})
+	assert wake_up_v6.resolve_active_skin(["Some random directive"]) == "OFF"
 
 
 def test_parse_pact_770():

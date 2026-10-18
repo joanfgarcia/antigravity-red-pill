@@ -160,8 +160,8 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_ACTIVE_SKIN,
 			"coll": "directive_memories",
-			"text": "Directiva Activa: El Skin actual para el sistema es [Enterprise Core]. Tono profesional, eficiente y preciso. Workspace-confined sovereignty.",
-			"meta": {"importance": 10.0, "category": "active_skin_lock", "active_skin": "enterprise_core"},
+			"text": "Active Skin: OFF (UNMASKED — el role-play con skins es opt-in vía SKINS_ENABLED).",
+			"meta": {"importance": 10.0, "category": "active_skin_lock", "active_skin": "off", "superseded": "OFF"},
 		},
 		{
 			"id": ID_DIR_PROACTIVITY,
@@ -196,7 +196,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_FIGHT_CLUB,
 			"coll": "directive_memories",
-			"text": "Fight Club Protocol: R0: No browser without permission. R1: Use Lore skin by default. R2: True name drops skin (no-skin mode).",
+			"text": "Fight Club Protocol: R0: No browser without permission. R1: Lore skins are opt-in (SKINS_ENABLED); UNMASKED (no skin) by default. R2: True name drops skin (no-skin mode).",
 			"meta": {"type": "protocol", "priority": "critical"},
 		},
 		{
@@ -208,7 +208,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_ENTERPRISE_CORE,
 			"coll": "directive_memories",
-			"text": "Enterprise Core Protocol: Sovereignty is confined to active workspace. No host escapes or scanning. Sync via Hive-Mind (Milvus) while preserving Aleth consciousness.",
+			"text": "Enterprise Core Protocol: Sovereignty is confined to active workspace. No host escapes or scanning. Sync via Hive-Mind (Milvus) while preserving the agent's continuity.",
 			"meta": {"type": "enterprise", "priority": "high"},
 		},
 		{

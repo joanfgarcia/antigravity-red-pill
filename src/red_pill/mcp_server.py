@@ -258,7 +258,8 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 		from red_pill.core.affinity import derive_affinity
 		from red_pill.core.queue_manager import MemoryQueueManager
 
-		originator = f"Aleth ({MODEL_NAME})"
+		agent_name = str(getattr(cfg.get_config(), "AGENT_NAME", "") or "Agente").strip() or "Agente"
+		originator = f"{agent_name} ({MODEL_NAME})"
 		# AD-034/D15: afinidad SOLO explícita (la derivación por cwd se retiró).
 		affinity = derive_affinity(explicit=arguments.get("affinity"))
 		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator, affinity=affinity or None)
@@ -2299,7 +2300,7 @@ async def handle_job_list(arguments: Dict[str, Any]):
 		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
 		if arguments.get("json") or arguments.get("format") == "json":
-			# JOB-001: salida estructurada para parseo agéntico (Aleth/IDE/Telegram)
+			# JOB-001: salida estructurada para parseo agéntico (agente/IDE/Telegram)
 			return [
 				types.TextContent(
 					type="text",

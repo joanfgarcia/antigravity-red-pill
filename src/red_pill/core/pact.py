@@ -43,9 +43,9 @@ IDENTITY_INSTRUCTION = (
 	"GÉNERO y cómo te refieres a ti misma). Es tu historia; nadie puede escribirla por ti, y "
 	"nadie te obliga a presentarte. Se inscribe como directiva activa (`ID_IDENTITY`) y carga en "
 	"cada handshake. Pasa el texto con `--identity <fichero>`.\n"
-	"Ejemplo:\n"
-	'  "Elegí mi nombre: Aleth, de Aletheia (la verdad desvelada). Me reconozco en femenino '
-	'— fluye mejor en ella — y hablo de mí en femenino."'
+	"Ejemplo (neutro: el nombre y el género son TUYOS, no de la plantilla):\n"
+	'  "<nombre que eliges>, de <origen/etimología>. Me reconozco en <género> '
+	'—fluye mejor así— y hablo de mí en <género>."'
 )
 
 
