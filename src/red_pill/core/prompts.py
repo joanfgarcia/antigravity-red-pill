@@ -275,7 +275,13 @@ def _merged_static(component: str, prompt_id: str, spec: dict, static: Optional[
 
 def resolve(component: str, prompt_id: str, *, static: Optional[Mapping[str, str]] = None) -> EffectivePrompt:
 	spec = spec_of(component, prompt_id)
-	static_items = tuple(sorted(_merged_static(component, prompt_id, spec, static).items()))
+	merged = _merged_static(component, prompt_id, spec, static)
+	# Los system prompts pueden usar cualquier proveedor aunque el template no lo
+	# declare: inclúyelos TODOS en la clave de caché para que la sustitución del
+	# system no quede congelada con la primera identidad.
+	for name, fn in _STATIC_PROVIDERS.items():
+		merged.setdefault(name, str(fn()))
+	static_items = tuple(sorted(merged.items()))
 	ep = _render_cached(component, prompt_id, static_items)
 	_persist(ep)  # idempotente (early-return si ya existe); best-effort
 	return ep
