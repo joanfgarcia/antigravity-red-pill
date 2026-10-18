@@ -1,15 +1,15 @@
 """Construcción del argv de `sd-cli`: text2img + edición/referencias.
 
 `_sd_cpp_command` es pura (no ejecuta): permite verificar las flags sin cargar
-modelos. La edición/referencias exigen `vision` (mmproj) y fallan limpio sin él.
+modelos. El proyector de visión (`--llm_vision`) es **opcional y dirigido por el
+dato**: se añade solo si el modelo declara `vision` en el elenco. Algunos modelos
+(FLUX.3 klein) editan por referencia sin proyector (fail-soft).
 """
 
 from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-
-import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 MOD = REPO / "scripts" / "imagegen" / "bench_imagegen.py"
@@ -44,7 +44,7 @@ def test_text2img_sin_vision_ni_edit(monkeypatch):
 	assert cmd[cmd.index("-W") + 1] == "1024" and cmd[cmd.index("-o") + 1] == "/o.png"
 
 
-def test_edicion_con_imagen_exige_vision(monkeypatch):
+def test_edicion_con_vision_pasa_proyector(monkeypatch):
 	m = _load(monkeypatch)
 	cmd = m._sd_cpp_command(_ctx(), "edit it", 7, 1024, 1024, "/o.png", image="/in.png", strength=0.6)
 	assert cmd[cmd.index("-i") + 1] == "/in.png"
@@ -52,10 +52,11 @@ def test_edicion_con_imagen_exige_vision(monkeypatch):
 	assert cmd[cmd.index("--llm_vision") + 1] == "/mmproj.gguf"
 
 
-def test_edicion_sin_vision_falla_limpio(monkeypatch):
+def test_edicion_sin_vision_no_fuerza_proyector(monkeypatch):
 	m = _load(monkeypatch)
-	with pytest.raises(RuntimeError, match="vision"):
-		m._sd_cpp_command(_ctx(vision=False), "edit", 7, 1024, 1024, "/o.png", image="/in.png")
+	cmd = m._sd_cpp_command(_ctx(vision=False), "edit", 7, 1024, 1024, "/o.png", image="/in.png")
+	assert cmd[cmd.index("-i") + 1] == "/in.png"
+	assert "--llm_vision" not in cmd
 
 
 def test_referencias_repetibles(monkeypatch):

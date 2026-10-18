@@ -103,11 +103,26 @@ def _composition_from_args(args) -> dict:
 	return meta
 
 
-_CONFIG_KEYS = frozenset({
-	"model", "role", "width", "height", "seed", "out", "prompt", "text",
-	"image", "mask", "ref_image", "ref_images", "strength", "negative_prompt",
-	"no_unload", "dry_run",
-})
+_CONFIG_KEYS = frozenset(
+	{
+		"model",
+		"role",
+		"width",
+		"height",
+		"seed",
+		"out",
+		"prompt",
+		"text",
+		"image",
+		"mask",
+		"ref_image",
+		"ref_images",
+		"strength",
+		"negative_prompt",
+		"no_unload",
+		"dry_run",
+	}
+)
 
 
 def _load_config_file(path: str) -> dict:
@@ -254,9 +269,17 @@ def main() -> int:
 	kind, pipe = B._load(model)
 	# Composición (referencia/edición) unificada: la filtra el harness según lo que declara el elenco. Lo no
 	# soportado AVISA (soft-fail, política `compatible`) y se renderiza igual; en `strict`, falla.
+	policy = os.environ.get("RP_MEDIA_COMPOSITION_POLICY", "compatible")
 	meta = _composition_from_args(args)
 	if meta:
-		print(f"[gen] composición: {', '.join(meta)} (política {os.environ.get('RP_MEDIA_COMPOSITION_POLICY', 'compatible')})", file=sys.stderr)
+		try:
+			meta, warns = B.apply_composition(meta, {**prof, "id": model})
+		except RuntimeError as e:
+			raise SystemExit(f"[error] {e}") from e
+		for warn in warns:
+			print(f"[gen] aviso: {warn} (política {policy})", file=sys.stderr)
+	if meta:
+		print(f"[gen] composición: {', '.join(meta)} (política {policy})", file=sys.stderr)
 	img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta)
 
 	outdir = Path(args.out)

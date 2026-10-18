@@ -165,8 +165,9 @@ def _resolve_sd_cpp(cfg: dict) -> dict:
 def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, out, image=None, mask=None, ref_images=None, strength=None) -> list:
 	"""Construye el argv de `sd-cli`: text2img; con `image`/`ref_images` → edición.
 
-	Editar (o usar referencias) exige el proyector de visión (`--llm_vision` →
-	`vision`/mmproj del elenco); sin él falla limpio.
+	Si el elenco declara `vision` (mmproj), se pasa como `--llm_vision` al editar.
+	Algunos modelos (FLUX.3 klein) editan por referencia sin proyector propio:
+	el DiT consume las referencias y el encoder VL se usa solo como texto.
 	"""
 	cfg = ctx["cfg"]
 	sd = ctx["sd"]
@@ -207,9 +208,8 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 		cmd += ["--ref-image", str(r)]
 	if image or ref_images:
 		vision = (ctx.get("paths") or {}).get("vision")
-		if not vision:
-			raise RuntimeError(f"sd.cpp: edición/referencias requieren `vision` (mmproj) en el elenco ({cfg.get('id')})")
-		cmd += ["--llm_vision", str(vision)]
+		if vision:
+			cmd += ["--llm_vision", str(vision)]
 	cmd += [str(a) for a in (sd.get("extra_args") or [])]
 	return cmd
 
@@ -480,9 +480,15 @@ def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int
 	ref = meta.get("reference_image")
 	refs = ref if isinstance(ref, list) else ([ref] if ref else None)
 	return _sd_cpp_generate(
-		pipe, prompt, seed, width, height,
-		image=meta.get("img2img"), mask=meta.get("mask"),
-		ref_images=refs, strength=meta.get("strength"),
+		pipe,
+		prompt,
+		seed,
+		width,
+		height,
+		image=meta.get("img2img"),
+		mask=meta.get("mask"),
+		ref_images=refs,
+		strength=meta.get("strength"),
 	)
 
 
