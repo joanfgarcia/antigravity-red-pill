@@ -39,10 +39,22 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 		except Exception:
 			return ""
 
+	def _open_loops_line(self) -> str:
+		"""Digest determinista de lo pendiente (P0-3): notas del Operador + RFC
+		blocked/paused + shards OPEN. Silencioso si no hay nada."""
+		try:
+			from red_pill.core.open_loops import open_loops_line
+
+			return open_loops_line()
+		except Exception:
+			return ""
+
 	async def execute(self, prompt: str) -> str:
-		notes_line = self._notes_line()
+		# `_notes_line` queda como helper unit-testeado; el digest usa el agregado
+		# OPEN LOOPS (incluye las notas), para no contar lo mismo dos veces.
 		board_line = self._board_line()
-		prefix = "\n".join(x for x in (board_line, notes_line) if x)
+		loops_line = self._open_loops_line()
+		prefix = "\n".join(x for x in (board_line, loops_line) if x)
 		runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
 		bunker_state = runtime_dir / "bunker_state.json"
 		if not bunker_state.exists():
@@ -76,8 +88,8 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 
 			if board_line:
 				lines.append(board_line)
-			if notes_line:
-				lines.append(notes_line)
+			if loops_line:
+				lines.append(loops_line)
 
 			if len(lines) > 1:
 				return "\n".join(lines)
