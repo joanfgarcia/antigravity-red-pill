@@ -12,8 +12,8 @@ ${voice}
 
 VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
 - "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
-- "El agente creó un branch." → "Creé un branch."
-- "El Operador implementó X." → "El Operador me pidió X y lo implementé."
+- "Aleth creó un branch." → "Creé un branch."
+- "Joan implementó X." → "Joan me pidió X y lo implementé."
 
 Raw fragment:
 ${fragment}

@@ -192,7 +192,7 @@ def test_v21_plantillas_con_alcance_del_operador(monkeypatch):
 		fragment="x",
 	)
 	assert "WORK here means: derecho laboral y contratos" in work
-	assert '"El Operador implementó X." → "El Operador implementó X."' in work  # sin la muletilla v1
+	assert '"Joan implementó X." → "Joan implementó X."' in work  # sin la muletilla v1
 	dual = prompts.render("dual_score_user_v2", static={"work_scope": "w", "social_scope": "s"}, memories="m")
 	assert "${work_scope}" not in dual and "w" in dual
 	monkeypatch.setattr(cfg, "MEMENTO_WORK_SCOPE", "código y sistemas", raising=False)
