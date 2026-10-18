@@ -4,7 +4,7 @@ title: "Fase: design"
 status: active
 created: 2026-09-13
 updated: 2026-09-13
-author: "Operator / Agent"
+author: "Joan García (Operator) / Aleth (Agent)"
 project: aleth-core
 tags: [planner, fase, design]
 ---

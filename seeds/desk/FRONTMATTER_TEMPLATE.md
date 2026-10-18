@@ -78,7 +78,7 @@ El vocabulario de estados depende de la **fase** del ítem en el planner
   (see `planner/README.md`): `priority` in `High | Medium | Low`;
   `depends_on` lists relative paths that must close first (topological order in the panel).
 - `author` holds the **actual author(s) of the document** — write the real name(s),
-  e.g. `<Agent name>`, `<Operator name>`, or both `<Agent name> / <Operator name>`.
+  e.g. `Aleth (Netrunner)`, `Joan García`, or both `Aleth (Netrunner) / Joan García`.
   **Never copy a placeholder**: if you are not one of the listed names, replace it.
 - `project` names the canonical source of truth: if it is `red-pill`, the code
   wins; the `.md` is only a design record.

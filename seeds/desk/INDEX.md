@@ -4,7 +4,7 @@ title: "${AGENT_CORE_DIR} — Índice"
 status: active
 created: 2026-09-13
 updated: 2026-10-02
-author: "Operator / Agent"
+author: "Joan García (Operator) / Aleth (Agent)"
 project: aleth-core
 tags: [index]
 ---
