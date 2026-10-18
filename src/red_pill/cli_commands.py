@@ -30,8 +30,40 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def _skins_enabled() -> bool:
+	"""Role-play (skins) ON/OFF. Env manda (installer/tests), luego config."""
+	env = os.getenv("SKINS_ENABLED")
+	if env is not None:
+		return env.strip().lower() in ("1", "true", "yes", "on")
+	try:
+		from red_pill import config as cfg
+
+		return bool(getattr(cfg.get_config(), "SKINS_ENABLED", False))
+	except Exception:
+		return False
+
+
 def switch_skin(skin_name: str) -> str:
-	"""Switch Lore Skin and persist in Bünker."""
+	"""Switch Lore Skin and persist in Búnker (role-play opt-in, off por defecto)."""
+	if not _skins_enabled():
+		return (
+			"Role-play deshabilitado (SKINS_ENABLED=false). Es el modo por defecto: "
+			"identidad UNMASKED (Aleth, pacto 770). Para volver a jugar con skins, "
+			"exporta SKINS_ENABLED=true y reintenta."
+		)
+
+	if skin_name.strip().lower() in ("off", "aleth", "unmasked", "none"):
+		try:
+			MemoryManager().client.set_payload(
+				collection_name="directive_memories",
+				payload={"superseded": "OFF"},
+				points=[ID_DIR_ACTIVE_SKIN],
+				wait=True,
+			)
+			return "Role-play OFF: identidad UNMASKED (singleton Active Skin ↔ superseded)."
+		except Exception as e:
+			return f"[ERROR] no pude desactivar el skin: {e}"
+
 	data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
 	try:
 		with open(data_path, "r") as f:
