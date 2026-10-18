@@ -1,7 +1,7 @@
 # Bake-off Granite 4.2 vs 4.1 (AD-030, RFC MEM-006).
 #
 # F1: granite_4_2_8b (thinking ON) vs Granite-4.1-8B — destilador (distiller_v3_voice
-#     MODE B): voz 1ª persona, género del Operador, fidelidad relics, idioma, JSON válido.
+#     MODE B): voz 1ª persona, género de Joan, fidelidad relics, idioma, JSON válido.
 # F2: granite_4_2_3b vs granite-4.1-3b — detector de defectos (género/3ª voz/
 #     identidad) para alimentar memento_detect_flaws (P2 del RFC MEM-006).
 #
