@@ -49,10 +49,10 @@ def enabled_for(capability: Optional[str]) -> bool:
 	return capability in active
 
 
-def _read_capability(skill_md: Path) -> Optional[str]:
+def _read_capability(skill_md: Path | str) -> Optional[str]:
 	"""Lee `capability:` del frontmatter YAML de un SKILL.md (sin dependencias)."""
 	try:
-		lines = skill_md.read_text(encoding="utf-8").splitlines()
+		lines = Path(skill_md).read_text(encoding="utf-8").splitlines()
 	except OSError:
 		return None
 	if not lines or lines[0].strip() != "---":
@@ -65,6 +65,11 @@ def _read_capability(skill_md: Path) -> Optional[str]:
 	return None
 
 
-def skill_enabled(skill_md: Path) -> bool:
-	"""Decide si un SKILL.md debe sembrarse, según su `capability:`."""
+def skill_enabled(skill_md: Path | str) -> bool:
+	"""Decide si un SKILL.md debe sembrarse, según su `capability:`.
+
+	Acepta `str` o `Path`: el installer (`install_neo.sh`/`upgrade.sh`) pasa la
+	ruta como string en un `python -c`; sin la coerción, `.read_text()` sobre un
+	str lanzaba y el gate saltaba TODAS las skills con `capability:` en silencio.
+	"""
 	return enabled_for(_read_capability(skill_md))
