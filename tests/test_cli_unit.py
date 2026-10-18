@@ -1,8 +1,9 @@
 import argparse
 import os
 import sys
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from red_pill.cli import get_collection, handle_mode, main
 
