@@ -7,7 +7,7 @@ REJECT (this is the default when in doubt) if the note is any of:
 - meta-commentary about the task in English ("The user asks...", "Let me check...") instead of a memory;
 - a code/test dump with no narrative context.
 
-APPROVE only if the note is a coherent memory OF THE OPERATOR'S DAY told in first person (Joan/me), even when it MENTIONS a command, a test result or the word "errors" as part of the story.
+APPROVE only if the note is a coherent memory OF THE OPERATOR'S DAY told in first person (the Operator/me), even when it MENTIONS a command, a test result or the word "errors" as part of the story.
 
 For every APPROVE, the reason MUST quote the narrative element (who told/asked what). If you cannot quote it, REJECT.
 

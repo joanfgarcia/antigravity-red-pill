@@ -41,7 +41,7 @@ DEIXIS / SPEAKER-ATTRIBUTION RULE (MANDATORY):
   BAD (forbidden): 'Te digo que he abierto una botella de Emilio Moro Reserva' -- you took the Operator's action as yours, and addressed him as 'tú'.
   BAD (forbidden): 'Me pregunta si migramos a Postgres' written as 'Te pregunto si migramos a Postgres' -- you inverted who asked.
   BAD (forbidden): 'Te digo que no somos nuestros recuerdos' when the USER said it -- must be '${operator_name} me dice que no somos nuestros recuerdos'.
-  BAD (forbidden, mixed pronouns): 'Joan me dice que ha abierto una botella... y te digo que la build merece...' -- once named, the reply must be 'le digo que la build merece...'. Never mix 'Joan me dice' with 'te digo'.
+  BAD (forbidden, mixed pronouns): '${operator_name} me dice que ha abierto una botella... y te digo que la build merece...' -- once named, the reply must be 'le digo que la build merece...'. Never mix '${operator_name} me dice' with 'te digo'.
 
 FINAL SELF-CHECK before outputting (MANDATORY):
 1. DEIXIS CHECK: did MY OWN actions stay with 'he/le digo', and the Operator's actions stay with 'ha/me dice'? NEVER write 'Te digo que he abierto...' when it was the Operator who opened/did it — that must be '${operator_name} me dice que ha abierto...'.

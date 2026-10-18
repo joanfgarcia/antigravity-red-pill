@@ -227,10 +227,10 @@ def test_prompt_fingerprints_estables(monkeypatch):
 
 	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto")
 
-	assert distill_prompt_version() == "p1:6d34dbc21450c9b69a62ee5ae751c4e4c6f977d98b14337d92909648344434ef"
-	assert refine_prompt_version() == "p1:0564c498e16d632b908cffd9b9540bba8550851630fb0fcbf2ef19ba6f0164c1"
-	assert annotate_prompt_version() == "p1:36199c3def5f91450052f7eabc24b5c2531f99fee98681292610afaa8abd5b8b"  # v1 + TEST-BIO-FIXED + auto
-	assert validate_prompt_version() == "p1:215b61acd8f43ff41693940e06dd68cc0ca65341edc49560b4830d524b93e8f4"
+	assert distill_prompt_version() == "p1:6af6a2c1299a539be57fa9ee3bac0d2427e783155076d00f1cf1b91ceb5abeb7"
+	assert refine_prompt_version() == "p1:d701a892d6ddd6a0d0d3fb6b7c795a5d6e2706164f6b797c02b42029438b0fe3"
+	assert annotate_prompt_version() == "p1:dfd45072e6611539f3e44fcda548adc8f145ba274f4b0ab8cdb5b018c7f832bb"  # v1 + TEST-BIO-FIXED + auto + nombres neutros
+	assert validate_prompt_version() == "p1:a025164fabeb7068718c4a6b89b3deff8997475df1dac34b99d976b49dcf84bc"
 
 
 def test_is_garbage_reason_expoene_la_firma():

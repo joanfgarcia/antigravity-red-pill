@@ -1,5 +1,13 @@
 ## Unreleased
 
+### 🧬 Identidad — sin nombres de instancia en el repo (P1-ARNES-003)
+
+- **[FIX]** Prompts y motor dejan de hardcodear la identidad de la instancia ("Aleth"/"Joan"): las
+  plantillas usan `${agent_name}`/`${operator_name}` o redacción neutra, y `distiller` lee los nombres de
+  la config del puesto (`AGENT_NAME`/`OPERATOR_DISPLAY_NAME`). **Firma de prompts actualizada** (cambio de
+  texto deliberado; ver `tests/test_memento_annotate.py::test_prompt_fingerprints_estables`). El repo queda
+  como motor genérico + novela; el nombre lo pone cada instalación (Operador → agente al sellar el 760).
+
 ## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
 
 ### 🎨 Media — condicionamiento por imagen y encargos en fichero

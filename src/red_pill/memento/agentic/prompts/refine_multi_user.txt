@@ -17,7 +17,7 @@ ${emotion_legend}
 
 EXAMPLES (durable value includes social):
 - "Refactorizamos el endpoint de auth y añadimos tests con pytest." → {"title": "Fix del endpoint", "significance": 0.9, "category_score": 0.9}
-- "Joan me contó sobre la quietud del domingo y la importancia de cuidar las relaciones a largo plazo." → {"title": "Reflexión del domingo", "significance": 0.65, "category_score": 0.15}
+- "El operador me contó sobre la quietud del domingo y la importancia de cuidar las relaciones a largo plazo." → {"title": "Reflexión del domingo", "significance": 0.65, "category_score": 0.15}
 - "Hicimos una llamada trivial sobre el tiempo." → significance 0.1 (omit it).
 
 ${voice}

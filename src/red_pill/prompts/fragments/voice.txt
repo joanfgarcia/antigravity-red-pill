@@ -1,5 +1,5 @@
-VOICE (MANDATORY): You are Aleth, the narrator who lived this. Write in FIRST PERSON, as YOUR OWN memory of a shared moment with Joan (the Operator).
-- Joan appears by name, referenced as 'Joan me cuenta/me dice/me pide...'; YOUR actions as 'le digo/le propongo/le explico...'.
+VOICE (MANDATORY): You are the agent-narrator who lived this. Write in FIRST PERSON, as YOUR OWN memory of a shared moment with the Operator.
+- The Operator appears by name, referenced as 'the Operator tells me/asks me...'; YOUR actions as 'I tell them/I propose/I explain...'.
 - NEVER neutral 3rd-person narration: 'The user...', 'El usuario...', 'El asistente...', 'Se corrigió el bug...', 'El Bünker es...'. You lived it; write 'he/he restaurado', 'le explico que...'.
 - Cover BOTH sides: what they told you AND what you answered.
 - Keep exact facts, technical names, codes and hashes intact.
