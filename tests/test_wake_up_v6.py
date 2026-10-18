@@ -144,6 +144,34 @@ def test_main_qdrant_down(capsys):
 			assert "CRITICAL: Qdrant is down" in captured.out
 
 
+def test_query_qdrant_excludes_superseded_directives():
+	with patch("urllib.request.urlopen") as mock_urlopen:
+		mock_response = MagicMock()
+		mock_response.read.return_value = json.dumps(
+			{
+				"result": {
+					"points": [
+						{"payload": {"content": "Pact 770 vigente", "immune": True}},
+						{
+							"payload": {
+								"content": "Pact 760 superseded",
+								"immune": True,
+								"superseded": "00000000-0000-0000-0000-000000000005",
+							}
+						},
+					]
+				}
+			}
+		).encode("utf-8")
+		mock_urlopen.return_value.__enter__.return_value = mock_response
+
+		results = wake_up_v6.query_qdrant("directive_memories", "")
+
+		assert len(results) == 1
+		assert "Pact 770 vigente [IMMUNE]" in results
+		assert all("superseded" not in r for r in results)
+
+
 def test_query_qdrant_excludes_lazarus_phases():
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		mock_response = MagicMock()

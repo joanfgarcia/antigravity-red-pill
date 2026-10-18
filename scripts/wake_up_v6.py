@@ -64,6 +64,21 @@ def check_llm_service_active():
 		return False
 
 
+def _directive_is_active(payload: dict) -> bool:
+	"""Vigencia de una directiva: `superseded` ausente/null/'null'/'None' == activa.
+
+	Reproduce a propósito la semántica de `red_pill.core.directives.is_active`
+	para que el despertar no dependa de un import pesado; si el módulo está
+	disponible, gana la implementación canónica (una sola fuente de verdad).
+	"""
+	try:
+		from red_pill.core.directives import is_active
+
+		return is_active(payload)
+	except Exception:
+		return (payload or {}).get("superseded") in (None, "", "null", "None")
+
+
 def query_qdrant(collection, text):
 
 	# We use a dummy vector query just for keyword or semantic match fallback if needed.
@@ -94,6 +109,10 @@ def query_qdrant(collection, text):
 				payload = p.get("payload", {})
 				lazarus = payload.get("lazarus_phase")
 				if lazarus in ("raw_parent", "sequence_chunk", "synthesis_hub"):
+					continue
+				# Solo directivas vigentes: el 760 superado por el 770 no se carga
+				# (una versión contradictoria por turno). Ver core/directives.py.
+				if collection == "directive_memories" and not _directive_is_active(payload):
 					continue
 				content = payload.get("content", "")
 				is_immune = payload.get("immune", False)
