@@ -87,7 +87,8 @@ def test_claude_code_espeja_skills_kebab(tmp_path, monkeypatch):
 	mod = _load("claude-code")
 	assert mod._deploy_skills(str(repo)) > 0
 	names = sorted(p.name for p in dest.iterdir())
-	assert "job_manager" not in names and "basura" not in names
+	assert "job_manager" not in names  # legacy snake: se poda
+	assert "basura" in names  # entrada AJENA: se respeta (red-pill es invitado)
 	assert {"frontmatter", "job-manager", "scout"} <= set(names)
 	assert (dest / "scout").is_symlink()
 	assert mod._deploy_skills(str(repo)) == 0  # idempotente

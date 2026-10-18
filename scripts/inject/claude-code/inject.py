@@ -64,19 +64,33 @@ def _deploy_skills(redpill_dir: str) -> int:
 	os.makedirs(dest, exist_ok=True)
 	changed = 0
 
-	# Poda: fuera legacy y cualquier entrada que ya no sea canónica.
+	def _is_ours_link(p: str) -> bool:
+		"""Symlink que apunta a una copia canónica que gestionamos (agent/opencode)."""
+		if not os.path.islink(p):
+			return False
+		real = os.path.realpath(p)
+		return real.startswith(agent + os.sep) or real.startswith(opencode + os.sep)
+
+	# Poda SOLO de lo nuestro (red-pill es invitado, nunca dueño):
+	#  - nombres legacy snake_case (renombrados a kebab el 2026-09-10)
+	#  - symlinks creados por nosotros hacia agent/opencode
+	# Cualquier entrada ajena (dir o symlink del usuario) se RESPETA.
 	for entry in list(os.listdir(dest)):
 		p = os.path.join(dest, entry)
-		if entry in names and entry not in _LEGACY_SKILLS:
-			continue
-		if os.path.islink(p):
-			os.unlink(p)
+		if entry in _LEGACY_SKILLS:
+			if os.path.islink(p):
+				os.unlink(p)
+			elif os.path.isdir(p):
+				shutil.rmtree(p)
 			changed += 1
-		elif os.path.isdir(p):
-			shutil.rmtree(p)
-			changed += 1
+		elif _is_ours_link(p):
+			# Symlink nuestro: solo se poda si ya NO es una skill canónica.
+			# (Si sigue siéndolo, lo actualiza el bucle de creación sin recrear.)
+			if entry not in names:
+				os.unlink(p)
+				changed += 1
 
-	# Symlink kebab → copia canónica desplegada (resuelta).
+	# Symlink kebab → copia canónica desplegada (resuelta). No pisamos contenido ajeno.
 	for name in sorted(names):
 		if name in _LEGACY_SKILLS:
 			continue
@@ -92,8 +106,8 @@ def _deploy_skills(redpill_dir: str) -> int:
 			if os.readlink(link) == target:
 				continue
 			os.unlink(link)
-		elif os.path.isdir(link):
-			shutil.rmtree(link)
+		elif os.path.exists(link):
+			continue  # entrada ajena con nombre canónico: se respeta
 		os.symlink(target, link)
 		changed += 1
 
