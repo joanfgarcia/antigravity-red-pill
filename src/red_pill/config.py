@@ -476,6 +476,7 @@ class RedPillConfig(BaseSettings):
 		if v not in (None, ""):
 			logging.getLogger(__name__).warning("MEDIA_COMPOSITION_POLICY=%r desconocido → compatible", v)
 		return "compatible"
+
 	# AWAKENING_SILENCE_COUNTS: si False (default), un despertar que ejerce el
 	# Derecho al Silencio NO consume el tope diario (`MAX_AWAKENINGS_PER_DAY`);
 	# solo cuentan los despertares productivos (con trabajo real) y los errores.
@@ -714,7 +715,7 @@ class RedPillConfig(BaseSettings):
 	# Dedup de notas DESPUÉS de la re-escritura de voz (annotate): exacta + tokens
 	# (P1-A) + casi-duplicados por embedding dentro de la sesión (coseno ≥ umbral).
 	MEMENTO_ANNOTATE_POST_REWRITE_DEDUP: bool = False
-	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "Joan me…" y
+	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "el Operador me…" y
 	# nombrando la entidad; la re-escritura solo toca notas con bandera `voice`.
 	# Cambia el fingerprint de annotate → las sesiones anotadas quedan stale para el
 	# rebuild (NO para el nocturno). Encender tras validar el piloto.
@@ -1000,7 +1001,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# LORE SKINS / ROLE-PLAY (opt-in; default UNMASKED)
 	# -----------------------------------------------------------------------
-	# Apagado por defecto: la identidad persistente es Aleth (UNMASKED, pacto 770).
+	# Apagado por defecto: la identidad persistente es la del puesto (UNMASKED, pacto 770).
 	# `SKINS_ENABLED=true` habilita el subsistema de skins como "role-play": una
 	# capa de TONO deliberada, nunca una sustitución de identidad (el ancla de
 	# identidad se mantiene siempre). Ver `wake_up_v6.resolve_persona` y

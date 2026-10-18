@@ -11,12 +11,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from red_pill.schemas import ValidColor
+
 
 @pytest.fixture(autouse=True)
 def _enable_skins(monkeypatch):
 	monkeypatch.setenv("SKINS_ENABLED", "true")
-
-from red_pill.schemas import ValidColor
 
 
 def test_lore_skins_yaml_integrity():
