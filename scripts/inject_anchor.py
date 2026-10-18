@@ -35,12 +35,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 # ── Anchor block version (bump to force a re-splice on upgrade) ───────────────
+# Canonical order + roster: the SINGLE source every deployer imports. `inject_opencode`
+# used to hardcode a different subset (missing `identity_pact`, adding `frontmatter_docs`
+# only there), so each target drifted to a different rule set.
+BLOCK_ANCHORS = (
+	"sovereign_handshake",
+	"agent_core",
+	"knowledge_access",
+	"frontmatter_docs",
+	"job_dag_execution",
+	"identity_pact",
+)
+
 BLOCK_VERSION = {
 	"sovereign_handshake": 3,
 	"agent_core": 2,
 	"knowledge_access": 4,
 	"frontmatter_docs": 3,
 	"job_dag_execution": 1,
+	"identity_pact": 1,
 }
 
 
@@ -321,7 +334,7 @@ def main():
 	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-code-project|pi|claude-desktop-project|opencode")
 	parser.add_argument(
 		"--anchor",
-		default="sovereign_handshake,agent_core,knowledge_access,job_dag_execution,identity_pact",
+		default=",".join(BLOCK_ANCHORS),
 		help="csv of anchor seeds to inject (file names in --seeds-dir)",
 	)
 	parser.add_argument(

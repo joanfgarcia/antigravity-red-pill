@@ -74,14 +74,14 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
 	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
-	from inject_anchor import BLOCK_VERSION, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
+	from inject_anchor import BLOCK_ANCHORS, BLOCK_VERSION, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
 
 	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
 	# Sin esto los `${RELAY_*}` del seed llegaban literales a RED_PILL.md.
 	ide_vars = {**variables, **ide_call_vars("opencode")}
 
 	changed = 0
-	for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]:
+	for anchor in BLOCK_ANCHORS:
 		# Override per-IDE (seeds/opencode/anchors/<anchor>.md) si existe; si no, genérico.
 		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
 		if not os.path.exists(seed_path):
