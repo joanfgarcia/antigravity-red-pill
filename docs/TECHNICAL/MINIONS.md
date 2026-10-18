@@ -3,7 +3,7 @@
 Red Pill can delegate work to **minions**. This document is written for two readers:
 
 - a **human** deciding how to structure delegated work, and
-- an **orchestrating agent** (e.g. Aleth) that spawns minions via the
+- an **orchestrating agent** (e.g. the Operator's agent) that spawns minions via the
   `swarm_orchestrator_api` MCP tool and must know *what each kind can and cannot do*
   before assigning a task.
 

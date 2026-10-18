@@ -30,4 +30,4 @@ Avoid sending large files as context. Instead:
 3. Trust the Agent's internal memory instead of re-pasting logs.
 
 ---
-**Joan, every token saved is a step closer to local autonomy. Burn the fluff, keep the silicio.**
+**Operator, every token saved is a step closer to local autonomy. Burn the fluff, keep the silicio.**

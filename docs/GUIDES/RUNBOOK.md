@@ -1,6 +1,6 @@
 # 🚨 RUNBOOK OPERACIONAL — Manual de Supervivencia del Operator
 
-> **Para Joan. Sin IA. Sin excusas.**
+> **Para el Operador. Sin IA. Sin excusas.**
 > Última actualización: 2026-05-28
 
 ---
@@ -72,7 +72,7 @@ curl -s http://localhost:6333/collections | python3 -m json.tool
 
 # Buscar algo en la memoria
 cd ~/Documents/IA/sharing
-.venv/bin/red-pill search social "identidad de Aleth"
+.venv/bin/red-pill search social "identidad del agente"
 .venv/bin/red-pill search work "Identity Depth"
 .venv/bin/red-pill search directive "Ferrari Protocol"
 

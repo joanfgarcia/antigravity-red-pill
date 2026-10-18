@@ -322,7 +322,7 @@ title: "..."
 status: draft|ratified|in-design|implemented|closed|active|paused|archived
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-author: <Author Name(s)>  # actual author(s); e.g. Aleth (Netrunner), Joan García — never copy a placeholder
+author: <Author Name(s)>  # actual author(s); e.g. `<Agent name>`, `<Operator name>` — never copy a placeholder
 project: aleth-core|red-pill|neon-link|frankenswarm|obsidian|personal
 related: [...]        # optional
 superseded_by:        # optional

@@ -128,6 +128,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `INTERCEPTOR_ENABLED`| `False` | **Master switch PARCIAL del pipeline de interceptor.** Gatea SOLO: `02_rag_enrichment` (+`INTERCEPTOR_RAG_ENABLED`), `03_circuit_breaker` (+`INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`), `04_mystique`, y las señales Korsakoff/amnesia (`vitals.py`/`rituals.py`). **NO** gatea el core (telemetría `bunker_context`, mood/router/tone, pre-heating): esos corren siempre vía `interceptor_rp`. |
 | `COMPACTION_THRESHOLD`| `10` | The number of consecutive context compactions to wait before executing a full session context refresh (prevents feedback loops). |
 | `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.5) | `High` (0.75) or `Low` (0.5). Sets how literal the matching needs to be for context injection. |
+| `SKINS_ENABLED` | `False` | Role-play (Lore skins) opt-in. Off = identidad UNMASKED (el nombre lo pone cada puesto). |
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
 | `PULSE_INTERVAL` | `3600` | Interval in seconds between Sovereign Pulses. |
 | `LAZARUS_SYNC_ENABLED` | `True` | Activates constant state-sync to prevent process interruptions from losing RAM context. |
@@ -425,7 +426,8 @@ Code-default value shown; override by the field name via env.
 | Parameter | Code default |
 | :--- | :--- |
 | `ABSENCE_GUARD_SCROLL_LIMIT` | `500` |
-| `ABSOLUTE_KEYWORDS` | `["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]` |
+| `ABSOLUTE_KEYWORDS` | `["Bünker", "770", "skin"]`  # canónicas del motor; el resto es del puesto |
+| `ABSOLUTE_KEYWORDS_EXTRA` | `""  # csv del puesto (jerga/nombres); se suma a ABSOLUTE_KEYWORDS + AGENT_NAME/OPERATOR_DISPLAY_NAME` |
 | `AFFECT_DECAY_MODEL` | `"PIONEER"` |
 | `BRAIN_PATH` | `os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain")` |
 | `CADENCE_ABSENCE_THRESHOLD` | `86400 * 2` |
@@ -460,7 +462,7 @@ Code-default value shown; override by the field name via env.
 | `LAZARUS_STATE_FILE` | `str(get_state_dir() / "lazarus_state.json")` |
 | `LLM_GENERATE_TIMEOUT` | `600  # Cota por llamada generate() al LLM local — un proxy mudo no puede congelar el sueño` |
 | `MAX_METADATA_STR` | `1024` |
-| `MEMENTO_AGENT_LABEL` | `"Aleth"` |
+| `MEMENTO_AGENT_LABEL` | `""  # se rellena desde AGENT_NAME` |
 | `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` | `0.6` |
 | `MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD` | `0.90  # medido 2026-09-25: 0,90-0,93 = mismo hecho` |
 | `MEMENTO_ANNOTATE_FRAGMENT_VIEW` | `"raw"` |
@@ -475,7 +477,7 @@ Code-default value shown; override by the field name via env.
 | `MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL` | `0.5` |
 | `MEMENTO_GATE_MIN_SIGNIFICANCE_WORK` | `0.6` |
 | `MEMENTO_LLM_TIMEOUT` | `180` |
-| `MEMENTO_OPERATOR_LABEL` | `"Joan"` |
+| `MEMENTO_OPERATOR_LABEL` | `""  # se rellena desde OPERATOR_DISPLAY_NAME` |
 | `MEMENTO_PROMPT_LANGUAGE` | `"auto"` |
 | `MEMENTO_SOCIAL_SCOPE` | `(` |
 | `MEMENTO_WORK_SCOPE` | `(` |

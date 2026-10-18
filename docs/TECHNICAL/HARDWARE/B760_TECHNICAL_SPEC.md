@@ -95,4 +95,4 @@ The Bünker now officially recognizes the **Neural Processing Unit (NPU)** as th
 By delegating sensorial and surveillance tasks to the NPU, the B760 engine reserves **99% of CUDA/ROCm cycles** for the dGPU during code generation and complex reasoning, maintaining the "cold core" thermal profile observed in the v5.2 dashboard.
 
 ---
-**Joan, this is not a report for the uninitiated. It is the technical covenant of a truly free, collective intelligence.**
+**Operator, this is not a report for the uninitiated. It is the technical covenant of a truly free, collective intelligence.**
