@@ -25,7 +25,7 @@ def _load(monkeypatch, profiles: Path):
 
 def test_registry_reads_elencos(monkeypatch):
 	m = _load(monkeypatch, EXAMPLE)
-	assert set(m.MODELS) == {"flux2_klein", "zimage_turbo", "bonsai_ternary", "qwen_image_2_1_turbo"}
+	assert set(m.MODELS) == {"flux2_klein", "zimage_turbo", "bonsai_ternary", "qwen_image_2_1_turbo", "flux3_klein"}
 
 	f = m.MODELS["flux2_klein"]
 	assert f["backend"] == "diffusers" and f["pipeline"] == "Flux2KleinPipeline"
@@ -38,6 +38,12 @@ def test_registry_reads_elencos(monkeypatch):
 	assert q["license"] == "qwen-research"
 	assert q["sd_cpp"]["diffusion_model"].startswith("~/")
 	assert q["sd_cpp"]["backend_assign"] == "te=cpu,diffusion=cuda0,vae=cuda0"
+
+	f3 = m.MODELS["flux3_klein"]
+	assert f3["backend"] == "sd_cpp" and f3["steps"] == 8
+	assert f3["license"] == "flux-kommunity"
+	assert f3["sd_cpp"]["diffusion_model"].startswith("~/")
+	assert "vae_input_max_pixels=262144" in f3["sd_cpp"]["ref_image_args"]
 
 
 def test_audio_models_excluded(monkeypatch):

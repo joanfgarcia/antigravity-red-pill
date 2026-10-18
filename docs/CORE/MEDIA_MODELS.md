@@ -186,6 +186,7 @@ the three GGUF/safetensors files + the backend assignment:
       text_encoder:    "~/opt/red-pill-custom-image-models/qwen-image-2.1/Sakura-TextEncoder-Qwen3VL-8B-Uncensored-8bit-8.11GiB.gguf"
       vae:             "~/opt/red-pill-custom-image-models/qwen-image-2.1/qwen_image_2.1_vae_bf16.safetensors"
       backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"
+      ref_image_args: "vae_input_max_pixels=262144,resize_before_vae=true"   # opcional: refs a 512² (la multi-referencia cabe en 8 GB)
       extra_args: ["--flash-attn", "on", "--vae-tiling"]
       sigmas: "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"
     license:
@@ -209,6 +210,15 @@ Measured on the reference box (RTX 5070 Laptop 8 GB): **~32 s/image at 1024²**,
 DiT 4.7 GB in VRAM, encoder 8.3 GB in RAM. `min_free_vram_mb` must be ≥ the
 DiT+VAE footprint; the runner **defers** the job while VRAM is occupied (it does
 not evict a resident LLM).
+
+**Composición multi-referencia y `ref_image_args`** — el bloque `sd_cpp:` admite
+`ref_image_args` (cadena o dict `k=v`), que el harness añade como `--ref-image-args`
+**solo cuando hay referencias/edición**. Sirve para que la multi-referencia quepa:
+con `vae_input_max_pixels=262144,resize_before_vae=true` (refs a 512²) FLUX.3 klein
+compone hasta **10 referencias** en 8 GB (~200 MB VRAM/ref, ~13 s/ref); con refs a
+1024² solo caben 2. `--offload-to-cpu` es opcional (recorta ~0.5 GB VRAM, cuesta
+~3 GB RAM). El proyector `vision`/`--llm_vision` es igualmente **opcional**
+(depende del modelo: Qwen-Image lo necesita, FLUX.3 edita sin él).
 
 ---
 

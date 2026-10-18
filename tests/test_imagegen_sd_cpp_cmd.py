@@ -66,6 +66,16 @@ def test_referencias_repetibles(monkeypatch):
 	assert "--llm_vision" in cmd
 
 
+def test_ref_image_args_solo_en_composicion(monkeypatch):
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["ref_image_args"] = {"vae_input_max_pixels": 262144, "resize_before_vae": True}
+	assert "--ref-image-args" not in m._sd_cpp_command(ctx, "p", 1, 1024, 1024, "/o.png")
+	cmd = m._sd_cpp_command(ctx, "c", 1, 1024, 1024, "/o.png", ref_images=["/a.png"])
+	val = cmd[cmd.index("--ref-image-args") + 1]
+	assert "vae_input_max_pixels=262144" in val and "resize_before_vae=true" in val
+
+
 def test_mask_inpainting(monkeypatch):
 	m = _load(monkeypatch)
 	cmd = m._sd_cpp_command(_ctx(), "inpaint", 1, 1024, 1024, "/o.png", image="/in.png", mask="/m.png")

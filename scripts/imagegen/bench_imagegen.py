@@ -210,8 +210,20 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 		vision = (ctx.get("paths") or {}).get("vision")
 		if vision:
 			cmd += ["--llm_vision", str(vision)]
+		if sd.get("ref_image_args"):
+			cmd += ["--ref-image-args", _sd_ref_args(sd["ref_image_args"])]
 	cmd += [str(a) for a in (sd.get("extra_args") or [])]
 	return cmd
+
+
+def _sd_ref_args(value) -> str:
+	"""Serializa `ref_image_args` del elenco a la cadena `k=v,k=v` de sd-cli.
+
+	Acepta dict (bools en minúscula) o una cadena ya formateada.
+	"""
+	if isinstance(value, dict):
+		return ",".join(f"{k}={'true' if v is True else 'false' if v is False else v}" for k, v in value.items())
+	return str(value)
 
 
 def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int, image=None, mask=None, ref_images=None, strength=None):

@@ -21,6 +21,7 @@ Modelos: **NO hardcodeados** — el harness los lee del elenco de máquina
 - `zimage_turbo` — `ZImagePipeline` (diffusers), Z-Image-Turbo 6B (Apache-2.0).
 - `bonsai_ternary` — `GpuPipeline` (image-studio/backend_gpu), Bonsai Image 4B ternario (gemlite INT2) (Apache-2.0).
 - `qwen_image_2_1_turbo` — backend `sd_cpp` (stable-diffusion.cpp, GGUF), Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B (qwen-research, **no comercial**).
+- `flux3_klein` — backend `sd_cpp` (GGUF), FLUX.3 Image Klein 5.6B (destilado) + encoder Qwen3-VL-4B (flux-kommunity, **no comercial**); t2i + edición/multiref (hasta 10 refs a 512² vía `ref_image_args`).
 
 ## Rutas configurables (opción por defecto del puesto; override por entorno)
 
