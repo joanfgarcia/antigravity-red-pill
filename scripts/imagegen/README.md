@@ -96,6 +96,25 @@ scripts/imagegen/gen.sh --role photoreal --dry-run     # resuelve, sin generar
 También como **comando de consola del repo**: `uv run media-gen …` (entry point
 `media-gen` → `red_pill.media_gen`, delega en `gen_cli.py` con el python del forge).
 
+**Configuración por fichero, plantilla y lote** (`media-gen`):
+
+```sh
+uv run media-gen --template encargo.yaml      # plantilla YAML comentada ('-' → stdout)
+uv run media-gen --config encargo.yaml        # genera según el fichero (los flags lo pisan)
+```
+
+- El fichero acepta las mismas claves que los flags (`model`/`role`, `width`/`height`/`seed`,
+  `steps`/`guidance`, `prompt` en bloque literal) y un bloque `composition:` (vocabulario canónico).
+- **Effort**: `--steps`/`--guidance` (o en el fichero) **pisan** el `sampler` del elenco **solo
+  para esa llamada** (más pasos = mejor/más lento).
+- **Lote**: si el fichero trae **`requests:`** (lista), se generan varias imágenes **reutilizando
+  el modelo** (se carga **una vez por modelo distinto**). Cada `request` puede variar
+  prompt/seed/tamaño/steps/composición.
+- **Precedencia** de cada campo: `defaults de máquina (env) < config < request < flags del CLI`.
+- **`--no-unload`**: no libera la VRAM del **LLM residente** antes de generar (aplica al **inicio**;
+  el modelo de imagen se libera siempre al acabar el proceso). **No** acelera generaciones sueltas
+  —para eso, usa el **lote** (modelo cargado una vez).
+
 **Edición y composición** (backend `sd_cpp`; requieren el `vision`/mmproj en el
 elenco — se resuelve del `sd_cpp:` block):
 
