@@ -20,8 +20,9 @@ before touching git — the active profile is not a matter of taste per session.
 1. **`main` is stable and never receives a direct push.** The local `pre-push` hook
    (`scripts/git-hooks/pre-push`) rejects it; the GitHub repository ruleset **`no direct
    commit`** enforces the same server-side (deletion + non-fast-forward blocked, PR-only,
-   squash merges allowed). Only `main` is guarded this way — `next` is intentionally open.
-   All integration into `main` happens through a Pull Request.
+   squash merges allowed). All integration into `main` happens through a Pull Request.
+   `next` has its own ruleset, **`next: sin reescritura`**, which blocks force-push but
+   deliberately allows direct push and deletion.
 2. **No force-push, ever** (`--force`, `-f`, `+refspec`). If a branch diverged, merge or
    revert — never rewrite.
 3. **Conventional Commits** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `cert:`,
@@ -60,8 +61,9 @@ per RFC/phase). `next` is the accumulation point; the worktrees are the parallel
 - **Optional.** It exists only after its first push and until the release PR lands. Between
   releases `main` is the only branch.
 - **Born from `main`.** `git switch -c next origin/main` at the start of a cycle.
-- **Not protected.** Direct commits and pushes to `next` are allowed and expected. Only
-  `main` is forbidden.
+- **Not protected against direct push or deletion.** Direct commits and pushes to `next` are
+  allowed and expected, and the release deletes it. Only `main` is PR-guarded. A server-side
+  ruleset (`next: sin reescritura`) blocks force-push, matching the local hook.
 - **Always stable, always green.** The primary checkout lives on `next`, and `next` must be
   a working tree at all times: it compiles, its tests pass, it contains no half-done work.
   Anything not ready to be green lives in a worktree, never on `next`. This is what lets any
