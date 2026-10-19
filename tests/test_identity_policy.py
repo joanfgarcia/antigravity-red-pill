@@ -33,6 +33,7 @@ _FILES = [
 # Globs que DEBEN estar sin nombres.
 _GLOBS = [
 	"seeds/anchors/**/*.md",
+	"seeds/*.md",
 	"src/red_pill/**/prompts/**/*.txt",
 	"src/red_pill/**/prompts/**/*.yaml",
 ]
