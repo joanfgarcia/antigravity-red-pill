@@ -153,3 +153,17 @@ def test_template_a_fichero(monkeypatch, tmp_path):
 	p = tmp_path / "cfg.yaml"
 	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--template", str(p)])
 	assert m.main() == 0 and p.read_text(encoding="utf-8").startswith("#")
+
+
+def test_merge_request_precedencia(monkeypatch):
+	"""env < config(general) < request < flags del CLI."""
+	m = _load(monkeypatch)
+	monkeypatch.setenv("W", "111")
+	monkeypatch.setenv("H", "222")
+	monkeypatch.setenv("SEED", "1")
+	out = m._merge_request({"width": 333, "steps": 8}, {"height": 444, "steps": 12, "prompt": "a"}, {"steps": 20})
+	assert out["seed"] == 1
+	assert out["width"] == 333
+	assert out["height"] == 444
+	assert out["steps"] == 20
+	assert out["prompt"] == "a"

@@ -93,6 +93,20 @@ prompt: |
 # out: ~/tmp/red-pill/media/staging/mi-encargo   # dir de salida (def: staging del puesto)
 # no_unload: false    # true = no liberar la VRAM del LLM residente antes de generar
 # dry_run: false      # true = resolver y mostrar, sin generar
+
+# ── LOTE (opcional): varias imágenes con el modelo cargado UNA vez ──────
+# Si existe `requests:`, se entra en modo lote. Cada petición puede variar
+# prompt/seed/tamaño/steps/guidance/composición. Precedencia de cada campo:
+#   defaults de máquina  <  este fichero (general)  <  cada `request`  <  flags del CLI
+# Se agrupa por modelo y se carga una sola vez por modelo distinto.
+# requests:
+#   - prompt: "Un retrato fotorrealista…"
+#     seed: 42
+#   - prompt: "Póster tipográfico de Lisboa…"   # mismo modelo → NO se recarga
+#     seed: 7
+#     steps: 16
+#   - model: zimage_turbo                       # cambia de modelo → carga otra vez
+#     prompt: "…"
 """
 
 
@@ -231,6 +245,120 @@ def _model_available(prof: dict) -> tuple:
 	return B.backend_available(prof)
 
 
+def _env_defaults() -> dict:
+	"""Defaults de la máquina (nivel más bajo de precedencia)."""
+	return {"width": int(os.environ.get("W", 1024)), "height": int(os.environ.get("H", 1024)), "seed": int(os.environ.get("SEED", 42))}
+
+
+# flag del CLI -> clave de petición (para detectar overrides explícitos por `argv`).
+_FLAG_KEYS = {
+	"--model": "model",
+	"--role": "role",
+	"--width": "width",
+	"--height": "height",
+	"--seed": "seed",
+	"--steps": "steps",
+	"--guidance": "guidance",
+	"--prompt": "prompt",
+	"--image": "image",
+	"--mask": "mask",
+	"--ref-image": "ref_images",
+	"--strength": "strength",
+	"--negative-prompt": "negative_prompt",
+	"--out": "out",
+}
+
+
+def _cli_overrides(args) -> dict:
+	"""Campos realmente pasados por el CLI (nivel más alto): se detectan por presencia en `argv`."""
+	argv = sys.argv[1:]
+	o: dict = {}
+	for flag, key in _FLAG_KEYS.items():
+		if flag in argv:
+			o[key] = getattr(args, key)
+	if not o.get("prompt") and (args.prompt or args.text):
+		o["prompt"] = args.prompt or args.text
+	return o
+
+
+def _merge_request(general: dict, req: dict, explicit: dict) -> dict:
+	"""Precedencia: env-defaults < config(general) < request < flags del CLI."""
+	d = dict(_env_defaults())
+	d.update(general or {})
+	d.update(_config_to_defaults(req or {}))
+	d.update(explicit or {})
+	return d
+
+
+def _run_batch(args, config: dict, requests: list) -> int:
+	"""Modo lote: `config` trae general + `requests`. Carga el modelo UNA vez por modelo distinto."""
+	general = _config_to_defaults(config)
+	explicit = _cli_overrides(args)
+	data = _profiles()
+
+	B._setup_caches()
+	os.environ["HF_HUB_OFFLINE"] = "1"
+	os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+	out_base = Path(args.out or general.get("out") or _default_out())
+	out_base.mkdir(parents=True, exist_ok=True)
+	if not args.no_unload and not args.dry_run:
+		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
+
+	policy = os.environ.get("RP_MEDIA_COMPOSITION_POLICY", "compatible")
+	loaded_model = None
+	kind = pipe = None
+	n_img = n_load = 0
+	for i, req in enumerate(requests):
+		flat = _merge_request(general, req, explicit)
+		model = _ensure_image(_resolve_model(data, flat.get("model"), flat.get("role")))
+		prof = (data.get("media_profiles") or {}).get(model) or {}
+		mult = int((prof.get("constraints") or {}).get("dim_multiple") or 1)
+		w, h = _snap(int(flat["width"]), mult), _snap(int(flat["height"]), mult)
+		cons = prof.get("constraints") or {}
+		if cons.get("max_pixels") and w * h > int(cons["max_pixels"]):
+			raise SystemExit(f"[error] {model}: {w}x{h} excede max_pixels={cons['max_pixels']} (petición #{i})")
+		prompt = flat.get("prompt")
+		if not prompt:
+			raise SystemExit(f"[error] petición #{i}: falta prompt")
+		ns = argparse.Namespace(
+			prompt=prompt,
+			seed=int(flat["seed"]),
+			steps=flat.get("steps"),
+			guidance=flat.get("guidance"),
+			image=flat.get("image"),
+			mask=flat.get("mask"),
+			ref_images=flat.get("ref_images"),
+			strength=flat.get("strength"),
+			negative_prompt=flat.get("negative_prompt"),
+		)
+		meta = _composition_from_args(ns)
+		if meta:
+			meta, warns = B.apply_composition(meta, {**prof, "id": model})
+			for warn in warns:
+				print(f"[gen] aviso: {warn} (política {policy})", file=sys.stderr)
+		if args.dry_run:
+			print(f"[dry-run] #{i} {model} {w}x{h} s{flat['seed']} steps={flat.get('steps')} «{prompt[:50]}»", file=sys.stderr)
+			continue
+		ok, why = _model_available(prof)
+		if not ok:
+			raise SystemExit(f"[error] modelo '{model}' no disponible ({why})")
+		if model != loaded_model:
+			kind, pipe = B._load(model)
+			loaded_model = model
+			n_load += 1
+		try:
+			img = G._gen(kind, pipe, model, prompt, int(flat["seed"]), w, h, meta, steps=flat.get("steps"), guidance=flat.get("guidance"))
+		except RuntimeError as e:  # noqa: BLE001
+			raise SystemExit(f"[error] petición #{i} falló: {str(e)[:300]}") from e
+		out = out_base / f"{model}_{time.strftime('%Y%m%d-%H%M%S')}_s{flat['seed']}_{i:02d}.png"
+		img.save(out)
+		n_img += 1
+		print(f"[ok] {out}")
+	print(f"[batch] {n_img} imagen(es), {n_load} carga(s) de modelo (peticiones={len(requests)})")
+	return 0
+
+
 def main() -> int:
 	ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	ap.add_argument("--model", help="id exacto del elenco")
@@ -260,8 +388,9 @@ def main() -> int:
 	ap.add_argument("--template", metavar="FICHERO", help="escribe una plantilla YAML comentada de --config (usa '-' para stdout) y sale")
 	# Fichero de config primero (como defaults); los flags del CLI, si se pasan, mandan.
 	_pre, _ = ap.parse_known_args()
-	if _pre.config:
-		ap.set_defaults(**_config_to_defaults(_load_config_file(_pre.config)))
+	_config = _load_config_file(_pre.config) if _pre.config else {}
+	if _config:
+		ap.set_defaults(**_config_to_defaults(_config))
 	args = ap.parse_args()
 
 	if args.template:
@@ -292,6 +421,9 @@ def main() -> int:
 			el["composition"] = comp
 		print(json.dumps([el], ensure_ascii=False))
 		return 0
+
+	if isinstance(_config.get("requests"), list):
+		return _run_batch(args, _config, _config["requests"])
 
 	args.out = args.out or _default_out()
 
