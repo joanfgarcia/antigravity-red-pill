@@ -13,6 +13,7 @@ do
 	# 1. Prevent Push to Main
 	if [ "$remote_ref" == "refs/heads/main" ]; then
 		echo -e "\033[0;31m[SOVEREIGN GUARD] REJECTED: Direct push to 'main' is strictly forbidden.\033[0m"
+		echo -e "\033[0;33mPush your work branch or 'next' instead (docs/CORE/WORKFLOWS.md §0).\033[0m"
 		exit 1
 	fi
 

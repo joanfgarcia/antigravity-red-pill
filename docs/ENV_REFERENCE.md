@@ -374,6 +374,7 @@ Plugins 05–10. Each is independently toggleable.
 | `APP_ROOT` | Application root (repo) used for bundled resources. |
 | `AGENT_CORE_DIR` | The agent's GLOBAL personal desk (transversal notes/plans). |
 | `RED_PILL_PROFILE` | Active profile (user/enterprise/community). |
+| `GIT_WORKFLOW` | `solo` (default) → `main` + living `next` (worktrees squash into next; one release PR). `canonical` → one short-lived branch per change → PR → `main`. See `docs/CORE/WORKFLOWS.md` §0. |
 
 **Neuro-Immune signals**
 

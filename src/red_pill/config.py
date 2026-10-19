@@ -115,6 +115,10 @@ class RedPillConfig(BaseSettings):
 	WORKSPACE_ROOT: str = _WORKSPACE_ROOT
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
+	# Branch model for project repos (docs/CORE/WORKFLOWS.md §0):
+	# solo → main + living `next` (worktrees squash into next; one release PR to main)
+	# canonical → one short-lived branch per change → PR → main (no next)
+	GIT_WORKFLOW: Literal["solo", "canonical"] = "solo"
 	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Agent_Core")
 	# USER_ATLAS_DIR removed: the atlas is per-project now (workspaces.yaml / discovered via .agent).
 	# AGENT_CORE_DIR's effective source for anchors is workspaces.yaml:agent_core

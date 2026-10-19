@@ -205,7 +205,10 @@ chore/<short-hyphenated-description>   ✅  chore/ruff-cleanup
 docs/<short-hyphenated-description>    ✅  docs/conventions
 ```
 
-Main branches: `main` (stable), `dev` (integration). Feature branches merge into `dev`, releases cut from `main`.
+Main branches: `main` (stable, PR-only) and `next` (the living integration branch of the
+`solo` profile — optional, fixed name). Work branches and RFC worktrees are cut from `next`
+and land on it by squash; `next` lands on `main` through one release PR. The active profile
+is `GIT_WORKFLOW` in `.env`; the full model lives in [`WORKFLOWS.md`](WORKFLOWS.md) §0.
 
 ---
 

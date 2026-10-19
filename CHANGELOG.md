@@ -1,5 +1,20 @@
 ## Unreleased
 
+### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
+
+- **[NEW]** `GIT_WORKFLOW` (`solo` | `canonical`) en `.env`: un solo modelo documentado, dos
+  perfiles. `solo` = `main` estable + `next` como rama viva (nombre fijo, siempre verde); cada
+  desarrollo local en worktree entra en `next` **solo por squash** y el release es un único PR
+  `next → main` (squash) tras el cual `next` se borra y se recrea desde `main`.
+  `canonical` = una rama corta por cambio → PR → `main`.
+- **[NEW]** Regla de agente sembrada `seeds/rules/git_workflow.md` → `~/.agent/rules/` (install
+  y `bunker update`), y templates del scaffold (`git_workflow.md`; `pre-push` ahora también
+  bloquea el push directo a `main`).
+- **[DOCS]** `docs/CORE/WORKFLOWS.md` §0 nuevo (modelo completo, worktrees→`next` por squash,
+  release, hotfix); el Release Flow ya no enseña el `push origin main` que el hook rechaza; el
+  gate de coverage se lee de `pyproject.toml`; `CONVENTIONS.md` §5 (`dev` fantasma → `next`);
+  `CONTRIBUTING.md` con la vía canónica para contributors. `AD-054` en DECISION_LOG.
+
 ### 🧬 Identidad — nombres de instancia fuera del motor (P1-ARNES-003)
 
 - **[FIX]** El nombre del agente sale de la config del puesto (`AGENT_NAME`), no del código:

@@ -178,7 +178,7 @@ Project-level rules and standards. These govern how the project itself is built 
 | [PROTOCOL_OF_SILENCE.md](CORE/PROTOCOL_OF_SILENCE.md) | Universal coding standard for Human-AI co-authored systems (all languages) |
 | [CONVENTIONS.md](CORE/CONVENTIONS.md) | Naming and structure conventions — UPPERCASE docs, lowercase code, decision table |
 | [IDENTITY_AND_INSTANCE.md](CORE/IDENTITY_AND_INSTANCE.md) | Identity & instance policy — the repo is engine + novel; agent/operator identity is instance config |
-| [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — pre-push, pre-PR, release, certification, identity resync |
+| [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — branching model (solo/canonical), pre-push, pre-PR, release, certification, identity resync |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
 | [MEDIA_MODELS.md](CORE/MEDIA_MODELS.md) | Media models & runtimes — how the harness discovers models and how to add one |

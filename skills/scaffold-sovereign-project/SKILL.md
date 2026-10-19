@@ -34,6 +34,10 @@ To properly execute this skill, follow these exact steps sequentially:
      `cp <SKILL_DIR>/templates/PROTOCOL_OF_SILENCE.md ./docs/CORE/PROTOCOL_OF_SILENCE.md`
    - Copy the CHANGELOG template:
      `cp <SKILL_DIR>/templates/CHANGELOG.md ./CHANGELOG.md`
+   - Copy the branch-model rule and declare the chosen profile:
+     `mkdir -p .agent/rules && cp <SKILL_DIR>/templates/git_workflow.md .agent/rules/git_workflow.md`
+     Add `GIT_WORKFLOW=solo` (single maintainer) or `GIT_WORKFLOW=canonical` (multiple
+     contributors) to `.env` / `.env.example`. See `templates/git_workflow.md`.
 
 4. **Protocol of Silence (Linter & Tests Configuration):**
    - Append the strict `ruff`, `mypy`, and `pytest` configuration (with 96% coverage threshold) to `pyproject.toml`. Copy from `<SKILL_DIR>/templates/pyproject_silence.toml`.
@@ -43,7 +47,7 @@ To properly execute this skill, follow these exact steps sequentially:
 
 5. **First Sovereign Commit & Hooks:**
    - Run `git init` (if not already initialized).
-   - Install branch protection (no force-push) and commit-message formats:
+   - Install branch protection (no direct push to `main`, no force-push) and commit-message formats:
      `cp <SKILL_DIR>/templates/pre-push .git/hooks/pre-push`
      `cp <SKILL_DIR>/templates/commit-msg .git/hooks/commit-msg`
      `chmod +x .git/hooks/pre-push .git/hooks/commit-msg`
