@@ -407,6 +407,42 @@ def main() -> int:
 
 	if args.list_elements:
 		data = _profiles()
+		if isinstance(_config.get("requests"), list):
+			general = _config_to_defaults(_config)
+			explicit = _cli_overrides(args)
+			els = []
+			for i, req in enumerate(_config["requests"]):
+				flat = _merge_request(general, req, explicit)
+				model = _ensure_image(_resolve_model(data, flat.get("model"), flat.get("role")))
+				prof = (data.get("media_profiles") or {}).get(model) or {}
+				mult = int((prof.get("constraints") or {}).get("dim_multiple") or 1)
+				w, h = _snap(int(flat["width"]), mult), _snap(int(flat["height"]), mult)
+				ns = argparse.Namespace(
+					image=flat.get("image"),
+					mask=flat.get("mask"),
+					ref_images=flat.get("ref_images"),
+					strength=flat.get("strength"),
+					negative_prompt=flat.get("negative_prompt"),
+				)
+				el = {
+					"model": model,
+					"prompt": flat.get("prompt"),
+					"seed": int(flat["seed"]),
+					"width": w,
+					"height": h,
+					"out": args.out or general.get("out"),
+					"tag": (req or {}).get("tag") or f"req{i:02d}",
+				}
+				if flat.get("steps") is not None:
+					el["steps"] = flat["steps"]
+				if flat.get("guidance") is not None:
+					el["guidance"] = flat["guidance"]
+				comp = _composition_from_args(ns)
+				if comp:
+					el["composition"] = comp
+				els.append(el)
+			print(json.dumps(els, ensure_ascii=False))
+			return 0
 		model = _ensure_image(_resolve_model(data, args.model, args.role))
 		prompt = args.prompt or args.text
 		if not prompt:
