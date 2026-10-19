@@ -54,60 +54,65 @@ import gen_image as G  # noqa: E402
 
 DEFAULT_ROLE = "photoreal"
 
-_CONFIG_TEMPLATE = """\
-# Plantilla de configuración para `media-gen --config <fichero>`
-# Generada por `media-gen --template -`. Los comentarios documentan cada campo.
-# Los flags del CLI pisan estos valores si se pasan; si un campo no aparece, se usa el default.
-
-# ── Modelo ──────────────────────────────────────────────────────────────
-# id exacto del elenco (media_profiles.yaml):
-model: flux3_klein
-# ...o resuelve por familia/tarea de media_roles (p.ej. photoreal, portrait, typography):
-# role: photoreal
-
-# ── Tamaño y semilla ────────────────────────────────────────────────────
-# El router ajusta al múltiplo del modelo (dim_multiple). seed: -1 no está soportado (usa un nº).
-width: 1024
-height: 1024
-seed: 42
-
-# ── Effort (override del sampler del elenco; opcional) ──────────────────
-# steps: 8          # nº de pasos (más = mejor/más lento)
-# guidance: 1.0     # CFG/guidance
-
-# ── Prompt (bloque literal; entrécomíllalo tal cual) ────────────────────
-prompt: |
-  Un retrato editorial de un pescador anciano, piel curtida con arrugas,
-  luz de ventana suave, 85mm, fotorrealista, muy detallado.
-
-# ── Composición (condicionamiento por imagen; opcional) ─────────────────
-# Vocabulario canónico; lo NO soportado por el modelo se ignora con aviso (soft-fail).
-# composition:
-#   reference_image: /ruta/ref.png      # o lista: [a.png, b.png] (multi-referencia)
-#   img2img: /ruta/base.png             # edición (re-difusión parcial)
-#   mask: /ruta/mask.png                # inpainting (acompaña a img2img)
-#   strength: 0.6                       # fuerza de re-difusión
-#   negative_prompt: "borroso, texto ilegible"
-
-# ── Ejecución / salida ──────────────────────────────────────────────────
-# out: ~/tmp/red-pill/media/staging/mi-encargo   # dir de salida (def: staging del puesto)
-# no_unload: false    # true = no liberar la VRAM del LLM residente antes de generar
-# dry_run: false      # true = resolver y mostrar, sin generar
-
-# ── LOTE (opcional): varias imágenes con el modelo cargado UNA vez ──────
-# Si existe `requests:`, se entra en modo lote. Cada petición puede variar
-# prompt/seed/tamaño/steps/guidance/composición. Precedencia de cada campo:
-#   defaults de máquina  <  este fichero (general)  <  cada `request`  <  flags del CLI
-# Se agrupa por modelo y se carga una sola vez por modelo distinto.
-# requests:
-#   - prompt: "Un retrato fotorrealista…"
-#     seed: 42
-#   - prompt: "Póster tipográfico de Lisboa…"   # mismo modelo → NO se recarga
-#     seed: 7
-#     steps: 16
-#   - model: zimage_turbo                       # cambia de modelo → carga otra vez
-#     prompt: "…"
-"""
+_CONFIG_TEMPLATE = (
+	"\n".join(
+		[
+			"# Plantilla de configuración para `media-gen --config <fichero>`",
+			"# Generada por `media-gen --template -`. Los comentarios documentan cada campo.",
+			"# Los flags del CLI pisan estos valores si se pasan; si un campo no aparece, se usa el default.",
+			"",
+			"# ── Modelo ──────────────────────────────────────────────────────────────",
+			"# id exacto del elenco (media_profiles.yaml):",
+			"model: flux3_klein",
+			"# ...o resuelve por familia/tarea de media_roles (p.ej. photoreal, portrait, typography):",
+			"# role: photoreal",
+			"",
+			"# ── Tamaño y semilla ────────────────────────────────────────────────────",
+			"# El router ajusta al múltiplo del modelo (dim_multiple). seed: -1 no está soportado (usa un nº).",
+			"width: 1024",
+			"height: 1024",
+			"seed: 42",
+			"",
+			"# ── Effort (override del sampler del elenco; opcional) ──────────────────",
+			"# steps: 8          # nº de pasos (más = mejor/más lento)",
+			"# guidance: 1.0     # CFG/guidance",
+			"",
+			"# ── Prompt (bloque literal; entrécomíllalo tal cual) ────────────────────",
+			"prompt: |",
+			"  Un retrato editorial de un pescador anciano, piel curtida con arrugas,",
+			"  luz de ventana suave, 85mm, fotorrealista, muy detallado.",
+			"",
+			"# ── Composición (condicionamiento por imagen; opcional) ─────────────────",
+			"# Vocabulario canónico; lo NO soportado por el modelo se ignora con aviso (soft-fail).",
+			"# composition:",
+			"#   reference_image: /ruta/ref.png      # o lista: [a.png, b.png] (multi-referencia)",
+			"#   img2img: /ruta/base.png             # edición (re-difusión parcial)",
+			"#   mask: /ruta/mask.png                # inpainting (acompaña a img2img)",
+			"#   strength: 0.6                       # fuerza de re-difusión",
+			'#   negative_prompt: "borroso, texto ilegible"',
+			"",
+			"# ── Ejecución / salida ──────────────────────────────────────────────────",
+			"# out: ~/tmp/red-pill/media/staging/mi-encargo   # dir de salida (def: staging del puesto)",
+			"# no_unload: false    # true = no liberar la VRAM del LLM residente antes de generar",
+			"# dry_run: false      # true = resolver y mostrar, sin generar",
+			"",
+			"# ── LOTE (opcional): varias imágenes con el modelo cargado UNA vez ──────",
+			"# Si existe `requests:`, se entra en modo lote. Cada petición puede variar",
+			"# prompt/seed/tamaño/steps/guidance/composición. Precedencia de cada campo:",
+			"#   defaults de máquina  <  este fichero (general)  <  cada `request`  <  flags del CLI",
+			"# Se agrupa por modelo y se carga una sola vez por modelo distinto.",
+			"# requests:",
+			'#   - prompt: "Un retrato fotorrealista…"',
+			"#     seed: 42",
+			'#   - prompt: "Póster tipográfico de Lisboa…"   # mismo modelo → NO se recarga',
+			"#     seed: 7",
+			"#     steps: 16",
+			"#   - model: zimage_turbo                       # cambia de modelo → carga otra vez",
+			'#     prompt: "…"',
+		]
+	)
+	+ "\n"
+)
 
 
 def _profiles() -> dict:
