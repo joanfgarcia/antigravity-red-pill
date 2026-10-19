@@ -168,7 +168,7 @@ def _run_element(el: dict) -> int:
 	try:
 		torch.cuda.reset_peak_memory_stats()
 		t1 = time.perf_counter()
-		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta)
+		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta, steps=el.get("steps"), guidance=el.get("guidance"))
 		wall = time.perf_counter() - t1
 		peak = torch.cuda.max_memory_allocated() / (1024**2)
 		img.save(png)
@@ -177,6 +177,7 @@ def _run_element(el: dict) -> int:
 			"kind": kind,
 			"seed": seed,
 			"size": f"{width}x{height}",
+			"steps": el.get("steps") or MODELS[model_id].get("steps"),
 			"load_s": round(load_s, 2),
 			"wall_s": round(wall, 2),
 			"peak_mb": round(peak, 1),
