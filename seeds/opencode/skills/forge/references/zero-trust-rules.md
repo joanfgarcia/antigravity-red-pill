@@ -149,8 +149,10 @@ Rule 2), **do NOT resolve it in silence**. Stop and emit a `GAP`:
 - Prefer an honest `GAP` over an invented decision: surface the hole so a second iteration reviews it.
 
 **Enforcement:** schema `implementor_result.gaps[]`; `gate-check.mjs` Check 11 rejects closing with
-`open` gaps of blast ≥ medium. The `decision_gaps` scout lens (Scout) finds these holes *before*
-implementation — Rule 10 catches them *during*.
+`open` gaps of blast ≥ medium. Positive complement: the **Implementation Contract (IC)**
+(`Aleth_Core/planner/design/governance/IMPLEMENTATION_CONTRACT.md`) — a complete IC means there are
+no holes to fill; the `decision_gaps` scout lens finds them *before* implementation, Rule 10 catches
+them *during*.
 
 ---
 

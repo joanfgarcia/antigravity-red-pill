@@ -1,6 +1,6 @@
 ---
 name: forge-implementor
-version: 1.3.0
+version: 1.4.0
 description: Implements ONE phase of a plan with real commands and literal evidence. Piece of the Forge composer; usable standalone via task subagent or any cold-context backend.
 ---
 
@@ -15,8 +15,9 @@ Per phase, by the Orchestrator (main loop of Forge) or standalone for a single i
 The caller packs ALL of the following into the prompt:
 1. The phase spec: phase_id, exact scope, acceptance criteria (C-nn) — literally.
 2. The plan points (P-nn) this phase covers.
-3. Project conventions, ecosystem rules, and any known prior results.
-4. The absolute `<report_path>` (`.cell/reports/implementor-<phase>.json`) and the schema path.
+3. **The Implementation Contract (IC)** for the phase — inputs, outputs, invariants, error behavior, non-goals, acceptance — literally. A missing/empty field is an open decision → emit a `GAP` (Rule 10); never invent it.
+4. Project conventions, ecosystem rules, and any known prior results.
+5. The absolute `<report_path>` (`.cell/reports/implementor-<phase>.json`) and the schema path.
 
 The agent inherits NOTHING from the caller's context.
 
