@@ -493,8 +493,11 @@ def _gen_sd_cpp(cfg: dict, pipe, prompt: str, seed: int, width: int, height: int
 	# sd-cli espera RUTAS (no PIL): se pasan tal cual (ruta o lista de rutas).
 	ref = meta.get("reference_image")
 	refs = ref if isinstance(ref, list) else ([ref] if ref else None)
+	# `cfg` puede traer override de steps/guidance (CLI/elemento): pisa el `cfg` capturado
+	# en el load (`pipe` = ctx resuelto), si no, el override se perdería.
+	ctx = {**pipe, "cfg": cfg}
 	return _sd_cpp_generate(
-		pipe,
+		ctx,
 		prompt,
 		seed,
 		width,

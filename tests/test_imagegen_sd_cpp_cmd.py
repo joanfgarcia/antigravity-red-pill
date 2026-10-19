@@ -88,3 +88,13 @@ def test_offload_condicional_por_pixeles(monkeypatch):
 	ctx["sd"]["offload_over_pixels"] = 1500000
 	assert "--offload-to-cpu" not in m._sd_cpp_command(ctx, "p", 1, 1024, 1024, "/o.png")
 	assert "--offload-to-cpu" in m._sd_cpp_command(ctx, "p", 1, 1920, 1088, "/o.png")
+
+
+def test_gen_sd_cpp_usa_cfg_override(monkeypatch):
+	m = _load(monkeypatch)
+	seen: dict = {}
+	monkeypatch.setattr(m, "_sd_cpp_generate", lambda ctx, *a, **k: seen.update(ctx["cfg"]) or "IMG")
+	cfg = {"id": "flux3_klein", "steps": 4, "guidance": 0.5}
+	loaded_ctx = {"binary": "/bin/sd-cli", "cfg": {"id": "flux3_klein", "steps": 8}, "sd": {}, "paths": {}}
+	assert m._gen_sd_cpp(cfg, loaded_ctx, "p", 1, 512, 512, {}) == "IMG"
+	assert seen["steps"] == 4 and seen["guidance"] == 0.5
