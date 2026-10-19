@@ -198,8 +198,14 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 		"-o",
 		str(out),
 	]
-	if sd.get("sigmas"):
-		cmd += ["--sigmas", str(sd["sigmas"])]
+	sig = sd.get("sigmas")
+	if sig:
+		# `sigmas` fija el Nº de pasos (len-1 intervalos). Solo se pasa si el modelo va a
+		# ese nº de pasos; si el effort pide otro, se omite → scheduler por defecto a N pasos
+		# (permite variar los pasos; antes `sigmas` pisaba `--steps`).
+		n_sig = len([x for x in str(sig).split(",") if x.strip()]) - 1
+		if n_sig == int(cfg.get("steps") or n_sig):
+			cmd += ["--sigmas", str(sig)]
 	if image:
 		cmd += ["-i", str(image), "--strength", str(strength if strength is not None else sd.get("edit_strength", 0.75))]
 	if mask:

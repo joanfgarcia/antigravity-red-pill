@@ -90,6 +90,17 @@ def test_offload_condicional_por_pixeles(monkeypatch):
 	assert "--offload-to-cpu" in m._sd_cpp_command(ctx, "p", 1, 1920, 1088, "/o.png")
 
 
+def test_sigmas_solo_si_casan_los_pasos(monkeypatch):
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["sigmas"] = "1.0,0.9,0.7,0.4,0.0"  # 4 pasos
+	assert "--sigmas" not in m._sd_cpp_command(ctx, "p", 1, 512, 512, "/o.png")      # steps=8 del _ctx ≠ 4
+	ctx["cfg"]["steps"] = 4
+	assert "--sigmas" in m._sd_cpp_command(ctx, "p", 1, 512, 512, "/o.png")          # steps=4 casa
+	ctx["cfg"]["steps"] = 16
+	assert "--sigmas" not in m._sd_cpp_command(ctx, "p", 1, 512, 512, "/o.png")      # steps=16 ≠ 4
+
+
 def test_gen_sd_cpp_usa_cfg_override(monkeypatch):
 	m = _load(monkeypatch)
 	seen: dict = {}
