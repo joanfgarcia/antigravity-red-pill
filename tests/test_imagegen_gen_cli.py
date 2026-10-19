@@ -128,3 +128,13 @@ def test_gen_image_override_steps_guidance(monkeypatch):
 	monkeypatch.setattr(mod.BENCH, "generate", lambda kind, cfg, *a, **k: captured.update(cfg) or "IMG")
 	assert mod._gen("sd_cpp", None, "flux3_klein", "p", 1, 512, 512, steps=4, guidance=0.5) == "IMG"
 	assert captured["steps"] == 4 and captured["guidance"] == 0.5
+
+
+def test_resolucion_sobre_max_pixels_falla_limpio(monkeypatch, tmp_path):
+	"""Guard del CLI (espejo de `reject_oversize`): por encima de max_pixels → SystemExit limpio, no OOM."""
+	m = _load(monkeypatch)
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--model", "flux3_klein", "--prompt", "x", "--width", "1920", "--height", "1088"])
+	with pytest.raises(SystemExit) as ei:
+		m.main()
+	assert "max_pixels" in str(ei.value)

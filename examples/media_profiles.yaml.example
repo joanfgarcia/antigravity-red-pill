@@ -154,7 +154,7 @@ media_profiles:
     capabilities: ["photorealism", "concept", "landscape", "typography", "portrait"]
     not_capable_for: []
     priority: 2
-    constraints: { dim_multiple: 16, max_pixels: 4194304, max_vram_mb: 7600 }   # ÷16 (VAE scale 16)
+    constraints: { dim_multiple: 16, max_pixels: 1048576, max_vram_mb: 7600 }   # ÷16; ~1 MPix (1024² pico ~6.8 GB; >1 MPix OOM en 8 GB)
     adapters: ["snap_dims", "reject_oversize", "gate_composition"]
     composition: [reference_image, multi_reference]   # t2i + edición/multiref (hasta 10 refs)
     sd_cpp:

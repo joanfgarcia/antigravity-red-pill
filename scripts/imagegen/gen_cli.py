@@ -252,6 +252,20 @@ def main() -> int:
 	w, h = _snap(args.width, mult), _snap(args.height, mult)
 	backend = prof.get("backend")
 
+	# Guard de tamaño (espejo de `reject_oversize` del router; el CLI no pasaba por él):
+	# fuera de la envolvente de VRAM del modelo → error limpio en vez de OOM de sd-cli.
+	cons = prof.get("constraints") or {}
+	max_px = cons.get("max_pixels")
+	if max_px and w * h > int(max_px):
+		raise SystemExit(
+			f"[error] {model}: {w}x{h} ({w * h} px) excede max_pixels={max_px} del modelo en este puesto; "
+			f"usa ≤{int(int(max_px) ** 0.5)}² (p.ej. 1024x1024)."
+		)
+	peak = (prof.get("vram_footprint") or {}).get("peak_mb")
+	max_vram = cons.get("max_vram_mb")
+	if max_vram and peak and float(peak) > float(max_vram):
+		raise SystemExit(f"[error] {model}: pico ~{peak} MB excede max_vram_mb={max_vram}")
+
 	B._setup_caches()  # HF_HOME = caché del forge (misma que los jobs)
 	# Política del CLI: NO descargar nunca. Trabaja con lo que ya esté en la caché.
 	os.environ["HF_HUB_OFFLINE"] = "1"
@@ -293,7 +307,12 @@ def main() -> int:
 		eff_steps = args.steps if args.steps is not None else base.get("steps")
 		eff_guid = args.guidance if args.guidance is not None else base.get("guidance")
 		print(f"[gen] effort: steps={eff_steps} guidance={eff_guid}", file=sys.stderr)
-	img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta, steps=args.steps, guidance=args.guidance)
+	try:
+		img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta, steps=args.steps, guidance=args.guidance)
+	except RuntimeError as e:  # noqa: BLE001 — fallo del backend → error limpio, sin traceback
+		msg = str(e)
+		hint = " (posible VRAM agotada: baja la resolución)" if "memory" in msg.lower() else ""
+		raise SystemExit(f"[error] generación falló{hint}: {msg[:300]}") from e
 
 	outdir = Path(args.out)
 	outdir.mkdir(parents=True, exist_ok=True)
