@@ -93,9 +93,19 @@ def _confine_out(path: Path) -> Path:
 	return resolved
 
 
-def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int, meta: dict = None):
-	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052)."""
-	return BENCH.generate(kind, MODELS[model_id], pipe, prompt, seed, width, height, meta)
+def _gen(
+	kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int, meta: dict = None, steps: int = None, guidance: float = None
+):
+	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052).
+
+	`steps`/`guidance` (override del CLI) pisan el `sampler` del elenco para ESTA llamada.
+	"""
+	cfg = dict(MODELS[model_id])
+	if steps is not None:
+		cfg["steps"] = steps
+	if guidance is not None:
+		cfg["guidance"] = guidance
+	return BENCH.generate(kind, cfg, pipe, prompt, seed, width, height, meta)
 
 
 def _run_element(el: dict) -> int:

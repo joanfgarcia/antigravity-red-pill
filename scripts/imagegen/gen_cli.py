@@ -119,6 +119,8 @@ _CONFIG_KEYS = frozenset(
 		"ref_images",
 		"strength",
 		"negative_prompt",
+		"steps",
+		"guidance",
 		"no_unload",
 		"dry_run",
 	}
@@ -194,9 +196,15 @@ def main() -> int:
 	ap.add_argument("--role", help=f"familia/tarea de media_roles (def: {DEFAULT_ROLE})")
 	ap.add_argument("--prompt", help="prompt (si falta, se pide por consola)")
 	ap.add_argument("text", nargs="?", help="prompt posicional (alternativa a --prompt)")
-	ap.add_argument("--width", type=int, default=int(os.environ.get("W", 1024)), help="ancho en px (def: $W o 1024; se ajusta al múltiplo del modelo)")
-	ap.add_argument("--height", type=int, default=int(os.environ.get("H", 1024)), help="alto en px (def: $H o 1024; se ajusta al múltiplo del modelo)")
+	ap.add_argument(
+		"--width", type=int, default=int(os.environ.get("W", 1024)), help="ancho en px (def: $W o 1024; se ajusta al múltiplo del modelo)"
+	)
+	ap.add_argument(
+		"--height", type=int, default=int(os.environ.get("H", 1024)), help="alto en px (def: $H o 1024; se ajusta al múltiplo del modelo)"
+	)
 	ap.add_argument("--seed", type=int, default=int(os.environ.get("SEED", 42)), help="semilla (def: $SEED o 42)")
+	ap.add_argument("--steps", type=int, default=None, help="nº de pasos de inferencia (override del elenco; más pasos = mejor/más lento)")
+	ap.add_argument("--guidance", type=float, default=None, help="guidance/CFG (override del elenco)")
 	ap.add_argument("--out", default=None, help="dir de salida (def: staging — $OUTDIR/$RP_MEDIA_STAGING/cli)")
 	ap.add_argument("--image", help="imagen de entrada para EDITAR (backend sd_cpp)")
 	ap.add_argument("--mask", help="máscara de inpainting (acompaña a --image)")
@@ -280,7 +288,12 @@ def main() -> int:
 			print(f"[gen] aviso: {warn} (política {policy})", file=sys.stderr)
 	if meta:
 		print(f"[gen] composición: {', '.join(meta)} (política {policy})", file=sys.stderr)
-	img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta)
+	if args.steps is not None or args.guidance is not None:
+		base = B.MODELS[model]
+		eff_steps = args.steps if args.steps is not None else base.get("steps")
+		eff_guid = args.guidance if args.guidance is not None else base.get("guidance")
+		print(f"[gen] effort: steps={eff_steps} guidance={eff_guid}", file=sys.stderr)
+	img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta, steps=args.steps, guidance=args.guidance)
 
 	outdir = Path(args.out)
 	outdir.mkdir(parents=True, exist_ok=True)

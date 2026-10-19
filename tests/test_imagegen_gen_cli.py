@@ -115,3 +115,16 @@ def test_list_models_rc0(monkeypatch, capsys):
 	assert m.main() == 0
 	payload = json.loads(capsys.readouterr().out)
 	assert isinstance(payload, list) and any(e["model"] == "flux2_klein" for e in payload)
+
+
+def test_gen_image_override_steps_guidance(monkeypatch):
+	"""`gen_image._gen(steps=…, guidance=…)` pisa el sampler del elenco para esa llamada."""
+	monkeypatch.setenv("REDPILL_MEDIA_PROFILES", str(EXAMPLE))
+	monkeypatch.setenv("REDPILL_RUNTIMES", str(REPO / "examples" / "runtimes.yaml.example"))
+	spec = importlib.util.spec_from_file_location("gen_image_under_test", REPO / "scripts" / "imagegen" / "gen_image.py")
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	captured: dict = {}
+	monkeypatch.setattr(mod.BENCH, "generate", lambda kind, cfg, *a, **k: captured.update(cfg) or "IMG")
+	assert mod._gen("sd_cpp", None, "flux3_klein", "p", 1, 512, 512, steps=4, guidance=0.5) == "IMG"
+	assert captured["steps"] == 4 and captured["guidance"] == 0.5
