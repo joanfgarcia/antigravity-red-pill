@@ -142,6 +142,38 @@ media_profiles:
       source: "https://huggingface.co/webmp3/Sakura-Qwen-Image-2.1-Turbo-Uncensored-GGUF"
     notes: "Qwen-Image-2.1-Turbo (7B DiT, 8 steps) + encoder Qwen3-VL-8B abliterado (Sakura). GGUF vía sd.cpp; encoder en CPU → cabe en 8 GB. NO COMERCIAL (Qwen Research)."
 
+  flux3_klein:
+    modality: image
+    task: text2image
+    pipeline: sd_cpp                       # vía stable-diffusion.cpp (GGUF)
+    backend: sd_cpp
+    runtime: sd_cpp
+    weights: "leejet/flux-3-image-klein-GGUF"
+    sampler: { steps: 8, guidance: 1.0, size: 1024, sampler: euler }
+    vram_footprint: { peak_mb: 6805 }
+    capabilities: ["photorealism", "concept", "landscape", "typography", "portrait"]
+    not_capable_for: []
+    priority: 2
+    constraints: { dim_multiple: 16, max_pixels: 2097152, max_vram_mb: 7600 }   # ÷16; ~2 MPix (a ≤1.5 MPix sin offload; por encima, offload automático)
+    adapters: ["snap_dims", "reject_oversize", "gate_composition"]
+    composition: [reference_image, multi_reference]   # t2i + edición/multiref (hasta 10 refs)
+    sd_cpp:
+      diffusion_model: "~/opt/red-pill-custom-image-models/flux-3-image-klein/flux3-image-klein-Q4_K.gguf"
+      text_encoder: "~/opt/red-pill-custom-image-models/flux-3-image-klein/Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+      vae: "~/opt/red-pill-custom-image-models/flux-3-image-klein/ae.safetensors"
+      backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"
+      ref_image_args: "vae_input_max_pixels=262144,resize_before_vae=true"   # refs a 512² → caben hasta 10 refs en 8 GB
+      offload_over_pixels: 1500000   # >1.5 MPix: el harness añade --offload-to-cpu (permite llegar a ~2 MPix en 8 GB)
+      extra_args: ["--diffusion-fa"]
+    license:
+      id: "flux-kommunity"
+      commercial_ok: false
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/black-forest-labs/flux-3-image-klein"
+    notes: "FLUX.3 Image Klein (5.6B DiT destilado) + encoder Qwen3-VL-4B. GGUF vía sd.cpp; t2i + edición/multiref (hasta 10 refs a 512²). Licencia FLUX Kommunity (no comercial salvo <$5M)."
+
   # AUDIO
   kokoro_voice:
     modality: audio

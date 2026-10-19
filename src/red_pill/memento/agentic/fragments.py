@@ -88,13 +88,14 @@ _TURN_RE = re.compile(r"^(## .+ — )(Usuario|Asistente|Tool|None)\s*$")
 FRAGMENT_VIEWS = ("raw", "actors", "pairs")
 
 
-def fragment_view(content: str, mode: str = "raw", operator: str = "Joan", agent: str = "Aleth") -> str:
+def fragment_view(content: str, mode: str = "raw", operator: str = "Operador", agent: str = "Agente") -> str:
 	"""Vista del fragmento que ve el LLM de annotate (el árbol no cambia).
 
 	- `raw`: tal cual (`— Usuario` / `— Asistente` / `— Tool`).
 	- `actors`: mismo contenido, con el ACTOR en la cabecera de cada turno
-	(`— Joan`, `— Aleth`, `— Aleth (herramienta)`). Piloto v2.1: con `— Tool` sin
-	actor, el modelo atribuyó a Joan ediciones `[Code Edit]` que eran de Aleth.
+	(etiquetas del actor: p. ej. `— <Operador>`, `— <Agente>`, `— <Agente> (herramienta)`).
+	Piloto v2.1: con `— Tool` sin actor, el modelo atribuía al Operador ediciones
+	`[Code Edit]` que eran del agente.
 	- `pairs`: solo lo que pide el operador y la respuesta FINAL del agente antes del
 	siguiente mensaje del operador (sin herramientas ni mensajes intermedios),
 	etiquetados. Medido 2026-09-26: conserva el 74,7% del texto del árbol.

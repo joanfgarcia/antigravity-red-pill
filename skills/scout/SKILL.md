@@ -1,6 +1,6 @@
 ---
 name: scout
-version: 1.0.0
+version: 1.1.0
 description: >-
   Analysis and self-discovery skill. Validates implementation plans, scans
   targets (plans, code, docs, own Forge state) against the project's materialized
@@ -13,7 +13,7 @@ description: >-
   "autodescubrimiento", "valida el plan", or during autonomous awakenings.
 ---
 
-# Scout v1.0.0 — Analysis, self-discovery, satellite shards
+# Scout v1.1.0 — Analysis, self-discovery, satellite shards
 
 > Scout opens; Forge closes. Scout observes (does not execute), Forge verifies.
 > The shard is the bridge: a finding detached from the current task, queued for
@@ -48,8 +48,15 @@ Scout decomposes the target per lens family (a `forge-scout` agent per lens, or 
 | `security` | Secrets, unsafe patterns, permissions issues (only where rules materialized) |
 | `architecture` | Drift from declared architecture, layering violations, TODO/FIXME debt hotspots |
 | `verification` | Missing/trivial evidence patterns (the Forge Rule 1 lens on the plan's own claims) |
+| `decision_gaps` | **Design holes / open decisions** the implementer would have to fill in silence: `TBD`, "si procede", "adecuado", "etc.", undefined inputs/outputs, unspecified error paths, config not wired, unbound acceptance criteria, and `## Preguntas abiertas` left unresolved (a `ratified` item with open decisions violates `RFC_FLUJO`). |
 
 Cold context inherits nothing: each lens agent receives ONLY its lens + the target paths + the rule sources.
+
+> **`decision_gaps`** materializes the operator's thesis: *a weaker model does not err at
+> programming — it errs filling the design holes left open.* Each finding is a shard with
+> `standard_violated = "hueco de decisión"` (cite the source: `RFC_FLUJO` §2.1 / the item's
+> `decisions:` ledger) and `suggested_action` = the specific decision to close or the default to
+> accept. It **detects and records**, never decides.
 
 ## 4. The shard record (`.cell/shards.json`)
 

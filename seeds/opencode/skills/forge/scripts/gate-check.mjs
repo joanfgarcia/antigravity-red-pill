@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gate-check.mjs — Forge — Gate determinista de cierre (7 checks, 10 en misión).
+// gate-check.mjs — Forge — Gate determinista de cierre (8 checks, 11 en misión).
 // El veredicto de los agentes es ADVISORY: este script RECOMPUTA el estado real desde .cell/state.json.
 // Uso: node gate-check.mjs [path/al/state.json]   (default: .cell/state.json)
 // Output: JSON { gate: "OPEN"|"CLOSED", verdict, violations[], summary } — exit 1 si CLOSED.
@@ -114,6 +114,13 @@ if (isMission) {
     if (p.status !== 'KILLED') {
       violations.push(`Check 10: proceso registrado sin matar: pid ${p.pid} (${p.command || '?'}${p.port ? `, puerto ${p.port}` : ''}) — la misión no cierra con zombis (controlled-stop.md §6)`);
     }
+  }
+}
+
+// Check 11 — GAPs de diseño abiertos (Regla 10): no se cierra inventando huecos
+for (const gap of (state.gaps || [])) {
+  if (gap.status === 'open' && ['medium', 'high'].includes(gap.blast_radius)) {
+    violations.push(`Check 11: GAP de diseño ${gap.id || ''} '${gap.question || ''}' abierto (blast ${gap.blast_radius}, Regla 10) — cerrar la decisión o rebajarla con motivo`);
   }
 }
 

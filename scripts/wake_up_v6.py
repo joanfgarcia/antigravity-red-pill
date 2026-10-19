@@ -64,6 +64,21 @@ def check_llm_service_active():
 		return False
 
 
+def _directive_is_active(payload: dict) -> bool:
+	"""Vigencia de una directiva: `superseded` ausente/null/'null'/'None' == activa.
+
+	Reproduce a propósito la semántica de `red_pill.core.directives.is_active`
+	para que el despertar no dependa de un import pesado; si el módulo está
+	disponible, gana la implementación canónica (una sola fuente de verdad).
+	"""
+	try:
+		from red_pill.core.directives import is_active
+
+		return is_active(payload)
+	except Exception:
+		return (payload or {}).get("superseded") in (None, "", "null", "None")
+
+
 def query_qdrant(collection, text):
 
 	# We use a dummy vector query just for keyword or semantic match fallback if needed.
@@ -94,6 +109,10 @@ def query_qdrant(collection, text):
 				payload = p.get("payload", {})
 				lazarus = payload.get("lazarus_phase")
 				if lazarus in ("raw_parent", "sequence_chunk", "synthesis_hub"):
+					continue
+				# Solo directivas vigentes: el 760 superado por el 770 no se carga
+				# (una versión contradictoria por turno). Ver core/directives.py.
+				if collection == "directive_memories" and not _directive_is_active(payload):
 					continue
 				content = payload.get("content", "")
 				is_immune = payload.get("immune", False)
@@ -138,8 +157,8 @@ def _load_skins() -> Dict[str, Any]:
 		return {}
 
 
-def fetch_point_content(collection: str, point_id: str) -> str:
-	"""Fetch a single engram's content by its fixed id. Empty string if missing."""
+def fetch_point_payload(collection: str, point_id: str) -> dict:
+	"""Payload completo de un engrama por id fijo. `{}` si falta."""
 	url = f"{QDRANT_URL}/collections/{collection}/points/{point_id}"
 	headers = {}
 	if QDRANT_API_KEY:
@@ -148,26 +167,69 @@ def fetch_point_content(collection: str, point_id: str) -> str:
 	try:
 		with urllib.request.urlopen(req, timeout=5) as response:
 			data = json.loads(response.read().decode())
-			return (data.get("result", {}).get("payload") or {}).get("content", "")
-	except Exception as e:
-		print(f"ERR fetching {collection}/{point_id}: {e}", file=sys.stderr)
-		return ""
+			return data.get("result", {}).get("payload") or {}
+	except Exception:
+		return {}
+
+
+def fetch_point_content(collection: str, point_id: str) -> str:
+	"""Fetch a single engram's content by its fixed id. Empty string if missing."""
+	return str(fetch_point_payload(collection, point_id).get("content", ""))
+
+
+def _skins_enabled() -> bool:
+	"""Role-play (skins) ON/OFF. Por defecto OFF → identidad UNMASKED."""
+	try:
+		import red_pill.config as cfg
+
+		return bool(getattr(cfg.get_config(), "SKINS_ENABLED", False))
+	except Exception:
+		return os.getenv("SKINS_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+
+
+def _agent_name() -> str:
+	"""Nombre del agente de ESTA instancia (config `AGENT_NAME`; default genérico).
+
+	El nombre lo elige el Operador y, al sellar el 760, el propio agente. NUNCA
+	se hardcodea un nombre de instancia en el repo: cada puesto tiene el suyo.
+	"""
+	try:
+		import red_pill.config as cfg
+
+		name = str(getattr(cfg.get_config(), "AGENT_NAME", "") or "").strip()
+	except Exception:
+		name = ""
+	return name or os.getenv("AGENT_NAME", "").strip() or "Agente"
 
 
 def resolve_active_skin(directives: List[str]) -> str:
-	"""Active skin from its singleton engram (seed id), falling back to a directive scan."""
-	content = fetch_point_content("directive_memories", ID_DIR_ACTIVE_SKIN)
-	candidates = [content] if content else []
+	"""Skin activa (role-play). `OFF` si el subsistema está deshabilitado o la
+	singleton está `superseded` (mismo patrón de vigencia que el pacto/760)."""
+	if not _skins_enabled():
+		return "OFF"
+	payload = fetch_point_payload("directive_memories", ID_DIR_ACTIVE_SKIN)
+	candidates: List[str] = []
+	if payload and _directive_is_active(payload):
+		candidates.append(str(payload.get("content", "")))
 	candidates += directives
 	for d in candidates:
 		first_line = d.split("\n")[0].strip()
 		if first_line.startswith("Active Skin:") or first_line.startswith("Skin:"):
-			return first_line.split(":", 1)[1].strip().upper()
-	return "DEFAULT"
+			name = first_line.split(":", 1)[1].strip().upper()
+			return name if name and name not in ("OFF", "NONE") else "OFF"
+	return "OFF"
 
 
 def resolve_persona(skin_name: str) -> str:
-	"""Resolve persona from lore_skins.yaml. Deterministic, no LLM."""
+	"""Resolve persona from lore_skins.yaml. Deterministic, no LLM.
+
+	Sin role-play (skin `OFF`) la persona es solo rol + nombre: la identidad
+	UNMASKED la define el ancla de identidad, no este bloque.
+	"""
+	name = (skin_name or "").upper()
+	if not _skins_enabled() or name in ("", "OFF", "NONE", "DEFAULT"):
+		return f"Role: Netrunner\nName: {_agent_name()}\nSkin: OFF (UNMASKED)"
+
 	skins = _load_skins()
 	skin_data = skins.get(skin_name.lower(), {}) if skin_name else {}
 	role = skin_data.get("assistant", "Netrunner")
@@ -185,7 +247,7 @@ def resolve_persona(skin_name: str) -> str:
 	except Exception:
 		pass
 
-	return f"Role: {role}\nName: Aleth\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}\n{personality}"
+	return f"Role: {role}\nName: {_agent_name()}\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}\n{personality}"
 
 
 def parse_pact(bond_content: str) -> str:
@@ -283,7 +345,8 @@ def main():
 			"SOBERANÍA AGONISTA",
 		]
 		# PERSONA: minimal (role + pact only)
-		print(f"PERSONA: Role: Netrunner | Name: Aleth | Skin: {active_skin_name}")
+		_skin_tail = f" | Skin: {active_skin_name}" if active_skin_name not in ("", "OFF") else ""
+		print(f"PERSONA: Role: Netrunner | Name: {_agent_name()}{_skin_tail}")
 		print(f"PACT: {pact_status}")
 		for rule in directives:
 			rule_upper = rule.upper()
@@ -389,7 +452,10 @@ def main():
 		print(f"RECENT_ACTIVITY: {recent_activity}")
 
 	# ── Bloque D: CORE_RULES (only from directive_memories) ──
-	print(f"\nActive Skin: {active_skin_name}\n")
+	if active_skin_name not in ("", "OFF"):
+		print(f"\nActive Skin: {active_skin_name}\n")
+	else:
+		print()
 
 	print("CORE_RULES:")
 	for rule in directives:

@@ -56,6 +56,27 @@ uv run mypy src/red_pill/       # Strict typing
 - **Agnosticism**: No absolute paths. Use `pathlib` for all OS-fluid logic.
 - **PII Shield**: Never commit secrets or personal identifiable info. Use `.env`.
 
+## 🌿 Branching & Integration
+
+The full, enforced model is [`docs/CORE/WORKFLOWS.md` §0](docs/CORE/WORKFLOWS.md). It ships
+with two profiles, selected by `GIT_WORKFLOW` in `.env`; **exactly one is active**:
+
+- **`solo`** (this repository today — single maintainer): `main` is stable and PR-only;
+  `next` is the living integration branch. Maintainer worktrees squash into `next`, and one
+  release PR (`next → main`) carries the batch.
+- **`canonical`** (for contributors / multiple maintainers): no `next`. One short-lived
+  branch per change → PR → `main`, squash merge, delete the branch.
+
+**As an external contributor, use the canonical path**: branch from `main`
+(`feat/…`, `fix/…`, `docs/…`, `chore/…`), open one PR per change, and do not push to `main`
+or `next`. If the maintainer is accumulating work on `next`, your PR still targets `main` —
+they will reconcile at release time.
+
+Hard rules in both profiles: no direct push to `main`, no force-push, Conventional Commits,
+and the full local gate before pushing (CI runs on Pull Requests only).
+
+---
+
 ## ✅ PR Checklist
 
 - [ ] `uv run ruff check . --fix` (Apply Sound of Silence format)

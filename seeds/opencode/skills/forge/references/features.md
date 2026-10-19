@@ -10,7 +10,7 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 |----|---------|-------|---------|------------|
 | K1 | Disk anchoring | KERNEL | fixed | `.cell/state.json` as source of truth, checkpoints after every task, `disk_facts` captured with git (controlled-stop.md §5). Not resolvable: always on |
 | K2 | Mandatory evidence + `validate-report.mjs` | KERNEL | fixed | Every report validated against its schema before trusting (Rule 6). **v3.1 provenance**: every report carries `provenance` (harness/provider/model/timestamp) — the role emits it, or the orchestrator STAMPS it at consolidation; a report never lands in the ledger without provenance. Not resolvable |
-| K3 | Deterministic gate + render | KERNEL | fixed | `gate-check.mjs` recomputes the official verdict (7 checks, 10 in mission); `render-artifacts.mjs` regenerates .md artifacts. Not resolvable |
+| K3 | Deterministic gate + render | KERNEL | fixed | `gate-check.mjs` recomputes the official verdict (8 checks, 11 in mission); `render-artifacts.mjs` regenerates .md artifacts. Not resolvable |
 | K4 | Assumption Registry + Plan Coverage Matrix | KERNEL | fixed | Rules 2 and 3, deterministic reducer, gate checks 2/3/4. Not resolvable |
 | K5 | Verification=Execution + runtime nudge | KERNEL | fixed | Rule 1: anti-trivial evidence regex in gate check 6 + the nudge: before validating, ensure `commands_run` contains a non-trivial real command; if not, run one (opencode runtime nudge in validation steps and cycle-run) |
 | K6 | Honest 3-category reporting | KERNEL | fixed | Rule 5: `qa_final.totals` requires the 3 numbers; verdict recomputed, never self-declared |

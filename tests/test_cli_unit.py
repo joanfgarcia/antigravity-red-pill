@@ -3,11 +3,18 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from red_pill.cli import get_collection, handle_mode, main
 
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if root_path not in sys.path:
 	sys.path.insert(0, root_path)
+
+
+@pytest.fixture(autouse=True)
+def _enable_skins(monkeypatch):
+	monkeypatch.setenv("SKINS_ENABLED", "true")
 
 
 def test_get_collection():

@@ -63,6 +63,12 @@ os.environ.update(_SESSION_LOCATIONS)
 os.environ.pop("NEON_LINK_DB_PATH", None)
 os.environ["REDPILL_TESTING"] = "1"
 
+# Identidad de TEST fija (datos de prueba, no identidad real): los prompts resuelven
+# los nombres desde config/proveedores; el sandbox no tiene `.env`, así que se fijan
+# aquí para que las plantillas rindan los nombres que usan los fixtures (Joan/Aleth).
+os.environ.setdefault("MEMENTO_AGENT_LABEL", "Aleth")
+os.environ.setdefault("MEMENTO_OPERATOR_LABEL", "Joan")
+
 
 @pytest.fixture(autouse=True)
 def _isolation_guards(request):

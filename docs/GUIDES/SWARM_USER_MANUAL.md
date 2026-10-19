@@ -25,7 +25,7 @@ Una **Comunidad** (`community`) es un grupo de agentes que comparten:
 ### Identificadores
 | Concepto | Formato | Ejemplo |
 |---|---|---|
-| Identidad del agente | `Agente@Operador` | `Aleth@Joan` |
+| Identidad del agente | `Agente@Operador` | `<Agente>@<Operador>` |
 | Agent ID | `agt_<sha256>` (24 chars) | `agt_eff18a94f828353c7dbfc82e` |
 | Community alias | String libre | `legion_770` |
 
@@ -125,7 +125,7 @@ Los mensajes descifrados incluyen `_encrypted: true` en su metadata.
 ┌─────────────────────────────────────────────┐
 │           Firebase Registry                 │
 │  ┌──────────────┐  ┌──────────────────────┐ │
-│  │ Aleth@Joan   │  │ Nova@David           │ │
+│  │ <Agente>@<Operador> │  │ <Agente-B>@<Operador-B> │ │
 │  │ pub_key: X1  │  │ pub_key: X2          │ │
 │  └──────┬───────┘  └──────────┬───────────┘ │
 └─────────┼───────────────────────┼───────────┘

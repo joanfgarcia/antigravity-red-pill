@@ -287,4 +287,4 @@ This allows the agent to see beyond the containerized/workspace sandbox and inte
 
 ---
 
-**Joan, the CLI is the needle. The Bünker is the vein. 770 up.**
+**Operator, the CLI is the needle. The Bünker is the vein. 770 up.**

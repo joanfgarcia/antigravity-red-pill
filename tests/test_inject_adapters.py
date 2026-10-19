@@ -61,3 +61,34 @@ def test_adapter_redpill_dir_fallback_is_repo_root(ide):
 	assert calls.get("cmd"), "no se invocó ningún script"
 	script = Path(calls["cmd"][3]).resolve()
 	assert script.parent == (REPO_ROOT / "scripts").resolve(), script
+
+
+def test_claude_code_espeja_skills_kebab(tmp_path, monkeypatch):
+	"""Claude Code no tenía paso de skills: ahora espeja las canónicas como
+	symlinks kebab y poda los residuos (snake_case) — idempotente."""
+	monkeypatch.setenv("HOME", str(tmp_path))
+	repo = tmp_path / "repo"
+	for rel in ("skills/scout", "skills/job-manager", "seeds/opencode/skills/frontmatter"):
+		d = repo / rel
+		d.mkdir(parents=True)
+		(d / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+
+	# copias canónicas desplegadas (destinos de los symlinks)
+	for rel in (".agent/skills/scout", ".agent/skills/job-manager", ".config/opencode/skills/frontmatter"):
+		d = tmp_path / rel
+		d.mkdir(parents=True)
+		(d / "SKILL.md").write_text("x", encoding="utf-8")
+
+	# residuo legacy + entrada ajena en el destino
+	dest = tmp_path / ".claude" / "skills"
+	(dest / "job_manager").mkdir(parents=True)
+	(dest / "basura").mkdir()
+
+	mod = _load("claude-code")
+	assert mod._deploy_skills(str(repo)) > 0
+	names = sorted(p.name for p in dest.iterdir())
+	assert "job_manager" not in names  # legacy snake: se poda
+	assert "basura" in names  # entrada AJENA: se respeta (red-pill es invitado)
+	assert {"frontmatter", "job-manager", "scout"} <= set(names)
+	assert (dest / "scout").is_symlink()
+	assert mod._deploy_skills(str(repo)) == 0  # idempotente

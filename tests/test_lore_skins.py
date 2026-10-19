@@ -8,9 +8,15 @@ for every defined skin (mode) and that chroma values map to the ValidColor spect
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
 from red_pill.schemas import ValidColor
+
+
+@pytest.fixture(autouse=True)
+def _enable_skins(monkeypatch):
+	monkeypatch.setenv("SKINS_ENABLED", "true")
 
 
 def test_lore_skins_yaml_integrity():

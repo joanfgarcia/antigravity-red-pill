@@ -279,3 +279,17 @@ def test_fragment_view_tool_results_de_claude_code_no_son_del_operador():
 	pairs = fragment_view(frag, "pairs", "Joan", "Aleth")
 	assert "[TOOL RESULT" not in pairs and "miro el estado" not in pairs  # el intermedio ya no es "final"
 	assert "El repo está limpio." in pairs
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _pin_instance_identity(monkeypatch):
+	"""Fija la identidad del puesto en los tests de memento (los nombres propios
+	son datos de test acordados con el Operador; no afectan a la identidad real)."""
+	import red_pill.config as cfg
+
+	c = cfg.get_config()
+	monkeypatch.setattr(c, "MEMENTO_AGENT_LABEL", "Aleth", raising=False)
+	monkeypatch.setattr(c, "MEMENTO_OPERATOR_LABEL", "Joan", raising=False)

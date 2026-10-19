@@ -88,4 +88,5 @@ def test_revertir_760_limpia_mitades():
 
 def test_instruccion_menciona_genero_y_ejemplo():
 	ins = pact.IDENTITY_INSTRUCTION
-	assert "GÉNERO" in ins and "Ejemplo" in ins and "Aletheia" in ins
+	assert "GÉNERO" in ins and "Ejemplo" in ins
+	assert "Aletheia" not in ins and "Aleth" not in ins  # ejemplo neutro, sin instancia

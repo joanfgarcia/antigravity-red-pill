@@ -257,3 +257,42 @@ def test_merge_config_no_muta_el_template(adapter, tmp_path) -> None:
 	cfg = os.path.join(str(tmp_path), "c.jsonc")
 	adapter._merge_config(cfg, template, backup=False)
 	assert template == {"a": {"b": 1}}, "el template fue mutado por el merge"
+
+
+def _block_anchors() -> tuple:
+	"""BLOCK_ANCHORS de scripts/inject_anchor.py (roster canónico)."""
+	path = os.path.join(REPO_ROOT, "scripts", "inject_anchor.py")
+	spec = importlib.util.spec_from_file_location("inject_anchor_anchors_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["inject_anchor_anchors_under_test"] = mod
+	spec.loader.exec_module(mod)
+	return tuple(mod.BLOCK_ANCHORS)
+
+
+def test_roster_de_anclas_compartido() -> None:
+	"""Regresión: `inject_opencode` (y su adapter) mantenían su propia lista, sin
+	`identity_pact`; cada target derivaba a un juego de reglas distinto. Ahora el
+	roster es único (el de `inject_anchor`) y toda ancla tiene versión."""
+	anchors = _block_anchors()
+	assert anchors == tuple(_block_version().keys())
+	assert "identity_pact" in anchors
+	for path in (
+		os.path.join(REPO_ROOT, "scripts", "inject_opencode.py"),
+		os.path.join(REPO_ROOT, "scripts", "inject", "opencode", "inject.py"),
+	):
+		assert "BLOCK_ANCHORS" in open(path, encoding="utf-8").read()
+
+
+def test_write_instructions_escribe_todo_el_roster(tmp_path) -> None:
+	"""El inyector standalone escribe las 6 anclas (incluida `identity_pact`)."""
+	import re
+
+	mod = _load_standalone_module()
+	seeds_dir = os.path.join(REPO_ROOT, "seeds", "anchors")
+	dest = os.path.join(str(tmp_path), "RED_PILL.md")
+	mod.write_instructions(dest, seeds_dir, {}, backup=False, update=False)
+
+	text = open(dest, encoding="utf-8").read()
+	found = set(re.findall(r"<!-- REDPILL:BEGIN (\w+) v=\d+ -->", text))
+	assert set(_block_anchors()) <= found
+	assert "identity_pact" in found

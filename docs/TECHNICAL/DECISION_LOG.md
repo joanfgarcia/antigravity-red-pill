@@ -4,6 +4,21 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-054] Modelo de ramas `solo` (rama viva `next`) vs `canonical`, elegido por config
+**Date**: 2026-10-19
+**Status**: ACCEPTED & DOCUMENTED. En vigor desde el ciclo siguiente al release 8.2.0. Fuente única: `docs/CORE/WORKFLOWS.md` §0.
+**Context**: la guía decía `main` + `dev` (integration), pero `dev` **nunca existió**; el *Release Flow* enseñaba `git merge` + `git push origin main`, que el `pre-push` rechaza; `CONTRIBUTING.md` no describía ramas; y `main` no tenía branch protection en GitHub (solo el hook local). En la práctica, un single-maintainer acumulaba desarrollos en ramas con nombre de RFC (`feat/...`, `fix/p0-...`) que subían a origin; al pedir "acumula otra corrección" en una sesión nueva, el agente no reconocía esa rama como suya. Resultado: colisiones, ramas huérfanas y documentación que contradecía la realidad.
+**Decision**:
+- **Un solo modelo documentado, dos perfiles** seleccionados por `GIT_WORKFLOW` en `.env` (`solo` | `canonical`). No se mantienen dos guías paralelas: el perfil activo es dato, y la regla de agente sembrada (`seeds/rules/git_workflow.md` → `~/.agent/rules/`) y los templates del scaffold lo reflejan.
+- **Perfil `solo`** (actual): `main` estable (solo PR). `next` es la **rama viva**: nombre fijo, opcional, nace de `main`, no está protegida, y **siempre está verde/estable en local** (sin WIP sin commitear). Cada **desarrollo local en worktree** (rama cortada de `next`) entra en `next` **solo por squash** (`git merge --squash`), validando el resultado ya mergeado antes de commitear. Fixes pequeños pueden ir directos a `next`. Release = sincronizar `main`→`next` (merge, nunca rebase), bump + CHANGELOG, **un PR `next → main`**, squash merge, borrar `next` (local y remoto) y tag. El siguiente `next` se recrea desde `main`.
+- **Perfil `canonical`**: sin `next`; una rama corta por cambio → PR → `main` → squash → borrar.
+- **Invariantes comunes**: prohibido el push directo a `main` y el force-push; Conventional Commits; gate local completo antes de cada push (CI solo corre en PR, a propósito); una rama no es propiedad de la sesión que la creó.
+**Alternatives**: (a) mantener `dev` como integration — era ficción, nunca existió; (b) documentar solo el flujo canónico y seguir improvisando el real — mantiene la contradicción que causó el problema; (c) una rama de integración por release (`release/x.y`) — reintroduce nombres no genéricos y la colisión entre sesiones; (d) rebase de `next` sobre `main` — imposible con el hook anti force-push.
+**Rationale / Evidence**: el squash `next → main` es lo que ya ocurre (release 8.1.0 = un commit en `main` con 100 commits de PR colapsados). El `pre-push` ya bloquea `main` y non-fast-forward: el modelo se apoya en el guardián existente en vez de inventar otro. `next` de nombre fijo elimina la ambigüedad "esta rama no es mía".
+**Consequences**: el remoto queda limpio (`main` + `next` + ramas de PR puntuales), el historial de `main` sigue legible (un commit por release) y `next` conserva un commit por RFC/fase. Coste asumido: `next` no pasa CI (solo el PR de release), así que el gate local es obligatorio. Servidor: rulesets `no direct commit` (`main`: deletion + non-FF + PR squash-only) y `next: sin reescritura` (non-FF, permite push directo y borrado).
+
+---
+
 ## [AD-053] El tipo de nodo del DAG es un REGISTRO + el driver secciona en módulos
 **Date**: 2026-10-14
 **Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`, release 8.1.0). Extiende `RFC_JOB_DAG` (ver `docs/TECHNICAL/`).

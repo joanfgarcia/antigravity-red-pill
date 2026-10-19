@@ -115,3 +115,55 @@ def test_list_models_rc0(monkeypatch, capsys):
 	assert m.main() == 0
 	payload = json.loads(capsys.readouterr().out)
 	assert isinstance(payload, list) and any(e["model"] == "flux2_klein" for e in payload)
+
+
+def test_gen_image_override_steps_guidance(monkeypatch):
+	"""`gen_image._gen(steps=…, guidance=…)` pisa el sampler del elenco para esa llamada."""
+	monkeypatch.setenv("REDPILL_MEDIA_PROFILES", str(EXAMPLE))
+	monkeypatch.setenv("REDPILL_RUNTIMES", str(REPO / "examples" / "runtimes.yaml.example"))
+	spec = importlib.util.spec_from_file_location("gen_image_under_test", REPO / "scripts" / "imagegen" / "gen_image.py")
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	captured: dict = {}
+	monkeypatch.setattr(mod.BENCH, "generate", lambda kind, cfg, *a, **k: captured.update(cfg) or "IMG")
+	assert mod._gen("sd_cpp", None, "flux3_klein", "p", 1, 512, 512, steps=4, guidance=0.5) == "IMG"
+	assert captured["steps"] == 4 and captured["guidance"] == 0.5
+
+
+def test_resolucion_sobre_max_pixels_falla_limpio(monkeypatch, tmp_path):
+	"""Guard del CLI (espejo de `reject_oversize`): por encima de max_pixels → SystemExit limpio, no OOM."""
+	m = _load(monkeypatch)
+	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--model", "flux3_klein", "--prompt", "x", "--width", "2048", "--height", "1280"])
+	with pytest.raises(SystemExit) as ei:
+		m.main()
+	assert "max_pixels" in str(ei.value)
+
+
+def test_template_a_stdout(monkeypatch, capsys):
+	m = _load(monkeypatch)
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--template", "-"])
+	assert m.main() == 0
+	out = capsys.readouterr().out
+	assert "model: flux3_klein" in out and "prompt: |" in out and "composition:" in out
+
+
+def test_template_a_fichero(monkeypatch, tmp_path):
+	m = _load(monkeypatch)
+	p = tmp_path / "cfg.yaml"
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--template", str(p)])
+	assert m.main() == 0 and p.read_text(encoding="utf-8").startswith("#")
+
+
+def test_merge_request_precedencia(monkeypatch):
+	"""env < config(general) < request < flags del CLI."""
+	m = _load(monkeypatch)
+	monkeypatch.setenv("W", "111")
+	monkeypatch.setenv("H", "222")
+	monkeypatch.setenv("SEED", "1")
+	out = m._merge_request({"width": 333, "steps": 8}, {"height": 444, "steps": 12, "prompt": "a"}, {"steps": 20})
+	assert out["seed"] == 1
+	assert out["width"] == 333
+	assert out["height"] == 444
+	assert out["steps"] == 20
+	assert out["prompt"] == "a"

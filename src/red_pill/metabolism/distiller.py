@@ -18,6 +18,15 @@ import red_pill.config as cfg
 from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json
 from red_pill.metabolism.schemas_params import DistillerParamsConfig
 
+
+def _instance_names() -> tuple:
+	"""(agent_name, operator_name) del PUESTO — nunca hardcodeados en el repo."""
+	c = cfg.get_config()
+	agent = str(getattr(c, "MEMENTO_AGENT_LABEL", "") or getattr(c, "AGENT_NAME", "") or "Agente")
+	operator = str(getattr(c, "MEMENTO_OPERATOR_LABEL", "") or getattr(c, "OPERATOR_DISPLAY_NAME", "") or "Operador")
+	return agent, operator
+
+
 logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
@@ -296,7 +305,8 @@ def distill_engram(
 	prompt_file = (override_params or {}).get("prompt_file")
 	if not prompt_file:
 		prompt_file = _resolve_prompt_for_profile() or params.get("prompt_file") or "distiller_v3.txt"
-	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt, static={"agent_name": "Aleth", "operator_name": "Joan"})
+	_agent_name, _operator_name = _instance_names()
+	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt, static={"agent_name": _agent_name, "operator_name": _operator_name})
 
 	# Prepend dynamic identity context if not already present
 	identity_context = get_dynamic_identity_context()
@@ -729,8 +739,8 @@ def classify_category(
 
 def audit_engram_quality(
 	summary_text: str,
-	agent_name: str = "Aleth",
-	operator_name: str = "Joan",
+	agent_name: Optional[str] = None,
+	operator_name: Optional[str] = None,
 	override_prompt: Optional[str] = None,
 	override_params: Optional[Dict[str, Any]] = None,
 	config_yaml_path: Optional[str] = None,
@@ -741,6 +751,8 @@ def audit_engram_quality(
 	"""
 	import re
 
+	agent_name = agent_name or _instance_names()[0]
+	operator_name = operator_name or _instance_names()[1]
 	from red_pill.core.providers import ProviderRegistry
 
 	system_prompt = load_prompt_text(

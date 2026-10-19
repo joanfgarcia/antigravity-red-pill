@@ -98,6 +98,7 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 # drifted and kept re-splicing RED_PILL.md with stale `v=` markers).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inject_anchor import (  # noqa: E402
+	BLOCK_ANCHORS,
 	BLOCK_VERSION,
 	ide_call_vars,
 	ide_seed_path,
@@ -113,7 +114,8 @@ def _read_seed(seed_path: str) -> str:
 
 def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool = True, update: bool = False) -> int:
 	"""Write RED_PILL.md with versioned anchor blocks. Returns count of changed blocks."""
-	anchor_names = ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]
+	# Canonical roster from inject_anchor (never a local list: it drifted before).
+	anchor_names = list(BLOCK_ANCHORS)
 	changed = 0
 	# Per-IDE tool-call phrasing (${RELAY_CALL}/${WAKE_CALL}/${RELAY_INSTRUCTION}):
 	# opencode has an editor hook, so the anchor must say "passing only `user_prompt`".
@@ -410,7 +412,7 @@ def main():
 		# Remove RED_PILL.md anchor blocks
 		instructions_path = os.path.join(config_dir, "RED_PILL.md")
 		if os.path.exists(instructions_path):
-			for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]:
+			for anchor in BLOCK_ANCHORS:
 				status = remove_block(instructions_path, anchor, backup=backup)
 				if status != "absent":
 					logger.info(f"✓ opencode:{anchor} removed [{instructions_path}]")

@@ -11,7 +11,7 @@ El `IDEWorker` (el daemon de fondo) se ampliará para consumir tareas estructura
 1. Añadir el método `process_cognitive_queue()` a `IDEWorker`.
 2. Extraer la siguiente tarea de la base de datos usando `CognitiveQueueManager.pop_next_task()`.
 3. Inyectar la tarea en la cascada fantasma (Ghost Cascade).
-4. El LLM (Aleth) procesará la tarea y el Orquestador cerrará el ciclo usando `mark_completed()` o `mark_failed()`.
+4. El LLM (el agente) procesará la tarea y el Orquestador cerrará el ciclo usando `mark_completed()` o `mark_failed()`.
 
 ### Paso 2: La Chispa (Generación Proactiva)
 1. Si la cola está vacía, el sistema calculará un índice de entropía (ej. comprobando si hay memorias en RAM que necesitan consolidación en Qdrant, o si hay código marcado con TODOs).

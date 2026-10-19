@@ -562,6 +562,11 @@ update_env "CLOUD_VAULT_GPG_PASSPHRASE" "$CLOUD_VAULT_GPG_PASSPHRASE"
 update_env "WORKSPACE_ROOT" "$WORKSPACE_ROOT"
 update_env "APP_ROOT" "$APP_ROOT"
 update_env "RED_PILL_PROFILE" "user"
+# GIT_WORKFLOW is an operator choice (docs/CORE/WORKFLOWS.md §0): seed only when absent.
+if ! grep -q "^GIT_WORKFLOW=" "$ENV_FILE"; then
+	echo "GIT_WORKFLOW=\"solo\"" >> "$ENV_FILE"
+	export GIT_WORKFLOW="solo"
+fi
 update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
 update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Agent_Core"
 chmod 600 "$ENV_FILE"
@@ -764,6 +769,12 @@ fi
 if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
 	cp "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md"
 	ln -sf "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md" "$GEMINI_ROOT/rules/cognitive_integrity_protocol.md"
+fi
+
+# Branch model rule (editable seed; deployed per active GIT_WORKFLOW profile).
+if [ -f "$SCRIPT_DIR/../seeds/rules/git_workflow.md" ]; then
+	cp "$SCRIPT_DIR/../seeds/rules/git_workflow.md" "$USER_RULES_DIR/rules/git_workflow.md"
+	ln -sf "$USER_RULES_DIR/rules/git_workflow.md" "$GEMINI_ROOT/rules/git_workflow.md"
 fi
 
 echo -e "${BLUE}--- Fase: Ignición de Memoria Bio-Sintética ---${NC}"

@@ -64,3 +64,14 @@ def test_skill_enabled_reads_frontmatter(monkeypatch, tmp_path):
 	_isolate(monkeypatch, tmp_path)  # ninguna activa
 	assert capabilities.skill_enabled(gated) is False
 	assert capabilities.skill_enabled(ungated) is True
+
+
+def test_skill_enabled_acepta_str_o_path(monkeypatch, tmp_path):
+	"""Regresión installer: `install_neo.sh`/`upgrade.sh` pasan la ruta como `str`
+	en un `python -c`; con la firma `Path` a secas el gate saltaba TODAS las skills
+	con `capability:` en silencio."""
+	monkeypatch.setenv("IMAGE_FORGE_HOME", str(_forge(tmp_path, "image", hf=True)))
+	md = tmp_path / "SKILL.md"
+	md.write_text("---\ncapability: image_gen\n---\n", encoding="utf-8")
+	assert capabilities.skill_enabled(str(md)) is True
+	assert capabilities.skill_enabled(md) is True

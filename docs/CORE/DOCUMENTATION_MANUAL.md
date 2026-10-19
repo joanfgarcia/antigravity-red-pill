@@ -31,7 +31,7 @@ Este documento establece las reglas soberanas para la creación y organización 
 | :--- | :--- | :--- |
 | `docs/CORE` | Fundamental governance and foundational manifests. / Gobernanza fundamental y manifiestos base. | Architects / Arquitectos |
 | `docs/TECHNICAL` | Specs, architecture diagrams, Decision Logs, and Data Models. / Especificaciones, diagramas, Decision Logs y Modelos. | Engineers / Ingenieros |
-| `docs/LORE` | Manifestos, stories, skins,; and Red Pill philosophy. / Manifiestos, historias, skins y filosofía. | Aleth / Operators |
+| `docs/LORE` | Manifestos, stories, skins,; and Red Pill philosophy. / Manifiestos, historias, skins y filosofía. | Agent / Operators |
 | `docs/GUIDES` | User tutorials, update guides, and operating manuals. / Tutoriales, guías de actualización y manuales. | Support / Soporte |
 | `docs/CERTIFICATION` | Security audits, Samantha/Smith reports, and version certifies. / Auditorías y reportes de certificación. | Smith / Keymaker |
 | `docs/COMMUNITY` | Code of conduct and decentralized network rules. / Código de conducta y reglas de la red. | Hive-Mind |
@@ -58,7 +58,7 @@ with a YAML frontmatter header. Template & valid fields:
 | `type` | ✅ | `rfc \| plan \| note \| research \| audit \| log \| lore \| spec \| index` |
 | `status` | ✅ | `draft \| ratified \| in-design \| implemented \| closed \| active \| paused \| archived` |
 | `created` | ✅ | `YYYY-MM-DD` |
-| `author` | ✅ | `<author name(s)>` — the actual author(s); e.g. `Aleth (Netrunner)`, `Joan García` (fill in, never copy a placeholder) |
+| `author` | ✅ | `<author name(s)>` — the actual author(s); e.g. `<Agent name>`, `<Operator name>` (fill in, never copy a placeholder) |
 | `project` | ✅ | `aleth-core \| red-pill \| neon-link \| frankenswarm \| obsidian \| personal` |
 | `id`, `title`, `related`, `superseded_by`, `archived`, `archive_reason`, `tags` | ⬜ | optional |
 

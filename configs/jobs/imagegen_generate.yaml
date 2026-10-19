@@ -1,0 +1,30 @@
+# ImageGen generate — LOTE de encargos con CHECKPOINT POR IMAGEN (fan-out).
+#
+# UN step = UNA imagen (element_job, fail-soft): cada generación tiene su propio
+# checkpoint → reanudable por imagen; un fallo (OOM/err) se REGISTRA en
+# failures.jsonl y sale con skip_exit_code (79) → la cola lo marca saltado y SIGUE.
+#
+# Las peticiones vienen de un fichero `--config` de media-gen con `requests:`
+# (misma forma que el modo lote del CLI). Ruta por env: $RP_MEDIA_BATCH.
+# IMPORTANTE (regla de granularidad, CLAUDE.md §2): en un JOB se granulariza
+# (1 step = 1 imagen), NO se usa el `--batch` in-process (monolítico: un fallo
+# perdería el lote). El `--batch` es para uso interactivo en el CLI.
+# Coste: el modelo se recarga por imagen (~0 en sd_cpp; ~9–32 s en diffusers).
+#
+# Rutas por env (el runner exporta el .env): $IA_DIR (repo), $IMAGE_FORGE_HOME (forge),
+# $RP_MEDIA_BATCH (fichero de peticiones), $RP_MEDIA_STAGING (staging).
+source: element_job
+priority: 3
+title: ImageGen generate — lote (element_job, 1 step = 1 imagen)
+mission_id: imagegen-generate
+elements_command: ["sh", "-c", '"$IMAGE_FORGE_HOME/venv/bin/python" "$IA_DIR/scripts/imagegen/gen_cli.py" --config "$RP_MEDIA_BATCH" --list-elements']
+step_command: ["sh", "-c", 'OUT="$RP_MEDIA_STAGING/imagegen-generate"; mkdir -p "$OUT"; "$IMAGE_FORGE_HOME/venv/bin/python" -u "$IA_DIR/scripts/imagegen/gen_image.py" --element --out "$OUT"; rc=$?; if [ $rc -ne 0 ]; then echo "$RP_ELEMENT rc=$rc" >> "$OUT/failures.jsonl"; exit 79; fi; exit 0']
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 30
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 6000
+  memory_max: 16G

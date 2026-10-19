@@ -4,6 +4,12 @@ import pytest
 import yaml
 
 
+@pytest.fixture(autouse=True)
+def _enable_skins(monkeypatch):
+	"""Los tests de skins asumen role-play ON (off es el default de producto)."""
+	monkeypatch.setenv("SKINS_ENABLED", "true")
+
+
 def test_lore_skins_yaml_load_all():
 	"""TCG-003: Asserts all 12 skins load from yaml, have a name, and a valid chroma value."""
 	data_path = os.path.join(os.path.dirname(__file__), "..", "src", "red_pill", "data", "lore_skins.yaml")

@@ -5,7 +5,7 @@ Cualquier cosa que requiera el uso de **LLM local** (o una tarea que vaya a dura
 más de ~2 minutos, sobrevivir a reinicios, o ser reanudable) **DEBE ejecutarse
 mediante el Centralized Job Manager**, no a pelo en un `nohup`/`&`:
 
-1. **Usa el skill `job_manager`** (`~/.claude/skills/job_manager/`): decide si es
+1. **Usa el skill `job-manager` / `job_manager`** (según el arnés): decide si es
    job (§1), encola con el recipe/carril correcto (§2) y opera con pause/resume
    (§3). El runner (`redpill-queue.timer`, cada 1 min) lo recoge con OOM shield
    e inhibit del sueño — jamás lances `process-queue` tú mismo.

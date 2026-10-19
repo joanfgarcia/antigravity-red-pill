@@ -595,6 +595,8 @@ def bunker_update() -> None:
 	model_profiles / model_catalog / task_profiles), IDE anchors and MCP config.
 	2.7. Regenerate the background LLM daemon (setup_background_model.sh) and restart it.
 	2.8. Redeploy skills to the agent skills dir.
+	2.9. Seed the branch-model rule (`seeds/rules/git_workflow.md`) for the active
+	`GIT_WORKFLOW` profile (docs/CORE/WORKFLOWS.md §0).
 	3. Run any pending database migrations.
 	4. Reload systemd daemons (systemctl --user daemon-reload).
 	"""
@@ -714,6 +716,21 @@ def bunker_update() -> None:
 			print("   [SKIP] No skills directory found.")
 	except Exception as e:
 		print(f"   [WARN] Skills redeploy skipped: {e}")
+
+	print("2.9 Seeding the branch-model rule (GIT_WORKFLOW profile)...")
+	try:
+		rule_src = project_root / "seeds" / "rules" / "git_workflow.md"
+		from red_pill.core.paths import get_agent_dir
+
+		rules_dest = Path(os.getenv("RED_PILL_AGENT_DIR") or str(get_agent_dir())) / "rules"
+		if rule_src.is_file():
+			rules_dest.mkdir(parents=True, exist_ok=True)
+			shutil.copy2(rule_src, rules_dest / "git_workflow.md")
+			print(f"   [OK] git_workflow rule deployed to {rules_dest}.")
+		else:
+			print("   [SKIP] No seeds/rules/git_workflow.md found.")
+	except Exception as e:
+		print(f"   [WARN] git_workflow rule deploy skipped: {e}")
 
 	print("3. Running database migrations / checks...")
 	try:

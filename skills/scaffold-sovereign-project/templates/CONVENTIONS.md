@@ -142,7 +142,14 @@ test: include test_sound_of_silence in QA suite
 ```
 feat/<short-hyphenated-description>    ✅  feat/openmls-interop
 fix/<short-hyphenated-description>     ✅  fix/lbbt-out-of-bounds
+docs/<short-hyphenated-description>    ✅  docs/conventions
+chore/<short-hyphenated-description>   ✅  chore/ruff-cleanup
 ```
+
+Long-lived branches: `main` (stable, PR-only) and `next` (the living integration branch of
+the `solo` profile — optional, fixed name). Work branches and worktrees are cut from `next`
+and land on it by squash; `next` lands on `main` through one release PR. The active profile
+is `GIT_WORKFLOW` in `.env`; the full model lives in `docs/CORE/WORKFLOWS.md` §0.
 
 ---
 

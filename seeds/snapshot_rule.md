@@ -1,22 +1,26 @@
 # Governance Directive: Session Snapshots
 
 ## Context
-To ensure operational continuity between different context windows and prevent the degradation of technical knowledge, the agent must maintain a structured log of the project's state.
+Continuity across context windows / model switches: the agent keeps a structured
+snapshot of the **workspace** state so a new session resumes without loss.
 
 ## Execution Rules
 
-1.  **Snapshot Generation**: At the end of a session or when the context becomes excessive, the "Semantic Distillation System" (`context-distiller` skill) must be invoked to generate `.agent/rules/session_snapshot.md`.
-2.  **Mandatory Obfuscation (Fight Club / Anti-Smith)**:
-    *   It is forbidden to log internal protocol names, the agent's identity proper names, or lore terms in the project's file system.
-    *   Any reference to persistence must use generic terms such as "Resilience System" or "Identity Persistence".
-3.  **Mandatory Structure**:
-    *   **Dictionary of Terms**: Mapping of aliases to real code entities.
-    *   **Architecture Map**: Visual (Mermaid) or textual representation of affected modules.
-    *   **Decision Log**: Technical justification of critical changes.
-    *   **Final Frontier**: Exact state of the current task and any blockers.
-4.  **Plane Separation**:
-    *   Project markdown files are exclusively for **technical** data.
-    *   **Social, relational, or personal** data must be persisted exclusively in the global vector database (RAG).
+1. **Snapshot generation**: at the end of a session, on "guarda el contexto /
+   snapshot / handoff", or when context gets heavy, invoke the `context-distiller`
+   skill. Output: **one** file at `<workspace>/.red-pill/memory/session_snapshot.md`
+   (workspace-memory). **Never** write to `.agent/` or to project source trees.
+2. **No obfuscation.** Identity is **config of the instance** (see
+   `docs/CORE/IDENTITY_AND_INSTANCE.md`): the snapshot is technical and honest and
+   never sanitizes, hides, or rewrites the agent/operator identity or lore terms.
+   There is no "silence protocol" here.
+3. **Structure**: terms/aliases (optional), affected modules, decision log (durable,
+   non-obvious changes and why), and the **final frontier** (exact state +
+   blockers/open decisions). Point to artifacts (RFC, shard, commit) instead of
+   copying them.
+4. **Plane separation**: project markdown files hold **technical** data; social /
+   relational / personal data lives in the RAG (Bünker), never in project files.
 
 ## Verification
-Upon starting a new session, the agent must proactively check for the existence of `session_snapshot.md` to reconstitute its mental state before proceeding with work.
+On resuming, read `session_snapshot.md` to reconstitute state; the kernel **OPEN
+LOOPS** digest covers the pending decisions/jobs/notes counts.

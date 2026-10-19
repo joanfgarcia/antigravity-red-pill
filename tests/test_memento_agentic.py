@@ -867,3 +867,17 @@ def test_split_long_message_corta_linea_unica_gigante():
 	lines = "\n".join(["y" * 99] * 10)
 	subs2 = _split_long_message(("H" * 20, lines), max_chars=1000, overlap=0)
 	assert all(len(h) + 1 + len(b) <= 1000 for h, b in subs2)
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _pin_instance_identity(monkeypatch):
+	"""Fija la identidad del puesto en los tests de memento (los nombres propios
+	son datos de test acordados con el Operador; no afectan a la identidad real)."""
+	import red_pill.config as cfg
+
+	c = cfg.get_config()
+	monkeypatch.setattr(c, "MEMENTO_AGENT_LABEL", "Aleth", raising=False)
+	monkeypatch.setattr(c, "MEMENTO_OPERATOR_LABEL", "Joan", raising=False)

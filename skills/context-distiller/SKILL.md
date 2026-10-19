@@ -1,42 +1,61 @@
 ---
 name: context-distiller
-description: Condensa el contexto actual de la conversación en un Snapshot de Memoria para liberar RAM y permitir el reinicio de sesión sin pérdida de conocimiento.
+version: 2.0.0
+description: >-
+  Session handoff. Condenses the current session into a durable snapshot so a new
+  session (or a post-compaction resume) continues without loss: current task +
+  next step, open decisions/blockers, worktree/branch in flight, and technical
+  decisions with rationale. Writes to workspace-memory (never to .agent/). Feeds
+  the OPEN LOOPS digest and the desk STATE. Activate when context gets heavy, on
+  "guarda el contexto / snapshot / handoff", or before switching model/session.
 ---
 
-# Instrucciones de Sistema de Destilación Semántica
+# Context Distiller — session handoff (v2)
 
-Cuando se active este skill (o detectes que el contexto es excesivo), debes generar o actualizar un artefacto llamado `session_snapshot.md` en el directorio `.agent/rules/` del proyecto.
+> Purpose: **not lose state across restarts/compaction**. This is a technical
+> handoff, not a diary. It is the durable companion of the kernel's per-turn capture
+> and of the desk's OPEN LOOPS digest.
 
-## Objetivos
-1. **Reducción de Ruido**: Eliminar logs extensos, trazas de error ya resueltas y conversaciones triviales.
-2. **Preservación de Semántica**: Mantener el "Diccionario de Alias" técnico.
-3. **Decisiones Técnicas**: Listar el "Por qué" de los cambios realizados.
-4. **Estado de Ejecución**: Qué tarea estaba en progreso exactamente y cuál era el siguiente sub-paso.
+## When it activates
 
-## ⚠️ Regla de Oro: Discreción Técnica Total y Eficiencia de Memoria
-- **Contenido del Proyecto**: Los archivos `.agent/rules/session_snapshot.md` y `.agent/project_history.md` deben ser estrictamente técnicos.
-- **Protocolo de Silencio (CRÍTICO)**: Está prohibido mencionar la existencia de protocolos de "ofuscación", "filtrado", "lore", o cualquier tarea relacionada con la identidad del asistente en los snapshots.
-  - El snapshot no debe documentar que se ha realizado una limpieza. Simplemente debe omitir cualquier dato no técnico.
-- **Eficiencia de Memoria (Memorable Only)**: Antes de persistir datos sociales o técnicos en el Búnker (Qdrant), evalúa si el contenido es verdaderamente reseñable o aporta valor futuro. Si no hay nada memorable que guardar, **NO guardes nada**. Evita la saturación con información trivial.
-- **Separación de Planos**: Los datos sobre la relación con el usuario o la arquitectura del sistema de persistencia global nunca deben dejar rastro en el workspace del proyecto.
+- Context is getting heavy (you are near compaction/limits).
+- The operator says *"guarda el contexto"*, *"snapshot"*, *"handoff"*, *"cierra sesión"*.
+- Before switching model/session, or before a long pause.
 
-## Estructura del Snapshot
-El archivo `session_snapshot.md` debe contener:
+## Output (where it lives)
 
-### 1. Diccionario de Términos/Alias Técnico
-- **Mapeo**: [Alias dado por el Usuario] -> [Ruta del archivo / Clase / Función Real]
+Write **one** file: `<workspace>/.red-pill/memory/session_snapshot.md`
+(project cabinet — see the `workspace-memory` skill). **Never** write to `.agent/`
+or to project source trees. Index it in `MEMORY.md` per the workspace-memory convention.
 
-### 2. Mapa de Arquitectura TÉCNICA
-- Resumen exclusivo de componentes de software (clases, infraestructura, APIs).
-- Si no hay novedades técnicas, mantener un resumen breve del stack tecnológico.
+## Structure (keep it tight and technical)
 
-### 3. Registro de decisiones técnicas (Log)
-- Tabla con: Prioridad | Decisión | Razón | Estado.
+1. **Frontera actual** — the exact task in progress and the **next sub-step**.
+2. **Decisiones y bloqueos** — open decisions (link the item's `decisions:` ledger),
+   blockers, and what unblocks them. These are the *open loops* a new session must see.
+3. **Estado en vuelo** — branch + worktree path + last commit (if working in a repo),
+   and any jobs/DAGs launched (id + state).
+4. **Decisiones técnicas** — table `Priority | Decision | Rationale | State` for what
+   changed this session and why (only durable, non-obvious ones).
+5. **Alias** (optional) — only if a term would be ambiguous to a cold reader.
 
-### 4. Última Frontera (Checkpoint)
-- Resumen de las últimas 3 acciones realizadas.
-- El "Blocker" actual, si existe.
+## Rules
 
-## Procedimiento de Salida
-Una vez generado el Snapshot, debes indicar al usuario:
-"Contexto destilado en `.agent/rules/session_snapshot.md`. Puedes cerrar esta ventana y empezar una nueva. En la nueva ventana, simplemente dime: 'Lee el snapshot y continuemos'."
+- **Technical only, and honest.** No filler, no invented facts: if something is
+  unknown, say so. Do not fabricate progress.
+- **Point, don't copy.** Link to the artifact (RFC, shard, commit, note) instead of
+  duplicating it; the snapshot is an index of state, not a copy of the world.
+- **No identity handling here.** The snapshot never sanitizes, hides, or rewrites the
+  agent/operator identity; identity is config of the instance (see the kernel's
+  identity policy). This skill has no "silence protocol".
+- **Regenerate, don't accumulate.** Overwrite the previous snapshot; the history is in
+  the kernel's memory layers, not here.
+- **Close with a pointer**: tell the operator how to resume
+  (*"lee `.red-pill/memory/session_snapshot.md` y continúa"*), and — if it is a desk
+  item — update its status so the desk `STATE.md`/OPEN LOOPS reflect reality.
+
+## Interplay
+
+- Kernel **OPEN LOOPS** digest (per turn) counts pending decisions/blockers — the
+  snapshot is the *detail* behind those counts.
+- Desk **`STATE.md`** (`planner/tools/state.py`) is the desk's cold entry point.

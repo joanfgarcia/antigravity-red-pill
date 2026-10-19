@@ -5,6 +5,7 @@ prompts:
   samantha_compact_user:
     template: samantha_compact_user.txt
     system: samantha_compact_system.txt
+    static: [agent_name, operator_name]
     runtime: [history]
 
   samantha_classify_user:

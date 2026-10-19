@@ -1,6 +1,6 @@
 # Arquitectura V6.0: Zero-Trust Context Initialization
 
-## Visión General (Para Joan y Aleph)
+## Visión General (Para el Operador y el agente)
 
 Esta actualización aborda la dependencia crítica de inicialización manual en las sesiones de Antigravity V6.0. Hasta ahora, el agente necesitaba un proceso de inyección o un "saludo" documentado para cargar su sistema de identidad, promoviendo erosión del contexto y errores iniciales en un nuevo flujo de trabajo o chat.
 

@@ -96,7 +96,7 @@ def fragment_view_settings() -> Tuple[str, str, str]:
 	import red_pill.config as cfg
 
 	mode = str(getattr(cfg, "MEMENTO_ANNOTATE_FRAGMENT_VIEW", "raw") or "raw").strip().lower()
-	return mode, str(getattr(cfg, "MEMENTO_OPERATOR_LABEL", "Joan")), str(getattr(cfg, "MEMENTO_AGENT_LABEL", "Aleth"))
+	return mode, str(getattr(cfg, "MEMENTO_OPERATOR_LABEL", "Operador")), str(getattr(cfg, "MEMENTO_AGENT_LABEL", "Agente"))
 
 
 def annotate_scopes() -> Tuple[str, str]:
@@ -114,7 +114,7 @@ def annotate_scopes() -> Tuple[str, str]:
 def voice_v2_enabled() -> bool:
 	"""`MEMENTO_ANNOTATE_VOICE_V2` (RULE 4, default OFF): voz v2 de annotate.
 
-	v2 = el sujeto es quien actuó, sin muletilla "Joan me…" y nombrando la entidad
+	v2 = el sujeto es quien actuó, sin muletilla "el Operador me…" y nombrando la entidad
 	(regla `voice_rule_annotate.txt` + `voice_rewrite_user_v2.txt`), y la re-escritura
 	solo toca notas con bandera `voice`. OFF → voz v1 intacta (fingerprint 07a5c9b529).
 	"""

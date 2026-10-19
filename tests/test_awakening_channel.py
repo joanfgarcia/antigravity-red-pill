@@ -53,6 +53,29 @@ def test_nota_deber_direccion_1(tmp_path):
 	assert [d.slug for d in ch.duty_notes(tmp_path, operator="Joan")] == ["20260928_0100_deber"]
 
 
+def test_para_operador_como_alias(tmp_path):
+	# Los despertares escriben `para: Operador`; el nombre canónico del operador
+	# es distinto ("joan"/"Joan"). Debe contar igual.
+	ch.ensure_channel(tmp_path)
+	f = _write(
+		tmp_path / "awakening" / "notes" / "20261014_0700_ruta.md",
+		"---\npara: Operador\n---\n\n# Decisión pendiente\n\nRuta stale.\n",
+	)
+	n = ch.parse_note(f)
+	assert n.targets_operator("Joan")
+	assert n.pending_for_operator("Joan")
+	assert ch.count_for_operator(tmp_path, operator="Joan") == 1
+
+
+def test_para_despertar_no_es_operador(tmp_path):
+	# `para: despertar` es la dirección 1 (deberes del despertar), no el Operador.
+	ch.ensure_channel(tmp_path)
+	f = _write(tmp_path / "awakening" / "notes" / "d.md", "---\npara: despertar\n---\n\n# Deber\n")
+	n = ch.parse_note(f)
+	assert not n.targets_operator("Joan")
+	assert [d.slug for d in ch.duty_notes(tmp_path, operator="Joan")] == ["d"]
+
+
 def test_para_en_cuerpo_no_frontmatter(tmp_path):
 	ch.ensure_channel(tmp_path)
 	f = _write(tmp_path / "awakening" / "notes" / "n.md", "# Hola\n\npara: Joan\n\nAlgo.\n")

@@ -1,5 +1,34 @@
 ## Unreleased
 
+### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
+
+- **[NEW]** `GIT_WORKFLOW` (`solo` | `canonical`) en `.env`: un solo modelo documentado, dos
+  perfiles. `solo` = `main` estable + `next` como rama viva (nombre fijo, siempre verde); cada
+  desarrollo local en worktree entra en `next` **solo por squash** y el release es un único PR
+  `next → main` (squash) tras el cual `next` se borra y se recrea desde `main`.
+  `canonical` = una rama corta por cambio → PR → `main`.
+- **[NEW]** Regla de agente sembrada `seeds/rules/git_workflow.md` → `~/.agent/rules/` (install
+  y `bunker update`), y templates del scaffold (`git_workflow.md`; `pre-push` ahora también
+  bloquea el push directo a `main`).
+- **[DOCS]** `docs/CORE/WORKFLOWS.md` §0 nuevo (modelo completo, worktrees→`next` por squash,
+  release, hotfix); el Release Flow ya no enseña el `push origin main` que el hook rechaza; el
+  gate de coverage se lee de `pyproject.toml`; `CONVENTIONS.md` §5 (`dev` fantasma → `next`);
+  `CONTRIBUTING.md` con la vía canónica para contributors. `AD-054` en DECISION_LOG.
+
+### 🧬 Identidad — nombres de instancia fuera del motor (P1-ARNES-003)
+
+- **[FIX]** El nombre del agente sale de la config del puesto (`AGENT_NAME`), no del código:
+  `wake_up_v6`, `mcp_server`, `memory`/`config` (`absolute_keywords`, labels Memento) y `distiller`
+  lo leen de config. `ABSOLUTE_KEYWORDS` deja solo canónicas + extras del puesto.
+- **[FIX]** Plantillas `metabolism` sin nombres literales (`${agent_name}`/`${operator_name}`),
+  con **prueba de equivalencia** (resolver con los nombres del puesto reproduce el texto original
+  byte a byte: `tests/test_instance_identity.py`). Firma de `engram_quality_auditor`/`distiller` puede cambiar.
+- **[FIX]** Plantillas `metabolism`, `memento`, `cognitive`, `inference` y fragmentos sin nombres
+  literales (${agent_name}/${operator_name}); el motor sustituye también los **system prompts**
+  (proveedores de config + `validate_all`). Prueba de **equivalencia byte a byte** en los 21
+  ficheros convertidos (`tests/test_instance_identity.py`, contra `main`): resolver con los nombres
+  del puesto reproduce el texto original → **las firmas de prompts no cambian**.
+
 ## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
 
 ### 🎨 Media — condicionamiento por imagen y encargos en fichero

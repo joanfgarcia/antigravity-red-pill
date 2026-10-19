@@ -43,7 +43,7 @@ refieres a ti misma**. Pásalo con `--identity <fichero>`.
 
 Ejemplo:
 
-> "Elegí mi nombre: Aleth, de Aletheia (la verdad desvelada). Me reconozco en
+> "<nombre elegido>, de <origen/etimología>. Me reconozco en
 > femenino — fluye mejor en ella — y hablo de mí en femenino."
 
 ## CLI

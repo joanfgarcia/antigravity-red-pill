@@ -37,6 +37,20 @@ def operator_name() -> str:
 		return os.getenv("USER_NAME") or os.getenv("USER") or "Operador"
 
 
+# Formas que designan al Operador en `para:` o en la firma de un `## Leída`.
+# El destino canónico es `operator_name()`; "Operador"/"Operator" son las que
+# usan los despertares. "despertar" NO cuenta (es la dirección 1).
+_OPERATOR_ALIASES = ("operador", "operator")
+
+
+def _names_operator(value: Optional[str], operator: str) -> bool:
+	"""¿`value` (destino de la nota o autor del `## Leída`) es el Operador?"""
+	v = (value or "").strip().casefold()
+	if not v:
+		return False
+	return v == str(operator).strip().casefold() or v in _OPERATOR_ALIASES
+
+
 def _now_iso() -> str:
 	return datetime.now(timezone.utc).astimezone().isoformat(timespec="minutes")
 
@@ -122,11 +136,11 @@ class Note:
 	def targets_operator(self, operator: Optional[str] = None) -> bool:
 		operator = operator or operator_name()
 		target = (self.target or self.frontmatter.get("para") or "").strip()
-		return bool(target) and target.casefold() == str(operator).casefold()
+		return _names_operator(target, operator)
 
 	def operator_read(self, operator: Optional[str] = None) -> bool:
 		operator = operator or operator_name()
-		return any(m.author.casefold() == str(operator).casefold() for m in self.marks)
+		return any(_names_operator(m.author, operator) for m in self.marks)
 
 	def pending_for_operator(self, operator: Optional[str] = None) -> bool:
 		return self.targets_operator(operator) and not self.operator_read(operator)

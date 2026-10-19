@@ -205,7 +205,10 @@ chore/<short-hyphenated-description>   ✅  chore/ruff-cleanup
 docs/<short-hyphenated-description>    ✅  docs/conventions
 ```
 
-Main branches: `main` (stable), `dev` (integration). Feature branches merge into `dev`, releases cut from `main`.
+Main branches: `main` (stable, PR-only) and `next` (the living integration branch of the
+`solo` profile — optional, fixed name). Work branches and RFC worktrees are cut from `next`
+and land on it by squash; `next` lands on `main` through one release PR. The active profile
+is `GIT_WORKFLOW` in `.env`; the full model lives in [`WORKFLOWS.md`](WORKFLOWS.md) §0.
 
 ---
 
@@ -322,7 +325,7 @@ title: "..."
 status: draft|ratified|in-design|implemented|closed|active|paused|archived
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-author: <Author Name(s)>  # actual author(s); e.g. Aleth (Netrunner), Joan García — never copy a placeholder
+author: <Author Name(s)>  # actual author(s); e.g. `<Agent name>`, `<Operator name>` — never copy a placeholder
 project: aleth-core|red-pill|neon-link|frankenswarm|obsidian|personal
 related: [...]        # optional
 superseded_by:        # optional

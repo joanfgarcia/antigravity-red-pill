@@ -93,9 +93,19 @@ def _confine_out(path: Path) -> Path:
 	return resolved
 
 
-def _gen(kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int, meta: dict = None):
-	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052)."""
-	return BENCH.generate(kind, MODELS[model_id], pipe, prompt, seed, width, height, meta)
+def _gen(
+	kind: str, pipe, model_id: str, prompt: str, seed: int, width: int, height: int, meta: dict = None, steps: int = None, guidance: float = None
+):
+	"""Delega en el registro ÚNICO del harness (`bench_imagegen.generate`, AD-052).
+
+	`steps`/`guidance` (override del CLI) pisan el `sampler` del elenco para ESTA llamada.
+	"""
+	cfg = dict(MODELS[model_id])
+	if steps is not None:
+		cfg["steps"] = steps
+	if guidance is not None:
+		cfg["guidance"] = guidance
+	return BENCH.generate(kind, cfg, pipe, prompt, seed, width, height, meta)
 
 
 def _run_element(el: dict) -> int:
@@ -158,7 +168,7 @@ def _run_element(el: dict) -> int:
 	try:
 		torch.cuda.reset_peak_memory_stats()
 		t1 = time.perf_counter()
-		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta)
+		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta, steps=el.get("steps"), guidance=el.get("guidance"))
 		wall = time.perf_counter() - t1
 		peak = torch.cuda.max_memory_allocated() / (1024**2)
 		img.save(png)
@@ -167,6 +177,7 @@ def _run_element(el: dict) -> int:
 			"kind": kind,
 			"seed": seed,
 			"size": f"{width}x{height}",
+			"steps": el.get("steps") or MODELS[model_id].get("steps"),
 			"load_s": round(load_s, 2),
 			"wall_s": round(wall, 2),
 			"peak_mb": round(peak, 1),

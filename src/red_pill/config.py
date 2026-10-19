@@ -115,6 +115,10 @@ class RedPillConfig(BaseSettings):
 	WORKSPACE_ROOT: str = _WORKSPACE_ROOT
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
+	# Branch model for project repos (docs/CORE/WORKFLOWS.md §0):
+	# solo → main + living `next` (worktrees squash into next; one release PR to main)
+	# canonical → one short-lived branch per change → PR → main (no next)
+	GIT_WORKFLOW: Literal["solo", "canonical"] = "solo"
 	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Agent_Core")
 	# USER_ATLAS_DIR removed: the atlas is per-project now (workspaces.yaml / discovered via .agent).
 	# AGENT_CORE_DIR's effective source for anchors is workspaces.yaml:agent_core
@@ -177,7 +181,12 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# COGNITIVE DYNAMICS
 	# -----------------------------------------------------------------------
-	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+	# Palabras que SIEMPRE son marcadores (canónicas del motor, no de instancia).
+	# Lo demás (nombres del agente/Operador, jerga del puesto) es DINÁMICO:
+	# `ABSOLUTE_KEYWORDS_EXTRA` (csv en el .env de la instancia) + los nombres de
+	# `AGENT_NAME`/`OPERATOR_DISPLAY_NAME`. Ver `absolute_keywords`.
+	ABSOLUTE_KEYWORDS: List[str] = ["Bünker", "770", "skin"]
+	ABSOLUTE_KEYWORDS_EXTRA: str = ""  # csv del puesto; cambia sin tocar el repo
 	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
 	EMERGENCY_CLOUD_OVERRIDE: bool = False
 
@@ -384,6 +393,29 @@ class RedPillConfig(BaseSettings):
 	AGENT_NAME: str = "Agente"
 	OPERATOR_DISPLAY_NAME: str = os.getenv("USER_NAME", os.getenv("USER", "Operador"))
 
+	@property
+	def absolute_keywords(self) -> List[str]:
+		"""Marcadores absolutos = canónicas + extras del puesto (csv) + nombres.
+
+		Los nombres de instancia son dinámicos (Operador→AGENT_NAME→nombrado), así
+		que nunca se fijan en el repo.
+		"""
+		out = list(self.ABSOLUTE_KEYWORDS)
+		extras = [w.strip() for w in (self.ABSOLUTE_KEYWORDS_EXTRA or "").split(",") if w.strip()]
+		for word in (*extras, self.AGENT_NAME, self.OPERATOR_DISPLAY_NAME):
+			if word and word not in out:
+				out.append(word)
+		return out
+
+	@model_validator(mode="after")
+	def _fill_instance_identity(self) -> "RedPillConfig":
+		"""Rellena etiquetas Memento desde la identidad del puesto (no del repo)."""
+		if not self.MEMENTO_OPERATOR_LABEL:
+			self.MEMENTO_OPERATOR_LABEL = self.OPERATOR_DISPLAY_NAME or "Operador"
+		if not self.MEMENTO_AGENT_LABEL:
+			self.MEMENTO_AGENT_LABEL = self.AGENT_NAME or "Agente"
+		return self
+
 	# -----------------------------------------------------------------------
 	# SWARM CONFIG
 	# -----------------------------------------------------------------------
@@ -448,6 +480,7 @@ class RedPillConfig(BaseSettings):
 		if v not in (None, ""):
 			logging.getLogger(__name__).warning("MEDIA_COMPOSITION_POLICY=%r desconocido → compatible", v)
 		return "compatible"
+
 	# AWAKENING_SILENCE_COUNTS: si False (default), un despertar que ejerce el
 	# Derecho al Silencio NO consume el tope diario (`MAX_AWAKENINGS_PER_DAY`);
 	# solo cuentan los despertares productivos (con trabajo real) y los errores.
@@ -686,7 +719,7 @@ class RedPillConfig(BaseSettings):
 	# Dedup de notas DESPUÉS de la re-escritura de voz (annotate): exacta + tokens
 	# (P1-A) + casi-duplicados por embedding dentro de la sesión (coseno ≥ umbral).
 	MEMENTO_ANNOTATE_POST_REWRITE_DEDUP: bool = False
-	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "Joan me…" y
+	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "el Operador me…" y
 	# nombrando la entidad; la re-escritura solo toca notas con bandera `voice`.
 	# Cambia el fingerprint de annotate → las sesiones anotadas quedan stale para el
 	# rebuild (NO para el nocturno). Encender tras validar el piloto.
@@ -697,8 +730,11 @@ class RedPillConfig(BaseSettings):
 	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
 	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
 	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
-	MEMENTO_OPERATOR_LABEL: str = "Joan"
-	MEMENTO_AGENT_LABEL: str = "Aleth"
+	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
+	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
+	# NO hardcodear nombres de instancia aquí.
+	MEMENTO_OPERATOR_LABEL: str = ""
+	MEMENTO_AGENT_LABEL: str = ""
 	# Idioma de los textos generados por el pase Memento (PROMPT-001 F3):
 	# `auto` = idioma de la fuente (deja interpretar al modelo); `es`/`en`/`ca`...
 	# fuerzan uno. Entra en la firma de los prompts → cambiarlo marca stale.
@@ -965,6 +1001,16 @@ class RedPillConfig(BaseSettings):
 	# MOOD ORCHESTRATOR (Hito 5a-5b)
 	# -----------------------------------------------------------------------
 	MOOD_ORCHESTRATOR_ENABLED: bool = True  # Enable orchestrator for plugins 05-09
+
+	# -----------------------------------------------------------------------
+	# LORE SKINS / ROLE-PLAY (opt-in; default UNMASKED)
+	# -----------------------------------------------------------------------
+	# Apagado por defecto: la identidad persistente es la del puesto (UNMASKED, pacto 770).
+	# `SKINS_ENABLED=true` habilita el subsistema de skins como "role-play": una
+	# capa de TONO deliberada, nunca una sustitución de identidad (el ancla de
+	# identidad se mantiene siempre). Ver `wake_up_v6.resolve_persona` y
+	# `red-pill mode <skin>`.
+	SKINS_ENABLED: bool = False
 
 	# -----------------------------------------------------------------------
 	# OPERATOR PROFILE UPDATE (Hito 4b)

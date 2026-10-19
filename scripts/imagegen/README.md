@@ -21,6 +21,7 @@ Modelos: **NO hardcodeados** — el harness los lee del elenco de máquina
 - `zimage_turbo` — `ZImagePipeline` (diffusers), Z-Image-Turbo 6B (Apache-2.0).
 - `bonsai_ternary` — `GpuPipeline` (image-studio/backend_gpu), Bonsai Image 4B ternario (gemlite INT2) (Apache-2.0).
 - `qwen_image_2_1_turbo` — backend `sd_cpp` (stable-diffusion.cpp, GGUF), Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B (qwen-research, **no comercial**).
+- `flux3_klein` — backend `sd_cpp` (GGUF), FLUX.3 Image Klein 5.6B (destilado) + encoder Qwen3-VL-4B (flux-kommunity, **no comercial**); t2i + edición/multiref (hasta 10 refs a 512² vía `ref_image_args`).
 
 ## Rutas configurables (opción por defecto del puesto; override por entorno)
 
@@ -94,6 +95,25 @@ scripts/imagegen/gen.sh --role photoreal --dry-run     # resuelve, sin generar
 
 También como **comando de consola del repo**: `uv run media-gen …` (entry point
 `media-gen` → `red_pill.media_gen`, delega en `gen_cli.py` con el python del forge).
+
+**Configuración por fichero, plantilla y lote** (`media-gen`):
+
+```sh
+uv run media-gen --template encargo.yaml      # plantilla YAML comentada ('-' → stdout)
+uv run media-gen --config encargo.yaml        # genera según el fichero (los flags lo pisan)
+```
+
+- El fichero acepta las mismas claves que los flags (`model`/`role`, `width`/`height`/`seed`,
+  `steps`/`guidance`, `prompt` en bloque literal) y un bloque `composition:` (vocabulario canónico).
+- **Effort**: `--steps`/`--guidance` (o en el fichero) **pisan** el `sampler` del elenco **solo
+  para esa llamada** (más pasos = mejor/más lento).
+- **Lote**: si el fichero trae **`requests:`** (lista), se generan varias imágenes **reutilizando
+  el modelo** (se carga **una vez por modelo distinto**). Cada `request` puede variar
+  prompt/seed/tamaño/steps/composición.
+- **Precedencia** de cada campo: `defaults de máquina (env) < config < request < flags del CLI`.
+- **`--no-unload`**: no libera la VRAM del **LLM residente** antes de generar (aplica al **inicio**;
+  el modelo de imagen se libera siempre al acabar el proceso). **No** acelera generaciones sueltas
+  —para eso, usa el **lote** (modelo cargado una vez).
 
 **Edición y composición** (backend `sd_cpp`; requieren el `vision`/mmproj en el
 elenco — se resuelve del `sd_cpp:` block):

@@ -1,6 +1,6 @@
 # Dynamic L0-L3 Escalation — Forge
 
-v3.0 escalates **dynamically**: the Orchestrator (main loop) picks an initial level by scoring, then **raises or lowers during execution** based on what happens. Escalation adjusts parallelism and redundancy — **never the gates**: the 9 Zero-Trust rules apply identically at every level.
+v3.0 escalates **dynamically**: the Orchestrator (main loop) picks an initial level by scoring, then **raises or lowers during execution** based on what happens. Escalation adjusts parallelism and redundancy — **never the gates**: the 10 Zero-Trust rules apply identically at every level.
 
 ---
 
