@@ -54,6 +54,47 @@ import gen_image as G  # noqa: E402
 
 DEFAULT_ROLE = "photoreal"
 
+_CONFIG_TEMPLATE = """\
+# Plantilla de configuración para `media-gen --config <fichero>`
+# Generada por `media-gen --template -`. Los comentarios documentan cada campo.
+# Los flags del CLI pisan estos valores si se pasan; si un campo no aparece, se usa el default.
+
+# ── Modelo ──────────────────────────────────────────────────────────────
+# id exacto del elenco (media_profiles.yaml):
+model: flux3_klein
+# ...o resuelve por familia/tarea de media_roles (p.ej. photoreal, portrait, typography):
+# role: photoreal
+
+# ── Tamaño y semilla ────────────────────────────────────────────────────
+# El router ajusta al múltiplo del modelo (dim_multiple). seed: -1 no está soportado (usa un nº).
+width: 1024
+height: 1024
+seed: 42
+
+# ── Effort (override del sampler del elenco; opcional) ──────────────────
+# steps: 8          # nº de pasos (más = mejor/más lento)
+# guidance: 1.0     # CFG/guidance
+
+# ── Prompt (bloque literal; entrécomíllalo tal cual) ────────────────────
+prompt: |
+  Un retrato editorial de un pescador anciano, piel curtida con arrugas,
+  luz de ventana suave, 85mm, fotorrealista, muy detallado.
+
+# ── Composición (condicionamiento por imagen; opcional) ─────────────────
+# Vocabulario canónico; lo NO soportado por el modelo se ignora con aviso (soft-fail).
+# composition:
+#   reference_image: /ruta/ref.png      # o lista: [a.png, b.png] (multi-referencia)
+#   img2img: /ruta/base.png             # edición (re-difusión parcial)
+#   mask: /ruta/mask.png                # inpainting (acompaña a img2img)
+#   strength: 0.6                       # fuerza de re-difusión
+#   negative_prompt: "borroso, texto ilegible"
+
+# ── Ejecución / salida ──────────────────────────────────────────────────
+# out: ~/tmp/red-pill/media/staging/mi-encargo   # dir de salida (def: staging del puesto)
+# no_unload: false    # true = no liberar la VRAM del LLM residente antes de generar
+# dry_run: false      # true = resolver y mostrar, sin generar
+"""
+
 
 def _profiles() -> dict:
 	import yaml
@@ -216,11 +257,20 @@ def main() -> int:
 	ap.add_argument("--list-models", action="store_true", help="emite el array JSON de modelos de imagen (elenco)")
 	ap.add_argument("--list-elements", action="store_true", help="emite el array JSON de elementos (para element_job)")
 	ap.add_argument("--config", help="fichero YAML/TOML con toda la configuración (model, tamaño, seed, prompt, composición…)")
+	ap.add_argument("--template", metavar="FICHERO", help="escribe una plantilla YAML comentada de --config (usa '-' para stdout) y sale")
 	# Fichero de config primero (como defaults); los flags del CLI, si se pasan, mandan.
 	_pre, _ = ap.parse_known_args()
 	if _pre.config:
 		ap.set_defaults(**_config_to_defaults(_load_config_file(_pre.config)))
 	args = ap.parse_args()
+
+	if args.template:
+		if args.template in ("-", ""):
+			print(_CONFIG_TEMPLATE)
+		else:
+			Path(args.template).expanduser().write_text(_CONFIG_TEMPLATE, encoding="utf-8")
+			print(f"[ok] plantilla escrita en {args.template}")
+		return 0
 
 	if args.list_models:
 		print(json.dumps([{"model": m} for m in B.MODELS], ensure_ascii=False))

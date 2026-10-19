@@ -138,3 +138,18 @@ def test_resolucion_sobre_max_pixels_falla_limpio(monkeypatch, tmp_path):
 	with pytest.raises(SystemExit) as ei:
 		m.main()
 	assert "max_pixels" in str(ei.value)
+
+
+def test_template_a_stdout(monkeypatch, capsys):
+	m = _load(monkeypatch)
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--template", "-"])
+	assert m.main() == 0
+	out = capsys.readouterr().out
+	assert "model: flux3_klein" in out and "prompt: |" in out and "composition:" in out
+
+
+def test_template_a_fichero(monkeypatch, tmp_path):
+	m = _load(monkeypatch)
+	p = tmp_path / "cfg.yaml"
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--template", str(p)])
+	assert m.main() == 0 and p.read_text(encoding="utf-8").startswith("#")
