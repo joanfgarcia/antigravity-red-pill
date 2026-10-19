@@ -4,8 +4,8 @@
 // Exit code: 0 = all green, 1 = any failure.
 //
 // Coverage:
-//   Phase A — schema contracts: 15 fixtures (9 schemas, valid+invalid) via validate-report.mjs.
-//   Phase B — deterministic gate: 5 state goldsets, one per violation family (checks 1-10).
+//   Phase A — schema contracts: 17 fixtures (9 schemas, valid+invalid) via validate-report.mjs.
+//   Phase B — deterministic gate: 6 state goldsets, one per violation family (checks 1-11).
 //   Phase C — triage plan: 3 fixtures (2 valid + recommendation, 1 invalid).
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';

@@ -88,6 +88,55 @@
     "fail_reason": {
       "type": "string"
     },
+    "gaps": {
+      "type": "array",
+      "description": "REGLA 10: decisiones de diseño sin cerrar. NO se inventan: se emiten como GAP. Un gap `open` de blast >= medium bloquea el cierre (gate Check 11).",
+      "items": {
+        "type": "object",
+        "required": [
+          "question",
+          "blast_radius",
+          "reversible",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^GAP-\\d+$"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 10
+          },
+          "proposed_default": {
+            "type": "string"
+          },
+          "blast_radius": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "reversible": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "resolved",
+              "downgraded"
+            ]
+          },
+          "resolution_ref": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "notes": {
       "type": "string"
     },

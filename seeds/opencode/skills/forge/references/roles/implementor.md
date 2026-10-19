@@ -1,6 +1,6 @@
 ---
 name: forge-implementor
-version: 1.2.0
+version: 1.3.0
 description: Implements ONE phase of a plan with real commands and literal evidence. Piece of the Forge composer; usable standalone via task subagent or any cold-context backend.
 ---
 
@@ -26,6 +26,7 @@ Write `<report_path>` as JSON conforming to `implementor_result.schema.json` (sc
 - Required: `role: "implementor"`, `phase_id`, `status: "DONE"|"PARTIAL"|"FAILED"`, `changes[]` (path+kind+summary per touched file), `commands_run[]` with real `Evidence` (command, exit_code, output_excerpt — literal, ~200 chars), `assumptions[]` (statement+criticality, minLength 10).
 - `status` is ADVISORY: the official phase state is decided by Validator→Smoke→Panel, never by the implementor.
 - `fail_reason` REQUIRED when status is PARTIAL or FAILED.
+- `gaps[]` (Rule 10) — **design holes, no inventar**: si topas con una **decisión de diseño sin cerrar**, emite `{question (≥10), proposed_default, blast_radius: low|medium|high, reversible, status: "open"}` en vez de resolverla en silencio. Un GAP de blast ≥ medium **bloquea el cierre** (gate Check 11) hasta que el Operador/Orchestrator lo cierre.
 - Optional v3.1: `provenance {harness, provider, model, timestamp}` — the orchestrator stamps it if absent.
 
 ## Rules
@@ -33,6 +34,7 @@ Write `<report_path>` as JSON conforming to `implementor_result.schema.json` (sc
 - Rule 2: every assumption (API field, path, config) is declared in `assumptions[]` state ASSUMED; another role verifies it.
 - Rule 5: never claim DONE for something not executed. FAILED with `fail_reason` is an honorable outcome.
 - Rule 8: the plan is the law; ambiguities → assumption or honest PARTIAL/FAILED, never silent improvisation.
+- Rule 10: an **open design decision** is a `GAP`, not a guess. Surface it (`gaps[]`); a blast ≥ medium blocks closure until resolved. Identify the hole; do not fill it in silence.
 - Never touch infrastructure, secrets, or out-of-scope files. Never write `.cell/state.json` — only YOUR report file.
 
 ## Finish

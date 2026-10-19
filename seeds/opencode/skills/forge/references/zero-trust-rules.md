@@ -1,4 +1,4 @@
-# The 9 Zero-Trust Rules — Forge
+# The 10 Zero-Trust Rules — Forge
 
 > Team motto: *"Verifying is executing. If you did not execute it, you did not verify it."*
 
@@ -129,6 +129,28 @@ When a system is designed to run on **multiple platforms/IDEs**, verify ALL have
 | Smoke Tester sees the asymmetry but classifies it as PASS | Asymmetry is escalated as FAIL |
 
 **Enforcement:** `parity_table` field in schema `smoke_report` + `env_segregation` lens questions.
+
+---
+
+## RULE 10: Design Gaps — GAP, nunca inventar
+
+> Born from the harness retro-inspection (2026-10-18): a less capable model does not err at
+> **programming** — it errs **filling the design holes** left open during analysis. The harness
+> verifies implementation; this rule forces the *design* gap to surface instead of being masked.
+
+If you hit an **open design decision** while implementing (NOT a technical assumption — that is
+Rule 2), **do NOT resolve it in silence**. Stop and emit a `GAP`:
+
+- `gaps[]` in `implementor_result` (schema): `question` (≥10), `proposed_default` (what you would
+  do if nobody decides), `blast_radius` (`low|medium|high`), `reversible`, `status: open`.
+- A `GAP` with `blast_radius` medium/high **blocks closure** (gate Check 11) until the Operator
+  (or, in Mission Mode, the Orchestrator via `decisions[]`) closes it (`status: resolved` +
+  `resolution_ref`) or downgrades it with a documented reason.
+- Prefer an honest `GAP` over an invented decision: surface the hole so a second iteration reviews it.
+
+**Enforcement:** schema `implementor_result.gaps[]`; `gate-check.mjs` Check 11 rejects closing with
+`open` gaps of blast ≥ medium. The `decision_gaps` scout lens (Scout) finds these holes *before*
+implementation — Rule 10 catches them *during*.
 
 ---
 

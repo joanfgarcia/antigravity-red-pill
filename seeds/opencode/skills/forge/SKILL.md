@@ -1,5 +1,5 @@
 ---
-version: 1.4.0
+version: 1.5.0
 name: forge
 description: >-
   Multi-agent Zero-Trust execution composer. Orchestrates 9 composable role pieces (orchestrator, implementor, validator, smoke,
@@ -16,7 +16,7 @@ description: >-
   invocation is the explicit operator opt-in to multi-agent orchestration.
 ---
 
-# Forge v1.4.0 (opencode) — Zero-Trust Multi-Agent Composer
+# Forge v1.5.0 (opencode) — Zero-Trust Multi-Agent Composer
 
 > The composer skill: 9 composable role pieces (agents + portable specs in `references/roles/`), orchestrated by the main loop. Scout (`~/.config/opencode/skills/scout/`) is the sibling analysis skill — its shards execute on individual Forge pieces.
 
@@ -129,7 +129,7 @@ QA Final (`task` subagent `forge-qa`, preconditions read from state.json), then:
 ```bash
 node <skill>/scripts/gate-check.mjs .cell/state.json
 ```
-The gate recomputes the official verdict (7 checks, 10 in mission). If CLOSED → fix violations and repeat. **The team cannot close what the gate does not open.**
+The gate recomputes the official verdict (8 checks, 11 in mission). If CLOSED → fix violations and repeat. **The team cannot close what the gate does not open.**
 
 ### Step 6 — Render and honest delivery
 ```bash
@@ -151,7 +151,7 @@ Seven pillars — full detail in `references/mission-mode.md`:
 
 **Model profile** (`modelProfile: 'frontier'|'standard'`): with `standard` → strict mode (plan to the letter, zero improvisation, improvements registered as PROPOSAL), always 5-lens panel, escalation scoring +1. Gates are identical: they do not know which model wrote the JSON.
 
-## 7. The 9 Zero-Trust Rules
+## 7. The 10 Zero-Trust Rules
 
 Full text with enforcement in `references/zero-trust-rules.md`:
 
@@ -166,6 +166,7 @@ Full text with enforcement in `references/zero-trust-rules.md`:
 | 7 | Environment Segregation | panel lens `env_segregation` |
 | 8 | The Plan is the Law | lens `plan_completeness` + coverage vs anchor plan; deviations only via documented `decision` |
 | 9 | Environment Symmetry | `parity_table` in smoke; asymmetry → critical assumption |
+| 10 | Design Gaps — GAP, never invent | schema `implementor_result.gaps[]` + gate check 11 (0 open gaps of blast ≥ medium); `decision_gaps` scout lens finds them pre-implementation |
 
 Rules do not change with level: they apply identically from L0 to L3 and mission.
 
@@ -187,5 +188,6 @@ Verified deterministically by `scripts/gate-check.mjs` — the orchestrator cann
 - [ ] Final adversarial panel = `CLEARED` (check 7)
 - [ ] *(Mission)* decisions with rationale and sources (check 8); actionable pending_human (check 9)
 - [ ] *(Mission)* `live_processes[]` empty — zero zombies (check 10)
+- [ ] ZERO design gaps `open` with blast ≥ medium — surfaced as `GAP`, not invented (check 11, Rule 10)
 
 **If the gate is CLOSED → the task is NOT reported as DONE.** It is reported with its real state: partial, with pending items, with documented blockers.
