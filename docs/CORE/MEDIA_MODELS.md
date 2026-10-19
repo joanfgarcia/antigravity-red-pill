@@ -220,6 +220,12 @@ compone hasta **10 referencias** en 8 GB (~200 MB VRAM/ref, ~13 s/ref); con refs
 ~3 GB RAM). El proyector `vision`/`--llm_vision` es igualmente **opcional**
 (depende del modelo: Qwen-Image lo necesita, FLUX.3 edita sin él).
 
+Otro knob del bloque `sd_cpp:` es **`offload_over_pixels: N`**: cuando la
+resolución pedida supera N píxeles, el harness añade `--offload-to-cpu`
+automáticamente. Sirve para que un modelo con DiT residente (FLUX.3) llegue a
+~2 MPix en 8 GB sin penalizar el t2i pequeño (p. ej. `1500000` = offload por
+encima de ~1.5 MPix).
+
 ---
 
 ## 6. License

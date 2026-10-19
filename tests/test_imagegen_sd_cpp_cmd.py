@@ -80,3 +80,11 @@ def test_mask_inpainting(monkeypatch):
 	m = _load(monkeypatch)
 	cmd = m._sd_cpp_command(_ctx(), "inpaint", 1, 1024, 1024, "/o.png", image="/in.png", mask="/m.png")
 	assert cmd[cmd.index("--mask") + 1] == "/m.png"
+
+
+def test_offload_condicional_por_pixeles(monkeypatch):
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["offload_over_pixels"] = 1500000
+	assert "--offload-to-cpu" not in m._sd_cpp_command(ctx, "p", 1, 1024, 1024, "/o.png")
+	assert "--offload-to-cpu" in m._sd_cpp_command(ctx, "p", 1, 1920, 1088, "/o.png")

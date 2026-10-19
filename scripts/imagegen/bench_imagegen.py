@@ -212,6 +212,8 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 			cmd += ["--llm_vision", str(vision)]
 		if sd.get("ref_image_args"):
 			cmd += ["--ref-image-args", _sd_ref_args(sd["ref_image_args"])]
+	if sd.get("offload_over_pixels") and int(width) * int(height) > int(sd["offload_over_pixels"]) and "--offload-to-cpu" not in cmd:
+		cmd.append("--offload-to-cpu")
 	cmd += [str(a) for a in (sd.get("extra_args") or [])]
 	return cmd
 

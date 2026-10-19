@@ -154,7 +154,7 @@ media_profiles:
     capabilities: ["photorealism", "concept", "landscape", "typography", "portrait"]
     not_capable_for: []
     priority: 2
-    constraints: { dim_multiple: 16, max_pixels: 1048576, max_vram_mb: 7600 }   # ÷16; ~1 MPix (1024² pico ~6.8 GB; >1 MPix OOM en 8 GB)
+    constraints: { dim_multiple: 16, max_pixels: 2097152, max_vram_mb: 7600 }   # ÷16; ~2 MPix (a ≤1.5 MPix sin offload; por encima, offload automático)
     adapters: ["snap_dims", "reject_oversize", "gate_composition"]
     composition: [reference_image, multi_reference]   # t2i + edición/multiref (hasta 10 refs)
     sd_cpp:
@@ -163,6 +163,7 @@ media_profiles:
       vae: "~/opt/red-pill-custom-image-models/flux-3-image-klein/ae.safetensors"
       backend_assign: "te=cpu,diffusion=cuda0,vae=cuda0"
       ref_image_args: "vae_input_max_pixels=262144,resize_before_vae=true"   # refs a 512² → caben hasta 10 refs en 8 GB
+      offload_over_pixels: 1500000   # >1.5 MPix: el harness añade --offload-to-cpu (permite llegar a ~2 MPix en 8 GB)
       extra_args: ["--diffusion-fa"]
     license:
       id: "flux-kommunity"

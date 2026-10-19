@@ -134,7 +134,7 @@ def test_resolucion_sobre_max_pixels_falla_limpio(monkeypatch, tmp_path):
 	"""Guard del CLI (espejo de `reject_oversize`): por encima de max_pixels → SystemExit limpio, no OOM."""
 	m = _load(monkeypatch)
 	monkeypatch.setenv("RP_MEDIA_STAGING", str(tmp_path / "stg"))
-	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--model", "flux3_klein", "--prompt", "x", "--width", "1920", "--height", "1088"])
+	monkeypatch.setattr("sys.argv", ["gen_cli.py", "--model", "flux3_klein", "--prompt", "x", "--width", "2048", "--height", "1280"])
 	with pytest.raises(SystemExit) as ei:
 		m.main()
 	assert "max_pixels" in str(ei.value)
