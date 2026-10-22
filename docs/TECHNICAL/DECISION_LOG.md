@@ -4,7 +4,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
-## [AD-058] Pillow 12.3.0 — CVEs aceptados; fastembed y re-embedding en la próxima MAYOR
+## [AD-059] Pillow 12.3.0 — CVEs aceptados; fastembed y re-embedding en la próxima MAYOR
 **Date**: 2026-10-22
 **Status**: ACCEPTED (temporal). Plan vinculado a la próxima versión **mayor**.
 **Context**: `pip-audit` (bloqueante) del CI detectó 35 CVEs en `pillow 12.3.0` (fix 13.0.0); `certifi` se actualizó a 2026.10.19. El proyecto usa `fastembed` para los **embeddings de texto** de la memoria (`paraphrase-multilingual-MiniLM-L12-v2`, 384d). `fastembed` arrastra `pillow` para sus modelos de **imagen** (que NO usamos) y no permite `pillow 13` en 3.13+/Windows: el resolver retrocede y el lock es irresoluble con 13. Forzar 13 con override es posible, pero es un bump mayor que puede romper el código de imagen/media (PIL) y no arregla la dependencia en otras máquinas.
