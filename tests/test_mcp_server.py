@@ -316,7 +316,10 @@ class TestListTools:
 		assert "bunker_memory_api" in tool_names
 		assert "sovereign_handshake" in tool_names
 		assert "job_manager_api" in tool_names
-		assert len(result) == 5
+		assert "announce_intent" in tool_names
+		assert "fetch_events" in tool_names
+		assert "check_parallel_sessions" in tool_names
+		assert len(result) == 8
 
 
 class TestControlBunkerAdditional:
@@ -870,3 +873,66 @@ class TestMainBlock:
 			with patch("red_pill.mcp_server.server.run") as mock_run:
 				await main()
 				assert mock_run.called
+
+
+class TestSession0b:
+	"""Fase 0b: reloj (F1), espejo git (F4) y misión por repo tocado (F3)."""
+
+	@staticmethod
+	async def _handshake(arguments):
+		from types import SimpleNamespace
+
+		from red_pill.mcp_server import handle_call_tool
+
+		async def _fake_interceptor(args):
+			return [SimpleNamespace(text="ok")]
+
+		with patch("red_pill.mcp_server.handle_interceptor_rp", new=_fake_interceptor):
+			return await handle_call_tool("sovereign_handshake", arguments)
+
+	async def test_reloj_late_y_se_guarda(self):
+		from red_pill.session.store import SessionRegistry
+
+		await self._handshake({"user_prompt": "x", "originator": "opencode:clock1"})
+		await self._handshake({"user_prompt": "y", "originator": "opencode:clock1"})
+		reg = SessionRegistry()
+		row = reg.get_by_originator("opencode:clock1")
+		assert row["last_seen_global_turn"] >= 2
+		assert reg.get_max_global_turn() >= row["last_seen_global_turn"]
+
+	async def test_espejo_git_se_llena(self, tmp_path):
+		import subprocess
+
+		repo = tmp_path / "proj"
+		repo.mkdir()
+		subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+		subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+		subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+		(repo / "f").write_text("x")
+		subprocess.run(["git", "add", "."], cwd=repo, check=True)
+		subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+		subprocess.run(["git", "checkout", "-q", "-b", "feat/mirror"], cwd=repo, check=True)
+		head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
+
+		from red_pill.session.store import SessionRegistry
+
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "opencode:mir1", "workdir": str(repo)}):
+			await self._handshake({"user_prompt": "x"})
+		row = SessionRegistry().get_by_originator("opencode:mir1")
+		assert row["branch"] == "feat/mirror"
+		assert row["worktree"] == str(repo.resolve())
+		assert row["head_commit"] == head
+		assert row["mission_id"] == "repo:feat/mirror"
+
+	async def test_mision_por_repo_tocado_f3(self):
+		from red_pill.session.store import SessionRegistry
+
+		inferred = {"branch": "feat/touched", "worktree": "/ws/touched", "head_commit": "deadbeef"}
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "opencode:f3", "workdir": "/no/repo"}):
+			with patch("red_pill.mcp_server._current_git_branch", return_value=None):
+				with patch("red_pill.core.session_index.infer_session_git", return_value=inferred):
+					res = await self._handshake({"user_prompt": "x"})
+		assert 'mission="repo:feat/touched"' in res[0].text
+		row = SessionRegistry().get_by_originator("opencode:f3")
+		assert row["branch"] == "feat/touched"
+		assert row["worktree"] == "/ws/touched"

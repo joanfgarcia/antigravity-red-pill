@@ -110,3 +110,24 @@ class TestStore:
 		gt2 = reg.next_global_turn("claude_code:s1", ["x"])
 		assert gt1 == 1 and gt2 == 2
 		assert reg.get_max_global_turn() == 2
+
+
+class TestListingAndContracts:
+	def test_list_sessions_orders_by_updated_desc(self, reg):
+		import time
+
+		reg.upsert_session(originator="a:1", continuity_id="x1", mission_id="m1")
+		time.sleep(0.01)
+		reg.upsert_session(originator="b:2", continuity_id="x2", mission_id="m2")
+		assert [r["originator"] for r in reg.list_sessions()] == ["b:2", "a:1"]
+
+	def test_session_registry_satisfies_sessionstore(self, reg):
+		from red_pill.session.contracts import SessionStore
+
+		assert isinstance(reg, SessionStore)
+
+	def test_session_board_satisfies_presenceboard(self):
+		from red_pill.session.board import SessionBoard
+		from red_pill.session.contracts import PresenceBoard
+
+		assert isinstance(SessionBoard(), PresenceBoard)

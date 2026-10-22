@@ -4,6 +4,94 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-058] Pillow 12.3.0 — CVEs aceptados; fastembed y re-embedding en la próxima MAYOR
+**Date**: 2026-10-22
+**Status**: ACCEPTED (temporal). Plan vinculado a la próxima versión **mayor**.
+**Context**: `pip-audit` (bloqueante) del CI detectó 35 CVEs en `pillow 12.3.0` (fix 13.0.0); `certifi` se actualizó a 2026.10.19. El proyecto usa `fastembed` para los **embeddings de texto** de la memoria (`paraphrase-multilingual-MiniLM-L12-v2`, 384d). `fastembed` arrastra `pillow` para sus modelos de **imagen** (que NO usamos) y no permite `pillow 13` en 3.13+/Windows: el resolver retrocede y el lock es irresoluble con 13. Forzar 13 con override es posible, pero es un bump mayor que puede romper el código de imagen/media (PIL) y no arregla la dependencia en otras máquinas.
+**Decision**:
+- **Aceptar `pillow 12.3.0` por ahora**: los 35 IDs se añaden a `[tool.pip-audit]` y al audit bloqueante del CI, con justificación. CI verde (`No known vulnerabilities found, 37 ignored`).
+- **Próxima versión MAYOR**: sustituir/actualizar `fastembed` y **re-embeber todas las colecciones** con backup previo. Trigger: la próxima mayor (o cuando `fastembed` permita `pillow 13`, lo que ocurra antes).
+- Riesgo actual: local y bajo — los CVEs son de *parsing* de imágenes; procesamos imágenes locales/trusted (imagegen), no expuestas.
+**Plan de la mayor**:
+1. Backup: snapshot de Qdrant + `bunker_queue.db`/`session.db` + Memento.
+2. Sustituir `fastembed` (o el backend de embeddings) por uno que no arrastre `pillow` (o que permita 13).
+3. Re-embeber TODAS las colecciones (work ~22k, social ~1.6k, y las demás) con el mismo modelo/dimensión (384d) o migrar el espacio con índice dual y validación de recall.
+4. Validar paridad de recall/calidad y el arnés media con PIL 13.
+5. Quitar los ignores de pillow y actualizar el lock.
+6. Verificar instalaciones/actualizaciones en otras máquinas.
+**Alternatives**: (a) forzar pillow 13 ahora — riesgo media/PIL y no arregla fastembed en 3.13+/otras máquinas; (b) ignorar sin plan — deuda sin trigger; (c) sustituir fastembed ahora — coste alto (re-embedding) sin urgencia local.
+**Consequences**: CI verde y riesgo local acotado; deuda explícita con trigger y plan. `certifi` sí se actualizó; el extra `hf-transfer` de `huggingface-hub` se retiró (eliminado en 1.21.0). El plan de re-embedding se desarrolla en la nota de deuda de la próxima mayor.
+
+---
+
+## [AD-057] Alma y Coro Fase 2 (slice 2) — sala de guerra, digest SILENT/HEADER y tablón por misión
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro-digest`). **Panel adversarial de 3 lentes: CLEARED; P1 corregidos.**
+**Context**: con `mission_events` (AD-056) y el registro (AD-055), falta que un alma se entere al despertar de lo que pasó y de quién más está viva, sin inflar el contexto.
+**Decision**:
+- **`check_parallel_sessions`** (MCP, solo lectura): `global_turn`, tu `last_seen`, divergencia y sesiones recientes con originator/alma/misión/campaña/rol/delta/ttl/afinidad y (opcional) rama/worktree/head. Campos saneados.
+- **`session_registry.last_seen_event_seq`** (migración v3, ALTER tolerante a carrera) = cursor del digest. El handshake lo fija a `MAX(event_seq)` **después** de calcular el digest (si el digest falla, reintenta); un leg nuevo de un alma hereda el cursor de sus hermanos.
+- **Digest en el handshake**: `SILENT` si no hay nada; `HEADER` con `N novedades (desde seq X) · M awaiting_operator · K sesiones paralelas`. Una línea; sin volcar eventos.
+  - Novedades: `previous_event_seq < event_seq <= until_seq` de **tu misión de confianza**.
+  - `awaiting_operator`: pendientes **abiertos** (sin cursor; la resolución por `unblocked`/`mission_closed` es Fase 2).
+  - Paralelas: sesiones **vivas** (liveness), no filas rancias del registro.
+- **Identidad**: en arnés con hook (opencode/claude_code), misión/campaña/rol salen **solo del env** (`REDPILL_MISSION_ID`/`REDPILL_CAMPAIGN_ID`/`REDPILL_ROLE`); el argumento del modelo no los declara. Sin hook (pi/antigravity) se aceptan como relay (residual local).
+- **`session_board`** agrupado por **misión/campaña** (vivas primero; misión entrecomillada; campaña `mixta` si difiere).
+**Alternatives**: (a) volcar eventos en el handshake — infla el contexto; (b) cursor por `global_turn` — pierde eventos del mismo turno (bug de la ronda 1); (c) digest siempre presente — ruido; (d) contar `awaiting` por cursor — desaparece al turno siguiente.
+**Rationale / Evidence**: suite **3134 passed**, `ruff`/`mypy` limpios; tests de SILENT, novedades/cursor, `awaiting` abierto, paralelas (liveness), misión de confianza en hook, migración v3 y agrupación del tablón. Panel adversarial CLEARED (sin bloqueante; P1 corregidos).
+**Consequences**: el coro ya avisa al despertar y la sala de guerra agrupa por misión; el detalle es pull (`fetch_events`/`session_board`). Siguiente: Fase 1 (alma/switch) y D26 (red).
+
+---
+
+## [AD-056] Alma y Coro Fase 2 (slice 1) — substrato de eventos de misión
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro`). **Revisado por panel adversarial de 3 lentes y endurecido.**
+**Context**: el coro necesita un substrato tipado para que un alma se entere de lo que hace otra sin compartir contexto ni depender de leer su `opencode.db`.
+**Decision**:
+- `mission_events` **append-only** en `session.db`: `event_seq` (AUTOINCREMENT, **cursor real**), `event_id` (UUID, UNIQUE), `type`, `mission_id`, `campaign_id`, `continuity_id`, `originator`, `global_turn` (referencia del turno), `summary`, `ref`, `sealed`, `created_at`; índices por `(mission_id, event_seq)` y `(type, created_at)`; **triggers** que abortan UPDATE/DELETE.
+- Taxonomía **cerrada**: `phase_done, commit, claim_acquired, claim_released, blocked, unblocked, awaiting_operator, intent_updated, mission_closed, objection`. Tipo desconocido → rechazo.
+- **Cursor `event_seq`, no `global_turn`**: varios eventos comparten turno y el reloj solo avanza en el handshake; `fetch_events(since_seq)` no pierde eventos. (`since_seq` sustituye al `since_global_turn` del borrador del RFC.)
+- **Anti-inyección**: `summary` (máx. 800) y `ref` (máx. 400) se sanean al escribir (sin controles/ANSI, una línea, `<`/`>` neutralizados); el render es una línea por evento.
+- **Identidad de confianza**: `announce_intent`/`fetch_events` resuelven al llamante **solo** por bridge del arnés/env (`REDPILL_ORIGINATOR`, `REDPILL_MISSION_ID`); los argumentos del modelo (`originator`, `mission_id`, `continuity_id`, `campaign_id`) **no** pueden auto-declarar identidad. Sin cuerpo compuesto → **fail-closed**. La campaña sale de la sesión, no del argumento.
+- **`sealed`** filtrado **en SQL** con `viewer_originator` (antes del LIMIT: no consume cupo ni revela existencia); `count_events` también.
+- **`_resolve_session_identity(persist=False)`**: identidad sin reloj ni escritura; sin fila en el registro no se inventa un `continuity_id` (`None`, no alma fantasma).
+- **`objection`** en la taxonomía: engancha con la Carta de Límites.
+**Endurecimiento (ronda 2 del panel adversarial):**
+- **Ancla de confianza en el handshake**: el `originator` del bridge/env manda; el argumento del modelo solo se usa si no hay bridge/env. `REDPILL_MISSION_ID` (env) manda sobre el `mission_id` del modelo. En un arnés con hook, un `originator` ajeno no suplanta a otra sesión.
+- **Lecturas deny-by-default**: `fetch_events` solo tu propia misión en este slice; cross-misión se difiere al digest/orquestador con autorización explícita.
+- **Migración**: `PRAGMA user_version=1`; una tabla `mission_events` pre-release (sin `event_seq`) se recrea (nunca se desplegó).
+- **Cuotas/caps**: 30 eventos/min por `(mission_id, originator)`; caps de 200 en mission/campaign/originator; bidi/zero-width fuera; trigger `no_replace` (`INSERT OR REPLACE` no salta el append-only).
+- **Residual declarado**: arneses sin hook (pi/antigravity) siguen aceptando `originator` por argumento; el bridge es un fichero que el arnés debe proteger (endurecimiento de harness, fuera de este slice).
+**Endurecimiento (ronda 3, identidad de misión):**
+- **La misión de eventos sale del canal de confianza** (env `REDPILL_MISSION_ID` o la rama del workspace), **no** de la fila del registro: aunque el handshake escriba una misión envenenada, el evento no la usa.
+- **`sealed` se ata al `originator`** que lo publicó (no a la misión): otro cuerpo de la misma misión no lo ve.
+- **Fail-closed con arnés de hook** (opencode/claude_code): sin bridge no hay cuerpo (sin upsert/relay); el argumento del modelo no suplanta. El env `REDPILL_ORIGINATOR` (jobs) gana al bridge.
+- **Claves normalizadas con `_clean_key`** (sin neutralizar `<>`, válido en ramas git) y **render saneado**: no se pierden eventos ni se rompe la atribución.
+- **`no_replace` por `event_id` y `event_seq`**; `user_version` solo si cambia; `busy_timeout` antes del WAL (arranque concurrente).
+- **`sealed` estricto**: un valor no-boolean se rechaza (no se interpreta como público).
+- **Deuda de superficie**: los roles headless del backend `local` no exponen `announce_intent`/`fetch_events`; y la misión del manifiesto puede quedar escrita en la fila del registro por un handshake (el evento no la usa; el tablón podría mostrarla).
+**Alternatives**: (a) ficheros `.md` — pudren y duplican fuente; (b) tabla sin tipos — pierde contrato/filtro; (c) publicar en misión ajena — spoofing; (d) cursor por `global_turn` — pierde eventos del mismo turno; (e) aceptar `originator` por argumento — identidad auto-afirmada.
+**Rationale / Evidence**: panel adversarial de 3 lentes, tres rondas → BLOCKER de identidad corregidos (misión por canal de confianza, `sealed` por originator, fail-closed con hook); suite **3123 passed**, `ruff`/`mypy` limpios; tests de spoof (evento persistido), misión no redirigible, cursor sin pérdida, saneado de claves/render, migración, rate-limit, REPLACE, deny-by-default y env precedence.
+**Consequences**: la Fase 2 puede construir el digest ("novedades desde tu `since_seq`"), la sala de guerra por misión y las incursiones/iniciativa. Deuda: digest + `check_parallel_sessions`/`fetch_divergent_turns`; cross-misión autorizado; jobs/awakenings deben aportar `REDPILL_ORIGINATOR`/`REDPILL_MISSION_ID`; arneses sin hook y protección del bridge.
+
+---
+
+## [AD-055] Alma y Coro Fase 0b — registro, reloj, espejo git y tablón desde el registro
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED. Extiende AD-050 (Fase 0a).
+**Context**: la 0a dejó viva la identidad de sesión, pero el informe de campo (desk, 2026-10-13) midió tres fricciones: el reloj global no latía (`global_turn_seq` con 0 filas y `next_global_turn` sin llamantes), el espejo git del registro estaba vacío (`upsert_session` no recibía `branch`/`worktree`/`head_commit`) y el tablón (`session_board`) leía los latidos de liveness, no el registro. Además la misión caía siempre a `mission:adhoc-<fecha>` porque el cwd del agente no es un repo.
+**Decision**:
+1. **Reloj (F1).** `_resolve_session_identity` incrementa `global_turn_seq` una vez por turno con cuerpo (`originator` compuesto) y guarda el valor en `session_registry.last_seen_global_turn`. Solo pasan por el handshake los turnos conversacionales/de trabajo; señales y jobs sin afinidad no incrementan (D2-a).
+2. **Espejo git (F4).** Se pasan `branch`/`worktree`/`head_commit` al `upsert_session`, resueltos por `core.gitinfo.git_snapshot` (`git -C`, cacheado 60s, fuera del event loop). `worktree` es la raíz del árbol (`--show-toplevel`, worktree-aware).
+3. **Misión por repo tocado (F3 / D22).** Si el workspace del agente no es un repo (IDE abierto en una carpeta padre), la misión se resuelve por el repo de las rutas TOCADAS (`session_index.infer_session_git`, P1b; solo opencode, cacheado 60s). `adhoc` sigue siendo el fallback.
+4. **Tablón desde el registro (F2).** `session_board` une el registro por `originator` (alma/misión/afinidad/espejo git) y usa los latidos solo como señal de vivo/activo; las filas del registro sin latido reciente entran como "recientes" (TTL `SESSION_BOARD_REGISTRY_TTL_H`, default 12h). El tablón es una VISTA del registro.
+5. **Contratos.** `session/contracts.py` declara los Protocols (`SessionStore`, `PresenceBoard`, `AffinityResolver`; `HydrationPolicy`/`ClaimDriver`/`Compactor` para las Fases 2/4/3) y `session/board.py` implementa `PresenceBoard`.
+**Alternatives**: (a) contador materializado por alma en vez de una fila por turno — el RFC §3.1 fija el log append-only (una fila/turno, `MAX()` = reloj); (b) tablón como segundo renderizador — descartado, una sola superficie; (c) `ws:` para la misión — descartado (D15: la afinidad por filesystem no refleja cómo trabaja el operador).
+**Rationale / Evidence**: el informe de campo del desk fija F1–F4 con evidencia; suite completa verde (3095 passed) y registro verificado en vivo.
+**Consequences**: la Fase 2 (coro) ya tiene dónde apoyarse (reloj monotónico, espejo git y tablón con misiones reales). Deuda declarada: la colisión del bridge entre sesiones top-level concurrentes (P2a, AD-050) sigue diferida, y `repo:<rama>` no distingue dos repos en la misma rama (mejora futura del scope).
+
+---
+
 ## [AD-054] Modelo de ramas `solo` (rama viva `next`) vs `canonical`, elegido por config
 **Date**: 2026-10-19
 **Status**: ACCEPTED & DOCUMENTED. En vigor desde el ciclo siguiente al release 8.2.0. Fuente única: `docs/CORE/WORKFLOWS.md` §0.
@@ -32,6 +120,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-052] Media como datos: el elenco (`media_profiles.yaml`) es la única fuente de máquina
 **Date**: 2026-10-14
 **Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende el router/elenco (ver `docs/CORE/MEDIA_MODELS.md`).
 **Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres

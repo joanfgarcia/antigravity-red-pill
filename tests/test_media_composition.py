@@ -151,8 +151,6 @@ def test_parity_router_vs_harness(tmp_path, monkeypatch):
 	model = harness.MODELS["flux2_klein"]
 	meta = {"reference_image": "a.png", "img2img": "b.png"}
 	kept, hwarns = harness.apply_composition(dict(meta), model)
-	rparams, rwarns = _adapter_gate_composition(
-		{"composition": dict(meta)}, {**model, "_policy": "compatible"}
-	)
+	rparams, rwarns = _adapter_gate_composition({"composition": dict(meta)}, {**model, "_policy": "compatible"})
 	assert rparams["composition"] == kept == {"reference_image": "a.png"}
 	assert len(rwarns) == len(hwarns) == 1
