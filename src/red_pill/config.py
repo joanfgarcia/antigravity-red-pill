@@ -503,6 +503,10 @@ class RedPillConfig(BaseSettings):
 	# SESSION_LIVENESS_TTL_H: retención de los ficheros de latido para limpieza
 	# por mtime (distinta del umbral de "activo ahora"). Janitor `session_liveness`.
 	SESSION_LIVENESS_TTL_H: int = 48
+	# MULTISESSION_PURGE_AFTER_SECS (D14): antigüedad mínima de un leg expirado
+	# antes de borrarlo de `session_registry` (24h). `mission_events` no se toca:
+	# su TTL es la vida de la misión, no la presencia.
+	MULTISESSION_PURGE_AFTER_SECS: int = 86400
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

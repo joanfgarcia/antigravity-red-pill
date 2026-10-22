@@ -282,6 +282,23 @@ class TestHardening:
 		assert row["campaign_id"] is None
 		assert row["role"] == "task"
 
+	async def test_unregister_closes_own_leg_only(self, tmp_path):
+		from red_pill.session.store import SessionRegistry
+
+		bridge = {"originator": "opencode:ev9", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				await self._handshake({"user_prompt": "x"})
+				out = await self._call("unregister_session", {})
+		assert "leg cerrado" in out
+		assert SessionRegistry().get_by_originator("opencode:ev9")["ttl_state"] == "expired"
+
+	async def test_unregister_without_body_denied(self, tmp_path):
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
+			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "", "REDPILL_HARNESS": ""}):
+				out = await self._call("unregister_session", {})
+		assert "deny-by-default" in out
+
 
 def test_rate_limit(tmp_path):
 	reg = SessionRegistry(str(tmp_path / "s.db"))

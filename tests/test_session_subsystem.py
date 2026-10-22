@@ -112,6 +112,45 @@ class TestStore:
 		assert reg.get_max_global_turn() == 2
 
 
+class TestLifecycle:
+	def test_unregister_marks_expired_and_is_idempotent(self, reg):
+		reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="repo:main")
+		assert reg.unregister_session("opencode:s1") is True
+		row = reg.get_by_originator("opencode:s1")
+		assert row["ttl_state"] == "expired"
+		assert reg.unregister_session("opencode:s1") is True
+		assert reg.get_by_originator("opencode:s1")["ttl_state"] == "expired"
+		assert reg.unregister_session("") is False
+
+	def test_unregister_keeps_other_legs_of_same_soul(self, reg):
+		reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="repo:main")
+		reg.upsert_session(originator="claude_code:s2", continuity_id="alma-1", mission_id="repo:main")
+		reg.unregister_session("opencode:s1")
+		assert reg.get_by_originator("opencode:s1")["ttl_state"] == "expired"
+		assert reg.get_by_originator("claude_code:s2")["ttl_state"] == "active"
+
+	def test_purge_expired_respects_window(self, reg):
+		reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="repo:main")
+		reg.unregister_session("opencode:s1")
+		assert reg.purge_expired(after_s=3600) == 0
+		assert reg.get_by_originator("opencode:s1") is not None
+		assert reg.purge_expired(after_s=0) == 1
+		assert reg.get_by_originator("opencode:s1") is None
+
+	def test_purge_never_deletes_active_rows(self, reg):
+		reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="repo:main")
+		assert reg.purge_expired(after_s=0) == 0
+		assert reg.get_by_originator("opencode:s1") is not None
+
+	def test_expired_rows_hidden_from_registry_view(self, reg, monkeypatch):
+		from red_pill.core import session_index
+
+		reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="repo:main")
+		reg.unregister_session("opencode:s1")
+		monkeypatch.setattr("red_pill.session.store.SessionRegistry", lambda *a, **k: reg)
+		assert session_index._load_registry() == {}
+
+
 class TestListingAndContracts:
 	def test_list_sessions_orders_by_updated_desc(self, reg):
 		import time

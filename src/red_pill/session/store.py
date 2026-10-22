@@ -514,3 +514,46 @@ class SessionRegistry:
 				(int(seq), str(originator or "")),
 			)
 			conn.commit()
+
+	# ── Ciclo de vida del leg (D14) ─────────────────────────────────────────
+	def unregister_session(self, originator: str) -> bool:
+		"""Expira EXPLÍCITAMENTE un leg (cierre de sesión); `True` si existía.
+
+		Marca `ttl_state='expired'` y sella `updated_at` para que la purga D14
+		cuente el plazo desde el cierre. El tablón deja de mostrarlo de inmediato.
+		"""
+		origin = str(originator or "").strip()
+		if not origin:
+			return False
+		with self._connect() as conn:
+			cur = conn.execute(
+				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ?, updated_at = ? WHERE originator = ?",
+				(time.time(), time.time(), origin),
+			)
+			conn.commit()
+			return bool(cur.rowcount)
+
+	def purge_expired(self, after_s: Optional[float] = None) -> int:
+		"""Purga D14: borra legs expirados hace más de `after_s` (default config).
+
+		`MULTISESSION_PURGE_AFTER_SECS` (24h). Nunca toca filas activas ni
+		`mission_events` (su TTL es la vida de la misión, no la presencia).
+		`VACUUM` best-effort: no puede correr dentro de una transacción.
+		"""
+		import red_pill.config as cfg
+
+		window = float(after_s) if after_s is not None else float(getattr(cfg.get_config(), "MULTISESSION_PURGE_AFTER_SECS", 86400))
+		cutoff = time.time() - max(0.0, window)
+		with self._connect() as conn:
+			cur = conn.execute(
+				"DELETE FROM session_registry WHERE ttl_state = 'expired' AND updated_at < ?",
+				(cutoff,),
+			)
+			conn.commit()
+			removed = int(cur.rowcount or 0)
+			if removed:
+				try:
+					conn.execute("VACUUM")
+				except sqlite3.OperationalError:
+					pass
+		return removed

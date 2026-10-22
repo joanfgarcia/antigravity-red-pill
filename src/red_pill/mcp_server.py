@@ -1954,6 +1954,11 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 			persisted = registry_obj.get_by_originator(originator)
 			if persisted and persisted.get("continuity_id"):
 				continuity_id = persisted["continuity_id"]
+			# D14: purga perezosa de legs expirados (una vez por turno persistido).
+			try:
+				registry_obj.purge_expired()
+			except Exception as e:
+				logger.debug(f"[SessionRegistry] purge unavailable: {e}")
 	except Exception as e:
 		logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
 		if not continuity_id:
@@ -2373,6 +2378,8 @@ async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
 		]
 		shown = 0
 		for row in rows:
+			if row.get("ttl_state") == "expired":
+				continue
 			if (now - float(row.get("updated_at") or 0.0)) > ttl:
 				continue
 			last = int(row.get("last_seen_global_turn") or 0)
@@ -2404,6 +2411,31 @@ async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
 		if shown == 0:
 			lines.append("(sin sesiones recientes)")
 		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
+
+
+@registry.register(
+	name="unregister_session",
+	description=(
+		"[OFFICIAL] Cierra TU leg explícitamente (fin de sesión): lo marca expirado "
+		"en el registro y deja de aparecer en el tablón. Solo tu propio cuerpo "
+		"(bridge/env); los argumentos del modelo no declaran identidad."
+	),
+	schema={"type": "object", "properties": {}},
+)
+async def handle_unregister_session(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		session = await _caller_session(arguments)
+		originator = str(session.get("originator") or "")
+		if ":" not in originator:
+			return [types.TextContent(type="text", text="[CORO] sin cuerpo compuesto (bridge/env); deny-by-default.")]
+		closed = SessionRegistry().unregister_session(originator)
+		if closed:
+			return [types.TextContent(type="text", text=f"[CORO] leg cerrado: {originator}")]
+		return [types.TextContent(type="text", text=f"[CORO] sin leg registrado: {originator}")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
 
