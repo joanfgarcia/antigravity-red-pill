@@ -316,7 +316,9 @@ class TestListTools:
 		assert "bunker_memory_api" in tool_names
 		assert "sovereign_handshake" in tool_names
 		assert "job_manager_api" in tool_names
-		assert len(result) == 5
+		assert "announce_intent" in tool_names
+		assert "fetch_events" in tool_names
+		assert len(result) == 7
 
 
 class TestControlBunkerAdditional:

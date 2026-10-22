@@ -4,6 +4,39 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-056] Alma y Coro Fase 2 (slice 1) — substrato de eventos de misión
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro`). **Revisado por panel adversarial de 3 lentes y endurecido.**
+**Context**: el coro necesita un substrato tipado para que un alma se entere de lo que hace otra sin compartir contexto ni depender de leer su `opencode.db`.
+**Decision**:
+- `mission_events` **append-only** en `session.db`: `event_seq` (AUTOINCREMENT, **cursor real**), `event_id` (UUID, UNIQUE), `type`, `mission_id`, `campaign_id`, `continuity_id`, `originator`, `global_turn` (referencia del turno), `summary`, `ref`, `sealed`, `created_at`; índices por `(mission_id, event_seq)` y `(type, created_at)`; **triggers** que abortan UPDATE/DELETE.
+- Taxonomía **cerrada**: `phase_done, commit, claim_acquired, claim_released, blocked, unblocked, awaiting_operator, intent_updated, mission_closed, objection`. Tipo desconocido → rechazo.
+- **Cursor `event_seq`, no `global_turn`**: varios eventos comparten turno y el reloj solo avanza en el handshake; `fetch_events(since_seq)` no pierde eventos. (`since_seq` sustituye al `since_global_turn` del borrador del RFC.)
+- **Anti-inyección**: `summary` (máx. 800) y `ref` (máx. 400) se sanean al escribir (sin controles/ANSI, una línea, `<`/`>` neutralizados); el render es una línea por evento.
+- **Identidad de confianza**: `announce_intent`/`fetch_events` resuelven al llamante **solo** por bridge del arnés/env (`REDPILL_ORIGINATOR`, `REDPILL_MISSION_ID`); los argumentos del modelo (`originator`, `mission_id`, `continuity_id`, `campaign_id`) **no** pueden auto-declarar identidad. Sin cuerpo compuesto → **fail-closed**. La campaña sale de la sesión, no del argumento.
+- **`sealed`** filtrado **en SQL** con `viewer_originator` (antes del LIMIT: no consume cupo ni revela existencia); `count_events` también.
+- **`_resolve_session_identity(persist=False)`**: identidad sin reloj ni escritura; sin fila en el registro no se inventa un `continuity_id` (`None`, no alma fantasma).
+- **`objection`** en la taxonomía: engancha con la Carta de Límites.
+**Endurecimiento (ronda 2 del panel adversarial):**
+- **Ancla de confianza en el handshake**: el `originator` del bridge/env manda; el argumento del modelo solo se usa si no hay bridge/env. `REDPILL_MISSION_ID` (env) manda sobre el `mission_id` del modelo. En un arnés con hook, un `originator` ajeno no suplanta a otra sesión.
+- **Lecturas deny-by-default**: `fetch_events` solo tu propia misión en este slice; cross-misión se difiere al digest/orquestador con autorización explícita.
+- **Migración**: `PRAGMA user_version=1`; una tabla `mission_events` pre-release (sin `event_seq`) se recrea (nunca se desplegó).
+- **Cuotas/caps**: 30 eventos/min por `(mission_id, originator)`; caps de 200 en mission/campaign/originator; bidi/zero-width fuera; trigger `no_replace` (`INSERT OR REPLACE` no salta el append-only).
+- **Residual declarado**: arneses sin hook (pi/antigravity) siguen aceptando `originator` por argumento; el bridge es un fichero que el arnés debe proteger (endurecimiento de harness, fuera de este slice).
+**Endurecimiento (ronda 3, identidad de misión):**
+- **La misión de eventos sale del canal de confianza** (env `REDPILL_MISSION_ID` o la rama del workspace), **no** de la fila del registro: aunque el handshake escriba una misión envenenada, el evento no la usa.
+- **`sealed` se ata al `originator`** que lo publicó (no a la misión): otro cuerpo de la misma misión no lo ve.
+- **Fail-closed con arnés de hook** (opencode/claude_code): sin bridge no hay cuerpo (sin upsert/relay); el argumento del modelo no suplanta. El env `REDPILL_ORIGINATOR` (jobs) gana al bridge.
+- **Claves normalizadas con `_clean_key`** (sin neutralizar `<>`, válido en ramas git) y **render saneado**: no se pierden eventos ni se rompe la atribución.
+- **`no_replace` por `event_id` y `event_seq`**; `user_version` solo si cambia; `busy_timeout` antes del WAL (arranque concurrente).
+- **`sealed` estricto**: un valor no-boolean se rechaza (no se interpreta como público).
+- **Deuda de superficie**: los roles headless del backend `local` no exponen `announce_intent`/`fetch_events`; y la misión del manifiesto puede quedar escrita en la fila del registro por un handshake (el evento no la usa; el tablón podría mostrarla).
+**Alternatives**: (a) ficheros `.md` — pudren y duplican fuente; (b) tabla sin tipos — pierde contrato/filtro; (c) publicar en misión ajena — spoofing; (d) cursor por `global_turn` — pierde eventos del mismo turno; (e) aceptar `originator` por argumento — identidad auto-afirmada.
+**Rationale / Evidence**: panel adversarial de 3 lentes, tres rondas → BLOCKER de identidad corregidos (misión por canal de confianza, `sealed` por originator, fail-closed con hook); suite **3123 passed**, `ruff`/`mypy` limpios; tests de spoof (evento persistido), misión no redirigible, cursor sin pérdida, saneado de claves/render, migración, rate-limit, REPLACE, deny-by-default y env precedence.
+**Consequences**: la Fase 2 puede construir el digest ("novedades desde tu `since_seq`"), la sala de guerra por misión y las incursiones/iniciativa. Deuda: digest + `check_parallel_sessions`/`fetch_divergent_turns`; cross-misión autorizado; jobs/awakenings deben aportar `REDPILL_ORIGINATOR`/`REDPILL_MISSION_ID`; arneses sin hook y protección del bridge.
+
+---
+
 ## [AD-055] Alma y Coro Fase 0b — registro, reloj, espejo git y tablón desde el registro
 **Date**: 2026-10-22
 **Status**: ACCEPTED & IMPLEMENTED. Extiende AD-050 (Fase 0a).

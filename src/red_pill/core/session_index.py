@@ -619,31 +619,33 @@ def _age(ts: Optional[float], now: float) -> str:
 
 
 def _render_entry(b: Dict[str, Any], active_min: int, now: float) -> List[str]:
+	from red_pill.session.store import sanitize_inline
+
 	if b.get("active"):
 		state = "en vuelo"
 	elif b.get("in_flight"):
 		state = f"en vuelo > {active_min} min (¿huérfana?)"
 	else:
 		state = "idle"
-	lines = [f"[{b['provider']}] {b['session_id']} · {b.get('origin')} · {state}{_age(b.get('last_activity'), now)}"]
+	lines = [f"[{sanitize_inline(b['provider'])}] {sanitize_inline(b['session_id'])} · {sanitize_inline(b.get('origin'))} · {state}{_age(b.get('last_activity'), now)}"]
 	detail = []
 	if b.get("project"):
 		others = [x for x in b.get("projects") or [] if x != b["project"]]
-		detail.append(f"proyecto={b['project']}" + (f" (+{', '.join(others)})" if others else ""))
+		detail.append(f"proyecto={sanitize_inline(b['project'])}" + (f" (+{', '.join(sanitize_inline(x) for x in others)})" if others else ""))
 	if b.get("topic"):
-		detail.append(f"tema={b['topic']}")
+		detail.append(f"tema={sanitize_inline(b['topic'])}")
 	if b.get("mission_id"):
-		detail.append(f"misión={b['mission_id']}")
+		detail.append(f"misión={sanitize_inline(b['mission_id'], 120)}")
 	if b.get("continuity_id"):
-		detail.append(f"alma={str(b['continuity_id'])[:8]}")
+		detail.append(f"alma={sanitize_inline(str(b['continuity_id'])[:8], 8)}")
 	if b.get("branch"):
-		detail.append(f"rama={b['branch']}")
+		detail.append(f"rama={sanitize_inline(b['branch'], 120)}")
 	if b.get("directory"):
-		detail.append(f"cwd={b['directory']}")
+		detail.append(f"cwd={sanitize_inline(b['directory'], 200)}")
 	if b.get("title"):
-		detail.append(f"título={b['title']}")
+		detail.append(f"título={sanitize_inline(b['title'], 200)}")
 	if b.get("model"):
-		detail.append(f"modelo={b['model']}")
+		detail.append(f"modelo={sanitize_inline(b['model'], 120)}")
 	if detail:
 		lines.append("\t- " + " | ".join(detail))
 	return lines
@@ -670,8 +672,10 @@ def render_board(board: List[Dict[str, Any]], active_min: Optional[int] = None, 
 		if m:
 			misiones[m] = misiones.get(m, 0) + 1
 	if misiones:
+		from red_pill.session.store import sanitize_inline
+
 		ranked = sorted(misiones.items(), key=lambda kv: (-kv[1], kv[0]))
-		lines.append("Misiones: " + " · ".join(f"{m} ({n})" for m, n in ranked))
+		lines.append("Misiones: " + " · ".join(f"{sanitize_inline(m, 120)} ({n})" for m, n in ranked))
 	if live:
 		lines.append(f"Vivas (turno en vuelo, iniciado hace < {active_min} min):")
 		for b in live:
