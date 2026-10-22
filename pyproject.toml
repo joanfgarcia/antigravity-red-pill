@@ -94,7 +94,7 @@ ignore-vuln = [
 	"CVE-2026-28684", # python-dotenv vulnerabilities
 	"CVE-2026-40347", # python-multipart vulnerabilities
 	# Pillow 12.3.0: fix 13.0.0 irresoluble con fastembed (pillow<13 en 3.13+ y
-	# cadena de deps); revisar cuando fastembed lo permita.
+	# cadena de deps). AD-058: sustituir fastembed + re-embeber en la próxima MAYOR.
 	"CVE-2026-112895",
 	"CVE-2026-112400",
 	"CVE-2026-112397",

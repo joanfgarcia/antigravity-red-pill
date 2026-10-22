@@ -4,6 +4,26 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-058] Pillow 12.3.0 — CVEs aceptados; fastembed y re-embedding en la próxima MAYOR
+**Date**: 2026-10-22
+**Status**: ACCEPTED (temporal). Plan vinculado a la próxima versión **mayor**.
+**Context**: `pip-audit` (bloqueante) del CI detectó 35 CVEs en `pillow 12.3.0` (fix 13.0.0); `certifi` se actualizó a 2026.10.19. El proyecto usa `fastembed` para los **embeddings de texto** de la memoria (`paraphrase-multilingual-MiniLM-L12-v2`, 384d). `fastembed` arrastra `pillow` para sus modelos de **imagen** (que NO usamos) y no permite `pillow 13` en 3.13+/Windows: el resolver retrocede y el lock es irresoluble con 13. Forzar 13 con override es posible, pero es un bump mayor que puede romper el código de imagen/media (PIL) y no arregla la dependencia en otras máquinas.
+**Decision**:
+- **Aceptar `pillow 12.3.0` por ahora**: los 35 IDs se añaden a `[tool.pip-audit]` y al audit bloqueante del CI, con justificación. CI verde (`No known vulnerabilities found, 37 ignored`).
+- **Próxima versión MAYOR**: sustituir/actualizar `fastembed` y **re-embeber todas las colecciones** con backup previo. Trigger: la próxima mayor (o cuando `fastembed` permita `pillow 13`, lo que ocurra antes).
+- Riesgo actual: local y bajo — los CVEs son de *parsing* de imágenes; procesamos imágenes locales/trusted (imagegen), no expuestas.
+**Plan de la mayor**:
+1. Backup: snapshot de Qdrant + `bunker_queue.db`/`session.db` + Memento.
+2. Sustituir `fastembed` (o el backend de embeddings) por uno que no arrastre `pillow` (o que permita 13).
+3. Re-embeber TODAS las colecciones (work ~22k, social ~1.6k, y las demás) con el mismo modelo/dimensión (384d) o migrar el espacio con índice dual y validación de recall.
+4. Validar paridad de recall/calidad y el arnés media con PIL 13.
+5. Quitar los ignores de pillow y actualizar el lock.
+6. Verificar instalaciones/actualizaciones en otras máquinas.
+**Alternatives**: (a) forzar pillow 13 ahora — riesgo media/PIL y no arregla fastembed en 3.13+/otras máquinas; (b) ignorar sin plan — deuda sin trigger; (c) sustituir fastembed ahora — coste alto (re-embedding) sin urgencia local.
+**Consequences**: CI verde y riesgo local acotado; deuda explícita con trigger y plan. `certifi` sí se actualizó; el extra `hf-transfer` de `huggingface-hub` se retiró (eliminado en 1.21.0). El plan de re-embedding se desarrolla en la nota de deuda de la próxima mayor.
+
+---
+
 ## [AD-057] Alma y Coro Fase 2 (slice 2) — sala de guerra, digest SILENT/HEADER y tablón por misión
 **Date**: 2026-10-22
 **Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro-digest`). **Panel adversarial de 3 lentes: CLEARED; P1 corregidos.**
