@@ -456,3 +456,93 @@ def test_render_board_shows_topic_and_other_projects():
 	out = si.render_board([b], active_min=10, now=100.0)
 	assert "proyecto=sharing (+school)" in out
 	assert "tema=auditoría" in out
+
+
+def test_infer_session_git_uses_touched_repo(monkeypatch):
+	from red_pill.core import gitinfo
+
+	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": "/home/user/IA"})
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None, **k: ["/tmp/x", "/home/user/sharing/a.py"])
+	monkeypatch.setattr(
+		gitinfo,
+		"git_snapshot",
+		lambda d, **k: {"branch": "feat/f3", "worktree": "/home/user/sharing", "head_commit": "abc"}
+		if d == "/home/user/sharing"
+		else {"branch": None, "worktree": None, "head_commit": None},
+	)
+	snap = si.infer_session_git("opencode", "s1", use_cache=False)
+	assert snap == {"branch": "feat/f3", "worktree": "/home/user/sharing", "head_commit": "abc"}
+
+
+def test_infer_session_git_non_opencode_is_none():
+	assert si.infer_session_git("claude_code", "s1") is None
+	assert si.infer_session_git("opencode", "") is None
+
+
+def test_build_board_joins_registry(monkeypatch):
+	now = time.time()
+	monkeypatch.setattr(si, "_active_seconds", lambda: 600)
+	monkeypatch.setattr(si, "list_sessions", lambda: [SessionSignal("opencode", "sx", now - 1, None)])
+	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": "/w"})
+	monkeypatch.setattr(si, "_origin_for", lambda p, s: "user")
+	monkeypatch.setattr(si, "_owning_workspace", lambda d: None)
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None, **k: [])
+	monkeypatch.setattr(si, "_theme_client", lambda: None)
+	registry = {
+		"opencode:sx": {
+			"originator": "opencode:sx",
+			"provider": "opencode",
+			"session_id": "sx",
+			"continuity_id": "alma-1",
+			"mission_id": "repo:feat/x",
+			"branch": "feat/x",
+			"head_commit": "abc",
+			"role": "task",
+			"affinity_json": "[]",
+			"last_seen_global_turn": 7,
+			"updated_at": now - 5,
+		},
+		"claude_code:dead": {
+			"originator": "claude_code:dead",
+			"provider": "claude_code",
+			"session_id": "dead",
+			"continuity_id": "alma-2",
+			"mission_id": "mission:adhoc-2026-10-01",
+			"role": "task",
+			"affinity_json": "[]",
+			"last_seen_global_turn": 3,
+			"updated_at": now - 100,
+		},
+	}
+	monkeypatch.setattr(si, "_load_registry", lambda: dict(registry))
+	board = si.build_board()
+	by = {b["session_id"]: b for b in board}
+	assert by["sx"]["mission_id"] == "repo:feat/x"
+	assert by["sx"]["continuity_id"] == "alma-1"
+	assert by["sx"]["active"] is True
+	assert by["dead"]["mission_id"] == "mission:adhoc-2026-10-01"
+	assert by["dead"]["active"] is False and by["dead"]["from_registry"] is True
+	text = si.render_board(board, active_min=10, now=now)
+	assert "misión=repo:feat/x" in text
+	assert "Misiones:" in text
+
+
+def test_build_board_hides_stale_registry_rows(monkeypatch):
+	now = time.time()
+	monkeypatch.setattr(si, "_active_seconds", lambda: 600)
+	monkeypatch.setattr(si, "list_sessions", lambda: [])
+	monkeypatch.setattr(si, "_registry_ttl_s", lambda: 3600.0)
+	monkeypatch.setattr(
+		si,
+		"_load_registry",
+		lambda: {
+			"opencode:old": {
+				"originator": "opencode:old",
+				"provider": "opencode",
+				"session_id": "old",
+				"mission_id": "repo:x",
+				"updated_at": now - 10**7,
+			}
+		},
+	)
+	assert si.build_board() == []

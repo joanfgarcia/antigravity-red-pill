@@ -1746,39 +1746,28 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"FAILED to configure interceptor: {e}")]
 
 
-_BRANCH_CACHE: Dict[str, Any] = {"dir": None, "branch": None, "at": 0.0}
+def _git_mirror(workdir: Optional[str] = None) -> Dict[str, Optional[str]]:
+	"""Espejo git del workspace del agente (F4): `{branch, worktree, head_commit}`.
+
+	Delegado en `core.gitinfo` (cacheado 60s). El MCP corre con cwd = checkout del
+	kernel (`uv --directory ${REDPILL_DIR}`), que NO es el workspace del agente;
+	`workdir` llega del bridge del arnés (opencode_session.json /
+	claude_code_session.json), de `REDPILL_WORKSPACE` o del cwd. Nunca lanza: un
+	fallo degrada a sin-repo.
+	"""
+	from red_pill.core.gitinfo import git_snapshot
+
+	return git_snapshot(workdir)
 
 
 def _current_git_branch(workdir: Optional[str] = None) -> Optional[str]:
-	"""Rama git del workspace del agente (best-effort, A2: `repo:<rama>`) con caché.
+	"""Rama git del workspace del agente (A2: `repo:<rama>`), cacheada 60s.
 
-	El MCP corre con cwd = checkout del kernel (`uv --directory ${REDPILL_DIR}`),
-	que NO es el workspace del agente; `workdir` llega del bridge del harness
-	(opencode_session.json / claude_code_session.json), de `REDPILL_WORKSPACE` o del cwd.
-	La caché evita un subprocess por turno (solo se re-resuelve al cambiar de dir
-	o tras 60s). None si no hay repo.
+	None si el workspace no vive en un repo (lo normal: el agente suele abrir el
+	IDE en una carpeta padre → cascada a `mission:adhoc-<fecha>`, o F3 si hay
+	cuerpo de sesión).
 	"""
-	workdir = os.path.abspath(workdir or os.getcwd())
-	if not os.path.isdir(workdir):
-		return None  # un workdir no-directorio (bridge corrupto) no debe ir a `git -C`
-	now = time.time()
-	if _BRANCH_CACHE["dir"] == workdir and now - float(_BRANCH_CACHE["at"]) < 60.0:
-		cached = _BRANCH_CACHE["branch"]
-		return cached if isinstance(cached, str) else None
-	branch: Optional[str]
-	try:
-		out = subprocess.run(
-			["git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD"],
-			capture_output=True,
-			text=True,
-			timeout=2.0,
-		)
-		raw = out.stdout.strip()
-		branch = raw if out.returncode == 0 and raw and raw != "HEAD" else None
-	except Exception:
-		branch = None
-	_BRANCH_CACHE.update({"dir": workdir, "branch": branch, "at": now})
-	return branch
+	return _git_mirror(workdir).get("branch")
 
 
 def _bridge_ttl_s() -> float:
@@ -1868,6 +1857,20 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 	campaign_id = str(arguments.get("campaign_id") or "").strip() or None
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
 	branch = await asyncio.to_thread(_current_git_branch, workspace)
+	mirror = await asyncio.to_thread(_git_mirror, workspace)
+	# F3: si el workspace no es un repo (p.ej. el IDE abierto en `~/Documents/IA`),
+	# la misión se resuelve por el repo que la sesión TOCA (P1b: rutas tocadas en
+	# opencode.db), no por el cwd del proceso. Solo opencode expone rutas tocadas.
+	if branch is None and originator and ":" in originator:
+		from red_pill.core.session_index import infer_session_git
+
+		prov, _, sid = originator.partition(":")
+		if sid:
+			inferred = await asyncio.to_thread(infer_session_git, prov, sid)
+			if inferred:
+				branch = inferred.get("branch") or branch
+				if inferred.get("worktree"):
+					mirror = inferred
 	mission_id = resolve_default_mission(arguments.get("mission_id"), branch=branch)
 	role = str(arguments.get("role") or "task").strip() or "task"
 
@@ -1894,6 +1897,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 			else:
 				continuity_id = new_continuity_id()
 		if linkable and originator:
+			# F1: el reloj global late UNA vez por turno conversacional (D2-a:
+			# señales/jobs sin afinidad no pasan por aquí y no incrementan).
+			global_turn = registry_obj.next_global_turn(originator, affinity)
 			registry_obj.upsert_session(
 				originator=originator,
 				continuity_id=continuity_id,
@@ -1902,6 +1908,10 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 				role=role,
 				lineage_id=arguments.get("lineage_id"),
 				affinity=affinity,
+				last_seen_global_turn=global_turn,
+				branch=branch,
+				worktree=mirror.get("worktree"),
+				head_commit=mirror.get("head_commit"),
 			)
 			# El alma EMITIDA debe ser la PERSISTIDA (primer enlace gana): si la fila
 			# conservó otra alma, el tag refleja la real, no la del argumento.

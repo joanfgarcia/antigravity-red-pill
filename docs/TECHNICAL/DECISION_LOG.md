@@ -4,6 +4,22 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-055] Alma y Coro Fase 0b — registro, reloj, espejo git y tablón desde el registro
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED. Extiende AD-050 (Fase 0a).
+**Context**: la 0a dejó viva la identidad de sesión, pero el informe de campo (desk, 2026-10-13) midió tres fricciones: el reloj global no latía (`global_turn_seq` con 0 filas y `next_global_turn` sin llamantes), el espejo git del registro estaba vacío (`upsert_session` no recibía `branch`/`worktree`/`head_commit`) y el tablón (`session_board`) leía los latidos de liveness, no el registro. Además la misión caía siempre a `mission:adhoc-<fecha>` porque el cwd del agente no es un repo.
+**Decision**:
+1. **Reloj (F1).** `_resolve_session_identity` incrementa `global_turn_seq` una vez por turno con cuerpo (`originator` compuesto) y guarda el valor en `session_registry.last_seen_global_turn`. Solo pasan por el handshake los turnos conversacionales/de trabajo; señales y jobs sin afinidad no incrementan (D2-a).
+2. **Espejo git (F4).** Se pasan `branch`/`worktree`/`head_commit` al `upsert_session`, resueltos por `core.gitinfo.git_snapshot` (`git -C`, cacheado 60s, fuera del event loop). `worktree` es la raíz del árbol (`--show-toplevel`, worktree-aware).
+3. **Misión por repo tocado (F3 / D22).** Si el workspace del agente no es un repo (IDE abierto en una carpeta padre), la misión se resuelve por el repo de las rutas TOCADAS (`session_index.infer_session_git`, P1b; solo opencode, cacheado 60s). `adhoc` sigue siendo el fallback.
+4. **Tablón desde el registro (F2).** `session_board` une el registro por `originator` (alma/misión/afinidad/espejo git) y usa los latidos solo como señal de vivo/activo; las filas del registro sin latido reciente entran como "recientes" (TTL `SESSION_BOARD_REGISTRY_TTL_H`, default 12h). El tablón es una VISTA del registro.
+5. **Contratos.** `session/contracts.py` declara los Protocols (`SessionStore`, `PresenceBoard`, `AffinityResolver`; `HydrationPolicy`/`ClaimDriver`/`Compactor` para las Fases 2/4/3) y `session/board.py` implementa `PresenceBoard`.
+**Alternatives**: (a) contador materializado por alma en vez de una fila por turno — el RFC §3.1 fija el log append-only (una fila/turno, `MAX()` = reloj); (b) tablón como segundo renderizador — descartado, una sola superficie; (c) `ws:` para la misión — descartado (D15: la afinidad por filesystem no refleja cómo trabaja el operador).
+**Rationale / Evidence**: el informe de campo del desk fija F1–F4 con evidencia; suite completa verde (3095 passed) y registro verificado en vivo.
+**Consequences**: la Fase 2 (coro) ya tiene dónde apoyarse (reloj monotónico, espejo git y tablón con misiones reales). Deuda declarada: la colisión del bridge entre sesiones top-level concurrentes (P2a, AD-050) sigue diferida, y `repo:<rama>` no distingue dos repos en la misma rama (mejora futura del scope).
+
+---
+
 ## [AD-054] Modelo de ramas `solo` (rama viva `next`) vs `canonical`, elegido por config
 **Date**: 2026-10-19
 **Status**: ACCEPTED & DOCUMENTED. En vigor desde el ciclo siguiente al release 8.2.0. Fuente única: `docs/CORE/WORKFLOWS.md` §0.
@@ -32,6 +48,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-052] Media como datos: el elenco (`media_profiles.yaml`) es la única fuente de máquina
 **Date**: 2026-10-14
 **Status**: ACCEPTED & IMPLEMENTED (rama `feat/media-router`). Extiende el router/elenco (ver `docs/CORE/MEDIA_MODELS.md`).
 **Context**: al montar un modelo **GGUF** (Qwen-Image-2.1-Turbo/Sakura) salieron tres

@@ -108,6 +108,18 @@ class SessionRegistry:
 			).fetchall()
 		return [dict(r) for r in rows]
 
+	def list_sessions(self, limit: int = 500) -> List[dict]:
+		"""Todas las filas del registro, más recientes primero (alimenta el tablón).
+
+		El tablón (`session_board`) es una VISTA del registro: lee de aquí y usa los
+		latidos de liveness solo como señal de "vivo/activo" (F2)."""
+		with self._connect() as conn:
+			rows = conn.execute(
+				"SELECT * FROM session_registry ORDER BY updated_at DESC LIMIT ?",
+				(int(limit),),
+			).fetchall()
+		return [dict(r) for r in rows]
+
 	# ── Escrituras ──────────────────────────────────────────────────────────
 	def upsert_session(
 		self,

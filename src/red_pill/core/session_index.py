@@ -164,7 +164,13 @@ def _command_paths(cmd: str) -> List[str]:
 	return out
 
 
-def _touched_sequence(session_id: str, base_dir: Optional[str] = None) -> List[str]:
+def _touched_sequence(
+	session_id: str,
+	base_dir: Optional[str] = None,
+	*,
+	newest_first: bool = False,
+	limit: Optional[int] = None,
+) -> List[str]:
 	"""Rutas tocadas por la sesión, CON repeticiones y en orden cronológico.
 
 	Extraídas de los tool parts de opencode.db: las keys estructuradas de los
@@ -173,6 +179,9 @@ def _touched_sequence(session_id: str, base_dir: Optional[str] = None) -> List[s
 	(el directorio de la sesión), nunca contra el cwd de este proceso; sin él se
 	descartan. Determinista y non-fatal: cualquier fallo devuelve [] y el
 	proyecto cae al fallback del cwd (RFC-DESPERTAR-001 §8.2).
+
+	`newest_first`/`limit` sirven a la inferencia de rama (F3): solo las últimas
+	rutas hacen falta y llegan de la más reciente a la más antigua.
 	"""
 	db = _opencode_db_path()
 	if not db.exists():
@@ -180,10 +189,13 @@ def _touched_sequence(session_id: str, base_dir: Optional[str] = None) -> List[s
 	try:
 		con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 		try:
-			rows = con.execute(
-				"SELECT data FROM part WHERE session_id = ? AND data LIKE '%\"tool\"%' ORDER BY time_created ASC",
-				(session_id,),
-			).fetchall()
+			order = "DESC" if newest_first else "ASC"
+			sql = f"SELECT data FROM part WHERE session_id = ? AND data LIKE '%\"tool\"%' ORDER BY time_created {order}"
+			params: tuple = (session_id,)
+			if limit:
+				sql += " LIMIT ?"
+				params = (session_id, int(limit))
+			rows = con.execute(sql, params).fetchall()
 		finally:
 			con.close()
 	except Exception as e:
@@ -237,6 +249,46 @@ def _rank_projects(paths: List[str]) -> List[str]:
 		hits[0] += 1
 		hits[1] = i
 	return sorted(score, key=lambda n: (-score[n][0], -score[n][1]))
+
+
+# Inferencia de rama por repo TOCADO (F3 / D22): cacheada por sesión (TTL 60s),
+# porque el handshake la consulta cada turno cuando el workspace del agente no es
+# un repo. session_id -> (at, snapshot | None)
+_INFER_TTL_S = 60.0
+_INFER_CACHE: Dict[str, tuple] = {}
+
+
+def infer_session_git(provider: str, session_id: str, *, use_cache: bool = True) -> Optional[Dict[str, Optional[str]]]:
+	"""Snapshot git del repo que la sesión está TOCANDO (F3 / D22).
+
+	Cuando el cwd del agente no es un repo (IDE abierto en una carpeta padre,
+	p.ej. `~/Documents/IA`), la misión se resuelve por el repo de las **rutas
+	tocadas** (P1b), no por el cwd. Solo opencode expone rutas tocadas
+	(`opencode.db`); otros proveedores devuelven None (fallback a `adhoc`).
+
+	Non-fatal y cacheado (TTL 60s): `{branch, worktree, head_commit}` del primer
+	repo encontrado entre las últimas rutas, o None.
+	"""
+	from red_pill.core.gitinfo import git_snapshot
+
+	if not session_id or provider != "opencode":
+		return None
+	now = time.time()
+	if use_cache:
+		hit = _INFER_CACHE.get(session_id)
+		if hit and now - float(hit[0]) < _INFER_TTL_S:
+			return dict(hit[1]) if hit[1] else None
+	base = _opencode_meta(session_id).get("directory")
+	snap: Optional[Dict[str, Optional[str]]] = None
+	for path in _touched_sequence(session_id, base_dir=base, newest_first=True, limit=40):
+		directory = path if os.path.isdir(path) else os.path.dirname(path)
+		candidate = git_snapshot(directory)
+		if candidate.get("worktree"):
+			snap = candidate
+			break
+	if use_cache:
+		_INFER_CACHE[session_id] = (now, snap)
+	return dict(snap) if snap else None
 
 
 # Tope de puntos leídos por sesión al buscar el último tema (paginando).
@@ -362,8 +414,88 @@ def _theme_client() -> Any:
 		return None
 
 
+def _registry_ttl_s() -> float:
+	"""Ventana en que una fila del registro sin latido sigue mostrándose (reciente).
+
+	`SESSION_BOARD_REGISTRY_TTL_H` (horas, default 12) — más generosa que el TTL de
+	liveness: el registro es el "quién/qué misión", el latido solo el "vivo".
+	"""
+	try:
+		return float(os.getenv("SESSION_BOARD_REGISTRY_TTL_H", "12")) * 3600.0
+	except Exception:
+		return 12 * 3600.0
+
+
+def _load_registry() -> Dict[str, Dict[str, Any]]:
+	"""Filas de `session_registry` por `originator` (best-effort; {} si falla).
+
+	El tablón es una VISTA del registro (F2): sin `session.db` disponible degrada
+	a lo que dan los latidos, nunca revienta.
+	"""
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		return {r["originator"]: r for r in SessionRegistry().list_sessions()}
+	except Exception as e:
+		logger.debug(f"[SessionIndex] registry unavailable: {e}")
+		return {}
+
+
+# Campos del registro que el tablón expone (alma / misión / afinidad / espejo git).
+_REGISTRY_FIELDS = (
+	"continuity_id",
+	"mission_id",
+	"campaign_id",
+	"role",
+	"lineage_id",
+	"affinity_json",
+	"last_seen_global_turn",
+	"branch",
+	"worktree",
+	"head_commit",
+	"title",
+	"intent",
+)
+
+
+def _attach_registry(entry: Dict[str, Any], row: Dict[str, Any]) -> None:
+	"""Copia los campos de registro (no nulos) sobre una entrada del tablón."""
+	for key in _REGISTRY_FIELDS:
+		if row.get(key) is not None:
+			entry[key] = row[key]
+	if not entry.get("title"):
+		entry["title"] = row.get("title")
+
+
+def _registry_entry(row: Dict[str, Any], now: float) -> Dict[str, Any]:
+	"""Entrada del tablón para una fila del registro SIN latido vivo (reciente)."""
+	entry: Dict[str, Any] = {
+		"provider": row.get("provider"),
+		"session_id": row.get("session_id"),
+		"origin": "user",
+		"in_flight": False,
+		"active": False,
+		"last_activity": row.get("updated_at"),
+		"directory": None,
+		"project": None,
+		"projects": [],
+		"topic": None,
+		"model": None,
+		"touched_files": 0,
+		"from_registry": True,
+	}
+	_attach_registry(entry, row)
+	return entry
+
+
 def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 	"""Lista enriquecida de sesiones (más reciente primero).
+
+	Fuente **primaria**: el registro (`session_registry` — alma/misión/afinidad/
+	espejo git). Fuente de **liveness**: los latidos (`session_liveness`) y, para
+	opencode, su `opencode.db`. El registro se une por `originator`
+	(`provider:session_id`) y añade las filas sin latido reciente como
+	"recientes" (F2: el tablón lee del registro, los latidos son el fallback).
 
 	`projects` ordena los workspaces de las últimas `_RECENT_PATHS` rutas
 	tocadas por frecuencia (empate → el más reciente, `_rank_projects`);
@@ -371,6 +503,7 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 	"""
 	if active_seconds is None:
 		active_seconds = _active_seconds()
+	now = time.time()
 	board: List[Dict[str, Any]] = []
 	client = None
 	client_ready = False
@@ -403,6 +536,19 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 				"touched_files": len(set(touched)),
 			}
 		)
+	# F2: el registro es la fuente primaria de identidad/misión; se une por
+	# `originator` y lo que no tiene latido reciente entra como "reciente".
+	registry = _load_registry()
+	if registry:
+		for b in board:
+			row = registry.pop(f"{b.get('provider')}:{b.get('session_id')}", None)
+			if row:
+				_attach_registry(b, row)
+		ttl = _registry_ttl_s()
+		for row in registry.values():
+			updated = row.get("updated_at")
+			if isinstance(updated, (int, float)) and 0 < now - float(updated) <= ttl:
+				board.append(_registry_entry(row, now))
 	return board
 
 
@@ -486,6 +632,12 @@ def _render_entry(b: Dict[str, Any], active_min: int, now: float) -> List[str]:
 		detail.append(f"proyecto={b['project']}" + (f" (+{', '.join(others)})" if others else ""))
 	if b.get("topic"):
 		detail.append(f"tema={b['topic']}")
+	if b.get("mission_id"):
+		detail.append(f"misión={b['mission_id']}")
+	if b.get("continuity_id"):
+		detail.append(f"alma={str(b['continuity_id'])[:8]}")
+	if b.get("branch"):
+		detail.append(f"rama={b['branch']}")
 	if b.get("directory"):
 		detail.append(f"cwd={b['directory']}")
 	if b.get("title"):
@@ -512,6 +664,14 @@ def render_board(board: List[Dict[str, Any]], active_min: Optional[int] = None, 
 	live = [b for b in board if b.get("active")]
 	recent = [b for b in board if not b.get("active")]
 	lines = [f"--- SESSION BOARD: {len(live)} viva(s) · {len(recent)} reciente(s) ---"]
+	misiones: Dict[str, int] = {}
+	for b in board:
+		m = b.get("mission_id")
+		if m:
+			misiones[m] = misiones.get(m, 0) + 1
+	if misiones:
+		ranked = sorted(misiones.items(), key=lambda kv: (-kv[1], kv[0]))
+		lines.append("Misiones: " + " · ".join(f"{m} ({n})" for m, n in ranked))
 	if live:
 		lines.append(f"Vivas (turno en vuelo, iniciado hace < {active_min} min):")
 		for b in live:
