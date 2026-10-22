@@ -1898,8 +1898,13 @@ async def _resolve_session_identity(arguments: Dict[str, Any]) -> Dict[str, Any]
 				continuity_id = new_continuity_id()
 		if linkable and originator:
 			# F1: el reloj global late UNA vez por turno conversacional (D2-a:
-			# señales/jobs sin afinidad no pasan por aquí y no incrementan).
-			global_turn = registry_obj.next_global_turn(originator, affinity)
+			# señales/jobs sin afinidad no pasan por aquí y no incrementan). Un
+			# fallo del reloj NO debe perder el registro (best-effort por separado).
+			try:
+				global_turn = registry_obj.next_global_turn(originator, affinity)
+			except Exception as e:
+				logger.warning(f"Sovereign Handshake — clock unavailable: {e}")
+				global_turn = 0
 			registry_obj.upsert_session(
 				originator=originator,
 				continuity_id=continuity_id,
