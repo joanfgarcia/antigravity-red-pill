@@ -1,5 +1,22 @@
 ## Unreleased
 
+### 🧠 Alma y Coro — Fase 1 (espejo canónico + `switch_model`)
+
+- **[NEW]** `session.db` v4: tabla `session_mirror` con turnos portables
+  `{continuity_id, mission_id, global_turn, seq, role, content, tool_calls, tool_call_id, model, ts}`
+  (+ `originator/source/source_ref`), `seq` por alma e idempotencia de backfill.
+  `MirrorStore` (contrato) + `SessionMirror`.
+- **[NEW]** Poblado desde transcripts: `chronicle_sources.load_canonical()` aditivo;
+  opencode y claude_code conservan `tool_use`/`tool_result` (pareja call ↔ resultado).
+  Backfill `red-pill session mirror sync`.
+- **[NEW]** `session/switch.py:switch_model()`: misma familia → resume nativo;
+  cruzado → replay desde el espejo; fallback por quota. Publica el cierre/apertura
+  de leg con la misma alma/misión/afinidad. `rehydrate_payload` para arneses
+  externos y `replay_messages` para el arnés RedPill.
+- **[NEW]** Restos de Fase 2: `unregister_session`, purga D14
+  (`MULTISESSION_PURGE_AFTER_SECS`) y reactivación de un leg que vuelve a latir.
+- **[DOCS]** AD-060.
+
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 
 - **[NEW]** `GIT_WORKFLOW` (`solo` | `canonical`) en `.env`: un solo modelo documentado, dos

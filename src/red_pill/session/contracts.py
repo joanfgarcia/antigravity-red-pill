@@ -86,6 +86,19 @@ class AffinityResolver(Protocol):
 	) -> List[str]: ...
 
 
+class ModelDriver(Protocol):
+	"""Bridge ejecutable mínimo que `switch_model` necesita (sin acoplarse a uno).
+
+	`ConversationResult`-like: el resultado debe exponer `response`, `conversation_id`
+	y `error` (atributos o claves). Misma familia → `continue_conversation`;
+	cruzado → `prompt` con el historial renderizado.
+	"""
+
+	def prompt(self, text: str, **kwargs: Any) -> Any: ...
+
+	def continue_conversation(self, text: str, **kwargs: Any) -> Any: ...
+
+
 class HydrationPolicy(Protocol):
 	"""Qué referencia recibe cada rol al despertar (Fase 2)."""
 

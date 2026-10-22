@@ -293,7 +293,8 @@ class SessionRegistry:
 		cuerpo" (F5): el `continuity_id` YA atado se conserva SIEMPRE — este es el
 		único escritor con la invariante atómica (el hook del arnés usa la MISMA
 		cláusula `ON CONFLICT ... SET continuity_id=session_registry.continuity_id`).
-		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe)."""
+		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe).
+	Un leg vuelto a ver tras `unregister_session` se reactiva (`ttl_state=active`)."""
 		provider, session_id = _split_originator(originator)
 		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
 		now = time.time()
@@ -321,7 +322,8 @@ class SessionRegistry:
 					worktree = COALESCE(excluded.worktree, session_registry.worktree),
 					head_commit = COALESCE(excluded.head_commit, session_registry.head_commit),
 					title = COALESCE(excluded.title, session_registry.title),
-					intent = COALESCE(excluded.intent, session_registry.intent)
+					intent = COALESCE(excluded.intent, session_registry.intent),
+					ttl_state = 'active'
 				""",
 				(
 					originator,

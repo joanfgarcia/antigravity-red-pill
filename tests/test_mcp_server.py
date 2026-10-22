@@ -319,7 +319,8 @@ class TestListTools:
 		assert "announce_intent" in tool_names
 		assert "fetch_events" in tool_names
 		assert "check_parallel_sessions" in tool_names
-		assert len(result) == 8
+		assert "unregister_session" in tool_names
+		assert len(result) == 9
 
 
 class TestControlBunkerAdditional:

@@ -66,6 +66,17 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(f"[MIRROR] {row['originator']} ({row.get('provider') or '?'}): {status}")
 		print(f"[MIRROR] legs={len(report)} turnos_insertados={inserted}")
 		return
+	if getattr(args, "session_cmd", None) == "rehydrate":
+		from red_pill.session.switch import rehydrate_payload
+
+		print(
+			rehydrate_payload(
+				args.continuity,
+				limit=getattr(args, "limit", None),
+				kind=getattr(args, "kind", "opencode") or "opencode",
+			)
+		)
+		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 
 
