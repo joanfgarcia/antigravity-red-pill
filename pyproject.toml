@@ -17,7 +17,7 @@ dependencies = [
     "psutil>=7.2.2",
     "mcp>=1.30.0,<2",
     "llama-cpp-python[server]>=0.3.16",
-    "huggingface-hub[hf-transfer]>=1.4.1",
+    "huggingface-hub>=1.4.1",
     "hf-transfer>=0.1.9",
     "pymilvus>=2.4.0",
     "transformers>=4.40.0",
@@ -93,6 +93,43 @@ ignore-vuln = [
 	"CVE-2026-40192", # Pillow vulnerabilities
 	"CVE-2026-28684", # python-dotenv vulnerabilities
 	"CVE-2026-40347", # python-multipart vulnerabilities
+	# Pillow 12.3.0: fix 13.0.0 irresoluble con fastembed (pillow<13 en 3.13+ y
+	# cadena de deps); revisar cuando fastembed lo permita.
+	"CVE-2026-112895",
+	"CVE-2026-112400",
+	"CVE-2026-112397",
+	"CVE-2026-112896",
+	"CVE-2026-112897",
+	"CVE-2026-112395",
+	"CVE-2026-112404",
+	"CVE-2026-112899",
+	"CVE-2026-112402",
+	"CVE-2026-112900",
+	"CVE-2026-112893",
+	"CVE-2026-112392",
+	"CVE-2026-112891",
+	"CVE-2026-112405",
+	"CVE-2026-112390",
+	"CVE-2026-112401",
+	"CVE-2026-112901",
+	"CVE-2026-112391",
+	"CVE-2026-112894",
+	"CVE-2026-112406",
+	"CVE-2026-112399",
+	"CVE-2026-112892",
+	"CVE-2026-112393",
+	"CVE-2026-112396",
+	"CVE-2026-96638",
+	"CVE-2026-96641",
+	"CVE-2026-96640",
+	"CVE-2026-96642",
+	"CVE-2026-96639",
+	"CVE-2026-96643",
+	"CVE-2026-96637",
+	"CVE-2026-96644",
+	"CVE-2026-96778",
+	"CVE-2026-96636",
+	"GHSA-78g4-xqwv-q3g8",
 ]
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
 fix = false
