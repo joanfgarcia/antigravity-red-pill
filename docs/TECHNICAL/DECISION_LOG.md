@@ -4,6 +4,25 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-057] Alma y Coro Fase 2 (slice 2) — sala de guerra, digest SILENT/HEADER y tablón por misión
+**Date**: 2026-10-22
+**Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro-digest`). **Panel adversarial de 3 lentes: CLEARED; P1 corregidos.**
+**Context**: con `mission_events` (AD-056) y el registro (AD-055), falta que un alma se entere al despertar de lo que pasó y de quién más está viva, sin inflar el contexto.
+**Decision**:
+- **`check_parallel_sessions`** (MCP, solo lectura): `global_turn`, tu `last_seen`, divergencia y sesiones recientes con originator/alma/misión/campaña/rol/delta/ttl/afinidad y (opcional) rama/worktree/head. Campos saneados.
+- **`session_registry.last_seen_event_seq`** (migración v3, ALTER tolerante a carrera) = cursor del digest. El handshake lo fija a `MAX(event_seq)` **después** de calcular el digest (si el digest falla, reintenta); un leg nuevo de un alma hereda el cursor de sus hermanos.
+- **Digest en el handshake**: `SILENT` si no hay nada; `HEADER` con `N novedades (desde seq X) · M awaiting_operator · K sesiones paralelas`. Una línea; sin volcar eventos.
+  - Novedades: `previous_event_seq < event_seq <= until_seq` de **tu misión de confianza**.
+  - `awaiting_operator`: pendientes **abiertos** (sin cursor; la resolución por `unblocked`/`mission_closed` es Fase 2).
+  - Paralelas: sesiones **vivas** (liveness), no filas rancias del registro.
+- **Identidad**: en arnés con hook (opencode/claude_code), misión/campaña/rol salen **solo del env** (`REDPILL_MISSION_ID`/`REDPILL_CAMPAIGN_ID`/`REDPILL_ROLE`); el argumento del modelo no los declara. Sin hook (pi/antigravity) se aceptan como relay (residual local).
+- **`session_board`** agrupado por **misión/campaña** (vivas primero; misión entrecomillada; campaña `mixta` si difiere).
+**Alternatives**: (a) volcar eventos en el handshake — infla el contexto; (b) cursor por `global_turn` — pierde eventos del mismo turno (bug de la ronda 1); (c) digest siempre presente — ruido; (d) contar `awaiting` por cursor — desaparece al turno siguiente.
+**Rationale / Evidence**: suite **3134 passed**, `ruff`/`mypy` limpios; tests de SILENT, novedades/cursor, `awaiting` abierto, paralelas (liveness), misión de confianza en hook, migración v3 y agrupación del tablón. Panel adversarial CLEARED (sin bloqueante; P1 corregidos).
+**Consequences**: el coro ya avisa al despertar y la sala de guerra agrupa por misión; el detalle es pull (`fetch_events`/`session_board`). Siguiente: Fase 1 (alma/switch) y D26 (red).
+
+---
+
 ## [AD-056] Alma y Coro Fase 2 (slice 1) — substrato de eventos de misión
 **Date**: 2026-10-22
 **Status**: ACCEPTED & IMPLEMENTED (local, rama `feat/2-coro`). **Revisado por panel adversarial de 3 lentes y endurecido.**

@@ -318,7 +318,8 @@ class TestListTools:
 		assert "job_manager_api" in tool_names
 		assert "announce_intent" in tool_names
 		assert "fetch_events" in tool_names
-		assert len(result) == 7
+		assert "check_parallel_sessions" in tool_names
+		assert len(result) == 8
 
 
 class TestControlBunkerAdditional:

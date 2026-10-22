@@ -43,6 +43,7 @@ lineage_id TEXT,
 provider TEXT NOT NULL,
 session_id TEXT NOT NULL,
 last_seen_global_turn INTEGER NOT NULL DEFAULT 0,
+last_seen_event_seq INTEGER NOT NULL DEFAULT 0,
 affinity_json TEXT NOT NULL DEFAULT '[]',
 updated_at REAL NOT NULL,
 title TEXT,
@@ -194,13 +195,22 @@ class SessionRegistry:
 				if "event_seq" not in cols:
 					conn.execute("DROP TABLE mission_events")
 			conn.executescript(_SCHEMA)
+			registry_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_registry)").fetchall()}
+			if "last_seen_event_seq" not in registry_cols:
+				# v3: cursor de eventos para el digest (BD creada antes de v3).
+				# El ALTER no es atómico: dos sesiones abriendo a la vez pueden chocar.
+				try:
+					conn.execute("ALTER TABLE session_registry ADD COLUMN last_seen_event_seq INTEGER NOT NULL DEFAULT 0")
+				except sqlite3.OperationalError:
+					pass
 			current = conn.execute("PRAGMA user_version").fetchone()[0]
 			if current < 2:
 				# v2: el trigger `no_replace` también cubre `event_seq`. En BD ya
 				# inicializadas con v1, `CREATE TRIGGER IF NOT EXISTS` no lo actualiza.
 				conn.execute("DROP TRIGGER IF EXISTS mission_events_no_replace")
 				conn.executescript(_SCHEMA)
-				conn.execute("PRAGMA user_version=2")
+			if current < 3:
+				conn.execute("PRAGMA user_version=3")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────
@@ -246,6 +256,7 @@ class SessionRegistry:
 		title: Optional[str] = None,
 		intent: Optional[str] = None,
 		last_seen_global_turn: int = 0,
+		last_seen_event_seq: int = 0,
 	) -> None:
 		"""UPSERT por `originator` (el leg). Política UNIFICADA "primer enlace gana por
 		cuerpo" (F5): el `continuity_id` YA atado se conserva SIEMPRE — este es el
@@ -260,9 +271,9 @@ class SessionRegistry:
 				"""
 				INSERT INTO session_registry (
 					originator, continuity_id, mission_id, campaign_id, role, lineage_id,
-					provider, session_id, last_seen_global_turn, affinity_json, updated_at,
-					branch, worktree, head_commit, title, intent
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					provider, session_id, last_seen_global_turn, last_seen_event_seq,
+					affinity_json, updated_at, branch, worktree, head_commit, title, intent
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(originator) DO UPDATE SET
 					continuity_id = session_registry.continuity_id,
 					mission_id = excluded.mission_id,
@@ -272,6 +283,7 @@ class SessionRegistry:
 					provider = excluded.provider,
 					session_id = excluded.session_id,
 					last_seen_global_turn = excluded.last_seen_global_turn,
+					last_seen_event_seq = excluded.last_seen_event_seq,
 					affinity_json = excluded.affinity_json,
 					updated_at = excluded.updated_at,
 					branch = COALESCE(excluded.branch, session_registry.branch),
@@ -290,6 +302,7 @@ class SessionRegistry:
 					provider,
 					session_id,
 					last_seen_global_turn,
+					last_seen_event_seq,
 					affinity_json,
 					now,
 					branch,
@@ -315,6 +328,12 @@ class SessionRegistry:
 	def get_max_global_turn(self) -> int:
 		with self._connect() as conn:
 			row = conn.execute("SELECT MAX(global_turn) AS m FROM global_turn_seq").fetchone()
+		return int(row["m"]) if row and row["m"] is not None else 0
+
+	def get_max_event_seq(self) -> int:
+		"""Último `event_seq` global (cursor del digest; 0 si no hay eventos)."""
+		with self._connect() as conn:
+			row = conn.execute("SELECT MAX(event_seq) AS m FROM mission_events").fetchone()
 		return int(row["m"]) if row and row["m"] is not None else 0
 
 	# ── Eventos de misión (Fase 2, append-only) ─────────────────────────────
@@ -455,6 +474,7 @@ class SessionRegistry:
 		mission_id: str,
 		*,
 		since_seq: int = 0,
+		until_seq: Optional[int] = None,
 		types: Optional[List[str]] = None,
 		viewer_originator: Optional[str] = None,
 	) -> int:
@@ -468,6 +488,9 @@ class SessionRegistry:
 		if since > 0:
 			sql += " AND event_seq > ?"
 			params.append(since)
+		if until_seq is not None:
+			sql += " AND event_seq <= ?"
+			params.append(int(until_seq))
 		sql += " AND (sealed = 0 OR ? = originator)"
 		params.append(_clean_key(viewer_originator) if viewer_originator else "")
 		if types:
@@ -482,3 +505,12 @@ class SessionRegistry:
 		with self._connect() as conn:
 			row = conn.execute(sql, tuple(params)).fetchone()
 		return int(row["n"]) if row else 0
+
+	def set_last_seen_event_seq(self, originator: str, seq: int) -> None:
+		"""Fija el cursor del digest DESPUÉS de calcularlo (nunca antes)."""
+		with self._connect() as conn:
+			conn.execute(
+				"UPDATE session_registry SET last_seen_event_seq = ? WHERE originator = ?",
+				(int(seq), str(originator or "")),
+			)
+			conn.commit()

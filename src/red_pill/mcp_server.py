@@ -737,7 +737,7 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 @registry.register_action(
 	parent="swarm_orchestrator_api",
 	action="session_board",
-	description="[OFFICIAL] Tablón de sesiones multi-IDE: vivas (turno en vuelo) y recientes (latido aún retenido), con origen + proyecto/título/modelo (RFC-DESPERTAR-001 P1a).",
+	description="[OFFICIAL] Sala de guerra: sesiones agrupadas por misión/campaña (vivas primero), con alma/rol/proyecto/título/modelo (RFC-DESPERTAR-001 P1a).",
 	schema={"type": "object", "properties": {}},
 )
 async def handle_session_board(arguments: Dict[str, Any]):
@@ -1868,7 +1868,12 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
 	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
 	continuity_id = str(arguments.get("continuity_id") or "").strip() or None
-	campaign_id = str(arguments.get("campaign_id") or "").strip() or None
+	# Arnés con hook: campaña/misión/rol SOLO por env (canal de confianza). Sin
+	# hook (pi/antigravity) se aceptan los argumentos como relay (residual local).
+	if hook_harness:
+		campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or None
+	else:
+		campaign_id = str(arguments.get("campaign_id") or "").strip() or None
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
 	branch = await asyncio.to_thread(_current_git_branch, workspace)
 	mirror = await asyncio.to_thread(_git_mirror, workspace)
@@ -1886,9 +1891,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				if inferred.get("worktree"):
 					mirror = inferred
 	# La misión del manifiesto (env de confianza) manda sobre el argumento del modelo.
-	mission_param = os.getenv("REDPILL_MISSION_ID") or arguments.get("mission_id")
+	mission_param = os.getenv("REDPILL_MISSION_ID") or (None if hook_harness else arguments.get("mission_id"))
 	mission_id = resolve_default_mission(mission_param, branch=branch)
-	role = str(arguments.get("role") or "task").strip() or "task"
+	role = str(os.getenv("REDPILL_ROLE") or (None if hook_harness else arguments.get("role")) or "task").strip() or "task"
 
 	try:
 		affinity = derive_affinity(
@@ -1904,6 +1909,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
 	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
 	linkable = bool(originator and ":" in originator)
+	previous_event_seq = 0
 	try:
 		registry_obj = SessionRegistry()
 		existing = registry_obj.get_by_originator(originator) if (linkable and originator) else None
@@ -1912,6 +1918,14 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				continuity_id = existing["continuity_id"]
 			else:
 				continuity_id = new_continuity_id()
+		previous_event_seq = int((existing or {}).get("last_seen_event_seq") or 0)
+		if existing is None and continuity_id:
+			# Nuevo leg de un alma existente: hereda su cursor (no re-cuenta el histórico).
+			try:
+				siblings = registry_obj.get_by_continuity(continuity_id)
+				previous_event_seq = max((int(r.get("last_seen_event_seq") or 0) for r in siblings), default=0)
+			except Exception:
+				previous_event_seq = 0
 		if persist and linkable and originator:
 			# F1: el reloj global late UNA vez por turno conversacional (D2-a:
 			# señales/jobs sin afinidad no pasan por aquí y no incrementan). Un
@@ -1930,6 +1944,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				lineage_id=arguments.get("lineage_id"),
 				affinity=affinity,
 				last_seen_global_turn=global_turn,
+				last_seen_event_seq=previous_event_seq,
 				branch=branch,
 				worktree=mirror.get("worktree"),
 				head_commit=mirror.get("head_commit"),
@@ -1950,7 +1965,47 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		"mission_id": mission_id,
 		"role": role,
 		"affinity": affinity,
+		"previous_event_seq": previous_event_seq,
 	}
+
+
+def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
+	"""Línea compacta del coro para el handshake (SILENT si no hay nada).
+
+	- Novedades de TU misión: `previous_event_seq < event_seq <= until_seq`.
+	- `awaiting_operator`: pendientes ABIERTOS (sin cursor; resolución en Fase 2).
+	- Paralelas: sesiones VIVAS (liveness) distintas de la tuya.
+	No escribe nada; el cursor lo fija el handshake DESPUÉS de esta función.
+	"""
+	originator = str(identity.get("originator") or "")
+	mission = str(identity.get("mission_id") or "").strip()
+	if ":" not in originator or not mission:
+		return None
+	from red_pill.session.store import SessionRegistry
+
+	registry_obj = SessionRegistry()
+	since = int(identity.get("previous_event_seq") or 0)
+	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
+	awaiting = registry_obj.count_events(
+		mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator
+	)
+	try:
+		from red_pill.core.session_index import _active_seconds, list_sessions
+
+		active = [s for s in list_sessions() if s.is_active(active_seconds=_active_seconds())]
+		parallel = sum(1 for s in active if f"{s.provider}:{s.session_id}" != originator)
+	except Exception:
+		parallel = 0
+	if not novelties and not awaiting and not parallel:
+		return None
+	parts = []
+	if novelties:
+		parts.append(f"{novelties} novedad{'es' if novelties != 1 else ''} (desde seq {since})")
+	if awaiting:
+		parts.append(f"{awaiting} awaiting_operator")
+	if parallel:
+		parts.append("1 sesión paralela" if parallel == 1 else f"{parallel} sesiones paralelas")
+	return "[CORO] " + " · ".join(parts) + " (fetch_events / session_board)"
 
 
 @registry.register(
@@ -2066,6 +2121,21 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 	except Exception as e:
 		outputs.append(f"[HANDSHAKE] Interceptor pipeline failed: {e}")
 		logger.error(f"Sovereign Handshake — interceptor_rp failed: {e}")
+
+	# Coro: novedades/paralelas de tu misión (SILENT si no hay nada). El cursor
+	# se fija DESPUÉS del digest: si falla, el próximo handshake reintenta.
+	if ":" in str(identity.get("originator") or ""):
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			registry_obj = SessionRegistry()
+			until_seq = registry_obj.get_max_event_seq()
+			digest = _coro_digest(identity, until_seq)
+			registry_obj.set_last_seen_event_seq(identity["originator"], until_seq)
+			if digest:
+				outputs.append(digest)
+		except Exception as e:
+			logger.warning(f"Sovereign Handshake — coro digest unavailable: {e}")
 
 	from red_pill.session import decorate_with_session_tag
 
@@ -2266,6 +2336,76 @@ async def handle_fetch_events(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[EVENTS] error: {e}")]
+
+
+@registry.register(
+	name="check_parallel_sessions",
+	description=(
+		"[OFFICIAL] Sala de guerra del coro: global_turn, tu marca, divergencia y "
+		"sesiones vivas/recientes (originator, alma, misión, rol, delta, rama). "
+		"Solo lectura; visibilidad global (D16)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"include_git_status": {"type": "boolean", "description": "Incluye rama/HEAD del espejo git."},
+			"limit": {"type": "integer", "description": "Máximo de sesiones (default 50, tope 200)."},
+		},
+	},
+)
+async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
+	try:
+		from red_pill.core.session_index import _registry_ttl_s
+		from red_pill.session.store import SessionRegistry, sanitize_inline
+
+		session = await _caller_session(arguments)
+		registry_obj = SessionRegistry()
+		global_turn = registry_obj.get_max_global_turn()
+		rows = registry_obj.list_sessions(limit=max(1, min(int(arguments.get("limit") or 50), 200)))
+		my = registry_obj.get_by_originator(session["originator"]) if session.get("originator") else None
+		my_last = int((my or {}).get("last_seen_global_turn") or 0)
+		delta = max(0, global_turn - my_last)
+		include_git = bool(arguments.get("include_git_status"))
+		ttl = _registry_ttl_s()
+		now = time.time()
+		lines = [
+			f"--- CORO: global_turn={global_turn} · tú={sanitize_inline(session.get('mission_id'), 120)} · last_seen={my_last} · delta={delta} ---"
+		]
+		shown = 0
+		for row in rows:
+			if (now - float(row.get("updated_at") or 0.0)) > ttl:
+				continue
+			last = int(row.get("last_seen_global_turn") or 0)
+			parts = [
+				f"[{sanitize_inline(row.get('provider'), 40)}] {sanitize_inline(row.get('session_id'), 60)}",
+				f"alma={sanitize_inline(row.get('continuity_id'), 12)}",
+				f"misión={sanitize_inline(row.get('mission_id'), 80)}",
+			]
+			if row.get("campaign_id"):
+				parts.append(f"campaña={sanitize_inline(row.get('campaign_id'), 80)}")
+			parts.append(f"rol={sanitize_inline(row.get('role'), 20)}")
+			parts.append(f"delta={max(0, global_turn - last)}")
+			parts.append(f"ttl={sanitize_inline(row.get('ttl_state'), 20)}")
+			try:
+				aff = json.loads(row.get("affinity_json") or "[]")
+			except Exception:
+				aff = []
+			if isinstance(aff, list) and aff:
+				parts.append("afinidad=" + sanitize_inline(",".join(str(a) for a in aff), 120))
+			if include_git:
+				if row.get("branch"):
+					parts.append(f"rama={sanitize_inline(row.get('branch'), 80)}")
+				if row.get("worktree"):
+					parts.append(f"worktree={sanitize_inline(row.get('worktree'), 120)}")
+				if row.get("head_commit"):
+					parts.append(f"head={sanitize_inline(row.get('head_commit'), 12)}")
+			lines.append(" · ".join(parts))
+			shown += 1
+		if shown == 0:
+			lines.append("(sin sesiones recientes)")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
 
 
 @server.list_tools()

@@ -408,12 +408,13 @@ def test_render_board_separates_live_from_recent():
 	]
 	text = si.render_board(board, active_min=10, now=now)
 	head, rest = text.split("\n", 1)
-	assert head == "--- SESSION BOARD: 1 viva(s) · 2 reciente(s) ---"
-	live_part, recent_part = rest.split("Recientes", 1)
-	assert "viva" in live_part and "vieja" not in live_part and "colgada" not in live_part
-	assert "modelo=p/m" in live_part
-	assert "vieja · user · idle · hace 2 h" in recent_part
-	assert "colgada · user · en vuelo > 10 min (¿huérfana?)" in recent_part
+	assert head == "--- SESSION BOARD: 1 viva(s) · 2 reciente(s) · 1 misión(es) ---"
+	assert "## '(sin misión)' (3)" in rest
+	assert "viva · user · en vuelo" in rest
+	assert "modelo=p/m" in rest
+	assert "vieja · user · idle · hace 2 h" in rest
+	assert "colgada · user · en vuelo > 10 min (¿huérfana?)" in rest
+	assert rest.index("viva") < rest.index("vieja")  # vivas primero dentro de la misión
 
 
 def test_render_board_empty():
@@ -523,8 +524,8 @@ def test_build_board_joins_registry(monkeypatch):
 	assert by["dead"]["mission_id"] == "mission:adhoc-2026-10-01"
 	assert by["dead"]["active"] is False and by["dead"]["from_registry"] is True
 	text = si.render_board(board, active_min=10, now=now)
-	assert "misión=repo:feat/x" in text
-	assert "Misiones:" in text
+	assert "## 'repo:feat/x' (1)" in text
+	assert "## 'mission:adhoc-2026-10-01' (1)" in text
 
 
 def test_build_board_hides_stale_registry_rows(monkeypatch):
@@ -546,3 +547,16 @@ def test_build_board_hides_stale_registry_rows(monkeypatch):
 		},
 	)
 	assert si.build_board() == []
+
+
+def test_render_board_groups_by_mission_and_campaign():
+	now = 10_000.0
+	board = [
+		{"provider": "opencode", "session_id": "a", "origin": "user", "active": True, "in_flight": True, "last_activity": now - 10, "mission_id": "repo:x", "campaign_id": "camp:1"},
+		{"provider": "opencode", "session_id": "b", "origin": "user", "active": False, "in_flight": False, "last_activity": now - 20, "mission_id": "repo:x", "campaign_id": "camp:1"},
+		{"provider": "claude_code", "session_id": "c", "origin": "user", "active": False, "in_flight": False, "last_activity": now - 30, "mission_id": "mission:adhoc-2026-10-22"},
+	]
+	text = si.render_board(board, active_min=10, now=now)
+	assert "## 'repo:x' (2) · campaña=camp:1" in text
+	assert "## 'mission:adhoc-2026-10-22' (1)" in text
+	assert text.index("## 'repo:x'") < text.index("## 'mission:adhoc")  # misión con viva primero

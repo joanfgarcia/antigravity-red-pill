@@ -6,6 +6,7 @@ anti-spoof de cuerpo/misión/campaña y fail-closed sin cuerpo compuesto.
 """
 
 import os
+import time
 from unittest.mock import patch
 
 import pytest
@@ -261,6 +262,26 @@ class TestHardening:
 				await self._handshake({"user_prompt": "x", "originator": "opencode:victim"})
 		assert SessionRegistry().get_by_originator("opencode:victim") is None
 
+	async def test_hook_harness_ignores_declared_mission(self, tmp_path):
+		from red_pill.session.store import SessionRegistry
+
+		bridge = {"originator": "opencode:evH", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				with patch.dict(os.environ, {"REDPILL_HARNESS": "opencode", "REDPILL_ORIGINATOR": ""}):
+					await self._handshake(
+						{
+							"user_prompt": "x",
+							"mission_id": "repo:feat/victim",
+							"campaign_id": "camp:x",
+							"role": "orchestrator",
+						}
+					)
+		row = SessionRegistry().get_by_originator("opencode:evH")
+		assert row["mission_id"] == "repo:feat/ev"
+		assert row["campaign_id"] is None
+		assert row["role"] == "task"
+
 
 def test_rate_limit(tmp_path):
 	reg = SessionRegistry(str(tmp_path / "s.db"))
@@ -352,3 +373,121 @@ def test_migration_v1_trigger_is_upgraded(tmp_path):
 				(event["event_seq"], "nuevoid", "commit", "m", "pwn", 0.0),
 			)
 			conn.commit()
+
+
+class TestCoroBoard:
+	@staticmethod
+	async def _call(name, arguments):
+		from red_pill.mcp_server import handle_call_tool
+
+		return (await handle_call_tool(name, arguments))[0].text
+
+	@staticmethod
+	async def _handshake(arguments):
+		from types import SimpleNamespace
+
+		from red_pill.mcp_server import handle_call_tool
+
+		async def _fake_interceptor(args):
+			return [SimpleNamespace(text="ok")]
+
+		with patch("red_pill.mcp_server.handle_interceptor_rp", new=_fake_interceptor):
+			return await handle_call_tool("sovereign_handshake", arguments)
+
+	async def test_check_parallel_lists_sessions(self, tmp_path):
+		bridge = {"originator": "opencode:coro1", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				await self._handshake({"user_prompt": "x"})
+				out = await self._call("check_parallel_sessions", {"include_git_status": True})
+		assert "global_turn=" in out
+		assert "[opencode] coro1" in out
+		assert "delta=0" in out
+		assert "rama=feat/ev" in out
+
+	async def test_check_parallel_without_body_is_global(self):
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
+			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "", "REDPILL_HARNESS": ""}):
+				out = await self._call("check_parallel_sessions", {})
+		assert "global_turn=" in out
+
+
+class TestCoroDigest:
+	@staticmethod
+	async def _handshake(arguments):
+		from types import SimpleNamespace
+
+		from red_pill.mcp_server import handle_call_tool
+
+		async def _fake_interceptor(args):
+			return [SimpleNamespace(text="ok")]
+
+		with patch("red_pill.mcp_server.handle_interceptor_rp", new=_fake_interceptor):
+			return (await handle_call_tool("sovereign_handshake", arguments))[0].text
+
+	@staticmethod
+	async def _announce(arguments):
+		from red_pill.mcp_server import handle_call_tool
+
+		return (await handle_call_tool("announce_intent", arguments))[0].text
+
+	async def test_silent_without_novelty(self, tmp_path):
+		bridge = {"originator": "opencode:dg1", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				first = await self._handshake({"user_prompt": "x"})
+		assert "[CORO]" not in first
+
+	async def test_counts_novelties_and_advances_cursor(self, tmp_path):
+		bridge = {"originator": "opencode:dg2", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				await self._handshake({"user_prompt": "x"})
+				await self._announce({"summary": "hito", "type": "phase_done"})
+				second = await self._handshake({"user_prompt": "y"})
+				third = await self._handshake({"user_prompt": "z"})
+		assert "[CORO] 1 novedad (desde seq 0)" in second
+		assert "[CORO]" not in third
+
+	async def test_counts_awaiting_operator(self, tmp_path):
+		bridge = {"originator": "opencode:dg3", "workdir": str(tmp_path)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				await self._handshake({"user_prompt": "x"})
+				await self._announce({"summary": "necesito decisión", "type": "awaiting_operator"})
+				out = await self._handshake({"user_prompt": "y"})
+		assert "awaiting_operator" in out
+
+	async def test_parallel_sessions(self, tmp_path):
+		from red_pill.core.session_liveness import SessionSignal
+
+		now = time.time()
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "opencode:dgB", "workdir": str(tmp_path)}):
+			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
+				with patch("red_pill.core.session_index.list_sessions", return_value=[SessionSignal("opencode", "dgA", now, None)]):
+					out = await self._handshake({"user_prompt": "b"})
+		assert "sesión paralela" in out
+
+
+def test_migration_v3_adds_last_seen_event_seq(tmp_path):
+	"""Una BD v2 (sin la columna) se migra a v3 y acepta last_seen_event_seq."""
+	import sqlite3
+
+	path = tmp_path / "s.db"
+	con = sqlite3.connect(path)
+	con.execute(
+		"CREATE TABLE session_registry (originator TEXT PRIMARY KEY, continuity_id TEXT NOT NULL, mission_id TEXT NOT NULL, "
+		"campaign_id TEXT, role TEXT NOT NULL DEFAULT 'task', lineage_id TEXT, provider TEXT NOT NULL, "
+		"session_id TEXT NOT NULL, last_seen_global_turn INTEGER NOT NULL DEFAULT 0, "
+		"affinity_json TEXT NOT NULL DEFAULT '[]', updated_at REAL NOT NULL, title TEXT, branch TEXT, "
+		"worktree TEXT, base_commit TEXT, head_commit TEXT, dirty_hash TEXT, intent TEXT, "
+		"ttl_state TEXT NOT NULL DEFAULT 'active', ttl_checked_at REAL NOT NULL DEFAULT 0)"
+	)
+	con.execute("PRAGMA user_version=2")
+	con.commit()
+	con.close()
+	reg = SessionRegistry(str(path))
+	reg.upsert_session(originator="opencode:m", continuity_id="alma", mission_id="repo:x", last_seen_event_seq=7)
+	row = reg.get_by_originator("opencode:m")
+	assert row["last_seen_event_seq"] == 7
+	assert reg.get_max_event_seq() == 0

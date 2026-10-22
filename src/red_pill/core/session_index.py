@@ -618,7 +618,7 @@ def _age(ts: Optional[float], now: float) -> str:
 	return f" · hace {mins // 60} h"
 
 
-def _render_entry(b: Dict[str, Any], active_min: int, now: float) -> List[str]:
+def _render_entry(b: Dict[str, Any], active_min: int, now: float, show_mission: bool = True) -> List[str]:
 	from red_pill.session.store import sanitize_inline
 
 	if b.get("active"):
@@ -634,7 +634,7 @@ def _render_entry(b: Dict[str, Any], active_min: int, now: float) -> List[str]:
 		detail.append(f"proyecto={sanitize_inline(b['project'])}" + (f" (+{', '.join(sanitize_inline(x) for x in others)})" if others else ""))
 	if b.get("topic"):
 		detail.append(f"tema={sanitize_inline(b['topic'])}")
-	if b.get("mission_id"):
+	if show_mission and b.get("mission_id"):
 		detail.append(f"misión={sanitize_inline(b['mission_id'], 120)}")
 	if b.get("continuity_id"):
 		detail.append(f"alma={sanitize_inline(str(b['continuity_id'])[:8], 8)}")
@@ -652,36 +652,53 @@ def _render_entry(b: Dict[str, Any], active_min: int, now: float) -> List[str]:
 
 
 def render_board(board: List[Dict[str, Any]], active_min: Optional[int] = None, now: Optional[float] = None) -> str:
-	"""Texto del MCP `session_board`.
+	"""Texto del MCP `session_board`, agrupado por misión (sala de guerra).
 
-	Separa las **vivas** (turno en vuelo con inicio reciente: `active`) de las
-	**recientes** (latidos que el Janitor aún retiene, TTL `SESSION_LIVENESS_TTL_H`):
-	tener latido no es estar vivo.
+	Cada misión es una sección; dentro, vivas primero y luego recientes. La
+	campaña (si la hay) va en la cabecera de la sección. `tener latido` no es
+	`estar vivo`: el estado por entrada lo dice (`en vuelo` / `idle`).
 	"""
 	if active_min is None:
 		active_min = _active_seconds() // 60
 	now = time.time() if now is None else now
 	if not board:
 		return "[SESSION BOARD] Sin sesiones vivas ni recientes."
-	live = [b for b in board if b.get("active")]
-	recent = [b for b in board if not b.get("active")]
-	lines = [f"--- SESSION BOARD: {len(live)} viva(s) · {len(recent)} reciente(s) ---"]
-	misiones: Dict[str, int] = {}
-	for b in board:
-		m = b.get("mission_id")
-		if m:
-			misiones[m] = misiones.get(m, 0) + 1
-	if misiones:
-		from red_pill.session.store import sanitize_inline
+	from red_pill.session.store import sanitize_inline
 
-		ranked = sorted(misiones.items(), key=lambda kv: (-kv[1], kv[0]))
-		lines.append("Misiones: " + " · ".join(f"{sanitize_inline(m, 120)} ({n})" for m, n in ranked))
-	if live:
-		lines.append(f"Vivas (turno en vuelo, iniciado hace < {active_min} min):")
-		for b in live:
-			lines.extend(_render_entry(b, active_min, now))
-	if recent:
-		lines.append("Recientes (sin turno en vuelo; latidos aún no purgados):")
-		for b in recent:
-			lines.extend(_render_entry(b, active_min, now))
+	missions: Dict[str, List[Dict[str, Any]]] = {}
+	for b in board:
+		missions.setdefault(str(b.get("mission_id") or ""), []).append(b)
+
+	def _num(value: Any) -> float:
+		try:
+			return float(value or 0.0)
+		except (TypeError, ValueError):
+			return 0.0
+
+	def _order(item: tuple) -> tuple:
+		mission, entries = item
+		live = sum(1 for e in entries if e.get("active"))
+		last = max(_num(e.get("last_activity")) for e in entries)
+		return (-live, -last, mission)
+
+	live_total = sum(1 for b in board if b.get("active"))
+	recent_total = len(board) - live_total
+	lines = [
+		f"--- SESSION BOARD: {live_total} viva(s) · {recent_total} reciente(s) · {len(missions)} misión(es) ---"
+	]
+	for mission, entries in sorted(missions.items(), key=_order):
+		live = [e for e in entries if e.get("active")]
+		recent = [e for e in entries if not e.get("active")]
+		campaigns = {str(e.get("campaign_id")) for e in entries if e.get("campaign_id")}
+		safe_mission = sanitize_inline(mission or "(sin misión)", 120)
+		head = f"## {safe_mission!r} ({len(entries)})"
+		if len(campaigns) == 1:
+			head += f" · campaña={sanitize_inline(next(iter(campaigns)), 80)}"
+		elif len(campaigns) > 1:
+			head += " · campaña=mixta"
+		lines.append(head)
+		for e in live:
+			lines.extend(_render_entry(e, active_min, now, show_mission=False))
+		for e in recent:
+			lines.extend(_render_entry(e, active_min, now, show_mission=False))
 	return "\n".join(lines)
