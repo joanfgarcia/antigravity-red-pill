@@ -1,13 +1,11 @@
-"""`session.db` — reloj global de turnos + registro de sesiones (Alma y Coro).
+"""`session.db` — reloj global, registro de sesiones y espejo canónico (Alma y Coro).
 
-Fase 0a: versión MÍNIMA pero con el esquema ratificado (ver DECISION_LOG).
 El registro (`session_registry`) es el tablón: una fila por `originator`
 (leg, `provider:session_id`), con su alma (`continuity_id`), misión, rol y linaje.
 El reloj (`global_turn_seq`) da monotonicidad a los turnos (que `memory_queue.id`
-no puede, por el dedup que devuelve ids existentes).
-
-Fase 0b completará lo diferido (TTL materializado, git status espejo, claims y
-eventos): aquí solo se declaran las columnas para no migrar dos veces.
+no puede, por el dedup que devuelve ids existentes). El espejo canónico
+(`session_mirror`, Fase 1a) guarda los turnos portables que permiten reencarnar
+el alma en otro cuerpo (`mirror.SessionMirror`).
 """
 
 from __future__ import annotations
@@ -96,6 +94,28 @@ WHEN EXISTS (SELECT 1 FROM mission_events WHERE event_id = NEW.event_id)
 BEGIN
 	SELECT RAISE(ABORT, 'mission_events is append-only (event_id/event_seq duplicado)');
 END;
+
+CREATE TABLE IF NOT EXISTS session_mirror (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+continuity_id TEXT NOT NULL,
+mission_id TEXT NOT NULL,
+global_turn INTEGER NOT NULL DEFAULT 0,
+seq INTEGER NOT NULL,
+role TEXT NOT NULL,
+content TEXT,
+tool_calls TEXT,
+tool_call_id TEXT,
+model TEXT,
+ts REAL NOT NULL DEFAULT 0,
+originator TEXT NOT NULL DEFAULT '',
+source TEXT NOT NULL DEFAULT '',
+source_ref TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_seq ON session_mirror(continuity_id, seq);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_source ON session_mirror(continuity_id, originator, source_ref)
+WHERE source_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mirror_ts ON session_mirror(continuity_id, ts);
 """
 
 # Taxonomía civil de eventos de misión (Fase 2, RFC_CONSCIENCIA_MULTISESION §3.6).
@@ -156,6 +176,24 @@ def _split_originator(originator: str) -> tuple[str, str]:
 	return (provider or originator), session_id
 
 
+@contextmanager
+def connect_session_db(db_path: str) -> Iterator[sqlite3.Connection]:
+	"""Conexión a `session.db` (WAL + busy_timeout), compartida por store y espejo."""
+	conn = sqlite3.connect(db_path, timeout=30.0)
+	try:
+		# busy_timeout ANTES del WAL: el pragma de journal no usa el handler y
+		# en un arranque concurrente en frío puede dar "database is locked".
+		conn.execute("PRAGMA busy_timeout=5000;")
+		try:
+			conn.execute("PRAGMA journal_mode=WAL;")
+		except sqlite3.OperationalError:
+			pass
+		conn.row_factory = sqlite3.Row
+		yield conn
+	finally:
+		conn.close()
+
+
 class SessionRegistry:
 	"""Acceso a `session.db` (WAL + busy_timeout). Schema owned by Python."""
 
@@ -165,19 +203,8 @@ class SessionRegistry:
 
 	@contextmanager
 	def _connect(self) -> Iterator[sqlite3.Connection]:
-		conn = sqlite3.connect(self.db_path, timeout=30.0)
-		try:
-			# busy_timeout ANTES del WAL: el pragma de journal no usa el handler y
-			# en un arranque concurrente en frío puede dar "database is locked".
-			conn.execute("PRAGMA busy_timeout=5000;")
-			try:
-				conn.execute("PRAGMA journal_mode=WAL;")
-			except sqlite3.OperationalError:
-				pass
-			conn.row_factory = sqlite3.Row
+		with connect_session_db(self.db_path) as conn:
 			yield conn
-		finally:
-			conn.close()
 
 	def _init_db(self) -> None:
 		from pathlib import Path
@@ -211,6 +238,10 @@ class SessionRegistry:
 				conn.executescript(_SCHEMA)
 			if current < 3:
 				conn.execute("PRAGMA user_version=3")
+			if current < 4:
+				# v4: espejo canónico de turnos (`session_mirror`). `_SCHEMA` ya la
+				# crea idempotentemente; aquí solo se sella la versión.
+				conn.execute("PRAGMA user_version=4")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────

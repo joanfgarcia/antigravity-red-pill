@@ -53,6 +53,26 @@ class PresenceBoard(Protocol):
 	) -> str: ...
 
 
+@runtime_checkable
+class MirrorStore(Protocol):
+	"""Espejo canónico de turnos por alma (implementa `mirror.SessionMirror`).
+
+	`tool_calls` viaja como lista OpenAI íntegra (no como marcador de texto): es
+	lo que permite replay cruzado con herramientas. `append_*` es idempotente por
+	`(continuity_id, originator, source_ref)` cuando el turno trae `source_ref`.
+	"""
+
+	def append_turn(self, **kwargs: Any) -> Optional[dict]: ...
+
+	def append_turns(self, continuity_id: str, turns: List[dict], **kwargs: Any) -> int: ...
+
+	def read_turns(self, continuity_id: str, *, since_seq: int = 0, limit: Optional[int] = None) -> List[dict]: ...
+
+	def count_turns(self, continuity_id: str) -> int: ...
+
+	def last_seq(self, continuity_id: str) -> int: ...
+
+
 class AffinityResolver(Protocol):
 	"""Resolver determinista de afinidad (`core.affinity.derive_affinity`)."""
 

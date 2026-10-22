@@ -66,6 +66,51 @@ class ChronicleSourcePlugin(ABC):
 	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
 		"""Mensajes normalizados [{role, content, timestamp}] de una conversación."""
 
+	def load_canonical(self, conversation_id: str) -> List[Dict[str, Any]]:
+		"""Turnos canónicos para el espejo de sesión (Fase 1, `session_mirror`).
+
+		Aditivo: la ruta Memento sigue usando `load()`. El default degrada a texto
+		(sin `tool_calls`); las fuentes que sí exponen tools nativas lo sobrescriben
+		(opencode, claude_code) para no perder la pareja tool-call/resultado.
+		"""
+		turns: List[Dict[str, Any]] = []
+		for message in self.load(conversation_id):
+			role = str(message.get("role") or "")
+			if role not in ("system", "user", "assistant", "tool"):
+				continue
+			content = message.get("content")
+			if not isinstance(content, str):
+				content = "" if content is None else str(content)
+			if not content.strip():
+				continue
+			turns.append(
+				{
+					"role": role,
+					"content": content,
+					"tool_calls": None,
+					"tool_call_id": None,
+					"model": None,
+					"ts": canonical_ts(message.get("timestamp")),
+					"source_ref": None,
+				}
+			)
+		return turns
+
+
+def canonical_ts(value: Any) -> float:
+	"""Timestamp a epoch en segundos (ISO o numérico); 0.0 si no es interpretable."""
+	if value is None:
+		return 0.0
+	if isinstance(value, (int, float)):
+		return float(value) if float(value) > 0 else 0.0
+	try:
+		from datetime import datetime
+
+		text = str(value).strip().replace("Z", "+00:00")
+		return datetime.fromisoformat(text).timestamp()
+	except (TypeError, ValueError):
+		return 0.0
+
 
 def discover_source_plugins(only_enabled: bool = True) -> List[ChronicleSourcePlugin]:
 	"""Auto-descubre las subclases de ChronicleSourcePlugin de este paquete."""

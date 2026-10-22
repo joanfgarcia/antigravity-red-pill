@@ -99,6 +99,87 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		data = json.loads(raw_file.read_text(encoding="utf-8"))
 		return self._normalize_rows([tuple(r) for r in data.get("message_rows", [])], [tuple(r) for r in data.get("part_rows", [])])
 
+	def load_canonical(self, conversation_id: str) -> List[Dict[str, Any]]:
+		"""Turnos con tool-calls OpenAI nativos (pareja assistant.tool_calls ↔ tool)."""
+		msg_rows, part_rows = self._fetch_rows(conversation_id)
+		return self._normalize_rows_canonical(msg_rows, part_rows)
+
+	def _tool_output(self, state: Dict[str, Any]) -> str:
+		output = state.get("output")
+		if output is None:
+			return ""
+		if isinstance(output, str):
+			return output
+		try:
+			return json.dumps(output, ensure_ascii=False)
+		except (TypeError, ValueError):
+			return str(output)
+
+	def _normalize_rows_canonical(self, msg_rows: List[Any], part_rows: List[Any]) -> List[Dict[str, Any]]:
+		"""Como `_normalize_rows`, pero conserva `tool_calls`/`tool_call_id` intactos."""
+		parts_by_message: Dict[str, List[Dict[str, Any]]] = {}
+		for message_id, raw in part_rows:
+			try:
+				parts_by_message.setdefault(message_id, []).append(json.loads(raw))
+			except Exception:
+				continue
+
+		turns: List[Dict[str, Any]] = []
+		for message_id, raw, time_created in msg_rows:
+			try:
+				data = json.loads(raw)
+			except Exception:
+				continue
+			role = data.get("role")
+			if role not in ("user", "assistant"):
+				continue
+			ts_ms = (data.get("time") or {}).get("created") or time_created
+			ts = float(ts_ms) / 1000.0 if ts_ms else 0.0
+			model = data.get("modelID")
+			parts = parts_by_message.get(message_id, [])
+
+			text_chunks = [p.get("text", "") or "" for p in parts if p.get("type") == "text"]
+			content = "\n".join(chunk for chunk in text_chunks if chunk.strip()) or None
+			tool_parts = [p for p in parts if p.get("type") == "tool"]
+			tool_calls = []
+			for index, part in enumerate(tool_parts):
+				call_id = str(part.get("callID") or f"{message_id}:{index}")
+				tool_calls.append(
+					{
+						"id": call_id,
+						"type": "function",
+						"function": {
+							"name": str(part.get("tool") or ""),
+							"arguments": json.dumps(part.get("state", {}).get("input") or {}, ensure_ascii=False),
+						},
+					}
+				)
+			if content or tool_calls:
+				turns.append(
+					{
+						"role": role,
+						"content": content,
+						"tool_calls": tool_calls or None,
+						"tool_call_id": None,
+						"model": model,
+						"ts": ts,
+						"source_ref": message_id,
+					}
+				)
+			for call, part in zip(tool_calls, tool_parts):
+				turns.append(
+					{
+						"role": "tool",
+						"content": self._tool_output(part.get("state") or {}),
+						"tool_calls": None,
+						"tool_call_id": call["id"],
+						"model": model,
+						"ts": ts,
+						"source_ref": f"{message_id}:tool:{call['id']}",
+					}
+				)
+		return turns
+
 	def _normalize_rows(self, msg_rows: List[Any], part_rows: List[Any]) -> List[Dict[str, Any]]:
 		parts_by_message: Dict[str, List[Dict[str, Any]]] = {}
 		for message_id, raw in part_rows:
