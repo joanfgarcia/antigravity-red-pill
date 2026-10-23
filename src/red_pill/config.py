@@ -507,6 +507,16 @@ class RedPillConfig(BaseSettings):
 	# antes de borrarlo de `session_registry` (24h). `mission_events` no se toca:
 	# su TTL es la vida de la misión, no la presencia.
 	MULTISESSION_PURGE_AFTER_SECS: int = 86400
+	# SESSION_MIRROR_RETENTION_DAYS: retención del espejo canónico (Fase 1). Solo
+	# se purgan almas SIN leg activo; un alma viva nunca pierde turnos (conservador
+	# hasta tener métricas del janitor). Ver CONVENTIONS §10.10.
+	SESSION_MIRROR_RETENTION_DAYS: int = 30
+	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
+	SESSION_MIRROR_GROWTH_ROWS: int = 200000
+	SESSION_MIRROR_GROWTH_BYTES: int = 536870912
+	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
+	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
+	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

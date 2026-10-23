@@ -94,7 +94,7 @@ def test_cross_family_replays_with_tool_result_without_reexecuting(env):
 	mirror, reg = env
 	bridge = FakeBridge(response="hecho", conversation_id="local-leg")
 	target = SwitchTarget(provider="local", model="8b", bridge=bridge)
-	result = switch_model("alma-1", target, prompt="sigue", mirror=mirror, registry=reg)
+	result = switch_model("alma-1", target, prompt="sigue", mirror=mirror, registry=reg, sync=False)
 	assert result.mode == "replay"
 	assert result.replayed_turns == 3
 	assert bridge.calls[0][0] == "prompt"
@@ -109,7 +109,7 @@ def test_cross_family_replays_with_tool_result_without_reexecuting(env):
 def test_publishes_leg_close_and_open_with_same_soul(env):
 	mirror, reg = env
 	bridge = FakeBridge(conversation_id="local-leg")
-	switch_model("alma-1", SwitchTarget(provider="local", bridge=bridge), prompt="x", mirror=mirror, registry=reg)
+	switch_model("alma-1", SwitchTarget(provider="local", bridge=bridge), prompt="x", mirror=mirror, registry=reg, sync=False)
 	old = reg.get_by_originator("claude_code:s1")
 	assert old["ttl_state"] == "expired"
 	new = reg.get_by_originator("local:local-leg")
@@ -127,7 +127,7 @@ def test_same_family_uses_native_resume(env):
 	mirror, reg = env
 	reg.upsert_session(originator="opencode:s9", continuity_id="alma-1", mission_id="repo:main")
 	bridge = FakeBridge(conversation_id="s9")
-	result = switch_model("alma-1", SwitchTarget(provider="opencode", bridge=bridge), prompt="sigue", previous_originator="opencode:s9", mirror=mirror, registry=reg)
+	result = switch_model("alma-1", SwitchTarget(provider="opencode", bridge=bridge), prompt="sigue", previous_originator="opencode:s9", mirror=mirror, registry=reg, sync=False)
 	assert result.mode == "native_resume"
 	assert result.replayed_turns == 0
 	assert bridge.calls[0][0] == "continue_conversation"
@@ -146,6 +146,7 @@ def test_quota_fallback_replays_on_next_target(env):
 		fallbacks=[SwitchTarget(provider="local", bridge=local)],
 		mirror=mirror,
 		registry=reg,
+		sync=False,
 	)
 	assert result.mode == "fallback_replay"
 	assert result.provider == "local"
@@ -164,6 +165,7 @@ def test_all_targets_fail_raises(env):
 			fallbacks=[SwitchTarget(provider="pi", bridge=FakeBridge(error="boom2"))],
 			mirror=mirror,
 			registry=reg,
+			sync=False,
 		)
 	assert len(exc.value.errors) == 2
 
@@ -197,3 +199,19 @@ def test_upsert_reactivates_a_closed_leg(tmp_path):
 	reg.unregister_session("opencode:s1")
 	reg.upsert_session(originator="opencode:s1", continuity_id="alma-1", mission_id="m")
 	assert reg.get_by_originator("opencode:s1")["ttl_state"] == "active"
+
+
+def test_sync_on_switch_fills_the_mirror_before_replay(env, monkeypatch):
+	import red_pill.session.switch as sw
+
+	mirror, reg = env
+	calls = []
+
+	def _fake_sync(store, **kwargs):
+		calls.append(kwargs)
+		return 0
+
+	monkeypatch.setattr(sw, "sync_originator", _fake_sync)
+	switch_model("alma-1", SwitchTarget(provider="local", bridge=FakeBridge()), prompt="sigue", mirror=mirror, registry=reg)
+	assert calls and calls[0]["originator"] == "claude_code:s1"
+	assert calls[0]["continuity_id"] == "alma-1"

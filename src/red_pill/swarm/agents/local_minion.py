@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import secrets
+import time
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
@@ -469,8 +470,22 @@ async def _dispatch(name: str, args: Dict[str, Any], cwd: Optional[str]) -> str:
 		return f"ERROR: {name} failed: {e!r}"
 
 
-async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_name: str = "sip") -> Dict[str, Any]:
-	"""Run a bounded tool loop for `task` on the local model. Returns a result dict."""
+async def run_local_minion(
+	task: str,
+	*,
+	cwd: Optional[str] = None,
+	provider_name: str = "sip",
+	continuity_id: Optional[str] = None,
+	mission_id: Optional[str] = None,
+	originator: str = "",
+	global_turn: int = 0,
+) -> Dict[str, Any]:
+	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
+
+	Con `continuity_id` + `mission_id`, el run vuelca su `messages` al espejo
+	canónico (arnés RedPill): es lo que permite el replay real al cambiar de
+	proveedor. Sin esos datos no se escribe nada (el espejo no inventa alma).
+	"""
 	from red_pill.core.providers import ProviderRegistry
 
 	provider = ProviderRegistry.get_inference_provider(provider_name)
@@ -491,7 +506,37 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 	tool_calls_ok = 0  # results that are not ERROR: only these ground the answer
 	tool_results: List[str] = []
 
+	def _capture() -> None:
+		if not continuity_id or not mission_id:
+			return
+		try:
+			from red_pill.session.mirror import SessionMirror
+
+			turns = [
+				{
+					"role": message.get("role"),
+					"content": message.get("content"),
+					"tool_calls": message.get("tool_calls"),
+					"tool_call_id": message.get("tool_call_id"),
+					"model": model if isinstance(model, str) else None,
+					"ts": time.time(),
+				}
+				for message in messages
+				if message.get("role") in ("user", "assistant", "tool")
+			]
+			SessionMirror().append_turns(
+				continuity_id,
+				turns,
+				mission_id=mission_id,
+				originator=originator,
+				source=provider_name,
+				global_turn=global_turn,
+			)
+		except Exception as e:
+			logger.warning(f"[local-minion] mirror capture failed: {e}")
+
 	def _done(ok: bool, answer: str, steps: int) -> Dict[str, Any]:
+		_capture()
 		return {
 			"ok": ok,
 			"answer": answer,

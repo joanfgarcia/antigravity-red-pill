@@ -17,5 +17,10 @@ plugins:
   session_liveness:
     enabled: true
     ttl_h: 48                 # TTL de los latidos de sesión (${STATE_DIR}/sessions/live/)
+  session_mirror_purge:
+    enabled: true
+    retention_days: 30        # Solo almas sin leg activo; un alma viva nunca pierde turnos
+    growth_rows: 200000       # Aviso (señal de dolor), no purga
+    growth_bytes: 536870912   # 512 MB (db + wal)
   orphaned_parents_sweep:
     enabled: true

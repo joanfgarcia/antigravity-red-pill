@@ -100,9 +100,9 @@ class ModelDriver(Protocol):
 
 
 class HydrationPolicy(Protocol):
-	"""Qué referencia recibe cada rol al despertar (Fase 2)."""
+	"""Qué referencia recibe cada rol al despertar (Fase 2; `session.roles`)."""
 
-	def references(self, role: str) -> Dict[str, Any]: ...
+	def references(self) -> Dict[str, Any]: ...
 
 
 class ClaimDriver(Protocol):

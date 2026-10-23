@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-061] Alma y Coro — retención observable, divergencia y rol transparente
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Cierra los flecos de Fase 2/Fase 1 acordados con el Operador.
+**Context**: AD-060 dejó el espejo sin política de retención y el arnés RedPill sin captura; `fetch_divergent_turns` e hidratación por rol seguían pendientes. El Operador fijó dos criterios: (a) TTLs conservadores + monitorización medible (no ajustar a ciegas), y (b) identidad transparente para el agente (rol/misión/campaña no se declaran desde el modelo).
+**Decision**:
+1. **Retención conservadora y observable del espejo.** `SESSION_MIRROR_RETENTION_DAYS=30`, pero solo se purgan almas **sin ningún leg activo**; un alma viva nunca pierde turnos. Turnos sin `ts` fiable se conservan y se reportan. Janitor `session_mirror_purge` devuelve métricas (filas antes/después, almas, bytes, muertas/huérfanas/sin fecha, cutoff), emite señal de estado `session_mirror_stats` y señal de dolor `session_mirror_growth` solo al cruzar umbrales (`SESSION_MIRROR_GROWTH_ROWS`/`_BYTES`). CLI `session mirror stats`. Regla de diseño nueva: `docs/CORE/CONVENTIONS.md` §10.10 (TTL *y* monitorización para todo artefacto acumulativo).
+2. **`fetch_divergent_turns` (D15).** Metadata del reloj (`global_turn_seq` + registro); contenido **solo** de turnos espejados con `global_turn > 0` (el backfill histórico no tiene reloj: no se inventa). Siempre los turnos propios; los ajenos solo con intersección de afinidad. `MULTISESSION_DIVERGENT_ALLOW_ALL` es flag de operador (nunca argumento del modelo).
+3. **Captura en el arnés RedPill.** `run_local_minion(..., continuity_id, mission_id, originator, global_turn)` vuelca sus `messages` (sin system) al espejo al terminar; sin alma/misión no escribe. Esto cierra la captura del lado RedPill sin tocar los bridges.
+4. **Rol transparente + hidratación por rol.** `role`: `REDPILL_ROLE` → rol ya atado al leg → `task`; el argumento del modelo se ignora (se conserva en el schema por compatibilidad, documentado como no autoritativo). Campaña: env → leg registrado. Misión: env → `repo:rama` → adhoc (el argumento no la declara). Políticas en `session/roles/` (orchestrator=digest global, task=compacto, spawn=silencioso) resueltas por dato, nunca por inferencia.
+5. **Evento del switch:** se mantiene `intent_updated` (taxonomía cerrada). Si un consumidor necesita distinguirlo, se valorará `model_switch`.
+6. **Sync-on-switch (F7).** `switch_model` sincroniza el transcript del leg anterior al espejo **antes** de leerlo (`sync=True`, idempotente). Es el disparador que ata el relleno al único momento en que su ausencia duele; un provider sin fuente canónica se ignora con log (no rompe el switch). Así la Fase 1 deja de estar «mergeada pero vacía».
+**Alternatives**: (a) trim de turnos antiguos también en almas vivas — riesgo de perder contexto en una tarea larga; se descarta hasta tener métricas; (b) contenido de divergencia desde backfill — exigiría inventar `global_turn` por timestamp (frágil); (c) rol inferido del texto/origen — prohibido por F2 (dato, no inferencia); (d) permitir `allow_all` por argumento — spoofing de lectura.
+**Rationale / Evidence**: suite completa **3183 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/` y `mypy src/red_pill/` limpios. Tests de purga (viva intacta, muerta antigua/reciente, edad desconocida), métricas/señales del janitor, divergencia (propio/intersección/ajeno, backfill sin contenido), captura del minion, rol heredado/ignorado y sync-on-switch.
+**Consequences**: la retención es ajustable **con datos** y el rol deja de ser un parámetro del agente. Deuda declarada: (1) turnos históricos sin `global_turn` no aportan contenido a divergencia hasta que exista captura en vivo de ese arnés; (2) `switch` *mid-run* dentro de `run_local_minion`; (3) D23 (firma de notas) se pospone hasta que sea bloqueante. Ratificado para Fase 3: compactar **no** cambia el `continuity_id`; `compact_parent` apunta al segmento anterior y el resumen entra en el espejo preservando parejas tool-call/resultado.
+
+---
+
 ## [AD-060] Alma y Coro Fase 1 — espejo canónico de turnos y `switch_model`
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Extiende AD-055/AD-056/AD-057. Cierra además los restos de Fase 2 (`unregister_session`, purga D14).

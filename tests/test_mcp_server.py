@@ -320,7 +320,8 @@ class TestListTools:
 		assert "fetch_events" in tool_names
 		assert "check_parallel_sessions" in tool_names
 		assert "unregister_session" in tool_names
-		assert len(result) == 9
+		assert "fetch_divergent_turns" in tool_names
+		assert len(result) == 10
 
 
 class TestControlBunkerAdditional:

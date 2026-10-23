@@ -24,7 +24,16 @@
   externos y `replay_messages` para el arnés RedPill.
 - **[NEW]** Restos de Fase 2: `unregister_session`, purga D14
   (`MULTISESSION_PURGE_AFTER_SECS`) y reactivación de un leg que vuelve a latir.
-- **[DOCS]** AD-060.
+- **[NEW]** Retención observable del espejo: `session_mirror_purge` (solo almas sin
+  leg activo, 30 días), métricas + señales (`session_mirror_stats` / `_growth`) y
+  CLI `session mirror stats`. Regla de diseño TTL+monitorización en CONVENTIONS §10.10.
+- **[NEW]** `fetch_divergent_turns` (D15: propio + afinidad; contenido solo con
+  `global_turn > 0`) y captura del espejo en `run_local_minion`.
+- **[NEW]** Sync-on-switch (F7): `switch_model` rellena el espejo desde el transcript
+  del leg anterior antes de reencarnar (idempotente).
+- **[NEW]** Rol transparente: se hereda del leg/`REDPILL_ROLE`; los argumentos del
+  modelo no declaran rol/misión/campaña. Políticas por rol en `session/roles/`.
+- **[DOCS]** AD-060, AD-061.
 
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 

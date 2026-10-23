@@ -26,7 +26,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from red_pill.session.mirror import SessionMirror
+from red_pill.session.mirror import SessionMirror, sync_originator
 from red_pill.session.store import SessionRegistry, sanitize_inline
 
 logger = logging.getLogger(__name__)
@@ -304,6 +304,7 @@ def switch_model(
 	mirror: Optional[SessionMirror] = None,
 	registry: Optional[SessionRegistry] = None,
 	timeout: int = 120,
+	sync: bool = True,
 ) -> SwitchResult:
 	"""Cambia de cuerpo conservando el alma; resume nativo o replay desde el espejo.
 
@@ -320,6 +321,21 @@ def switch_model(
 	old_origin = str((old_row or {}).get("originator") or "")
 	old_provider = str((old_row or {}).get("provider") or "")
 	old_native = str((old_row or {}).get("session_id") or "")
+	# F7 (sync-on-switch): antes de reencarnar, rellena el espejo desde el
+	# transcript del leg anterior. Es el único momento en que su ausencia duele.
+	# Idempotente; un provider sin fuente canónica se ignora (la captura en vivo
+	# del arnés RedPill ya escribe en el espejo).
+	if sync and old_row and old_origin:
+		try:
+			sync_originator(
+				store,
+				originator=old_origin,
+				continuity_id=continuity,
+				mission_id=str(old_row.get("mission_id") or ""),
+				provider=old_provider or None,
+			)
+		except Exception as e:
+			logger.info(f"[SessionSwitch] no transcript que sincronizar para {old_origin}: {e}")
 	turns = store.read_turns(continuity)
 	payload = render_history(continuity, turns, current_prompt=prompt)
 

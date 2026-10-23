@@ -681,3 +681,24 @@ async def test_run_bash_real_corre_dentro_del_directorio(tmp_path):
 	out = json.loads(await local_minion._dispatch("run_bash", {"command": "cat manifest.txt; pwd"}, str(tmp_path)))
 	assert out["returncode"] == 0
 	assert "vault-7731" in out["stdout"] and str(tmp_path.resolve()) in out["stdout"]
+
+
+async def test_mirror_capture_with_continuity(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": "hecho"}]))
+	res = await local_minion.run_local_minion("hola", continuity_id="alma-local", mission_id="repo:m", originator="sip:run1")
+	assert res["ok"] is True
+	turns = SessionMirror().read_turns("alma-local")
+	assert [t["role"] for t in turns] == ["user", "assistant"]
+	assert turns[0]["content"] == "hola"
+	assert turns[1]["content"] == "hecho"
+	assert turns[0]["source"] == "sip"
+
+
+async def test_mirror_capture_skipped_without_soul(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": "hecho"}]))
+	await local_minion.run_local_minion("hola")
+	assert SessionMirror().stats()["rows"] == 0

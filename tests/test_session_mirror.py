@@ -238,3 +238,73 @@ class TestCanonicalExtraction:
 	def test_sync_without_source_is_explicit_not_silent(self, mirror):
 		with pytest.raises(SessionSourceNotFound):
 			sync_originator(mirror, originator="mystery:s1", continuity_id="alma-1", mission_id="m")
+
+
+class TestRetentionAndStats:
+	def _turn(self, mirror, continuity, *, ts, originator="opencode:s1", mission="m"):
+		return mirror.append_turn(
+			continuity_id=continuity,
+			mission_id=mission,
+			role="user",
+			content="x",
+			ts=ts,
+			originator=originator,
+			source="opencode",
+			source_ref=f"{continuity}:{ts}",
+		)
+
+	def test_stats_counts_souls_and_bytes(self, tmp_path):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		reg.upsert_session(originator="opencode:live", continuity_id="alive", mission_id="m")
+		reg.upsert_session(originator="opencode:dead", continuity_id="dead", mission_id="m")
+		reg.unregister_session("opencode:dead")
+		self._turn(mirror, "alive", ts=time.time())
+		self._turn(mirror, "dead", ts=time.time())
+		self._turn(mirror, "orphan", ts=time.time(), originator="opencode:none")
+		stats = mirror.stats(retention_days=30)
+		assert stats["rows"] == 3
+		assert stats["souls"] == 3
+		assert stats["active_souls"] == 1
+		assert stats["dead_souls"] == 1
+		assert stats["orphan_souls"] == 1
+		assert stats["db_bytes"] + stats["wal_bytes"] > 0
+		assert stats["retention_days"] == 30
+
+	def test_purge_keeps_alive_souls_and_recent_dead(self, tmp_path):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		old = time.time() - 90 * 86400
+		reg.upsert_session(originator="opencode:live", continuity_id="alive", mission_id="m")
+		reg.upsert_session(originator="opencode:dead", continuity_id="dead_old", mission_id="m")
+		reg.upsert_session(originator="opencode:dead2", continuity_id="dead_new", mission_id="m")
+		reg.unregister_session("opencode:dead")
+		reg.unregister_session("opencode:dead2")
+		self._turn(mirror, "alive", ts=old)
+		self._turn(mirror, "dead_old", ts=old)
+		self._turn(mirror, "dead_new", ts=time.time())
+		self._turn(mirror, "orphan_old", ts=old, originator="opencode:none")
+		purged = mirror.purge(retention_days=30)
+		assert purged["souls_purged"] == 2
+		assert purged["rows_purged"] == 2
+		assert mirror.count_turns("alive") == 1
+		assert mirror.count_turns("dead_new") == 1
+		assert mirror.count_turns("dead_old") == 0
+		assert mirror.count_turns("orphan_old") == 0
+
+	def test_purge_does_not_guess_unknown_age(self, tmp_path):
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		reg.upsert_session(originator="opencode:dead", continuity_id="dead", mission_id="m")
+		reg.unregister_session("opencode:dead")
+		mirror.append_turn(continuity_id="dead", mission_id="m", role="user", content="x", ts=0.0, originator="opencode:dead")
+		assert mirror.purge(retention_days=30)["rows_purged"] == 0
+		assert mirror.stats(retention_days=30)["unknown_age_souls"] == 1
+		assert mirror.count_turns("dead") == 1

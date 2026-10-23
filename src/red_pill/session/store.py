@@ -369,6 +369,90 @@ class SessionRegistry:
 			row = conn.execute("SELECT MAX(event_seq) AS m FROM mission_events").fetchone()
 		return int(row["m"]) if row and row["m"] is not None else 0
 
+	def active_continuities(self) -> List[str]:
+		"""Almas con al menos un leg NO expirado (para retención del espejo)."""
+		with self._connect() as conn:
+			rows = conn.execute(
+				"SELECT DISTINCT continuity_id FROM session_registry WHERE ttl_state != 'expired'"
+			).fetchall()
+		return [str(row["continuity_id"]) for row in rows if row["continuity_id"]]
+
+	def divergent_turns(
+		self,
+		since_global_turn: int,
+		*,
+		viewer_originator: str,
+		viewer_affinity: Optional[List[str]] = None,
+		limit: int = 20,
+		allow_all: bool = False,
+	) -> List[dict]:
+		"""Turnos del reloj posteriores a tu marca, con filtro D15 (deny-by-default).
+
+		Incluye SIEMPRE los tuyos; los ajenos solo si su afinidad intersecta la tuya
+		(o `allow_all`, que exige flag de operador). `content` se rellena únicamente
+		desde turnos del espejo con `global_turn > 0` (el backfill histórico no tiene
+		reloj: no se inventa).
+		"""
+		from red_pill.core.affinity import canonize_affinity
+
+		since = int(since_global_turn or 0)
+		cap = max(1, min(int(limit or 20), 200))
+		mine = set(canonize_affinity(viewer_affinity or []))
+		with self._connect() as conn:
+			rows = conn.execute(
+				"""
+				SELECT g.global_turn, g.created_at, g.originator, g.affinity_json,
+				r.mission_id, r.continuity_id, r.role, r.ttl_state
+				FROM global_turn_seq g
+				LEFT JOIN session_registry r ON r.originator = g.originator
+				WHERE g.global_turn > ?
+				ORDER BY g.global_turn ASC
+				LIMIT ?
+				""",
+				(since, cap * 5),
+			).fetchall()
+			selected: List[dict] = []
+			for row in rows:
+				origin = str(row["originator"] or "")
+				try:
+					theirs = set(json.loads(row["affinity_json"] or "[]"))
+				except Exception:
+					theirs = set()
+				visible = bool(allow_all) or origin == viewer_originator or bool(mine & theirs)
+				if not visible:
+					continue
+				item = {
+					"global_turn": int(row["global_turn"]),
+					"created_at": float(row["created_at"] or 0.0),
+					"originator": origin,
+					"mission_id": row["mission_id"],
+					"continuity_id": row["continuity_id"],
+					"role": row["role"],
+					"ttl_state": row["ttl_state"],
+					"affinity": sorted(theirs),
+					"turns": [],
+				}
+				content_rows = conn.execute(
+					"SELECT role, content, tool_calls, tool_call_id, model, ts FROM session_mirror "
+					"WHERE originator = ? AND global_turn = ? ORDER BY seq ASC",
+					(origin, int(row["global_turn"])),
+				).fetchall()
+				for turn in content_rows:
+					item["turns"].append(
+						{
+							"role": turn["role"],
+							"content": turn["content"],
+							"tool_calls": json.loads(turn["tool_calls"]) if turn["tool_calls"] else None,
+							"tool_call_id": turn["tool_call_id"],
+							"model": turn["model"],
+							"ts": turn["ts"],
+						}
+					)
+				selected.append(item)
+				if len(selected) >= cap:
+					break
+		return selected
+
 	# ── Eventos de misión (Fase 2, append-only) ─────────────────────────────
 	def add_event(
 		self,

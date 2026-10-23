@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import time
 from typing import Any, Dict, List, Optional
 
@@ -251,6 +252,128 @@ class SessionMirror:
 				(str(continuity_id or "").strip(),),
 			).fetchone()
 		return int(row["m"]) if row else 0
+
+	# ── Ciclo de vida y observabilidad (TTL + monitorización, AD-060) ───────
+	def stats(self, *, retention_days: Optional[float] = None) -> dict:
+		"""Métricas medibles del espejo (janitor + CLI `session mirror stats`).
+
+		No purga nada. `dead_souls`/`orphan_souls` son la señal de trabajo para la
+		retención; `undated_rows` son turnos sin `ts` fiable (backfill incompleto).
+		"""
+		import os
+
+		import red_pill.config as cfg
+
+		days = float(retention_days) if retention_days is not None else float(getattr(cfg.get_config(), "SESSION_MIRROR_RETENTION_DAYS", 30))
+		cutoff = time.time() - max(0.0, days) * 86400.0
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(
+				"SELECT COUNT(*) AS rows, COUNT(DISTINCT continuity_id) AS souls, "
+				"SUM(CASE WHEN ts > 0 THEN 1 ELSE 0 END) AS dated_rows, "
+				"MIN(CASE WHEN ts > 0 THEN ts END) AS oldest_ts, MAX(ts) AS newest_ts "
+				"FROM session_mirror"
+			).fetchone()
+			per_soul = conn.execute(
+				"SELECT continuity_id, COUNT(*) AS turns, MAX(ts) AS last_ts, "
+				"SUM(CASE WHEN ts = 0 THEN 1 ELSE 0 END) AS undated "
+				"FROM session_mirror GROUP BY continuity_id"
+			).fetchall()
+			registry_rows = conn.execute(
+				"SELECT continuity_id, MAX(CASE WHEN ttl_state != 'expired' THEN 1 ELSE 0 END) AS has_active, "
+				"MAX(updated_at) AS last_updated FROM session_registry GROUP BY continuity_id"
+			).fetchall()
+		registry = {str(r["continuity_id"]): r for r in registry_rows}
+		active_souls = dead_souls = orphan_souls = dead_rows = orphan_rows = 0
+		unknown_age_souls = expired_candidates = 0
+		for soul in per_soul:
+			cid = str(soul["continuity_id"])
+			info = registry.get(cid)
+			is_active = bool(info and info["has_active"])
+			is_orphan = info is None
+			if is_active:
+				active_souls += 1
+				continue
+			if is_orphan:
+				orphan_souls += 1
+				orphan_rows += int(soul["turns"])
+			else:
+				dead_souls += 1
+				dead_rows += int(soul["turns"])
+			last_ts = float(soul["last_ts"] or 0.0)
+			if last_ts <= 0:
+				unknown_age_souls += 1
+			elif last_ts < cutoff:
+				expired_candidates += 1
+		try:
+			db_bytes = os.path.getsize(self.db_path)
+		except OSError:
+			db_bytes = 0
+		try:
+			wal_bytes = os.path.getsize(self.db_path + "-wal")
+		except OSError:
+			wal_bytes = 0
+		return {
+			"rows": int(row["rows"] or 0),
+			"souls": int(row["souls"] or 0),
+			"dated_rows": int(row["dated_rows"] or 0),
+			"undated_rows": int(row["rows"] or 0) - int(row["dated_rows"] or 0),
+			"oldest_ts": float(row["oldest_ts"]) if row["oldest_ts"] is not None else None,
+			"newest_ts": float(row["newest_ts"]) if row["newest_ts"] is not None else None,
+			"active_souls": active_souls,
+			"dead_souls": dead_souls,
+			"orphan_souls": orphan_souls,
+			"dead_rows": dead_rows,
+			"orphan_rows": orphan_rows,
+			"unknown_age_souls": unknown_age_souls,
+			"expired_candidates": expired_candidates,
+			"db_bytes": db_bytes,
+			"wal_bytes": wal_bytes,
+			"retention_days": days,
+			"retention_cutoff_ts": cutoff,
+		}
+
+	def purge(self, registry: Optional[SessionRegistry] = None, *, retention_days: Optional[float] = None) -> dict:
+		"""Purga CONSERVADORA: solo almas sin ningún leg activo y más viejas que el TTL.
+
+		Un alma activa no pierde turnos (ni antiguos): el coste de un purgado
+		demasiado agresivo es mayor que el de esperar métricas. Los turnos sin `ts`
+		fiable se conservan y se reportan (`unknown_age_souls`). Nunca toca el
+		registro ni `mission_events`.
+		"""
+		import red_pill.config as cfg
+
+		reg = registry or SessionRegistry(self.db_path)
+		days = float(retention_days) if retention_days is not None else float(getattr(cfg.get_config(), "SESSION_MIRROR_RETENTION_DAYS", 30))
+		cutoff = time.time() - max(0.0, days) * 86400.0
+		active = set(reg.active_continuities())
+		purged_rows = purged_souls = 0
+		with connect_session_db(self.db_path) as conn:
+			souls = conn.execute(
+				"SELECT continuity_id, COUNT(*) AS turns, MAX(ts) AS last_ts FROM session_mirror GROUP BY continuity_id"
+			).fetchall()
+			for soul in souls:
+				cid = str(soul["continuity_id"])
+				if cid in active:
+					continue
+				last_ts = float(soul["last_ts"] or 0.0)
+				if last_ts <= 0 or last_ts >= cutoff:
+					continue
+				cur = conn.execute("DELETE FROM session_mirror WHERE continuity_id = ?", (cid,))
+				if cur.rowcount:
+					purged_rows += int(cur.rowcount)
+					purged_souls += 1
+			conn.commit()
+			if purged_rows:
+				try:
+					conn.execute("VACUUM")
+				except sqlite3.OperationalError:
+					pass
+		return {
+			"rows_purged": purged_rows,
+			"souls_purged": purged_souls,
+			"retention_days": days,
+			"retention_cutoff_ts": cutoff,
+		}
 
 
 def _source_plugin(provider: str, base_dir: Optional[str] = None) -> Any:

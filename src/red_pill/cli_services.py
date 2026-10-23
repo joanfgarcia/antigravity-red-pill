@@ -66,6 +66,13 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(f"[MIRROR] {row['originator']} ({row.get('provider') or '?'}): {status}")
 		print(f"[MIRROR] legs={len(report)} turnos_insertados={inserted}")
 		return
+	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "stats":
+		import json
+
+		from red_pill.session.mirror import SessionMirror
+
+		print(json.dumps(SessionMirror().stats(), ensure_ascii=False, indent=2))
+		return
 	if getattr(args, "session_cmd", None) == "rehydrate":
 		from red_pill.session.switch import rehydrate_payload
 

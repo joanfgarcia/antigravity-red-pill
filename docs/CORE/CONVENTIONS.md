@@ -452,6 +452,36 @@ declarative pattern — never an assumption baked into code:
 
 ---
 
+## 10.10 Artifacts with a Lifecycle — TTL *and* Monitoring
+
+Any artifact that **accumulates** (session mirror, events, logs, staging, claims,
+queues, caches) is designed with **both** a retention policy and a way to **measure
+it**. A TTL without telemetry is a blind purge: it can grow forever or delete data
+that is still needed.
+
+1. **Declare, per artifact:** (a) retention/TTL, (b) who purges it (janitor plugin
+   or owner), (c) what is *live* and must never be purged, (d) grace semantics for
+   dead/ambiguous rows, (e) where the value is configured (config/`janitor.yaml`,
+   never a literal).
+2. **Conservative first.** Keep live data untouched; purge only dead/expired
+   artifacts after a generous margin. Tighten only with measurements, never by
+   guess. If age is unknown (`ts=0`, missing metadata), keep and report it — do not
+   delete on an assumption.
+3. **Every purge reports metrics.** The task returns counts before/after, bytes,
+   dead/orphan/unknown-age items and the cutoff used. The janitor logs them and
+   emits a **status signal** (e.g. `session_mirror_stats`).
+4. **Pain only on real risk.** Emit a pain signal when growth or un-purged
+   candidates cross configured thresholds (e.g. rows/bytes), not on every sweep.
+5. **Measure, then adjust.** Retention values are hypotheses until the operator has
+   monitoring data; the review trigger is the metric, not a calendar.
+6. **Idempotent and fail-closed.** Re-running a purge is safe; if the owner/index
+   cannot be read (registry down), the purge **does not** delete (safety over space).
+
+Reference implementation: `session/mirror.py` (`stats`/`purge`) +
+`swarm/agents/janitor_plugins/session_mirror.py` (AD-060).
+
+---
+
 ## 11. Why This Matters for Agents
 
 An AI agent working on this codebase without this document would likely:
