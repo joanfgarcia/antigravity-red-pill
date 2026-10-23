@@ -8,6 +8,16 @@
   la política de AD-058 (fix 13.0.0 bloqueado por `fastembed`); añadidos a
   `ignore-vuln` de pyproject y CI. Re-embedding sigue en la próxima MAYOR.
 
+### 🧠 `local_minion` multiturno — historial del espejo
+
+- **[NEW]** `run_local_minion` carga los últimos `history_turns` del espejo cuando
+  hay `continuity_id` (parámetros/env/registro) y captura **solo los turnos nuevos**
+  (sin duplicar el historial replayed).
+- **[NEW]** `LocalToolBridge` acepta `continuity_id`/`mission_id`/`originator`/
+  `history_turns`, declara `conversation_resume=True` y `local-tools` propaga esos
+  campos; `AgenticJobDriver` también reutiliza la continuidad del checkpoint.
+- **[DOCS]** AD-067.
+
 ### 🧩 Mini arnés composable — contratos, perfiles y `local-mini`
 
 - **[NEW]** `mini/contracts.py`: `ChatProvider`, `Toolbox` y `AgentProfile`;

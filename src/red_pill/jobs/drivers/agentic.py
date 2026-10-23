@@ -43,12 +43,17 @@ class AgenticJobDriver(ResumableJobDriver):
 		kwargs: Dict[str, Any] = {}
 		if origin is not None:
 			kwargs["origin"] = origin
-		if str(payload.get("backend") or "").strip().lower() in ("local-mini", "local_mini"):
+		backend_name = str(payload.get("backend") or "").strip().lower()
+		if backend_name in ("local-mini", "local_mini"):
 			for key in ("profile", "continuity_id", "mission_id", "workspace", "db_path", "gpu_socket", "flm_url", "operator"):
 				if payload.get(key) is not None:
 					kwargs[key] = payload[key]
 			if kwargs.get("workspace") is None and payload.get("cwd"):
 				kwargs["workspace"] = payload["cwd"]
+		elif backend_name in ("local-tools", "local_tools"):
+			for key in ("continuity_id", "mission_id", "originator", "history_turns"):
+				if payload.get(key) is not None:
+					kwargs[key] = payload[key]
 		return create_bridge(payload.get("backend"), **kwargs)
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
@@ -68,7 +73,7 @@ class AgenticJobDriver(ResumableJobDriver):
 			raise ValueError("agentic_job payload requires 'prompt'.")
 
 		job_payload = dict(payload)
-		if str(payload.get("backend") or "").strip().lower() in ("local-mini", "local_mini"):
+		if str(payload.get("backend") or "").strip().lower() in ("local-mini", "local_mini", "local-tools", "local_tools"):
 			if not job_payload.get("continuity_id"):
 				job_payload["continuity_id"] = checkpoint_data.get("continuity_id")
 		bridge = self._create_bridge(job_payload)

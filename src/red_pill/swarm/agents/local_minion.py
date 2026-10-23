@@ -510,6 +510,23 @@ def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_r
 	return turns
 
 
+def _resolve_minion_identity(*, originator: str, continuity_id: Optional[str], mission_id: Optional[str]) -> "tuple[str, Optional[str], Optional[str]]":
+	"""Parámetros → env del job → registro. Sin cuerpo compuesto no hay alma."""
+	origin = originator or os.getenv("REDPILL_ORIGINATOR") or ""
+	cid = continuity_id
+	mission = mission_id or os.getenv("REDPILL_MISSION_ID")
+	if (not cid or not mission) and origin and ":" in origin:
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			row = SessionRegistry().get_by_originator(origin) or {}
+			cid = cid or str(row.get("continuity_id") or "") or None
+			mission = mission or str(row.get("mission_id") or "") or None
+		except Exception:
+			pass
+	return origin, cid, mission
+
+
 async def run_local_minion(
 	task: str,
 	*,
@@ -520,12 +537,13 @@ async def run_local_minion(
 	originator: str = "",
 	global_turn: int = 0,
 	run_ref: Optional[str] = None,
+	history_turns: int = 40,
 ) -> Dict[str, Any]:
 	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
 
-	Con `continuity_id` + `mission_id`, el run vuelca su `messages` al espejo
-	canónico (arnés RedPill): es lo que permite el replay real al cambiar de
-	proveedor. Sin esos datos no se escribe nada (el espejo no inventa alma).
+	Con `continuity_id` + `mission_id`, el run carga el historial del espejo
+	(multiturno real) y vuelca solo los turnos NUEVOS al espejo canónico. Sin esos
+	datos se comporta como antes (system + task) y no escribe nada.
 	"""
 	from red_pill.core.providers import ProviderRegistry
 
@@ -538,30 +556,29 @@ async def run_local_minion(
 	nonce = secrets.token_hex(4)
 	loop = asyncio.get_event_loop()
 
-	messages: List[Dict[str, Any]] = [
-		{"role": "system", "content": SYSTEM_PROMPT},
-		{"role": "user", "content": task},
-	]
+	origin, cid, mission = _resolve_minion_identity(originator=originator, continuity_id=continuity_id, mission_id=mission_id)
+	history: List[Dict[str, Any]] = []
+	if cid:
+		try:
+			from red_pill.session.mirror import SessionMirror
+			from red_pill.session.switch import replay_messages
+
+			turns = SessionMirror().read_turns(cid)
+			if history_turns > 0:
+				turns = turns[-history_turns:]
+			history = replay_messages(turns)
+		except Exception as e:
+			logger.warning(f"[local-minion] history replay failed: {e}")
+	messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+	messages.extend(history)
+	initial_len = len(messages)
+	messages.append({"role": "user", "content": task})
 	consecutive_errors = 0
 	tool_calls_made = 0
 	tool_calls_ok = 0  # results that are not ERROR: only these ground the answer
 	tool_results: List[str] = []
 
 	def _capture() -> None:
-		# Identidad: parámetros → env del job → registro. Sin cuerpo compuesto no
-		# hay alma y no se escribe (nunca se inventa una).
-		origin = originator or os.getenv("REDPILL_ORIGINATOR") or ""
-		cid = continuity_id
-		mission = mission_id or os.getenv("REDPILL_MISSION_ID")
-		if (not cid or not mission) and origin and ":" in origin:
-			try:
-				from red_pill.session.store import SessionRegistry
-
-				row = SessionRegistry().get_by_originator(origin) or {}
-				cid = cid or str(row.get("continuity_id") or "") or None
-				mission = mission or str(row.get("mission_id") or "") or None
-			except Exception:
-				pass
 		if not cid or not mission:
 			return
 		try:
@@ -569,7 +586,7 @@ async def run_local_minion(
 
 			SessionMirror().append_turns(
 				cid,
-				_canonical_turns(messages, model if isinstance(model, str) else None, run_ref),
+				_canonical_turns(messages[initial_len:], model if isinstance(model, str) else None, run_ref),
 				mission_id=mission,
 				originator=origin,
 				source=provider_name,

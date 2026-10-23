@@ -745,3 +745,86 @@ def test_canonical_turns_drops_unpaired_tool_calls():
 	)
 	assert paired[0]["tool_calls"][0]["id"] == "c1"
 	assert paired[1]["tool_call_id"] == "c1"
+
+
+async def test_history_replay_and_no_duplicate_capture(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+	from red_pill.session.store import SessionRegistry
+
+	continuity = "alma-local-history"
+	mission = "mission:local-history"
+	SessionRegistry().upsert_session(originator="local-tools:s1", continuity_id=continuity, mission_id=mission)
+	mirror = SessionMirror()
+	mirror.append_turn(continuity_id=continuity, mission_id=mission, role="user", content="prior question", source_ref="old1")
+	mirror.append_turn(continuity_id=continuity, mission_id=mission, role="assistant", content="prior answer", source_ref="old2")
+	provider = FakeProvider([{"role": "assistant", "content": "new answer"}])
+	_use_provider(monkeypatch, provider)
+	res = await local_minion.run_local_minion(
+		"new task",
+		continuity_id=continuity,
+		mission_id=mission,
+		originator="local-tools:s1",
+		run_ref="history-run",
+	)
+	assert res["answer"] == "new answer"
+	contents = [m.get("content") for m in provider.sent[0]]
+	assert "prior question" in contents
+	assert "prior answer" in contents
+	assert "new task" in contents
+	turns = mirror.read_turns(continuity)
+	assert [t["role"] for t in turns] == ["user", "assistant", "user", "assistant"]
+	assert len(turns) == 4
+
+
+async def test_history_identity_from_env(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+	from red_pill.session.store import SessionRegistry
+
+	continuity = "alma-local-env"
+	mission = "mission:local-env"
+	SessionRegistry().upsert_session(originator="local-tools:s2", continuity_id=continuity, mission_id=mission)
+	SessionMirror().append_turn(continuity_id=continuity, mission_id=mission, role="user", content="env prior", source_ref="env1")
+	provider = FakeProvider([{"role": "assistant", "content": "ok"}])
+	_use_provider(monkeypatch, provider)
+	monkeypatch.setenv("REDPILL_ORIGINATOR", "local-tools:s2")
+	monkeypatch.setenv("REDPILL_MISSION_ID", mission)
+	res = await local_minion.run_local_minion("env task", run_ref="env-run")
+	assert res["answer"] == "ok"
+	assert "env prior" in [m.get("content") for m in provider.sent[0]]
+
+
+def test_local_tool_bridge_passes_continuity(monkeypatch):
+	from red_pill.swarm.bridges.local import LocalToolBridge
+
+	captured = {}
+
+	async def fake_run(text, **kwargs):
+		captured.update({"text": text, **kwargs})
+		return {"ok": True, "answer": "ok", "used_tools": True, "messages": []}
+
+	monkeypatch.setattr(local_minion, "run_local_minion", fake_run)
+	bridge = LocalToolBridge(continuity_id="alma-b", mission_id="mission:b", originator="local-tools:s9", history_turns=7)
+	result = bridge.prompt("hola", timeout=10)
+	assert result.ok and result.response == "ok"
+	assert captured["continuity_id"] == "alma-b"
+	assert captured["mission_id"] == "mission:b"
+	assert captured["originator"] == "local-tools:s9"
+	assert captured["history_turns"] == 7
+
+
+def test_agentic_job_creates_local_tools_with_continuity():
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+	from red_pill.swarm.bridges.local import LocalToolBridge
+
+	bridge = AgenticJobDriver()._create_bridge(
+		{
+			"backend": "local-tools",
+			"continuity_id": "alma-job-tools",
+			"mission_id": "mission:job-tools",
+			"originator": "local-tools:job",
+			"history_turns": 9,
+		}
+	)
+	assert isinstance(bridge, LocalToolBridge)
+	assert bridge.continuity_id == "alma-job-tools"
+	assert bridge._history_turns == 9
