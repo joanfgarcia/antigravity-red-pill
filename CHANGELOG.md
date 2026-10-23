@@ -44,7 +44,11 @@
   y últimos 200 por alma), tope por turno, TTL de inactividad materializado y
   métricas/señales (`session_mirror_budget`). Replay explícito capado; el espejo
   no se inyecta al despertar.
-- **[DOCS]** AD-060, AD-061, AD-062.
+- **[NEW]** Replay limpio (AD-063): las parejas de herramientas de identidad
+  (`sovereign_handshake`, `interceptor_rp`, `refresh_session_context`) no se
+  reencarnan; se conservan en el espejo para auditoría. Smoke real
+  opencode→opencode: nonce respondido sin tools, payload 3.330→746 chars.
+- **[DOCS]** AD-060, AD-061, AD-062, AD-063.
 
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 

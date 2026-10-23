@@ -4,6 +4,17 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-063] Replay limpio: la plomería de identidad no se reencarna
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Complementa AD-060/AD-062.
+**Context**: el primer smoke real opencode→opencode (dos sesiones, misma alma, migración) demostró que el espejo captura los tool calls del `sovereign_handshake` y sus resultados (`<bunker_context>`). Al rehidratar, ese snapshot de identidad/telemetría del cuerpo viejo viajaba al nuevo: ruido, contexto rancio y duplicación de la inyección (el cuerpo nuevo hará su propio handshake). Además infla el replay y el espejo.
+**Decision**: filtro **solo en replay** (`render_history` y `replay_messages`): se eliminan las parejas call/resultado de herramientas de plomería (`sovereign_handshake`, `interceptor_rp`, `refresh_session_context`). El espejo las conserva para auditoría/Memento; no se reinyectan al reencarnar. El filtro empareja por `tool_call_id`, así que no deja resultados huérfanos ni rompe la secuencia OpenAI.
+**Alternatives**: (a) filtrar en la ingesta — ahorra espacio pero pierde auditoría y obliga a migrar; (b) stub de las salidas — conserva la llamada pero sigue metiendo contexto rancio; (c) ignorarlo — el smoke demostró que el payload arrastraba el Búnker del cuerpo anterior.
+**Rationale / Evidence**: smoke real (2026-10-23, opencode A → opencode B, migración con A cerrado): A leyó un nonce con `read` (2 tool results en el espejo); se borró el fichero; B respondió el nonce **sin tool calls** y con un solo leg activo (A `expired`). El payload sin filtrar medía 3.330 chars e incluía `<bunker_context>`; con filtro, **746 chars**, sin plomería y con el nonce intacto. Una segunda sesión (D) respondió el nonce desde el payload filtrado. Suite `pytest tests/test_session_switch.py` verde; regresión `test_replay_filters_identity_plumbing`.
+**Consequences**: el replay queda limpio y más barato; el espejo mantiene la auditoría. Deuda: si se quiere ahorrar espacio, excluir la plomería en la ingesta (no urgente: 1 MB de 35 MB). Las sesiones de smoke (`ses_e96d...`) quedan en `opencode.db` como sesiones de prueba.
+
+---
+
 ## [AD-062] Espejo con presupuesto duro (100 MB) y degradación observable
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Endurece AD-060/AD-061; no cambia el contrato del espejo.

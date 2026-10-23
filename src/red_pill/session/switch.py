@@ -96,6 +96,44 @@ def same_family(left: str, right: str) -> bool:
 	return provider_family(left) == provider_family(right)
 
 
+# Herramientas de PLOMERÍA de identidad/telemetría: su salida es un snapshot del
+# arnés (contexto del Búnker, salud), no trabajo. Al reencarnar, el cuerpo nuevo
+# hará su propio handshake: reinyectarlas es ruido y contexto rancio.
+_NON_REPLAYABLE_MARKERS = ("sovereign_handshake", "interceptor_rp", "refresh_session_context")
+
+
+def _is_plumbing_call(call: Dict[str, Any]) -> bool:
+	fn = (call or {}).get("function") or {}
+	name = str(fn.get("name") or "").lower()
+	return any(marker in name for marker in _NON_REPLAYABLE_MARKERS)
+
+
+def _filter_replay_turns(turns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+	"""Quita las parejas call/resultado de plomería para el replay (no del espejo)."""
+	blocked = set()
+	for turn in turns:
+		calls = turn.get("tool_calls")
+		if isinstance(calls, list):
+			for call in calls:
+				if _is_plumbing_call(call):
+					blocked.add(str((call or {}).get("id") or ""))
+	if not blocked:
+		return turns
+	filtered: List[Dict[str, Any]] = []
+	for turn in turns:
+		if turn.get("role") == "tool" and str(turn.get("tool_call_id") or "") in blocked:
+			continue
+		calls = turn.get("tool_calls")
+		if turn.get("role") == "assistant" and isinstance(calls, list):
+			kept = [call for call in calls if not _is_plumbing_call(call)]
+			if len(kept) != len(calls):
+				turn = {**turn, "tool_calls": kept or None}
+				if not kept and not str(turn.get("content") or "").strip():
+					continue
+		filtered.append(turn)
+	return filtered
+
+
 def _neutralize(text: str) -> str:
 	"""Impide cerrar los delimitadores del bloque desde el contenido espejado."""
 	return text.replace("</history>", "<\\/history>").replace("</current>", "<\\/current>")
@@ -138,6 +176,7 @@ def render_history(
 			max_chars = int(getattr(cfg.get_config(), "SESSION_MIRROR_REPLAY_MAX_CHARS", _HISTORY_MAX_CHARS))
 		except Exception:
 			max_chars = _HISTORY_MAX_CHARS
+	turns = _filter_replay_turns(turns)
 	lines: List[str] = []
 	used = 0
 	for turn in reversed(turns):
@@ -166,7 +205,7 @@ def replay_messages(turns: List[Dict[str, Any]], *, current_prompt: Optional[str
 	resultados y no re-ejecuta las herramientas.
 	"""
 	messages: List[Dict[str, Any]] = []
-	for turn in turns:
+	for turn in _filter_replay_turns(turns):
 		role = str(turn.get("role") or "")
 		if role not in ("system", "user", "assistant", "tool"):
 			continue

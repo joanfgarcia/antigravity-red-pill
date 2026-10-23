@@ -316,3 +316,27 @@ def test_self_switch_preserves_event_cursor(env):
 	)
 	assert result.mode == "native_resume"
 	assert reg.get_by_originator("claude_code:s1")["last_seen_event_seq"] == 7
+
+
+def test_replay_filters_identity_plumbing():
+	turns = [
+		{"role": "user", "content": "lee el nonce"},
+		{
+			"role": "assistant",
+			"content": None,
+			"tool_calls": [{"id": "h1", "type": "function", "function": {"name": "RedPill-Kernel_sovereign_handshake", "arguments": "{}"}}],
+		},
+		{"role": "tool", "content": "<bunker_context>ruido</bunker_context>", "tool_call_id": "h1"},
+		{
+			"role": "assistant",
+			"content": None,
+			"tool_calls": [{"id": "r1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+		},
+		{"role": "tool", "content": "NONCE=abc", "tool_call_id": "r1"},
+	]
+	history = render_history("alma-1", turns)
+	assert "bunker_context" not in history
+	assert "NONCE=abc" in history
+	messages = replay_messages(turns)
+	assert [m["role"] for m in messages] == ["user", "assistant", "tool"]
+	assert all(m.get("tool_call_id") != "h1" for m in messages)
