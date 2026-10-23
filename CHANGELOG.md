@@ -48,7 +48,10 @@
   (`sovereign_handshake`, `interceptor_rp`, `refresh_session_context`) no se
   reencarnan; se conservan en el espejo para auditoría. Smoke real
   opencode→opencode: nonce respondido sin tools, payload 3.330→746 chars.
-- **[DOCS]** AD-060, AD-061, AD-062, AD-063.
+- **[NEW]** Pi como fuente canónica (AD-064): alias por UUID del header (sin
+  romper las claves de Memento) y `load_canonical` con `toolCall`/`toolResult`
+  nativos. Smoke real opencode↔pi en ambas direcciones sin re-ejecutar tools.
+- **[DOCS]** AD-060, AD-061, AD-062, AD-063, AD-064.
 
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 

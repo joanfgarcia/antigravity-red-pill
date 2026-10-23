@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-064] Pi como fuente canónica del switch (UUID + tools nativas)
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Habilita el smoke real opencode↔pi.
+**Context**: al preparar el switch real opencode↔pi aparecieron dos defectos: (1) `PiSourcePlugin` indexaba por ruta relativa (`--cwd--/<timestamp>_<uuid>.jsonl`) mientras el bridge y el registro usan el **UUID del header**, así que `sync_originator(pi:<uuid>)` respondía «Session not found» (los 2 errores del backfill); (2) `load()` compacta `toolResult` como texto de assistant, perdiendo la pareja `toolCall`/`toolResult` que el replay necesita.
+**Decision**:
+1. `_index_sessions` indexa **también** por el UUID (sufijo tras el último `_`); `discover` deduplica por fichero y conserva la ruta relativa como clave de Memento (sin migrar puntos ya archivados). `load`/`workspace_of` aceptan ambos.
+2. `load_canonical` propio de Pi: conserva `toolCall` (id/nombre/argumentos) como `assistant.tool_calls` y `toolResult` como `role=tool` con `tool_call_id`; el `thinking` se descarta. `load()` sigue compactando para Memento (sin cambios).
+**Alternatives**: (a) cambiar las claves de Memento a UUID — rompe continuidad de puntos existentes; (b) seguir usando solo texto — el replay cruza llamadas sin resultado y pierde fidelidad; (c) parsear pi en el switch en vez de en el source — duplica lógica.
+**Rationale / Evidence**: smoke real (2026-10-23):
+- **opencode→opencode**: A leyó un nonce, se cerró A y se borró el fichero; B (misma alma) respondió el nonce sin tools y con **1 leg activo**.
+- **opencode→pi**: el payload filtrado (740 chars, sin `<bunker_context>`) se rehidrató en Pi (`openrouter/xiaomi/mimo-v2.6-flash`); respondió el nonce y **0 tool events**.
+- **pi→opencode**: Pi leyó otro nonce (tool nativa), se cerró; el espejo guardó **1 tool row** con el resultado; OpenCode (sesión nueva, mismo `continuity_id`) respondió el nonce **sin tools** y con **1 leg activo**. Payload 745 chars, sin Búnker.
+- `pytest tests/test_chronicle_sources.py`: alias UUID + `load_canonical` verde.
+**Consequences**: Pi es fuente de primera clase para el switch sin tocar las claves de Memento. Deuda: `antigravity` sigue en texto; el proveedor `opencode-go` de Pi tenía la API key expirada y el smoke usó OpenRouter (dato de operador, no del código). Las sesiones de prueba quedan en `~/.pi/agent/sessions` y `opencode.db`.
+
+---
+
 ## [AD-063] Replay limpio: la plomería de identidad no se reencarna
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Complementa AD-060/AD-062.
