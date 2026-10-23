@@ -72,3 +72,48 @@ def test_orchestrator_sees_global_missions():
 	}
 	digest = _coro_digest(identity, reg.get_max_event_seq())
 	assert digest and "misiones vivas" in digest
+
+
+async def test_handshake_never_reads_or_injects_the_mirror(tmp_path, monkeypatch):
+	from types import SimpleNamespace
+
+	from red_pill.mcp_server import handle_call_tool
+	from red_pill.session.mirror import SessionMirror
+
+	SessionMirror().append_turn(
+		continuity_id="alma-sentinel",
+		mission_id="repo:m",
+		role="user",
+		content="SENTINEL_MIRROR_CONTENT",
+		ts=1.0,
+		originator="opencode:sentinel",
+		source="opencode",
+		source_ref="sentinel",
+	)
+
+	def _forbidden(*args, **kwargs):
+		raise AssertionError("el handshake no debe leer el espejo")
+
+	monkeypatch.setattr(SessionMirror, "read_turns", _forbidden)
+
+	async def _fake_interceptor(args):
+		return [SimpleNamespace(text="ok")]
+
+	bridge = {"originator": "opencode:nomirror", "workdir": str(tmp_path)}
+	with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+		with patch("red_pill.mcp_server._current_git_branch", return_value="feat/r"):
+			with patch("red_pill.mcp_server.handle_interceptor_rp", new=_fake_interceptor):
+				out = await handle_call_tool("sovereign_handshake", {"user_prompt": "hola"})
+	assert "SENTINEL_MIRROR_CONTENT" not in out[0].text
+
+
+def test_replay_history_is_capped_by_config(monkeypatch):
+	from types import SimpleNamespace
+
+	import red_pill.config as cfg
+	from red_pill.session.switch import render_history
+
+	monkeypatch.setattr(cfg, "get_config", lambda: SimpleNamespace(SESSION_MIRROR_REPLAY_MAX_CHARS=120))
+	text = render_history("alma-1", [{"role": "user", "content": "x" * 500}])
+	assert len(text) < 200
+	assert "…" in text

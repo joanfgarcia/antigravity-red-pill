@@ -124,13 +124,20 @@ def render_history(
 	turns: List[Dict[str, Any]],
 	*,
 	current_prompt: Optional[str] = None,
-	max_chars: int = _HISTORY_MAX_CHARS,
+	max_chars: Optional[int] = None,
 ) -> str:
 	"""Render textual del espejo para un bridge sin `messages` inyectables.
 
 	Recorta desde el final (los turnos más recientes pesan más) y neutraliza los
 	delimitadores; el resultado es DATO, nunca instrucción del sistema.
 	"""
+	if max_chars is None:
+		try:
+			import red_pill.config as cfg
+
+			max_chars = int(getattr(cfg.get_config(), "SESSION_MIRROR_REPLAY_MAX_CHARS", _HISTORY_MAX_CHARS))
+		except Exception:
+			max_chars = _HISTORY_MAX_CHARS
 	lines: List[str] = []
 	used = 0
 	for turn in reversed(turns):

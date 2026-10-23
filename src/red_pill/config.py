@@ -514,6 +514,10 @@ class RedPillConfig(BaseSettings):
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912
+	# SESSION_MIRROR_REPLAY_MAX_CHARS: tope del historial que se inyecta al
+	# reencarnar (switch/rehydrate). El espejo NO se inyecta al despertar; esto
+	# solo aplica al replay explícito. 60k ≈ 15k tokens.
+	SESSION_MIRROR_REPLAY_MAX_CHARS: int = 60000
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
