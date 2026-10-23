@@ -100,6 +100,7 @@ class WorkspaceTools:
 		self.root = Path(workspace).resolve()
 		if not self.root.is_dir():
 			raise ToolError(f"workspace does not exist: {workspace}")
+		self.schemas = list(TOOL_SCHEMAS)
 		self.max_read = int(max_read)
 		self.max_write = int(max_write)
 		self.max_output = int(max_output)

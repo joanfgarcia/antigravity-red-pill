@@ -151,3 +151,48 @@ def test_fixture_has_nonce_and_bug(tmp_path):
 	assert fixture["run_id"] in (tmp_path / "smoke" / "test_calc.py").read_text()
 	assert "return values[n // 2]" in (tmp_path / "smoke" / "calc.py").read_text()
 	assert PHASE1_TASK.startswith("Task:")
+
+
+class TestProfiles:
+	def test_forge_profile_renders_identity_without_bunker(self):
+		from red_pill.mini.profiles import PROFILES
+
+		text = PROFILES["forge"].render_system(session_short="abc12345", operator="Joan")
+		assert "Forge" in text and "Joan" in text and "abc12345" in text
+		assert "BUNKER" not in text and "handshake" not in text.lower()
+
+	def test_run_profile_uses_profile_prompt_provider_and_toolbox(self, tmp_path):
+		from red_pill.mini.profiles import PROFILES
+
+		provider = ScriptedProvider([{"role": "assistant", "content": "done"}])
+		session, tools, _ = _session(tmp_path, [])
+		session.providers["forge"] = provider
+		session.profiles = PROFILES
+		session.toolboxes = {"workspace": tools}
+		result = session.run_profile("forge", "read calc.py")
+		system = provider.calls[0]["messages"][0]["content"]
+		assert "Forge" in system and "Joan" in system
+		assert provider.calls[0]["tools"] == tools.schemas
+		assert result["body"] == "forge"
+		assert result["tool_calls"] == 0
+
+	def test_run_profile_loom_has_no_tools(self, tmp_path):
+		from red_pill.mini.profiles import PROFILES
+
+		provider = ScriptedProvider([{"role": "assistant", "content": "review"}])
+		session, tools, _ = _session(tmp_path, [{"role": "assistant", "content": "forge"}])
+		session.providers["loom"] = provider
+		session.profiles = PROFILES
+		session.toolboxes = {"workspace": tools}
+		session.run_profile("forge", "fix")
+		result = session.run_profile("loom", "review")
+		assert result["tool_calls"] == 0
+		assert "Loom" in provider.calls[0]["messages"][0]["content"]
+		assert provider.calls[0]["tools"] is None
+		active = [r for r in session.registry.get_by_continuity("alma-mini-test") if r.get("ttl_state") != "expired"]
+		assert len(active) == 1
+		assert active[0]["originator"].startswith("loom:")
+
+	def test_workspace_tools_exposes_schemas(self, tmp_path):
+		tools = WorkspaceTools(str(tmp_path))
+		assert tools.schemas == TOOL_SCHEMAS

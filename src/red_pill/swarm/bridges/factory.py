@@ -32,7 +32,8 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 		- "opencode"   : OpenCodeBridge (requires opencode CLI)
 		- "pi"       : PiBridge (requires pi CLI)
 		- "local"      : LocalBridge (local model via SIP provider — one-shot, no tools)
-		- "local-tools": LocalToolBridge (local model + bounded in-process tool loop)
+		- "local-mini": MiniLocalBridge (mini session: profiles, mirror, tools, Forge/Loom)
+	- "local-tools": LocalToolBridge (local model + bounded in-process tool loop)
 		- "grpc"     : GrpcBridge (legacy extraction backend)  [antigravity_ide]
 		- "auto"     : agy if available, else opencode if available, else grpc
 
@@ -61,6 +62,10 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 		from .pi import PiBridge
 
 		return PiBridge(**kwargs)
+	if backend in ("local-mini", "local_mini"):
+		from red_pill.mini.bridge import MiniLocalBridge
+
+		return MiniLocalBridge(**kwargs)
 	if backend in ("local-tools", "local_tools"):
 		from .local import LocalToolBridge
 
