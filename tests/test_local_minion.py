@@ -702,3 +702,46 @@ async def test_mirror_capture_skipped_without_soul(monkeypatch):
 	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": "hecho"}]))
 	await local_minion.run_local_minion("hola")
 	assert SessionMirror().stats()["rows"] == 0
+
+
+async def test_mirror_capture_uses_env_identity(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+	from red_pill.session.store import SessionRegistry
+
+	SessionRegistry().upsert_session(originator="opencode:loc1", continuity_id="alma-env", mission_id="repo:m")
+	monkeypatch.setenv("REDPILL_ORIGINATOR", "opencode:loc1")
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": "ok"}]))
+	await local_minion.run_local_minion("hola")
+	assert SessionMirror().count_turns("alma-env") == 2
+
+
+async def test_mirror_capture_with_run_ref_is_idempotent(monkeypatch):
+	from red_pill.session.mirror import SessionMirror
+
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": "ok"}, {"role": "assistant", "content": "ok"}]))
+	await local_minion.run_local_minion("hola", continuity_id="alma-rr", mission_id="m", run_ref="job:1")
+	await local_minion.run_local_minion("hola", continuity_id="alma-rr", mission_id="m", run_ref="job:1")
+	assert SessionMirror().count_turns("alma-rr") == 2
+
+
+def test_canonical_turns_drops_unpaired_tool_calls():
+	from red_pill.swarm.agents.local_minion import _canonical_turns
+
+	unpaired = _canonical_turns(
+		[
+			{"role": "user", "content": "x"},
+			{"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "function": {"name": "bash", "arguments": "{}"}}]},
+			{"role": "user", "content": "ERROR: boom"},
+		],
+		"sip",
+	)
+	assert unpaired[1]["tool_calls"] is None
+	paired = _canonical_turns(
+		[
+			{"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "function": {"name": "bash", "arguments": "{}"}}]},
+			{"role": "tool", "content": "ok", "tool_call_id": "c1"},
+		],
+		"sip",
+	)
+	assert paired[0]["tool_calls"][0]["id"] == "c1"
+	assert paired[1]["tool_call_id"] == "c1"

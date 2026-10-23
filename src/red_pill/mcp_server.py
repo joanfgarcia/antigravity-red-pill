@@ -1867,7 +1867,8 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		originator = env_originator or bridge_originator or explicit_originator
 	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
 	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
-	continuity_id = str(arguments.get("continuity_id") or "").strip() or None
+	# El alma NO se acepta del modelo: env de confianza (job/relay) → registro.
+	continuity_id = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip() or None
 	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
 	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
 	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
@@ -1905,15 +1906,23 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	mission_id = resolve_default_mission(os.getenv("REDPILL_MISSION_ID") or None, branch=branch)
 	role = str(os.getenv("REDPILL_ROLE") or (existing or {}).get("role") or "task").strip() or "task"
 
+	# La afinidad explícita es del OPERADOR (env AFFINITY), no del modelo: si el
+	# modelo pudiera añadirla, se auto-otorgaría lectura en `fetch_divergent_turns`.
+	try:
+		from red_pill.core.affinity import parse_affinity
+
+		explicit_affinity = parse_affinity(os.getenv("AFFINITY"))
+	except Exception:
+		explicit_affinity = []
 	try:
 		affinity = derive_affinity(
 			workdir=workspace,
 			mission_id=mission_id,
-			explicit=arguments.get("affinity"),
+			explicit=explicit_affinity,
 			campaign_id=campaign_id,
 		)
 	except Exception:
-		affinity = list(arguments.get("affinity") or [])
+		affinity = explicit_affinity
 
 	previous_event_seq = 0
 	try:
@@ -2072,7 +2081,7 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 			},
 			"continuity_id": {
 				"type": "string",
-				"description": "El alma de esta sesión (UUIDv7). Pásala si la conoces (p.ej. la viste en el tag `<session …/>` o la recuperas tras una compactación). Si se omite, el handshake la emite/recupera.",
+				"description": "Compatibilidad: NO autoritativo. El alma se recupera del registro o de REDPILL_CONTINUITY_ID (env de confianza); el argumento del modelo se ignora.",
 			},
 			"mission_id": {
 				"type": "string",
@@ -2091,7 +2100,7 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 			"affinity": {
 				"type": "array",
 				"items": {"type": "string"},
-				"description": "Afinidad explícita (se canoniza: lower/trim + sorted/dedup). Si se omite, se deriva.",
+				"description": "Compatibilidad: NO autoritativo. La afinidad explícita del operador sale de env AFFINITY; la del modelo se ignora.",
 			},
 			"originator": {
 				"type": "string",
@@ -2500,10 +2509,15 @@ async def handle_fetch_divergent_turns(arguments: Dict[str, Any]):
 		extra = arguments.get("affinity_filter") or []
 		if not isinstance(extra, list):
 			return [types.TextContent(type="text", text="[DIVERGENCIA] affinity_filter debe ser una lista.")]
-		viewer_affinity = canonize_affinity(list(own_affinity) + [str(a) for a in extra])
-		since = arguments.get("since_global_turn")
-		if since is None:
-			since = int(row.get("last_seen_global_turn") or 0)
+		# El filtro SOLO estrecha: nunca puede añadir afinidad que el leg no tenga
+		# (si pudiera, el modelo se auto-otorgaría lectura de otra misión). Cruzar
+		# requiere el flag de operador `MULTISESSION_DIVERGENT_ALLOW_ALL`.
+		own_set = set(canonize_affinity(list(own_affinity)))
+		viewer_affinity = [a for a in canonize_affinity([str(a) for a in extra]) if a in own_set] if extra else sorted(own_set)
+		# Default 0: `last_seen_global_turn` lo avanza el handshake en CADA turno,
+		# así que usarlo aquí escondería los turnos ajenos ocurridos entre turnos.
+		# La visibilidad sigue filtrada por D15; el cursor lo pasa el llamante.
+		since = max(0, int(arguments.get("since_global_turn") or 0))
 		allow_all = bool(getattr(cfg.get_config(), "MULTISESSION_DIVERGENT_ALLOW_ALL", False))
 		items = registry_obj.divergent_turns(
 			int(since),
@@ -2531,9 +2545,9 @@ async def handle_fetch_divergent_turns(arguments: Dict[str, Any]):
 				continue
 			for turn in item["turns"]:
 				body = sanitize_inline(turn.get("content") or "", 500)
-				call_names = ",".join(
-					str((call or {}).get("function", {}).get("name") or "?") for call in (turn.get("tool_calls") or [])
-				)
+				calls = turn.get("tool_calls")
+				calls = calls if isinstance(calls, list) else []
+				call_names = ",".join(str((call or {}).get("function", {}).get("name") or "?") for call in calls)
 				suffix = f" [tools: {sanitize_inline(call_names, 200)}]" if call_names else ""
 				lines.append(f"  {sanitize_inline(turn.get('role'), 20)}: {body}{suffix}")
 		return [types.TextContent(type="text", text="\n".join(lines))]

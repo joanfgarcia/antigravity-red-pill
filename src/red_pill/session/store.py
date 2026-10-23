@@ -395,22 +395,34 @@ class SessionRegistry:
 		"""
 		from red_pill.core.affinity import canonize_affinity
 
-		since = int(since_global_turn or 0)
+		since = max(0, int(since_global_turn or 0))
 		cap = max(1, min(int(limit or 20), 200))
-		mine = set(canonize_affinity(viewer_affinity or []))
+		mine = sorted(set(canonize_affinity(viewer_affinity or [])))
+		# D15 se filtra EN SQL (json_each) para no sufrir starvation: un LIMIT
+		# calculado en Python podía devolver vacío con miles de turnos ajenos.
+		where = ["g.global_turn > ?"]
+		params: List[Any] = [since]
+		if not allow_all:
+			if mine:
+				marks = ",".join("?" * len(mine))
+				where.append(
+					"(g.originator = ? OR EXISTS (SELECT 1 FROM json_each(g.affinity_json) je "
+					f"WHERE lower(trim(je.value)) IN ({marks})))"
+				)
+				params.append(viewer_originator)
+				params.extend(mine)
+			else:
+				where.append("g.originator = ?")
+				params.append(viewer_originator)
+		sql = (
+			"SELECT g.global_turn, g.created_at, g.originator, g.affinity_json, "
+			"r.mission_id, r.continuity_id, r.role, r.ttl_state "
+			"FROM global_turn_seq g LEFT JOIN session_registry r ON r.originator = g.originator "
+			"WHERE " + " AND ".join(where) + " ORDER BY g.global_turn ASC LIMIT ?"
+		)
+		params.append(cap)
 		with self._connect() as conn:
-			rows = conn.execute(
-				"""
-				SELECT g.global_turn, g.created_at, g.originator, g.affinity_json,
-				r.mission_id, r.continuity_id, r.role, r.ttl_state
-				FROM global_turn_seq g
-				LEFT JOIN session_registry r ON r.originator = g.originator
-				WHERE g.global_turn > ?
-				ORDER BY g.global_turn ASC
-				LIMIT ?
-				""",
-				(since, cap * 5),
-			).fetchall()
+			rows = conn.execute(sql, tuple(params)).fetchall()
 			selected: List[dict] = []
 			for row in rows:
 				origin = str(row["originator"] or "")
@@ -418,9 +430,6 @@ class SessionRegistry:
 					theirs = set(json.loads(row["affinity_json"] or "[]"))
 				except Exception:
 					theirs = set()
-				visible = bool(allow_all) or origin == viewer_originator or bool(mine & theirs)
-				if not visible:
-					continue
 				item = {
 					"global_turn": int(row["global_turn"]),
 					"created_at": float(row["created_at"] or 0.0),
@@ -438,11 +447,17 @@ class SessionRegistry:
 					(origin, int(row["global_turn"])),
 				).fetchall()
 				for turn in content_rows:
+					try:
+						calls = json.loads(turn["tool_calls"]) if turn["tool_calls"] else None
+					except json.JSONDecodeError:
+						calls = None
+					if not isinstance(calls, list):
+						calls = None
 					item["turns"].append(
 						{
 							"role": turn["role"],
 							"content": turn["content"],
-							"tool_calls": json.loads(turn["tool_calls"]) if turn["tool_calls"] else None,
+							"tool_calls": calls,
 							"tool_call_id": turn["tool_call_id"],
 							"model": turn["model"],
 							"ts": turn["ts"],

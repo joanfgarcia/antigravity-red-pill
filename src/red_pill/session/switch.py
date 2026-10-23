@@ -108,7 +108,8 @@ def _turn_line(turn: Dict[str, Any]) -> str:
 		call_id = turn.get("tool_call_id") or "?"
 		return f"[tool result {call_id}] {content}"
 	line = f"{role}: {content}"
-	calls = turn.get("tool_calls") or []
+	calls = turn.get("tool_calls")
+	calls = calls if isinstance(calls, list) else []
 	if calls:
 		rendered = []
 		for call in calls:
@@ -135,6 +136,12 @@ def render_history(
 	for turn in reversed(turns):
 		line = _neutralize(_turn_line(turn))
 		if used + len(line) + 1 > max_chars:
+			# Nunca perder el turno más reciente por ser grande: se recorta y se
+			# conserva (un tool result de 70 KB no debe dejar el historial vacío).
+			if not lines:
+				room = max(0, max_chars - used - 1)
+				if room:
+					lines.append(line[:room] + "…")
 			break
 		lines.append(line)
 		used += len(line) + 1
@@ -157,7 +164,7 @@ def replay_messages(turns: List[Dict[str, Any]], *, current_prompt: Optional[str
 		if role not in ("system", "user", "assistant", "tool"):
 			continue
 		message: Dict[str, Any] = {"role": role, "content": turn.get("content")}
-		if turn.get("tool_calls"):
+		if isinstance(turn.get("tool_calls"), list) and turn["tool_calls"]:
 			message["tool_calls"] = turn["tool_calls"]
 		if turn.get("tool_call_id"):
 			message["tool_call_id"] = turn["tool_call_id"]
@@ -202,6 +209,8 @@ def _old_leg(registry: SessionRegistry, continuity_id: str, previous_originator:
 	if previous_originator:
 		row = registry.get_by_originator(previous_originator)
 		if row:
+			if str(row.get("continuity_id") or "") != continuity_id:
+				raise ValueError(f"previous_originator {previous_originator} pertenece a otra alma")
 			return row
 	rows = registry.get_by_continuity(continuity_id)
 	for row in rows:
@@ -231,13 +240,18 @@ def _publish(
 	except Exception:
 		affinity = []
 	global_turn = 0
-	if old_origin and new_origin and old_origin != new_origin:
-		registry.unregister_session(old_origin)
+	# Abrir el leg nuevo ANTES de cerrar el viejo: si el upsert falla, el alma
+	# conserva al menos su cuerpo anterior (nunca se queda sin leg).
 	if new_origin and ":" in new_origin:
 		try:
 			global_turn = registry.next_global_turn(new_origin, affinity)
 		except Exception:
 			global_turn = 0
+		bound = registry.get_by_originator(new_origin) or {}
+		cursor = max(
+			int((old_row or {}).get("last_seen_event_seq") or 0),
+			int(bound.get("last_seen_event_seq") or 0),
+		)
 		registry.upsert_session(
 			originator=new_origin,
 			continuity_id=continuity_id,
@@ -247,7 +261,14 @@ def _publish(
 			lineage_id=(old_row or {}).get("lineage_id"),
 			affinity=affinity,
 			last_seen_global_turn=global_turn,
+			last_seen_event_seq=cursor,
 		)
+	if new_origin:
+		owner = registry.get_by_originator(new_origin)
+		if owner and str(owner.get("continuity_id") or "") != continuity_id:
+			raise ValueError(f"el cuerpo {new_origin} ya está atado a otra alma")
+	if old_origin and new_origin and old_origin != new_origin:
+		registry.unregister_session(old_origin)
 	try:
 		registry.add_event(
 			event_type="intent_updated",
@@ -262,6 +283,22 @@ def _publish(
 	except Exception as e:
 		logger.warning(f"[SessionSwitch] could not publish switch event: {e}")
 	result.leg_after = new_origin or None
+
+
+def _can_native_resume(bridge: Any) -> bool:
+	"""Solo resume nativo si el backend lo declara Y conserva estado.
+
+	`continue_conversation` es abstracto en `AgentBridge` (existe siempre); los
+	bridges locales lo implementan como `prompt` sin estado. Sin esta comprobación
+	un local→local fingiría resume y perdería el historial.
+	"""
+	getter = getattr(bridge, "get_capabilities", None)
+	if not callable(getter):
+		return True
+	try:
+		return bool(getattr(getter(), "conversation_resume", False))
+	except Exception:
+		return False
 
 
 def _invoke_native(target: SwitchTarget, prompt: Optional[str], native_id: str, previous_len: int, timeout: int) -> Any:
@@ -317,6 +354,10 @@ def switch_model(
 		raise ValueError("continuity_id requerido")
 	store = mirror or SessionMirror()
 	reg = registry or SessionRegistry(store.db_path)
+	if target.originator:
+		bound = reg.get_by_originator(target.originator)
+		if bound and str(bound.get("continuity_id") or "") != continuity:
+			raise ValueError(f"el cuerpo destino {target.originator} pertenece a otra alma")
 	old_row = _old_leg(reg, continuity, previous_originator)
 	old_origin = str((old_row or {}).get("originator") or "")
 	old_provider = str((old_row or {}).get("provider") or "")
@@ -341,10 +382,16 @@ def switch_model(
 
 	candidates = [target] + list(fallbacks or [])
 	errors: List[dict] = []
+	result: Optional[SwitchResult] = None
 	for index, candidate in enumerate(candidates):
 		mode = "native_resume"
 		native_id = candidate.native_session_id or (old_native if same_family(old_provider, candidate.provider) else "")
-		use_native = bool(index == 0 and native_id and hasattr(candidate.bridge, "continue_conversation"))
+		use_native = bool(
+			index == 0
+			and native_id
+			and hasattr(candidate.bridge, "continue_conversation")
+			and _can_native_resume(candidate.bridge)
+		)
 		try:
 			if use_native:
 				raw = _invoke_native(candidate, prompt, str(native_id), 0, timeout)
@@ -354,8 +401,6 @@ def switch_model(
 			error = _attr(raw, "error")
 			if error:
 				errors.append({"provider": candidate.provider, "error": str(error)})
-				if _is_quota_error(error) and index + 1 < len(candidates):
-					continue
 				continue
 			result = SwitchResult(
 				continuity_id=continuity,
@@ -368,10 +413,19 @@ def switch_model(
 				replayed_turns=len(turns) if mode != "native_resume" else 0,
 				errors=errors,
 			)
-			_publish(reg, continuity_id=continuity, old_row=old_row, target=candidate, result=result)
-			return result
+			break
 		except Exception as e:
 			errors.append({"provider": candidate.provider, "error": str(e)})
 			logger.warning(f"[SessionSwitch] target {candidate.provider} failed: {e}")
 			continue
-	raise SwitchFailed("ningún target pudo continuar el alma", errors)
+	if result is None:
+		raise SwitchFailed("ningún target pudo continuar el alma", errors)
+	# Publicar FUERA del try de invocación: un fallo del registro no debe repetir
+	# la llamada al modelo (efectos duplicados). El leg nuevo se abre antes de
+	# cerrar el viejo; si la publicación falla, se reporta y el resultado se devuelve.
+	try:
+		_publish(reg, continuity_id=continuity, old_row=old_row, target=candidate, result=result)
+	except Exception as e:
+		result.errors.append({"provider": "__publish__", "error": str(e)})
+		logger.warning(f"[SessionSwitch] switch ejecutado pero no publicado: {e}")
+	return result

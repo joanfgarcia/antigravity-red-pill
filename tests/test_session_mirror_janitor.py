@@ -93,3 +93,10 @@ async def test_signal_failure_never_breaks_the_sweep():
 		FakeJanitor(), {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=BrokenMemory()
 	)
 	assert result["session_mirror_rows_purged"] == 1
+
+
+def test_plugin_is_discovered_by_the_janitor():
+	from red_pill.swarm.agents.janitor import discover_plugins
+
+	names = {plugin.name for plugin in discover_plugins()}
+	assert "session_mirror_purge" in names

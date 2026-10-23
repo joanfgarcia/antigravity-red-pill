@@ -737,9 +737,20 @@ class TestSovereignHandshakeIdentity:
 		cid2 = re.search(r'continuity_id="([^"]+)"', r2[0].text).group(1)
 		assert cid1 and cid1 == cid2  # mismo cuerpo → mismo alma
 
-	async def test_id_explicito_no_emite_nuevo(self):
-		result = await self._handshake({"user_prompt": "x", "continuity_id": "alma-known"})
+	async def test_continuity_from_env_is_trusted(self):
+		import os
+		from unittest.mock import patch as _patch
+
+		with _patch.dict(os.environ, {"REDPILL_CONTINUITY_ID": "alma-known"}):
+			result = await self._handshake({"user_prompt": "x", "originator": "opencode:env1"})
 		assert 'continuity_id="alma-known"' in result[0].text
+
+	async def test_model_continuity_is_ignored(self):
+		import re
+
+		result = await self._handshake({"user_prompt": "x", "originator": "opencode:spoof1", "continuity_id": "alma-victima"})
+		tag = re.search(r'continuity_id="([^"]+)"', result[0].text).group(1)
+		assert tag != "alma-victima"
 
 	async def test_llamante_legacy_role_task(self):
 		from red_pill.mcp_server import _resolve_session_identity

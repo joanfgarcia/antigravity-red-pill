@@ -470,6 +470,46 @@ async def _dispatch(name: str, args: Dict[str, Any], cwd: Optional[str]) -> str:
 		return f"ERROR: {name} failed: {e!r}"
 
 
+def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_ref: Optional[str] = None) -> List[Dict[str, Any]]:
+	"""Turnos del loop local para el espejo, con parejas tool-call/resultado coherentes.
+
+	Si un chat-format no usa `role=tool` (resultado como `user`), el assistant
+	quedaría con `tool_calls` sin pareja: se le quitan las llamadas para que un
+	replay a otro proveedor no genere una secuencia OpenAI inválida.
+	"""
+	turns: List[Dict[str, Any]] = []
+	for message in messages:
+		role = message.get("role")
+		if role not in ("user", "assistant", "tool"):
+			continue
+		turns.append(
+			{
+				"role": role,
+				"content": message.get("content"),
+				"tool_calls": message.get("tool_calls"),
+				"tool_call_id": message.get("tool_call_id"),
+				"model": model,
+				"ts": time.time(),
+				"source_ref": f"{run_ref}:{len(turns)}" if run_ref else None,
+			}
+		)
+	pending: set[str] = set()
+	for turn in turns:
+		calls = turn.get("tool_calls")
+		if turn["role"] == "assistant" and isinstance(calls, list):
+			pending.update(str((call or {}).get("id") or "") for call in calls)
+		elif turn["role"] == "tool" and turn.get("tool_call_id"):
+			pending.discard(str(turn["tool_call_id"]))
+	if pending:
+		for turn in turns:
+			calls = turn.get("tool_calls")
+			if turn["role"] != "assistant" or not isinstance(calls, list):
+				continue
+			if any(str((call or {}).get("id") or "") in pending for call in calls):
+				turn["tool_calls"] = None
+	return turns
+
+
 async def run_local_minion(
 	task: str,
 	*,
@@ -479,6 +519,7 @@ async def run_local_minion(
 	mission_id: Optional[str] = None,
 	originator: str = "",
 	global_turn: int = 0,
+	run_ref: Optional[str] = None,
 ) -> Dict[str, Any]:
 	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
 
@@ -507,28 +548,30 @@ async def run_local_minion(
 	tool_results: List[str] = []
 
 	def _capture() -> None:
-		if not continuity_id or not mission_id:
+		# Identidad: parámetros → env del job → registro. Sin cuerpo compuesto no
+		# hay alma y no se escribe (nunca se inventa una).
+		origin = originator or os.getenv("REDPILL_ORIGINATOR") or ""
+		cid = continuity_id
+		mission = mission_id or os.getenv("REDPILL_MISSION_ID")
+		if (not cid or not mission) and origin and ":" in origin:
+			try:
+				from red_pill.session.store import SessionRegistry
+
+				row = SessionRegistry().get_by_originator(origin) or {}
+				cid = cid or str(row.get("continuity_id") or "") or None
+				mission = mission or str(row.get("mission_id") or "") or None
+			except Exception:
+				pass
+		if not cid or not mission:
 			return
 		try:
 			from red_pill.session.mirror import SessionMirror
 
-			turns = [
-				{
-					"role": message.get("role"),
-					"content": message.get("content"),
-					"tool_calls": message.get("tool_calls"),
-					"tool_call_id": message.get("tool_call_id"),
-					"model": model if isinstance(model, str) else None,
-					"ts": time.time(),
-				}
-				for message in messages
-				if message.get("role") in ("user", "assistant", "tool")
-			]
 			SessionMirror().append_turns(
-				continuity_id,
-				turns,
-				mission_id=mission_id,
-				originator=originator,
+				cid,
+				_canonical_turns(messages, model if isinstance(model, str) else None, run_ref),
+				mission_id=mission,
+				originator=origin,
 				source=provider_name,
 				global_turn=global_turn,
 			)

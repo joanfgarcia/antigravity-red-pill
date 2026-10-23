@@ -33,6 +33,12 @@
   del leg anterior antes de reencarnar (idempotente).
 - **[NEW]** Rol transparente: se hereda del leg/`REDPILL_ROLE`; los argumentos del
   modelo no declaran rol/misión/campaña. Políticas por rol en `session/roles/`.
+- **[HARDENING]** Dos rondas adversariales de AD-061. La segunda (independiente)
+  cierra: afinidad del modelo ignorada (solo env), ownership de alma en el switch,
+  cursor de divergencia sin pérdida, resume solo con `conversation_resume`, captura
+  local por env, aislamiento de fuentes (`db_path`/`base_dir`), `tool_calls` no-lista,
+  publicación sin reintento del modelo, recorte de turnos gigantes, captura
+  idempotente (`run_ref`), parejas tool-call/resultado y filtro D15 en SQL.
 - **[DOCS]** AD-060, AD-061.
 
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable

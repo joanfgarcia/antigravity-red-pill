@@ -239,6 +239,14 @@ class TestCanonicalExtraction:
 		with pytest.raises(SessionSourceNotFound):
 			sync_originator(mirror, originator="mystery:s1", continuity_id="alma-1", mission_id="m")
 
+	def test_source_isolation_uses_the_right_kwarg(self):
+		from red_pill.session.mirror import _source_plugin
+
+		plugin = _source_plugin("opencode", base_dir="/tmp/isolated-opencode.db")
+		assert plugin.db_path.as_posix() == "/tmp/isolated-opencode.db"
+		claude = _source_plugin("claude_code", base_dir="/tmp/isolated-claude")
+		assert claude.base_dir.as_posix() == "/tmp/isolated-claude"
+
 
 class TestRetentionAndStats:
 	def _turn(self, mirror, continuity, *, ts, originator="opencode:s1", mission="m"):
@@ -308,3 +316,41 @@ class TestRetentionAndStats:
 		assert mirror.purge(retention_days=30)["rows_purged"] == 0
 		assert mirror.stats(retention_days=30)["unknown_age_souls"] == 1
 		assert mirror.count_turns("dead") == 1
+
+	def test_purge_keeps_undated_turns_of_a_dead_soul(self, tmp_path):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		reg.upsert_session(originator="opencode:dead", continuity_id="dead", mission_id="m")
+		reg.unregister_session("opencode:dead")
+		mirror.append_turn(
+			continuity_id="dead", mission_id="m", role="user", content="viejo",
+			ts=time.time() - 90 * 86400, originator="opencode:dead", source="opencode", source_ref="old",
+		)
+		mirror.append_turn(
+			continuity_id="dead", mission_id="m", role="user", content="sin fecha",
+			ts=0.0, originator="opencode:dead", source="opencode", source_ref="undated",
+		)
+		purged = mirror.purge(retention_days=30)
+		assert purged["rows_purged"] == 1
+		assert mirror.count_turns("dead") == 1
+		assert mirror.read_turns("dead")[0]["content"] == "sin fecha"
+		assert mirror.stats(retention_days=30)["unknown_age_souls"] == 1
+
+	def test_purge_rechecks_active_leg_inside_the_delete(self, tmp_path, monkeypatch):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		reg.upsert_session(originator="opencode:live", continuity_id="alive", mission_id="m")
+		mirror.append_turn(
+			continuity_id="alive", mission_id="m", role="user", content="vivo",
+			ts=time.time() - 900 * 86400, originator="opencode:live", source="opencode", source_ref="v",
+		)
+		# Snapshot mentiroso (carrera): el DELETE debe re-verificar contra la BD.
+		monkeypatch.setattr(reg, "active_continuities", lambda: [])
+		assert mirror.purge(registry=reg, retention_days=30)["rows_purged"] == 0
+		assert mirror.count_turns("alive") == 1

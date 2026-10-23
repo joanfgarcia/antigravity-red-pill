@@ -25,11 +25,14 @@ logger = logging.getLogger(__name__)
 
 CANONICAL_ROLES = frozenset({"system", "user", "assistant", "tool"})
 
+# provider → (módulo, clase, kwarg de aislamiento). `opencode` usa `db_path`, no
+# `base_dir`: sin este mapa explícito, un `base_dir` pretendido acababa leyendo la
+# BD viva del operador (y el `TypeError` se tragaba en silencio).
 _SOURCE_CLASSES = {
-	"opencode": ("red_pill.chronicle_sources.opencode", "OpencodeSourcePlugin"),
-	"claude_code": ("red_pill.chronicle_sources.claude_code", "ClaudeCodeSourcePlugin"),
-	"pi": ("red_pill.chronicle_sources.pi", "PiSourcePlugin"),
-	"antigravity": ("red_pill.chronicle_sources.antigravity", "AntigravitySourcePlugin"),
+	"opencode": ("red_pill.chronicle_sources.opencode", "OpencodeSourcePlugin", "db_path"),
+	"claude_code": ("red_pill.chronicle_sources.claude_code", "ClaudeCodeSourcePlugin", "base_dir"),
+	"pi": ("red_pill.chronicle_sources.pi", "PiSourcePlugin", "base_dir"),
+	"antigravity": ("red_pill.chronicle_sources.antigravity", "AntigravitySourcePlugin", None),
 }
 
 
@@ -229,9 +232,10 @@ class SessionMirror:
 			raw_calls = turn.get("tool_calls")
 			if raw_calls:
 				try:
-					turn["tool_calls"] = json.loads(raw_calls)
+					parsed = json.loads(raw_calls)
 				except json.JSONDecodeError:
-					turn["tool_calls"] = None
+					parsed = None
+				turn["tool_calls"] = parsed if isinstance(parsed, list) else None
 			else:
 				turn["tool_calls"] = None
 			turns.append(turn)
@@ -358,7 +362,15 @@ class SessionMirror:
 				last_ts = float(soul["last_ts"] or 0.0)
 				if last_ts <= 0 or last_ts >= cutoff:
 					continue
-				cur = conn.execute("DELETE FROM session_mirror WHERE continuity_id = ?", (cid,))
+				# Solo turnos CON fecha y viejos: un turno sin `ts` nunca se borra por
+				# edad (se conserva y se reporta). El NOT EXISTS re-verifica "sin leg
+				# activo" dentro de la misma transacción: un leg que despierte entre el
+				# snapshot y el DELETE no pierde su espejo (carrera cerrada).
+				cur = conn.execute(
+					"DELETE FROM session_mirror WHERE continuity_id = ? AND ts > 0 AND ts < ? "
+					"AND NOT EXISTS (SELECT 1 FROM session_registry WHERE continuity_id = ? AND ttl_state != 'expired')",
+					(cid, cutoff, cid),
+				)
 				if cur.rowcount:
 					purged_rows += int(cur.rowcount)
 					purged_souls += 1
@@ -382,13 +394,10 @@ def _source_plugin(provider: str, base_dir: Optional[str] = None) -> Any:
 		return None
 	import importlib
 
-	module_name, class_name = entry
+	module_name, class_name, isolation_kwarg = entry
 	cls = getattr(importlib.import_module(module_name), class_name)
-	if base_dir:
-		try:
-			return cls(base_dir=base_dir)
-		except TypeError:
-			pass
+	if base_dir and isolation_kwarg:
+		return cls(**{isolation_kwarg: base_dir})
 	return cls()
 
 

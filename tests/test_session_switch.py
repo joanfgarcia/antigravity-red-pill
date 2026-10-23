@@ -215,3 +215,104 @@ def test_sync_on_switch_fills_the_mirror_before_replay(env, monkeypatch):
 	switch_model("alma-1", SwitchTarget(provider="local", bridge=FakeBridge()), prompt="sigue", mirror=mirror, registry=reg)
 	assert calls and calls[0]["originator"] == "claude_code:s1"
 	assert calls[0]["continuity_id"] == "alma-1"
+
+
+def test_failed_open_never_closes_the_old_leg(env, monkeypatch):
+	mirror, reg = env
+
+	def _boom(**kwargs):
+		raise RuntimeError("registry down")
+
+	monkeypatch.setattr(reg, "upsert_session", _boom)
+	result = switch_model("alma-1", SwitchTarget(provider="local", bridge=FakeBridge()), prompt="x", mirror=mirror, registry=reg, sync=False)
+	assert result.response == "ok"
+	assert any(error["provider"] == "__publish__" for error in result.errors)
+	assert reg.get_by_originator("claude_code:s1")["ttl_state"] == "active"
+
+
+class ResumeCapabilityBridge(FakeBridge):
+	def get_capabilities(self):
+		return SimpleNamespace(conversation_resume=False)
+
+
+def test_local_bridge_without_resume_forces_replay(env):
+	mirror, reg = env
+	bridge = ResumeCapabilityBridge(response="ok", conversation_id="local-x")
+	result = switch_model(
+		"alma-1",
+		SwitchTarget(provider="local", bridge=bridge),
+		prompt="sigue",
+		previous_originator="claude_code:s1",
+		mirror=mirror,
+		registry=reg,
+		sync=False,
+	)
+	assert result.mode == "replay"
+	assert result.replayed_turns == 3
+	assert bridge.calls[0][0] == "prompt"
+	assert "resultado-123" in bridge.calls[0][1]
+
+
+def test_publish_failure_does_not_reinvoke_the_model(env, monkeypatch):
+	import red_pill.session.switch as sw
+
+	mirror, reg = env
+	bridge = FakeBridge(response="ok")
+
+	def _broken_publish(*args, **kwargs):
+		raise RuntimeError("registry down")
+
+	monkeypatch.setattr(sw, "_publish", _broken_publish)
+	result = switch_model("alma-1", SwitchTarget(provider="local", bridge=bridge), prompt="x", mirror=mirror, registry=reg, sync=False, fallbacks=[SwitchTarget(provider="pi", bridge=FakeBridge())])
+	assert result.response == "ok"
+	assert len(bridge.calls) == 1
+	assert any(error["provider"] == "__publish__" for error in result.errors)
+
+
+def test_huge_newest_turn_is_clipped_not_dropped():
+	text = render_history("alma-1", [{"role": "tool", "tool_call_id": "c1", "content": "x" * 70000}], max_chars=1000)
+	assert len(text) <= 1100
+	assert "x" in text and "</history>" in text
+
+
+def test_previous_originator_of_another_soul_is_rejected(env):
+	mirror, reg = env
+	reg.upsert_session(originator="opencode:other", continuity_id="alma-2", mission_id="m")
+	with pytest.raises(ValueError):
+		switch_model(
+			"alma-1",
+			SwitchTarget(provider="local", bridge=FakeBridge()),
+			previous_originator="opencode:other",
+			mirror=mirror,
+			registry=reg,
+			sync=False,
+		)
+
+
+def test_target_body_of_another_soul_is_rejected(env):
+	mirror, reg = env
+	reg.upsert_session(originator="local:owned-by-b", continuity_id="alma-2", mission_id="m")
+	with pytest.raises(ValueError):
+		switch_model(
+			"alma-1",
+			SwitchTarget(provider="local", bridge=FakeBridge(), originator="local:owned-by-b"),
+			mirror=mirror,
+			registry=reg,
+			sync=False,
+		)
+
+
+def test_self_switch_preserves_event_cursor(env):
+	mirror, reg = env
+	reg.set_last_seen_event_seq("claude_code:s1", 7)
+	bridge = FakeBridge(conversation_id="s1")
+	result = switch_model(
+		"alma-1",
+		SwitchTarget(provider="claude_code", bridge=bridge, originator="claude_code:s1"),
+		prompt="x",
+		mirror=mirror,
+		registry=reg,
+		sync=False,
+	)
+	assert result.mode == "native_resume"
+	assert reg.get_by_originator("claude_code:s1")["last_seen_event_seq"] == 7

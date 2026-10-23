@@ -16,7 +16,33 @@ This document records the architectural and philosophical pivots of the project.
 5. **Evento del switch:** se mantiene `intent_updated` (taxonomía cerrada). Si un consumidor necesita distinguirlo, se valorará `model_switch`.
 6. **Sync-on-switch (F7).** `switch_model` sincroniza el transcript del leg anterior al espejo **antes** de leerlo (`sync=True`, idempotente). Es el disparador que ata el relleno al único momento en que su ausencia duele; un provider sin fuente canónica se ignora con log (no rompe el switch). Así la Fase 1 deja de estar «mergeada pero vacía».
 **Alternatives**: (a) trim de turnos antiguos también en almas vivas — riesgo de perder contexto en una tarea larga; se descarta hasta tener métricas; (b) contenido de divergencia desde backfill — exigiría inventar `global_turn` por timestamp (frágil); (c) rol inferido del texto/origen — prohibido por F2 (dato, no inferencia); (d) permitir `allow_all` por argumento — spoofing de lectura.
-**Rationale / Evidence**: suite completa **3183 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/` y `mypy src/red_pill/` limpios. Tests de purga (viva intacta, muerta antigua/reciente, edad desconocida), métricas/señales del janitor, divergencia (propio/intersección/ajeno, backfill sin contenido), captura del minion, rol heredado/ignorado y sync-on-switch.
+**Endurecimiento adversarial (ronda 2026-10-23, antes de dar la fase por buena):**
+- **A1 (crítico) — `affinity_filter` ampliaba visibilidad.** El handler unía la afinidad del modelo a la propia: un argumento con `mission:repo:otra` abría turnos ajenos (escalada por argumento). Ahora el filtro **solo estrecha** (intersección); cruzar exige `MULTISESSION_DIVERGENT_ALLOW_ALL` del operador. Test negativo incluido.
+- **A2 — la purga borraba turnos sin `ts`.** Una almas muerta con turnos antiguos fechados + uno reciente sin fecha se borraba entera. Ahora el `DELETE` exige `ts > 0`; los sin fecha se conservan y se reportan (`unknown_age_souls`). Test.
+- **A3 — carrera purga↔despertar.** El `DELETE` re-verifica `NOT EXISTS (leg activo)` en la misma transacción; un leg que despierta entre el snapshot y el borrado no pierde el espejo. Test con snapshot mentiroso.
+- **A4 — starvation en divergencia.** Un `LIMIT cap*5` podía devolver vacío con muchas filas ajenas intercaladas; el escaneo sube a `min(max(cap*50,500),5000)` antes de filtrar. Test con 30 turnos ajenos y el propio al final.
+- **A5 — orden de publicación del switch.** Se abre el leg nuevo antes de cerrar el viejo; si el upsert falla, el alma conserva cuerpo. Test de fallo.
+- **A6 — `tool_calls` corrupto** en una fila del espejo ya no rompe la lectura (JSON inválido → `None`). Test.
+- **A7 — descubrimiento del janitor**: test explícito de que `session_mirror_purge` entra en el barrido.
+
+**Ronda 2 — revisión adversarial independiente (2026-10-23, antes de aceptar):**
+- **B1 (crítico) — el bypass de afinidad seguía vivo por el handshake.** El modelo podía pasar `affinity` y se persistía; el filtro D15 leía esa fila como confianza. Ahora la afinidad explícita sale **solo de env `AFFINITY`** (operador); el argumento se ignora. Test de handshake con afinidad ajena.
+- **B2 — `switch_model` no validaba propiedad del alma.** `previous_originator` y `target.originator` podían apuntar a otra alma (cerrando su leg o corrompiendo su misión). Ahora se rechaza (`ValueError`) si el cuerpo pertenece a otra `continuity_id`. Tests.
+- **B3 — el cursor por defecto de divergencia ocultaba turnos.** Usaba `last_seen_global_turn`, que el handshake avanza cada turno. Default ahora `0` (la visibilidad D15 sigue filtrando); el llamante pasa su marca. Test.
+- **B4 — resume nativo en bridges sin estado.** `continue_conversation` es abstracto (existe siempre) y los bridges locales lo implementan como `prompt` sin estado. Ahora se exige `get_capabilities().conversation_resume`; si no, replay. Test.
+- **B5 — captura local muerta sin identidad.** `run_local_minion` acepta identidad por env del job (`REDPILL_ORIGINATOR`/`REDPILL_MISSION_ID`) y resuelve alma/misión del registro; sin cuerpo no escribe. Test.
+- **B6 — `base_dir` se ignoraba en opencode.** El mapa de fuentes ahora declara el kwarg de aislamiento correcto (`db_path` vs `base_dir`) y no traga `TypeError`; un sync aislado no puede leer la BD viva. Test.
+- **B7 — JSON válido no-lista rompía lectores.** `tool_calls` se coacciona a lista o `None` en espejo, store, render, replay y handler. Test con `{}`.
+- **B8 — un fallo al publicar repetía la llamada al modelo.** `_publish` sale del `try` de invocación; si falla, se reporta en `result.errors` (`__publish__`) y no se reintenta otro target. Test.
+- **B9 — un turno gigante vaciaba el replay.** El turno más reciente se recorta (`…`) en vez de descartarse. Test con 70 KB.
+- **B10 — captura no idempotente.** `run_ref` da `source_ref` deterministas; un job reintentado no duplica el diálogo. Test.
+- **B11 — parejas tool-call/resultado rotas sin `role=tool`.** `_canonical_turns` quita `tool_calls` sin pareja (resultado como `user`) para no generar secuencias OpenAI inválidas. Test.
+- **B12 — starvation de divergencia.** El filtro D15 se hace **en SQL** (`json_each` sobre la afinidad del reloj), sin límite de escaneo en Python. Test con ruido ajeno.
+- **B13 — `continuity_id` desde el modelo.** El alma ya no se acepta por argumento: env `REDPILL_CONTINUITY_ID` → registro → emisión. Test de spoof.
+- **B14 — el switch reseteaba el cursor de eventos.** `_publish` conserva `max(viejo, atado)`. Test de self-switch.
+- **B15 (riesgo, no bug reproducido)** — el orden de replay es por `seq`, no por `(ts, seq)`; dos legs de la misma alma sincronizados fuera de orden podrían invertir la conversación. Se documenta como riesgo de diseño; si aparece, ordenar por `(ts>0, ts, seq)`.
+
+**Rationale / Evidence**: suite completa **3205 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/` y `mypy src/red_pill/` limpios. Tests de purga (viva intacta, muerta antigua/reciente, sin fecha, carrera), métricas/señales del janitor, divergencia (propio/intersección/ajeno, filtro que no amplía, spoof por handshake, cursor por defecto, starvation, cursor negativo, JSON corrupto), captura del minion (env, idempotencia, parejas), rol heredado/ignorado, sync-on-switch, ownership del switch, fallo al publicar y recorte de turnos gigantes.
 **Consequences**: la retención es ajustable **con datos** y el rol deja de ser un parámetro del agente. Deuda declarada: (1) turnos históricos sin `global_turn` no aportan contenido a divergencia hasta que exista captura en vivo de ese arnés; (2) `switch` *mid-run* dentro de `run_local_minion`; (3) D23 (firma de notas) se pospone hasta que sea bloqueante. Ratificado para Fase 3: compactar **no** cambia el `continuity_id`; `compact_parent` apunta al segmento anterior y el resumen entra en el espejo preservando parejas tool-call/resultado.
 
 ---
