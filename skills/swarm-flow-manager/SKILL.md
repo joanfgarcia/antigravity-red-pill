@@ -1,6 +1,6 @@
 ---
 name: swarm-flow-manager
-description: Administra el diseño, creación y persistencia de flujos autónomos de enjambre (Minions) en proyectos soberanos.
+description: "Administra el diseño, creación y persistencia de flujos autónomos de enjambre (Minions) en proyectos soberanos."
 ---
 
 # Swarm Flow Manager Skill

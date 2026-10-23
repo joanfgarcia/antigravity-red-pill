@@ -1,6 +1,6 @@
 ---
 name: telegram-gateway
-description: Permite al agente enviar mensajes de notificación directa al operador a través de Telegram usando la configuración local de Neon-Link.
+description: "Permite al agente enviar mensajes de notificación directa al operador a través de Telegram usando la configuración local de Neon-Link."
 ---
 
 # Telegram Gateway (Neon-Link Communication)

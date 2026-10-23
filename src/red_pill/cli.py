@@ -31,6 +31,7 @@ from red_pill.cli_services import (  # noqa: F401  (re-exported for `red_pill.cl
 	handle_memory,
 	handle_p2p,
 	handle_runtime,
+	handle_session,
 	handle_telegram,
 )
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
@@ -110,6 +111,10 @@ def main() -> None:
 
 	elif args.command == "pact":
 		handle_pact(args)
+		return
+
+	elif args.command == "session":
+		handle_session(args)
 		return
 
 	# EventBus: let Enterprise/Community know which command was dispatched
@@ -298,7 +303,6 @@ def main() -> None:
 			return
 		elif args.command == "identity":
 			handle_identity(args)
-			return
 		elif args.command == "interceptor":
 			handle_interceptor(args)
 			return

@@ -1,6 +1,6 @@
 ---
 name: job-manager
-description: Encolar, ejecutar, pausar y monitorizar trabajos diferidos y reanudables (Centralized Job Manager) — flows YAML, tareas agénticas y drivers propios sobre la cola central de Red-Pill.
+description: "Encolar, ejecutar, pausar y monitorizar trabajos diferidos y reanudables (Centralized Job Manager) — flows YAML, tareas agénticas y drivers propios sobre la cola central de Red-Pill."
 ---
 
 # Centralized Job Manager Skill

@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.chronicle_sources.base import ChronicleSourcePlugin
+from red_pill.chronicle_sources.base import ChronicleSourcePlugin, canonical_ts
 from red_pill.core.origins import PROVIDER_CLAUDE, telegram_sessions
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,124 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 
 	def load_raw(self, raw_file: Path) -> List[Dict[str, Any]]:
 		return self._parse_transcript(raw_file)
+
+	def load_canonical(self, conversation_id: str) -> List[Dict[str, Any]]:
+		"""Turnos con `tool_use`/`tool_result` nativos (pareja call ↔ resultado)."""
+		path = self._transcript_path(conversation_id)
+		if path is None:
+			raise FileNotFoundError(f"[{self.name}] Transcript not found for session {conversation_id}")
+		return self._parse_transcript_canonical(path)
+
+	@staticmethod
+	def _block_text(value: Any) -> str:
+		if isinstance(value, str):
+			return value
+		if isinstance(value, list):
+			return "\n".join(
+				b.get("text", "") for b in value if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+			)
+		return ""
+
+	def _parse_transcript_canonical(self, path: Path) -> List[Dict[str, Any]]:
+		turns: List[Dict[str, Any]] = []
+		with open(path, "r", encoding="utf-8") as f:
+			for line in f:
+				line = line.strip()
+				if not line:
+					continue
+				try:
+					record = json.loads(line)
+				except json.JSONDecodeError:
+					continue
+				if record.get("isSidechain") is True or record.get("isMeta") is True:
+					continue
+				r_type = record.get("type")
+				if r_type not in ("user", "assistant"):
+					continue
+				message = record.get("message", {})
+				ts = canonical_ts(record.get("timestamp"))
+				ref = str(record.get("uuid") or message.get("id") or "")
+				model = message.get("model")
+				content = message.get("content")
+				if r_type == "user":
+					if isinstance(content, str):
+						if content.strip():
+							turns.append(
+								{
+									"role": "user",
+									"content": content,
+									"tool_calls": None,
+									"tool_call_id": None,
+									"model": model,
+									"ts": ts,
+									"source_ref": ref,
+								}
+							)
+						continue
+					text_parts: List[str] = []
+					for index, block in enumerate(content if isinstance(content, list) else []):
+						if not isinstance(block, dict):
+							continue
+						if block.get("type") == "text" and block.get("text"):
+							text_parts.append(block["text"])
+						elif block.get("type") == "tool_result":
+							call_id = str(block.get("tool_use_id") or "")
+							turns.append(
+								{
+									"role": "tool",
+									"content": self._block_text(block.get("content")),
+									"tool_calls": None,
+									"tool_call_id": call_id,
+									"model": model,
+									"ts": ts,
+									"source_ref": f"{ref}:tool:{call_id or index}",
+								}
+							)
+					if text_parts:
+						turns.append(
+							{
+								"role": "user",
+								"content": "\n".join(text_parts),
+								"tool_calls": None,
+								"tool_call_id": None,
+								"model": model,
+								"ts": ts,
+								"source_ref": ref,
+							}
+						)
+					continue
+				text_parts = []
+				tool_calls = []
+				for block in content if isinstance(content, list) else []:
+					if not isinstance(block, dict):
+						continue
+					if block.get("type") == "text" and block.get("text"):
+						text_parts.append(block["text"])
+					elif block.get("type") == "tool_use":
+						tool_calls.append(
+							{
+								"id": str(block.get("id") or ""),
+								"type": "function",
+								"function": {
+									"name": str(block.get("name") or ""),
+									"arguments": json.dumps(block.get("input") or {}, ensure_ascii=False),
+								},
+							}
+						)
+				text = "\n".join(text_parts) or None
+				if text or tool_calls:
+					turns.append(
+						{
+							"role": "assistant",
+							"content": text,
+							"tool_calls": tool_calls or None,
+							"tool_call_id": None,
+							"model": model,
+							"ts": ts,
+							"source_ref": ref,
+						}
+					)
+		return turns
 
 	def _parse_transcript(self, path: Path) -> List[Dict[str, Any]]:
 		from red_pill.utils.chronicle_render import extract_assistant_blocks, extract_user_content

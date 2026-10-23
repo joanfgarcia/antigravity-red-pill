@@ -53,6 +53,26 @@ class PresenceBoard(Protocol):
 	) -> str: ...
 
 
+@runtime_checkable
+class MirrorStore(Protocol):
+	"""Espejo canónico de turnos por alma (implementa `mirror.SessionMirror`).
+
+	`tool_calls` viaja como lista OpenAI íntegra (no como marcador de texto): es
+	lo que permite replay cruzado con herramientas. `append_*` es idempotente por
+	`(continuity_id, originator, source_ref)` cuando el turno trae `source_ref`.
+	"""
+
+	def append_turn(self, **kwargs: Any) -> Optional[dict]: ...
+
+	def append_turns(self, continuity_id: str, turns: List[dict], **kwargs: Any) -> int: ...
+
+	def read_turns(self, continuity_id: str, *, since_seq: int = 0, limit: Optional[int] = None) -> List[dict]: ...
+
+	def count_turns(self, continuity_id: str) -> int: ...
+
+	def last_seq(self, continuity_id: str) -> int: ...
+
+
 class AffinityResolver(Protocol):
 	"""Resolver determinista de afinidad (`core.affinity.derive_affinity`)."""
 
@@ -66,10 +86,23 @@ class AffinityResolver(Protocol):
 	) -> List[str]: ...
 
 
-class HydrationPolicy(Protocol):
-	"""Qué referencia recibe cada rol al despertar (Fase 2)."""
+class ModelDriver(Protocol):
+	"""Bridge ejecutable mínimo que `switch_model` necesita (sin acoplarse a uno).
 
-	def references(self, role: str) -> Dict[str, Any]: ...
+	`ConversationResult`-like: el resultado debe exponer `response`, `conversation_id`
+	y `error` (atributos o claves). Misma familia → `continue_conversation`;
+	cruzado → `prompt` con el historial renderizado.
+	"""
+
+	def prompt(self, text: str, **kwargs: Any) -> Any: ...
+
+	def continue_conversation(self, text: str, **kwargs: Any) -> Any: ...
+
+
+class HydrationPolicy(Protocol):
+	"""Qué referencia recibe cada rol al despertar (Fase 2; `session.roles`)."""
+
+	def references(self) -> Dict[str, Any]: ...
 
 
 class ClaimDriver(Protocol):

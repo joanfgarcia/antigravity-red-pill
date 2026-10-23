@@ -17,5 +17,13 @@ plugins:
   session_liveness:
     enabled: true
     ttl_h: 48                 # TTL de los latidos de sesión (${STATE_DIR}/sessions/live/)
+  session_mirror_purge:
+    enabled: true
+    retention_days: 30        # Solo almas sin leg activo y sin turnos recientes
+    growth_rows: 200000       # Aviso secundario (señal de dolor), no purga
+    growth_bytes: 536870912   # Aviso secundario (db + wal); el techo real es SESSION_MIRROR_MAX_BYTES
+    # Presupuesto duro y degradación (config.py): SESSION_MIRROR_MAX_BYTES=100MB,
+    # aviso 80%, emergencia 95%, stubbing de tools >7d fuera de los últimos 200,
+    # recorte de turnos viejos de almas activas conservando los últimos 200.
   orphaned_parents_sweep:
     enabled: true

@@ -1,6 +1,6 @@
 ---
 name: music-gen
-description: Genera música simbólica local (LLM→MIDI→FluidSynth→WAV, con control opcional de Ardour por MCP). No es un modelo: es una receta (tool-chain). Úsala para música, arreglos o partituras.
+description: "Genera música simbólica local (LLM→MIDI→FluidSynth→WAV, con control opcional de Ardour por MCP). No es un modelo: es una receta (tool-chain). Úsala para música, arreglos o partituras."
 capability: music_gen
 ---
 

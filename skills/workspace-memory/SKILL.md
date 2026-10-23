@@ -1,6 +1,6 @@
 ---
 name: workspace-memory
-description: Controls the local workspace-level memory filing cabinet, ensuring persistent technical context.
+description: "Controls the local workspace-level memory filing cabinet, ensuring persistent technical context."
 ---
 
 # Red Pill: Workspace Memory Skill

@@ -503,6 +503,44 @@ class RedPillConfig(BaseSettings):
 	# SESSION_LIVENESS_TTL_H: retención de los ficheros de latido para limpieza
 	# por mtime (distinta del umbral de "activo ahora"). Janitor `session_liveness`.
 	SESSION_LIVENESS_TTL_H: int = 48
+	# MULTISESSION_PURGE_AFTER_SECS (D14): antigüedad mínima de un leg expirado
+	# antes de borrarlo de `session_registry` (24h). `mission_events` no se toca:
+	# su TTL es la vida de la misión, no la presencia.
+	MULTISESSION_PURGE_AFTER_SECS: int = 86400
+	# SESSION_MIRROR_RETENTION_DAYS: retención del espejo canónico (Fase 1). Solo
+	# se purgan almas SIN leg activo; un alma viva nunca pierde turnos (conservador
+	# hasta tener métricas del janitor). Ver CONVENTIONS §10.10.
+	SESSION_MIRROR_RETENTION_DAYS: int = 30
+	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
+	SESSION_MIRROR_GROWTH_ROWS: int = 200000
+	SESSION_MIRROR_GROWTH_BYTES: int = 536870912
+	# SESSION_MIRROR_REPLAY_MAX_CHARS: tope del historial que se inyecta al
+	# reencarnar (switch/rehydrate). El espejo NO se inyecta al despertar; esto
+	# solo aplica al replay explícito. 60k ≈ 15k tokens.
+	SESSION_MIRROR_REPLAY_MAX_CHARS: int = 60000
+	# Presupuesto DURO del espejo (db + wal). 100 MB. El janitor avisa al 80 % y
+	# aplica degradación de emergencia al 95 % (stub de tools → purga de almas
+	# muertas → recorte de turnos viejos de almas vivas, conservando los últimos
+	# SESSION_MIRROR_MIN_TURNS_PER_SOUL).
+	SESSION_MIRROR_MAX_BYTES: int = 104857600
+	SESSION_MIRROR_WARN_PCT: float = 80.0
+	SESSION_MIRROR_EMERGENCY_PCT: float = 95.0
+	# Retención de RESULTADOS de tools (el 89 % del peso): se stubbean los más
+	# viejos que `TOOL_RETENTION_DAYS` y que queden fuera de los últimos
+	# `KEEP_TOOL_RESULTS` por alma. Las parejas call/resultado se conservan.
+	SESSION_MIRROR_TOOL_RETENTION_DAYS: int = 7
+	SESSION_MIRROR_KEEP_TOOL_RESULTS: int = 200
+	# Turnos mínimos que NUNCA se recortan en un alma activa (emergencia).
+	SESSION_MIRROR_MIN_TURNS_PER_SOUL: int = 200
+	# Tope por turno (contenido y argumentos de tools) para que una sola fila no
+	# rompa el presupuesto. Se recorta con marcador, conservando JSON válido.
+	SESSION_MIRROR_MAX_TURN_BYTES: int = 262144
+	# TTL de inactividad materializado en el registro (RFC §3.4). Un leg sin
+	# latido entra en `expired`; el handshake lo reactiva si vuelve.
+	MULTISESSION_IDLE_TTL_MIN: int = 30
+	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
+	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
+	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

@@ -1,6 +1,6 @@
 ---
 name: skill-creation
-description: Allows the agent to create new skills to extend its capabilities. MUST ask for user authorization before creating any new skill.
+description: "Allows the agent to create new skills to extend its capabilities. MUST ask for user authorization before creating any new skill."
 ---
 
 # Skill Creation Skill

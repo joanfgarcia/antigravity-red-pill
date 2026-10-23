@@ -1867,13 +1867,24 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		originator = env_originator or bridge_originator or explicit_originator
 	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
 	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
-	continuity_id = str(arguments.get("continuity_id") or "").strip() or None
-	# Arnés con hook: campaña/misión/rol SOLO por env (canal de confianza). Sin
-	# hook (pi/antigravity) se aceptan los argumentos como relay (residual local).
-	if hook_harness:
-		campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or None
-	else:
-		campaign_id = str(arguments.get("campaign_id") or "").strip() or None
+	# El alma NO se acepta del modelo: env de confianza (job/relay) → registro.
+	continuity_id = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip() or None
+	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
+	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
+	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
+	linkable = bool(originator and ":" in originator)
+	# Lectura temprana del registro: campaña y rol se HEREDAN del leg (transparente
+	# para el agente). El modelo no declara identidad: solo env/bridge/registro.
+	registry_obj = None
+	existing = None
+	if originator and ":" in originator:
+		try:
+			registry_obj = SessionRegistry()
+			existing = registry_obj.get_by_originator(originator)
+		except Exception as e:
+			logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
+	# Campaña: env (canal de confianza) → la ya atada al leg. Sin valor, no se infiere.
+	campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or (existing or {}).get("campaign_id")
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
 	branch = await asyncio.to_thread(_current_git_branch, workspace)
 	mirror = await asyncio.to_thread(_git_mirror, workspace)
@@ -1890,29 +1901,33 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				branch = inferred.get("branch") or branch
 				if inferred.get("worktree"):
 					mirror = inferred
-	# La misión del manifiesto (env de confianza) manda sobre el argumento del modelo.
-	mission_param = os.getenv("REDPILL_MISSION_ID") or (None if hook_harness else arguments.get("mission_id"))
-	mission_id = resolve_default_mission(mission_param, branch=branch)
-	role = str(os.getenv("REDPILL_ROLE") or (None if hook_harness else arguments.get("role")) or "task").strip() or "task"
+	# La misión sale del manifiesto (env de confianza) → repo:rama → adhoc. El
+	# argumento del modelo NO la declara (evita spoofing y params innecesarios).
+	mission_id = resolve_default_mission(os.getenv("REDPILL_MISSION_ID") or None, branch=branch)
+	role = str(os.getenv("REDPILL_ROLE") or (existing or {}).get("role") or "task").strip() or "task"
 
+	# La afinidad explícita es del OPERADOR (env AFFINITY), no del modelo: si el
+	# modelo pudiera añadirla, se auto-otorgaría lectura en `fetch_divergent_turns`.
+	try:
+		from red_pill.core.affinity import parse_affinity
+
+		explicit_affinity = parse_affinity(os.getenv("AFFINITY"))
+	except Exception:
+		explicit_affinity = []
 	try:
 		affinity = derive_affinity(
 			workdir=workspace,
 			mission_id=mission_id,
-			explicit=arguments.get("affinity"),
+			explicit=explicit_affinity,
 			campaign_id=campaign_id,
 		)
 	except Exception:
-		affinity = list(arguments.get("affinity") or [])
+		affinity = explicit_affinity
 
-	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
-	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
-	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
-	linkable = bool(originator and ":" in originator)
 	previous_event_seq = 0
 	try:
-		registry_obj = SessionRegistry()
-		existing = registry_obj.get_by_originator(originator) if (linkable and originator) else None
+		if registry_obj is None:
+			registry_obj = SessionRegistry()
 		if not continuity_id:
 			if existing and existing.get("continuity_id"):
 				continuity_id = existing["continuity_id"]
@@ -1954,6 +1969,11 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 			persisted = registry_obj.get_by_originator(originator)
 			if persisted and persisted.get("continuity_id"):
 				continuity_id = persisted["continuity_id"]
+			# D14: purga perezosa de legs expirados (una vez por turno persistido).
+			try:
+				registry_obj.purge_expired()
+			except Exception as e:
+				logger.debug(f"[SessionRegistry] purge unavailable: {e}")
 	except Exception as e:
 		logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
 		if not continuity_id:
@@ -1981,8 +2001,13 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	mission = str(identity.get("mission_id") or "").strip()
 	if ":" not in originator or not mission:
 		return None
+	from red_pill.session.roles import policy_for
 	from red_pill.session.store import SessionRegistry
 
+	references = policy_for(identity.get("role")).references()
+	digest_mode = str(references.get("digest") or "compact")
+	if digest_mode == "none":
+		return None
 	registry_obj = SessionRegistry()
 	since = int(identity.get("previous_event_seq") or 0)
 	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
@@ -1996,9 +2021,17 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		parallel = sum(1 for s in active if f"{s.provider}:{s.session_id}" != originator)
 	except Exception:
 		parallel = 0
-	if not novelties and not awaiting and not parallel:
+	global_missions = 0
+	if digest_mode == "global":
+		try:
+			global_missions = len({r.get("mission_id") for r in registry_obj.list_sessions() if r.get("ttl_state") != "expired" and r.get("mission_id")})
+		except Exception:
+			global_missions = 0
+	if not novelties and not awaiting and not parallel and not global_missions:
 		return None
 	parts = []
+	if global_missions:
+		parts.append("1 misión viva" if global_missions == 1 else f"{global_missions} misiones vivas")
 	if novelties:
 		parts.append(f"{novelties} novedad{'es' if novelties != 1 else ''} (desde seq {since})")
 	if awaiting:
@@ -2048,13 +2081,13 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 			},
 			"continuity_id": {
 				"type": "string",
-				"description": "El alma de esta sesión (UUIDv7). Pásala si la conoces (p.ej. la viste en el tag `<session …/>` o la recuperas tras una compactación). Si se omite, el handshake la emite/recupera.",
+				"description": "Compatibilidad: NO autoritativo. El alma se recupera del registro o de REDPILL_CONTINUITY_ID (env de confianza); el argumento del modelo se ignora.",
 			},
 			"mission_id": {
 				"type": "string",
-				"description": "La tarea/misión (`<scope>:<id>`). Si se omite, el handshake resuelve la misión por defecto (job → `repo:<rama>` → `mission:adhoc-<fecha>`).",
+				"description": "Compatibilidad: NO autoritativo. La misión sale de REDPILL_MISSION_ID (env) → repo:<rama> → adhoc; el argumento del modelo no la declara.",
 			},
-			"campaign_id": {"type": "string", "description": "Marco estratégico (opcional, nullable)."},
+			"campaign_id": {"type": "string", "description": "Compatibilidad: NO autoritativo. La campaña sale de REDPILL_CAMPAIGN_ID (env) o del leg ya registrado."},
 			"lineage_id": {
 				"type": "string",
 				"description": "Etiqueta de linaje (opcional; la asigna quien engendra, no tiene por qué ser el `continuity_id` del padre).",
@@ -2062,12 +2095,12 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 			"role": {
 				"type": "string",
 				"enum": ["orchestrator", "task", "spawn"],
-				"description": "Rol en el coro. Por defecto 'task'.",
+				"description": "Compatibilidad: NO autoritativo. El rol se hereda del leg registrado o de REDPILL_ROLE; por defecto 'task'.",
 			},
 			"affinity": {
 				"type": "array",
 				"items": {"type": "string"},
-				"description": "Afinidad explícita (se canoniza: lower/trim + sorted/dedup). Si se omite, se deriva.",
+				"description": "Compatibilidad: NO autoritativo. La afinidad explícita del operador sale de env AFFINITY; la del modelo se ignora.",
 			},
 			"originator": {
 				"type": "string",
@@ -2373,6 +2406,8 @@ async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
 		]
 		shown = 0
 		for row in rows:
+			if row.get("ttl_state") == "expired":
+				continue
 			if (now - float(row.get("updated_at") or 0.0)) > ttl:
 				continue
 			last = int(row.get("last_seen_global_turn") or 0)
@@ -2406,6 +2441,118 @@ async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
+
+
+@registry.register(
+	name="unregister_session",
+	description=(
+		"[OFFICIAL] Cierra TU leg explícitamente (fin de sesión): lo marca expirado "
+		"en el registro y deja de aparecer en el tablón. Solo tu propio cuerpo "
+		"(bridge/env); los argumentos del modelo no declaran identidad."
+	),
+	schema={"type": "object", "properties": {}},
+)
+async def handle_unregister_session(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		session = await _caller_session(arguments)
+		originator = str(session.get("originator") or "")
+		if ":" not in originator:
+			return [types.TextContent(type="text", text="[CORO] sin cuerpo compuesto (bridge/env); deny-by-default.")]
+		closed = SessionRegistry().unregister_session(originator)
+		if closed:
+			return [types.TextContent(type="text", text=f"[CORO] leg cerrado: {originator}")]
+		return [types.TextContent(type="text", text=f"[CORO] sin leg registrado: {originator}")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
+
+
+@registry.register(
+	name="fetch_divergent_turns",
+	description=(
+		"[OFFICIAL] Turnos del reloj posteriores a tu marca (divergencia) con filtro D15: "
+		"siempre los tuyos; los ajenos solo si su afinidad intersecta la tuya (o flag de "
+		"operador). El contenido solo existe para turnos capturados en vivo (global_turn>0); "
+		"el backfill histórico no inventa reloj."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"since_global_turn": {"type": "integer", "description": "Marca; por defecto tu last_seen_global_turn."},
+			"affinity_filter": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "Afinidad adicional para el filtro (se intersecta con la tuya; nunca la reemplaza).",
+			},
+			"limit": {"type": "integer", "description": "Máximo de turnos (default 20, tope 200)."},
+			"include_content": {"type": "boolean", "description": "Incluye el contenido espejado (default true)."},
+		},
+	},
+)
+async def handle_fetch_divergent_turns(arguments: Dict[str, Any]):
+	try:
+		import red_pill.config as cfg
+		from red_pill.core.affinity import canonize_affinity
+		from red_pill.session.store import SessionRegistry, sanitize_inline
+
+		session = await _caller_session(arguments)
+		originator = str(session.get("originator") or "")
+		if ":" not in originator:
+			return [types.TextContent(type="text", text="[DIVERGENCIA] sin cuerpo compuesto (bridge/env); deny-by-default.")]
+		registry_obj = SessionRegistry()
+		row = registry_obj.get_by_originator(originator) or {}
+		try:
+			own_affinity = json.loads(row.get("affinity_json") or "[]")
+		except Exception:
+			own_affinity = []
+		extra = arguments.get("affinity_filter") or []
+		if not isinstance(extra, list):
+			return [types.TextContent(type="text", text="[DIVERGENCIA] affinity_filter debe ser una lista.")]
+		# El filtro SOLO estrecha: nunca puede añadir afinidad que el leg no tenga
+		# (si pudiera, el modelo se auto-otorgaría lectura de otra misión). Cruzar
+		# requiere el flag de operador `MULTISESSION_DIVERGENT_ALLOW_ALL`.
+		own_set = set(canonize_affinity(list(own_affinity)))
+		viewer_affinity = [a for a in canonize_affinity([str(a) for a in extra]) if a in own_set] if extra else sorted(own_set)
+		# Default 0: `last_seen_global_turn` lo avanza el handshake en CADA turno,
+		# así que usarlo aquí escondería los turnos ajenos ocurridos entre turnos.
+		# La visibilidad sigue filtrada por D15; el cursor lo pasa el llamante.
+		since = max(0, int(arguments.get("since_global_turn") or 0))
+		allow_all = bool(getattr(cfg.get_config(), "MULTISESSION_DIVERGENT_ALLOW_ALL", False))
+		items = registry_obj.divergent_turns(
+			int(since),
+			viewer_originator=originator,
+			viewer_affinity=viewer_affinity,
+			limit=int(arguments.get("limit") or 20),
+			allow_all=allow_all,
+		)
+		if not items:
+			return [types.TextContent(type="text", text=f"[DIVERGENCIA] desde turno {int(since)}: sin turnos visibles.")]
+		include_content = arguments.get("include_content") is not False
+		lines = [f"--- DIVERGENCIA: {len(items)} turno(s) desde {int(since)} (D15) ---"]
+		for item in items:
+			head = (
+				f"#{item['global_turn']} [{sanitize_inline(item['originator'], 80)}] "
+				f"misión={sanitize_inline(item.get('mission_id'), 120)} "
+				f"alma={sanitize_inline(item.get('continuity_id'), 12)} "
+				f"rol={sanitize_inline(item.get('role'), 20)} ttl={sanitize_inline(item.get('ttl_state'), 20)}"
+			)
+			lines.append(head)
+			if not include_content:
+				continue
+			if not item["turns"]:
+				lines.append("  (sin contenido espejado: turno sin global_turn>0)")
+				continue
+			for turn in item["turns"]:
+				body = sanitize_inline(turn.get("content") or "", 500)
+				calls = turn.get("tool_calls")
+				calls = calls if isinstance(calls, list) else []
+				call_names = ",".join(str((call or {}).get("function", {}).get("name") or "?") for call in calls)
+				suffix = f" [tools: {sanitize_inline(call_names, 200)}]" if call_names else ""
+				lines.append(f"  {sanitize_inline(turn.get('role'), 20)}: {body}{suffix}")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[DIVERGENCIA] error: {e}")]
 
 
 @server.list_tools()

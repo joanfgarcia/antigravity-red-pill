@@ -359,3 +359,27 @@ def test_discovery_respects_config_gating(monkeypatch):
 	monkeypatch.setattr(cfg, "CHRONICLE_ARCHIVE_SOURCES", ["antigravity"], raising=False)
 	plugins = discover_source_plugins()
 	assert [p.name for p in plugins] == ["antigravity"]
+
+
+def test_pi_load_by_uuid_alias(pi_sessions):
+	"""El bridge usa el UUID del header; el source debe resolverlo sin romper Memento."""
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	relative = "--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION"
+	assert plugin.load("01J3SESSION") == plugin.load(relative)
+
+
+def test_pi_discover_does_not_duplicate_uuid_alias(pi_sessions):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	assert len(plugin.discover()) == 1
+
+
+def test_pi_load_canonical_preserves_tool_pair(pi_sessions):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	turns = plugin.load_canonical("01J3SESSION")
+	assert [t["role"] for t in turns] == ["user", "assistant", "tool"]
+	assert turns[0]["content"] == "arregla el bug del registro"
+	assert turns[1]["tool_calls"][0]["id"] == "call_1"
+	assert turns[1]["tool_calls"][0]["function"]["name"] == "read"
+	assert turns[2]["tool_call_id"] == "call_1"
+	assert turns[2]["content"].startswith("def load():")
+	assert turns[1]["model"] == "kimi-k2.6"

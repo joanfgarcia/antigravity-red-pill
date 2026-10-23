@@ -1,13 +1,11 @@
-"""`session.db` — reloj global de turnos + registro de sesiones (Alma y Coro).
+"""`session.db` — reloj global, registro de sesiones y espejo canónico (Alma y Coro).
 
-Fase 0a: versión MÍNIMA pero con el esquema ratificado (ver DECISION_LOG).
 El registro (`session_registry`) es el tablón: una fila por `originator`
 (leg, `provider:session_id`), con su alma (`continuity_id`), misión, rol y linaje.
 El reloj (`global_turn_seq`) da monotonicidad a los turnos (que `memory_queue.id`
-no puede, por el dedup que devuelve ids existentes).
-
-Fase 0b completará lo diferido (TTL materializado, git status espejo, claims y
-eventos): aquí solo se declaran las columnas para no migrar dos veces.
+no puede, por el dedup que devuelve ids existentes). El espejo canónico
+(`session_mirror`, Fase 1a) guarda los turnos portables que permiten reencarnar
+el alma en otro cuerpo (`mirror.SessionMirror`).
 """
 
 from __future__ import annotations
@@ -96,6 +94,28 @@ WHEN EXISTS (SELECT 1 FROM mission_events WHERE event_id = NEW.event_id)
 BEGIN
 	SELECT RAISE(ABORT, 'mission_events is append-only (event_id/event_seq duplicado)');
 END;
+
+CREATE TABLE IF NOT EXISTS session_mirror (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+continuity_id TEXT NOT NULL,
+mission_id TEXT NOT NULL,
+global_turn INTEGER NOT NULL DEFAULT 0,
+seq INTEGER NOT NULL,
+role TEXT NOT NULL,
+content TEXT,
+tool_calls TEXT,
+tool_call_id TEXT,
+model TEXT,
+ts REAL NOT NULL DEFAULT 0,
+originator TEXT NOT NULL DEFAULT '',
+source TEXT NOT NULL DEFAULT '',
+source_ref TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_seq ON session_mirror(continuity_id, seq);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_source ON session_mirror(continuity_id, originator, source_ref)
+WHERE source_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mirror_ts ON session_mirror(continuity_id, ts);
 """
 
 # Taxonomía civil de eventos de misión (Fase 2, RFC_CONSCIENCIA_MULTISESION §3.6).
@@ -156,6 +176,24 @@ def _split_originator(originator: str) -> tuple[str, str]:
 	return (provider or originator), session_id
 
 
+@contextmanager
+def connect_session_db(db_path: str) -> Iterator[sqlite3.Connection]:
+	"""Conexión a `session.db` (WAL + busy_timeout), compartida por store y espejo."""
+	conn = sqlite3.connect(db_path, timeout=30.0)
+	try:
+		# busy_timeout ANTES del WAL: el pragma de journal no usa el handler y
+		# en un arranque concurrente en frío puede dar "database is locked".
+		conn.execute("PRAGMA busy_timeout=5000;")
+		try:
+			conn.execute("PRAGMA journal_mode=WAL;")
+		except sqlite3.OperationalError:
+			pass
+		conn.row_factory = sqlite3.Row
+		yield conn
+	finally:
+		conn.close()
+
+
 class SessionRegistry:
 	"""Acceso a `session.db` (WAL + busy_timeout). Schema owned by Python."""
 
@@ -165,19 +203,8 @@ class SessionRegistry:
 
 	@contextmanager
 	def _connect(self) -> Iterator[sqlite3.Connection]:
-		conn = sqlite3.connect(self.db_path, timeout=30.0)
-		try:
-			# busy_timeout ANTES del WAL: el pragma de journal no usa el handler y
-			# en un arranque concurrente en frío puede dar "database is locked".
-			conn.execute("PRAGMA busy_timeout=5000;")
-			try:
-				conn.execute("PRAGMA journal_mode=WAL;")
-			except sqlite3.OperationalError:
-				pass
-			conn.row_factory = sqlite3.Row
+		with connect_session_db(self.db_path) as conn:
 			yield conn
-		finally:
-			conn.close()
 
 	def _init_db(self) -> None:
 		from pathlib import Path
@@ -211,6 +238,10 @@ class SessionRegistry:
 				conn.executescript(_SCHEMA)
 			if current < 3:
 				conn.execute("PRAGMA user_version=3")
+			if current < 4:
+				# v4: espejo canónico de turnos (`session_mirror`). `_SCHEMA` ya la
+				# crea idempotentemente; aquí solo se sella la versión.
+				conn.execute("PRAGMA user_version=4")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────
@@ -262,7 +293,8 @@ class SessionRegistry:
 		cuerpo" (F5): el `continuity_id` YA atado se conserva SIEMPRE — este es el
 		único escritor con la invariante atómica (el hook del arnés usa la MISMA
 		cláusula `ON CONFLICT ... SET continuity_id=session_registry.continuity_id`).
-		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe)."""
+		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe).
+	Un leg vuelto a ver tras `unregister_session` se reactiva (`ttl_state=active`)."""
 		provider, session_id = _split_originator(originator)
 		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
 		now = time.time()
@@ -290,7 +322,8 @@ class SessionRegistry:
 					worktree = COALESCE(excluded.worktree, session_registry.worktree),
 					head_commit = COALESCE(excluded.head_commit, session_registry.head_commit),
 					title = COALESCE(excluded.title, session_registry.title),
-					intent = COALESCE(excluded.intent, session_registry.intent)
+					intent = COALESCE(excluded.intent, session_registry.intent),
+					ttl_state = 'active'
 				""",
 				(
 					originator,
@@ -335,6 +368,105 @@ class SessionRegistry:
 		with self._connect() as conn:
 			row = conn.execute("SELECT MAX(event_seq) AS m FROM mission_events").fetchone()
 		return int(row["m"]) if row and row["m"] is not None else 0
+
+	def active_continuities(self) -> List[str]:
+		"""Almas con al menos un leg NO expirado (para retención del espejo)."""
+		with self._connect() as conn:
+			rows = conn.execute(
+				"SELECT DISTINCT continuity_id FROM session_registry WHERE ttl_state != 'expired'"
+			).fetchall()
+		return [str(row["continuity_id"]) for row in rows if row["continuity_id"]]
+
+	def divergent_turns(
+		self,
+		since_global_turn: int,
+		*,
+		viewer_originator: str,
+		viewer_affinity: Optional[List[str]] = None,
+		limit: int = 20,
+		allow_all: bool = False,
+	) -> List[dict]:
+		"""Turnos del reloj posteriores a tu marca, con filtro D15 (deny-by-default).
+
+		Incluye SIEMPRE los tuyos; los ajenos solo si su afinidad intersecta la tuya
+		(o `allow_all`, que exige flag de operador). `content` se rellena únicamente
+		desde turnos del espejo con `global_turn > 0` (el backfill histórico no tiene
+		reloj: no se inventa).
+		"""
+		from red_pill.core.affinity import canonize_affinity
+
+		since = max(0, int(since_global_turn or 0))
+		cap = max(1, min(int(limit or 20), 200))
+		mine = sorted(set(canonize_affinity(viewer_affinity or [])))
+		# D15 se filtra EN SQL (json_each) para no sufrir starvation: un LIMIT
+		# calculado en Python podía devolver vacío con miles de turnos ajenos.
+		where = ["g.global_turn > ?"]
+		params: List[Any] = [since]
+		if not allow_all:
+			if mine:
+				marks = ",".join("?" * len(mine))
+				where.append(
+					"(g.originator = ? OR EXISTS (SELECT 1 FROM json_each(g.affinity_json) je "
+					f"WHERE lower(trim(je.value)) IN ({marks})))"
+				)
+				params.append(viewer_originator)
+				params.extend(mine)
+			else:
+				where.append("g.originator = ?")
+				params.append(viewer_originator)
+		sql = (
+			"SELECT g.global_turn, g.created_at, g.originator, g.affinity_json, "
+			"r.mission_id, r.continuity_id, r.role, r.ttl_state "
+			"FROM global_turn_seq g LEFT JOIN session_registry r ON r.originator = g.originator "
+			"WHERE " + " AND ".join(where) + " ORDER BY g.global_turn ASC LIMIT ?"
+		)
+		params.append(cap)
+		with self._connect() as conn:
+			rows = conn.execute(sql, tuple(params)).fetchall()
+			selected: List[dict] = []
+			for row in rows:
+				origin = str(row["originator"] or "")
+				try:
+					theirs = set(json.loads(row["affinity_json"] or "[]"))
+				except Exception:
+					theirs = set()
+				item = {
+					"global_turn": int(row["global_turn"]),
+					"created_at": float(row["created_at"] or 0.0),
+					"originator": origin,
+					"mission_id": row["mission_id"],
+					"continuity_id": row["continuity_id"],
+					"role": row["role"],
+					"ttl_state": row["ttl_state"],
+					"affinity": sorted(theirs),
+					"turns": [],
+				}
+				content_rows = conn.execute(
+					"SELECT role, content, tool_calls, tool_call_id, model, ts FROM session_mirror "
+					"WHERE originator = ? AND global_turn = ? ORDER BY seq ASC",
+					(origin, int(row["global_turn"])),
+				).fetchall()
+				for turn in content_rows:
+					try:
+						calls = json.loads(turn["tool_calls"]) if turn["tool_calls"] else None
+					except json.JSONDecodeError:
+						calls = None
+					if not isinstance(calls, list):
+						calls = None
+					item["turns"].append(
+						{
+							"role": turn["role"],
+							"content": turn["content"],
+							"tool_calls": calls,
+							"tool_call_id": turn["tool_call_id"],
+							"model": turn["model"],
+							"ts": turn["ts"],
+						}
+					)
+				selected.append(item)
+				if len(selected) >= cap:
+					break
+		return selected
 
 	# ── Eventos de misión (Fase 2, append-only) ─────────────────────────────
 	def add_event(
@@ -514,3 +646,66 @@ class SessionRegistry:
 				(int(seq), str(originator or "")),
 			)
 			conn.commit()
+
+	# ── Ciclo de vida del leg (D14) ─────────────────────────────────────────
+	def unregister_session(self, originator: str) -> bool:
+		"""Expira EXPLÍCITAMENTE un leg (cierre de sesión); `True` si existía.
+
+		Marca `ttl_state='expired'` y sella `updated_at` para que la purga D14
+		cuente el plazo desde el cierre. El tablón deja de mostrarlo de inmediato.
+		"""
+		origin = str(originator or "").strip()
+		if not origin:
+			return False
+		with self._connect() as conn:
+			cur = conn.execute(
+				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ?, updated_at = ? WHERE originator = ?",
+				(time.time(), time.time(), origin),
+			)
+			conn.commit()
+			return bool(cur.rowcount)
+
+	def expire_idle_legs(self, ttl_min: Optional[float] = None) -> int:
+		"""Materializa el TTL de inactividad: legs sin latido → `expired`.
+
+		El handshake vuelve a poner `active` el leg si reaparece (reactivación), y
+		`purge_expired` (D14) lo borra 24 h después. Sin esto, `ttl_state` solo
+		cambiaba con `unregister_session` y la retención nunca se disparaba.
+		"""
+		import red_pill.config as cfg
+
+		minutes = float(ttl_min) if ttl_min is not None else float(getattr(cfg.get_config(), "MULTISESSION_IDLE_TTL_MIN", 30))
+		cutoff = time.time() - max(0.0, minutes) * 60.0
+		with self._connect() as conn:
+			cur = conn.execute(
+				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ? "
+				"WHERE ttl_state = 'active' AND updated_at < ?",
+				(time.time(), cutoff),
+			)
+			conn.commit()
+			return int(cur.rowcount or 0)
+
+	def purge_expired(self, after_s: Optional[float] = None) -> int:
+		"""Purga D14: borra legs expirados hace más de `after_s` (default config).
+
+		`MULTISESSION_PURGE_AFTER_SECS` (24h). Nunca toca filas activas ni
+		`mission_events` (su TTL es la vida de la misión, no la presencia).
+		`VACUUM` best-effort: no puede correr dentro de una transacción.
+		"""
+		import red_pill.config as cfg
+
+		window = float(after_s) if after_s is not None else float(getattr(cfg.get_config(), "MULTISESSION_PURGE_AFTER_SECS", 86400))
+		cutoff = time.time() - max(0.0, window)
+		with self._connect() as conn:
+			cur = conn.execute(
+				"DELETE FROM session_registry WHERE ttl_state = 'expired' AND updated_at < ?",
+				(cutoff,),
+			)
+			conn.commit()
+			removed = int(cur.rowcount or 0)
+			if removed:
+				try:
+					conn.execute("VACUUM")
+				except sqlite3.OperationalError:
+					pass
+		return removed

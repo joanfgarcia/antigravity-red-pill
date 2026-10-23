@@ -18,7 +18,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -35,6 +35,22 @@ const SCORE_THRESHOLD = parseFloat(process.env.RED_PILL_SCORE_THRESHOLD ?? "0.7"
 const XDG_DATA = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
 const QUEUE_DB = join(XDG_DATA, "red-pill", "queue", "bunker_queue.db");
 const RELAY_DEDUP_WINDOW_S = 12 * 3600;
+// Session liveness (RFC-DESPERTAR-001, P4): same `${STATE_DIR}/sessions/live`
+// pair the opencode plugin and the Claude Code hooks write. Without it a Pi
+// session is invisible to the autonomous-cron idle heuristic and to the board.
+const LIVE_DIR = join(XDG_DATA, "red-pill", "state", "sessions", "live");
+
+/** Touch `<provider>__<session>.<phase>`; mtime is the signal. Best-effort. */
+function touchLiveness(sessionId: string, phase: "start" | "end") {
+	if (!sessionId) return;
+	try {
+		const safe = String(sessionId).replace(/\//g, "_").replace(/__/g, "_");
+		mkdirSync(LIVE_DIR, { recursive: true });
+		writeFileSync(join(LIVE_DIR, `pi__${safe}.${phase}`), "");
+	} catch {
+		/* best-effort: a failed heartbeat never breaks the turn */
+	}
+}
 
 /** Filtra el output de `red-pill search`: conserva solo bullets con (Score: N >= umbral). */
 function filterByScore(output: string): string {
@@ -254,7 +270,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// Close the persistent MCP connection when the session ends.
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (_event, ctx) => {
+		touchLiveness(sessionIdOf(ctx), "end");
 		if (mcpClientPromise) {
 			try {
 				(await mcpClientPromise).close();
@@ -283,6 +300,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (event, ctx) => {
 		const prompt = event.prompt ?? "";
 		if (prompt.trim().length < 3) return;
+		const sessionId = sessionIdOf(ctx);
+		touchLiveness(sessionId, "start");
 		prevPrompt = prompt;
 		turnResponse = "";
 		boundarySeen = false;
@@ -298,7 +317,7 @@ export default function (pi: ExtensionAPI) {
 			// F5: en pérdida de contexto, el handshake MCP emite/recupera el alma y
 			// ata `pi:<session_id> ↔ alma` en session_registry (el resolver Python es
 			// el único escritor autoritativo). El texto de identidad no se inyecta.
-			void handshake(sessionIdOf(ctx), prompt);
+			void handshake(sessionId, prompt);
 		}
 
 		// LIGHT siempre: RAG liviano (equivale al pipeline del interceptor)
@@ -334,6 +353,7 @@ export default function (pi: ExtensionAPI) {
 	// reintentos/compactación) y dispara una vez por settle.
 	pi.on("agent_before_settle", async (event, ctx) => {
 		boundarySeen = true;
+		touchLiveness(sessionIdOf(ctx), "end");
 		if (event.outcome !== "completed") return;
 		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
 	});
@@ -341,6 +361,7 @@ export default function (pi: ExtensionAPI) {
 	// Fallback para Pi <0.87 (sin `agent_before_settle`): `agent_settled` es el
 	// hook final y garantiza UNA ejecución cuando Pi ya no va a seguir solo.
 	pi.on("agent_settled", async (_event, ctx) => {
+		touchLiveness(sessionIdOf(ctx), "end");
 		if (boundarySeen) return;
 		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
 	});

@@ -1,5 +1,74 @@
 ## Unreleased
 
+### 🐕 Mini arnés local — Forge (GPU) + Loom (NPU)
+
+- **[NEW]** `src/red_pill/mini/`: providers OpenAI por UDS/localhost, tools acotadas
+  (`list_files`, `read_file`, `write_file`, `edit_file`, `run_tests`), `MiniSession`
+  con replay del espejo, tool loop y migración de cuerpo con la misma `continuity_id`.
+- **[NEW]** Identidad operativa mínima y prompts en inglés; **sin handshake, Búnker
+  ni RAG** en los modelos locales. Reviewer sin tools.
+- **[NEW]** Smoke real: Forge (Qwen3.5-9B GPU) corrige un bug sembrado, Loom
+  (Qwen3-8B FLM) revisa citando el RUN_ID sin tools, Forge aplica el test del caso
+  límite. `ok=true`, 31 turnos/13 tool turns, 0 plomería, 1 leg activo.
+- **[SAFETY]** Unidades transitorias `systemd --user` con `MemoryMax` y
+  `MemorySwapMax=0`; GPU por Unix socket; FLM en loopback 52625 (v0). El 35B queda
+  diferido por RAM (OOM documentado).
+- **[DOCS]** AD-065; RFC §8.8/§8.3 con modelos y medición real.
+
+
+### 🌅 Despertar autónomo — Pi cuenta como actividad
+
+- **[FIX]** `is_ide_idle` ignoraba las sesiones de Pi: trabajar en el IDE `pi`
+  dejaba al Operador "offline" y el cron inyectaba un awakening de más (runs
+  headless de awakening se excluyen por `session_origins.json`).
+- **[FIX]** La extensión de Pi no escribía el latido `.start/.end`: ahora
+  `before_agent_start` marca inicio y `agent_before_settle`/`agent_settled`/
+  `session_shutdown` cierran el turno, así el tablón ve la sesión como viva.
+
+### 🧠 Alma y Coro — Fase 1 (espejo canónico + `switch_model`)
+
+- **[NEW]** `session.db` v4: tabla `session_mirror` con turnos portables
+  `{continuity_id, mission_id, global_turn, seq, role, content, tool_calls, tool_call_id, model, ts}`
+  (+ `originator/source/source_ref`), `seq` por alma e idempotencia de backfill.
+  `MirrorStore` (contrato) + `SessionMirror`.
+- **[NEW]** Poblado desde transcripts: `chronicle_sources.load_canonical()` aditivo;
+  opencode y claude_code conservan `tool_use`/`tool_result` (pareja call ↔ resultado).
+  Backfill `red-pill session mirror sync`.
+- **[NEW]** `session/switch.py:switch_model()`: misma familia → resume nativo;
+  cruzado → replay desde el espejo; fallback por quota. Publica el cierre/apertura
+  de leg con la misma alma/misión/afinidad. `rehydrate_payload` para arneses
+  externos y `replay_messages` para el arnés RedPill.
+- **[NEW]** Restos de Fase 2: `unregister_session`, purga D14
+  (`MULTISESSION_PURGE_AFTER_SECS`) y reactivación de un leg que vuelve a latir.
+- **[NEW]** Retención observable del espejo: `session_mirror_purge` (solo almas sin
+  leg activo, 30 días), métricas + señales (`session_mirror_stats` / `_growth`) y
+  CLI `session mirror stats`. Regla de diseño TTL+monitorización en CONVENTIONS §10.10.
+- **[NEW]** `fetch_divergent_turns` (D15: propio + afinidad; contenido solo con
+  `global_turn > 0`) y captura del espejo en `run_local_minion`.
+- **[NEW]** Sync-on-switch (F7): `switch_model` rellena el espejo desde el transcript
+  del leg anterior antes de reencarnar (idempotente).
+- **[NEW]** Rol transparente: se hereda del leg/`REDPILL_ROLE`; los argumentos del
+  modelo no declaran rol/misión/campaña. Políticas por rol en `session/roles/`.
+- **[HARDENING]** Dos rondas adversariales de AD-061. La segunda (independiente)
+  cierra: afinidad del modelo ignorada (solo env), ownership de alma en el switch,
+  cursor de divergencia sin pérdida, resume solo con `conversation_resume`, captura
+  local por env, aislamiento de fuentes (`db_path`/`base_dir`), `tool_calls` no-lista,
+  publicación sin reintento del modelo, recorte de turnos gigantes, captura
+  idempotente (`run_ref`), parejas tool-call/resultado y filtro D15 en SQL.
+- **[NEW]** Presupuesto duro del espejo (AD-062): techo 100 MB con aviso al 80 %
+  y emergencia al 95 %, stubbing de outputs de tools >7 días (conservando parejas
+  y últimos 200 por alma), tope por turno, TTL de inactividad materializado y
+  métricas/señales (`session_mirror_budget`). Replay explícito capado; el espejo
+  no se inyecta al despertar.
+- **[NEW]** Replay limpio (AD-063): las parejas de herramientas de identidad
+  (`sovereign_handshake`, `interceptor_rp`, `refresh_session_context`) no se
+  reencarnan; se conservan en el espejo para auditoría. Smoke real
+  opencode→opencode: nonce respondido sin tools, payload 3.330→746 chars.
+- **[NEW]** Pi como fuente canónica (AD-064): alias por UUID del header (sin
+  romper las claves de Memento) y `load_canonical` con `toolCall`/`toolResult`
+  nativos. Smoke real opencode↔pi en ambas direcciones sin re-ejecutar tools.
+- **[DOCS]** AD-060, AD-061, AD-062, AD-063, AD-064.
+
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 
 - **[NEW]** `GIT_WORKFLOW` (`solo` | `canonical`) en `.env`: un solo modelo documentado, dos

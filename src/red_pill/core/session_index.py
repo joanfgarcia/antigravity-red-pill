@@ -435,7 +435,7 @@ def _load_registry() -> Dict[str, Dict[str, Any]]:
 	try:
 		from red_pill.session.store import SessionRegistry
 
-		return {r["originator"]: r for r in SessionRegistry().list_sessions()}
+		return {r["originator"]: r for r in SessionRegistry().list_sessions() if r.get("ttl_state") != "expired"}
 	except Exception as e:
 		logger.debug(f"[SessionIndex] registry unavailable: {e}")
 		return {}

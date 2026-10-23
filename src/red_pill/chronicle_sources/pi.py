@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.chronicle_sources.base import ChronicleSourcePlugin
+from red_pill.chronicle_sources.base import ChronicleSourcePlugin, canonical_ts
 from red_pill.core.origins import PROVIDER_PI, telegram_sessions
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,14 @@ class PiSourcePlugin(ChronicleSourcePlugin):
 			logger.info(f"[{self.name}] Sessions dir not found: {self.base_dir}")
 			return self._paths
 		for session_file in sorted(self.base_dir.rglob("*.jsonl")):
-			# clave estable entre barridos: ruta relativa sin extensión
+			# Clave de Memento: ruta relativa sin extensión (estable, incluye cwd).
 			cid = str(session_file.relative_to(self.base_dir).with_suffix(""))
 			self._paths[cid] = session_file
+			# El bridge/registry usa el UUID del header (sufijo tras el último `_`):
+			# se indexa también para que `sync_originator(pi:<uuid>)` lo encuentre.
+			uuid = session_file.stem.rsplit("_", 1)[-1]
+			if uuid and uuid != cid:
+				self._paths.setdefault(uuid, session_file)
 		return self._paths
 
 	def _session_path(self, conversation_id: str) -> Optional[Path]:
@@ -64,7 +69,11 @@ class PiSourcePlugin(ChronicleSourcePlugin):
 	def discover(self) -> List[Tuple[str, int]]:
 		telegram = telegram_sessions(PROVIDER_PI)
 		discovered = []
+		seen = set()
 		for cid, path in self._index_sessions().items():
+			if path in seen:
+				continue  # el alias UUID no duplica la conversación
+			seen.add(path)
 			if cid in telegram:
 				continue
 			try:
@@ -97,6 +106,82 @@ class PiSourcePlugin(ChronicleSourcePlugin):
 
 	def load_raw(self, raw_file: Path) -> List[Dict[str, Any]]:
 		return self._parse_session(raw_file)
+
+	def load_canonical(self, conversation_id: str) -> List[Dict[str, Any]]:
+		"""Turnos con `toolCall`/`toolResult` nativos (pareja call ↔ resultado)."""
+		path = self._session_path(conversation_id)
+		if path is None:
+			raise FileNotFoundError(f"[{self.name}] Session not found: {conversation_id}")
+		return self._parse_session_canonical(path)
+
+	def _parse_session_canonical(self, path: Path) -> List[Dict[str, Any]]:
+		turns: List[Dict[str, Any]] = []
+		with open(path, "r", encoding="utf-8") as f:
+			for index, line in enumerate(f):
+				line = line.strip()
+				if not line:
+					continue
+				try:
+					record = json.loads(line)
+				except json.JSONDecodeError:
+					continue
+				if record.get("type") != "message":
+					continue
+				msg = record.get("message", {})
+				role = msg.get("role")
+				ts = canonical_ts(record.get("timestamp"))
+				ref = str(record.get("id") or f"{path.stem}:{index}")
+				model = msg.get("model")
+				content = msg.get("content")
+				if role == "toolResult":
+					turns.append(
+						{
+							"role": "tool",
+							"content": _text_of(content),
+							"tool_calls": None,
+							"tool_call_id": msg.get("toolCallId"),
+							"model": model,
+							"ts": ts,
+							"source_ref": ref,
+						}
+					)
+					continue
+				if role not in ("user", "assistant"):
+					continue
+				texts: List[str] = []
+				tool_calls: List[Dict[str, Any]] = []
+				for block in content if isinstance(content, list) else []:
+					if not isinstance(block, dict):
+						continue
+					if block.get("type") == "text" and block.get("text"):
+						texts.append(block["text"])
+					elif block.get("type") == "toolCall":
+						args = block.get("arguments")
+						if not isinstance(args, str):
+							args = json.dumps(args or {}, ensure_ascii=False)
+						tool_calls.append(
+							{
+								"id": str(block.get("id") or ""),
+								"type": "function",
+								"function": {"name": str(block.get("name") or ""), "arguments": args},
+							}
+						)
+				text = "\n".join(texts) or None
+				if isinstance(content, str):
+					text = content if content.strip() else None
+				if text or tool_calls:
+					turns.append(
+						{
+							"role": role,
+							"content": text,
+							"tool_calls": tool_calls or None,
+							"tool_call_id": None,
+							"model": model,
+							"ts": ts,
+							"source_ref": ref,
+						}
+					)
+		return turns
 
 	def _parse_session(self, path: Path) -> List[Dict[str, Any]]:
 		messages: List[Dict[str, Any]] = []

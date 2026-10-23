@@ -1,6 +1,6 @@
 ---
 name: minion-delegation
-description: Use when you are about to delegate/offload a single task to a minion — spawn a sub-agent, pick a backend (claude/agy/opencode/local/local-tools/pi), assign work to another model, or run a bounded local tool loop. Picks the right minion KIND for the task and shows how to invoke it in Pi (no MCP) via `red-pill job submit`. For composing multi-step minion FLOWS use swarm-flow-manager instead.
+description: "Use when you are about to delegate/offload a single task to a minion — spawn a sub-agent, pick a backend (claude/agy/opencode/local/local-tools/pi), assign work to another model, or run a bounded local tool loop. Picks the right minion KIND for the task and shows how to invoke it in Pi (no MCP) via `red-pill job submit`. For composing multi-step minion FLOWS use swarm-flow-manager instead."
 ---
 
 # Minion Delegation (Pi)

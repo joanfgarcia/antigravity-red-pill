@@ -12,10 +12,12 @@ from red_pill.session.identity import (
 	new_continuity_id,
 	resolve_default_mission,
 )
+from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
 
 __all__ = [
 	"SessionBoard",
+	"SessionMirror",
 	"SessionRegistry",
 	"decorate_with_session_tag",
 	"new_continuity_id",

@@ -50,6 +50,43 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("Purge aborted.")
 
 
+def handle_session(args: argparse.Namespace) -> None:
+	"""Alma y Coro: operaciones sobre el espejo canónico de turnos."""
+	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "sync":
+		from red_pill.session.mirror import SessionMirror, sync_registry
+
+		report = sync_registry(
+			SessionMirror(),
+			continuity_id=getattr(args, "continuity", None),
+			originator=getattr(args, "originator", None),
+		)
+		inserted = sum(int(row.get("inserted") or 0) for row in report)
+		for row in report:
+			status = f"+{row['inserted']}" if not row.get("error") else f"ERROR: {row['error']}"
+			print(f"[MIRROR] {row['originator']} ({row.get('provider') or '?'}): {status}")
+		print(f"[MIRROR] legs={len(report)} turnos_insertados={inserted}")
+		return
+	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "stats":
+		import json
+
+		from red_pill.session.mirror import SessionMirror
+
+		print(json.dumps(SessionMirror().stats(), ensure_ascii=False, indent=2))
+		return
+	if getattr(args, "session_cmd", None) == "rehydrate":
+		from red_pill.session.switch import rehydrate_payload
+
+		print(
+			rehydrate_payload(
+				args.continuity,
+				limit=getattr(args, "limit", None),
+				kind=getattr(args, "kind", "opencode") or "opencode",
+			)
+		)
+		return
+	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
+
+
 def handle_ide(args: argparse.Namespace) -> None:
 	"""Antigravity IDE Bridge Management."""
 	conf = cfg.get_config()
