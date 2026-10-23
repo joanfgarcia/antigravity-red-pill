@@ -1,6 +1,6 @@
 ---
 name: audio-gen
-description: Genera audio local con el arnés de media de Red-Pill — voz TTS (kokoro, chatterbox) y SFX/escena (moss, dasheng). Úsala cuando haya que sintetizar voz o sonido en este equipo.
+description: "Genera audio local con el arnés de media de Red-Pill — voz TTS (kokoro, chatterbox) y SFX/escena (moss, dasheng). Úsala cuando haya que sintetizar voz o sonido en este equipo."
 capability: audio_gen
 ---
 

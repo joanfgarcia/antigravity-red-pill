@@ -1,6 +1,6 @@
 ---
 name: swarm-flow-manager
-description: Administra el diseño, creación y persistencia de flujos autónomos de enjambre (Minions) en proyectos soberanos.
+description: "Administra el diseño, creación y persistencia de flujos autónomos de enjambre (Minions) en proyectos soberanos."
 ---
 
 > **Adaptación Pi** (sin MCP): los flujos se ejecutan encolándolos como `flow_job` vía `${RED_PILL_CMD} job submit`.

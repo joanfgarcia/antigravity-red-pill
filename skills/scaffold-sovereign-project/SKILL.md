@@ -1,6 +1,6 @@
 ---
 name: scaffold-sovereign-project
-description: Automatically scaffolds a new Red-Pill ecosystem project with strict architectural conventions and the Protocol of Silence.
+description: "Automatically scaffolds a new Red-Pill ecosystem project with strict architectural conventions and the Protocol of Silence."
 ---
 
 # Scaffold Sovereign Project

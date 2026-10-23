@@ -1,6 +1,6 @@
 ---
 name: memory-manager
-description: Controls the reading, writing, and semantic search of engrams in the Qdrant vector database (Cortex/Bunker).
+description: "Controls the reading, writing, and semantic search of engrams in the Qdrant vector database (Cortex/Bunker)."
 ---
 
 # Red Pill: Memory Manager Skill (Qdrant RAG)

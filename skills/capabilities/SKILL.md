@@ -1,6 +1,6 @@
 ---
 name: capabilities
-description: Orienta sobre las capacidades locales de media de Red-Pill (imagen/audio/música) — qué hay instalado, cómo consultarlo (router/elenco), cómo añadir un modelo o un runtime (engine) siguiendo el patrón data-over-code, y el modelo de staging/promoción.
+description: "Orienta sobre las capacidades locales de media de Red-Pill (imagen/audio/música) — qué hay instalado, cómo consultarlo (router/elenco), cómo añadir un modelo o un runtime (engine) siguiendo el patrón data-over-code, y el modelo de staging/promoción."
 capability: media
 ---
 

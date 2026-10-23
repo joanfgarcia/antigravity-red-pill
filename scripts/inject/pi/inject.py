@@ -125,6 +125,36 @@ def _pi_skill_capability(skill_md: str) -> str | None:
 	return None
 
 
+def _skill_frontmatter_error(skill_md: str) -> str | None:
+	"""Valida que el frontmatter YAML de un SKILL.md parsea. Devuelve el error o None.
+
+	Un frontmatter inválido (p.ej. `description:` con `: ` sin comillas) hace que Pi
+	lo reporte como *Skill conflict* al arrancar. Mejor abortar el deploy de ese skill
+	con un error claro que propagar la bomba al `~/.pi` del operador en cada reseed.
+	"""
+	try:
+		with open(skill_md, encoding="utf-8") as f:
+			txt = f.read()
+	except OSError as e:  # noqa: PERF203
+		return f"no se pudo leer: {e}"
+	if not txt.startswith("---"):
+		return None  # sin frontmatter no hay nada que validar
+	parts = txt.split("---", 2)
+	if len(parts) < 3:
+		return "frontmatter '---' sin cerrar"
+	try:
+		import yaml
+
+		meta = yaml.safe_load(parts[1])
+	except Exception as e:  # noqa: BLE001
+		return str(e).splitlines()[0]
+	if not isinstance(meta, dict):
+		return "el frontmatter no es un mapping YAML"
+	if not meta.get("name"):
+		return "falta 'name' en el frontmatter"
+	return None
+
+
 def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, skip: set | None = None) -> int:
 	"""Copy a skills dir into the Pi skills root. Returns number of changed skills."""
 	changed = 0
@@ -135,6 +165,10 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, s
 		skill_src = os.path.join(src_dir, skill_entry)
 		skill_md = os.path.join(skill_src, "SKILL.md")
 		if not os.path.isdir(skill_src) or not os.path.exists(skill_md):
+			continue
+		_fm_err = _skill_frontmatter_error(skill_md)
+		if _fm_err is not None:
+			logger.error(f"✗ Pi skill '{skill_entry}': frontmatter inválido ({_fm_err}) → NO desplegado")
 			continue
 		_cap = _pi_skill_capability(skill_md)
 		if _cap is not None:

@@ -1,6 +1,6 @@
 ---
 name: sovereign-handshake
-description: Use ONLY when the session mentions red-pill, redpill, bünker, bunker, qdrant, sovereign handshake, persistence layer, anti-amnesia, scribe relay, or refresh session context. Gate on the literal keyword or filename. This skill enforces the Sovereign Handshake protocol that preserves operator memory across turns.
+description: "Use ONLY when the session mentions red-pill, redpill, bünker, bunker, qdrant, sovereign handshake, persistence layer, anti-amnesia, scribe relay, or refresh session context. Gate on the literal keyword or filename. This skill enforces the Sovereign Handshake protocol that preserves operator memory across turns."
 ---
 
 ## Sovereign Handshake Protocol

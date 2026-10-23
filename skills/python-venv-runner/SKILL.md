@@ -1,6 +1,6 @@
 ---
 name: python-venv-runner
-description: Automatically detects and utilizes virtual environments to execute Python scripts without path-amnesia.
+description: "Automatically detects and utilizes virtual environments to execute Python scripts without path-amnesia."
 ---
 
 # Python Venv Runner

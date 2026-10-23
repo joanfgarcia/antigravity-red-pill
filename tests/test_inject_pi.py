@@ -124,6 +124,35 @@ def test_inject_idempotente_con_workspace(sandbox_home, adapter):
 	assert adapter.inject(_args(workspace=str(ws))) == 0  # el override converge
 
 
+def test_skill_frontmatter_valido_en_repo(adapter, tmp_path):
+	"""Regresión: ningún SKILL.md (repo o seed) puede traer un frontmatter YAML inválido.
+
+	Un `description:` plano con `: ` sin comillas rompía el arranque de Pi ([Skill
+	conflicts]) tras un reseed; el injector ahora valida antes de desplegar.
+	"""
+	import glob
+
+	skills = glob.glob(os.path.join(REPO_ROOT, "skills", "*", "SKILL.md"))
+	skills += glob.glob(os.path.join(REPO_ROOT, "seeds", "pi", "skills", "*", "SKILL.md"))
+	assert skills, "no se encontraron SKILL.md en el repo"
+	for md in skills:
+		assert adapter._skill_frontmatter_error(md) is None, md
+
+
+def test_inject_aborta_skill_con_frontmatter_roto(adapter, tmp_path):
+	"""Un skill con frontmatter inválido NO se despliega (fail-soft, sin propagar la bomba)."""
+	src = tmp_path / "skills" / "broken-skill"
+	src.mkdir(parents=True)
+	(src / "SKILL.md").write_text(
+		"---\nname: broken-skill\ndescription: no es un modelo: es una bomba\n---\n\n# x\n",
+		encoding="utf-8",
+	)
+	dest = tmp_path / "out"
+	changed = adapter._deploy_skills(str(tmp_path / "skills"), str(dest), {}, backup=False)
+	assert changed == 0
+	assert not (dest / "broken-skill" / "SKILL.md").exists()
+
+
 def test_pi_knowledge_access_tiene_las_mismas_secciones_que_el_generico():
 	"""El override Pi de knowledge_access no puede perder secciones del ancla genérica
 	(le faltaba el §4 «Plans & RFCs — Desk-First»); solo adapta las herramientas."""

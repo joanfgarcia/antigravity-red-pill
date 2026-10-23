@@ -1,6 +1,6 @@
 ---
 name: workspace-memory
-description: Controls the local workspace-level memory filing cabinet, ensuring persistent technical context. In Pi the bank is plain markdown under <ws>/.red-pill/memory/ read/written with the native read/write tools.
+description: "Controls the local workspace-level memory filing cabinet, ensuring persistent technical context. In Pi the bank is plain markdown under <ws>/.red-pill/memory/ read/written with the native read/write tools."
 ---
 
 # Red Pill: Workspace Memory Skill (Pi)

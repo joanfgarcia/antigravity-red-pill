@@ -1,6 +1,6 @@
 ---
 name: sovereign-handshake
-description: Use ONLY when the session mentions red-pill, redpill, bünker, bunker, qdrant, sovereign handshake, persistence layer, anti-amnesia, scribe relay, or refresh session context. Gate on the literal keyword or filename. In Pi the handshake is AUTOMATIC via the red-pill extension; this skill documents the tool mapping.
+description: "Use ONLY when the session mentions red-pill, redpill, bünker, bunker, qdrant, sovereign handshake, persistence layer, anti-amnesia, scribe relay, or refresh session context. Gate on the literal keyword or filename. In Pi the handshake is AUTOMATIC via the red-pill extension; this skill documents the tool mapping."
 ---
 
 ## Sovereign Handshake (Pi)
