@@ -1,5 +1,14 @@
 ## Unreleased
 
+### 🌅 Despertar autónomo — Pi cuenta como actividad
+
+- **[FIX]** `is_ide_idle` ignoraba las sesiones de Pi: trabajar en el IDE `pi`
+  dejaba al Operador "offline" y el cron inyectaba un awakening de más (runs
+  headless de awakening se excluyen por `session_origins.json`).
+- **[FIX]** La extensión de Pi no escribía el latido `.start/.end`: ahora
+  `before_agent_start` marca inicio y `agent_before_settle`/`agent_settled`/
+  `session_shutdown` cierran el turno, así el tablón ve la sesión como viva.
+
 ### 🧠 Alma y Coro — Fase 1 (espejo canónico + `switch_model`)
 
 - **[NEW]** `session.db` v4: tabla `session_mirror` con turnos portables

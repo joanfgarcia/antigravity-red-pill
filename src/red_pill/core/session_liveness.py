@@ -21,6 +21,8 @@ Los hooks que escriben son standalone y replican la resolución de
 - opencode: `chat.message` → `.start`; `session.idle` (v1) o
 `session.execution.succeeded|failed` (v2) → `.end`. Las sub-sesiones
 (`parentID`) no laten.
+- Pi: `before_agent_start` → `.start`; `agent_before_settle` / `agent_settled`
+y `session_shutdown` → `.end` (extensión `seeds/pi/extensions/red-pill.ts`).
 
 Limitación conocida: en Claude Code una interrupción con Esc no dispara ningún
 hook (verificado en 2.1.217), así que ese `.start` queda "en vuelo" hasta el

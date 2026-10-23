@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+from red_pill.core.origins import PROVIDER_PI, read_origins
 from red_pill.core.paths import (
 	get_antigravity_brain_dir,
 	get_awakening_log_path,
@@ -25,6 +27,15 @@ from red_pill.swarm.bridges.opencode import read_opencode_origins
 # chronicle_sources/{claude_code,opencode}.py.)
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 OPENCODE_DATA_DIR = Path.home() / ".local" / "share" / "opencode"
+PI_SESSIONS_DIR = Path.home() / ".pi" / "agent" / "sessions"
+
+# `<timestamp>_<uuid>.jsonl` → el `session_id` que registra el bridge de Pi.
+_PI_SESSION_ID = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$", re.IGNORECASE)
+
+
+def _pi_session_id(path: Path) -> str:
+	match = _PI_SESSION_ID.search(path.name)
+	return match.group(1) if match else path.stem
 
 
 def is_ide_idle(idle_seconds=3600):
@@ -36,6 +47,8 @@ def is_ide_idle(idle_seconds=3600):
 	2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
 	3. Claude Code: transcripts JSONL de ~/.claude/projects (escritos en vivo)
 	4. opencode: su base local (db/WAL mutan en cada turno)
+	5. Pi: transcripts JSONL de ~/.pi/agent/sessions (escritos en vivo; los runs
+	headless de awakening se excluyen por el registro de orígenes)
 
 	Returns True ONLY if ALL signals indicate idle > idle_seconds.
 	"""
@@ -98,6 +111,24 @@ def is_ide_idle(idle_seconds=3600):
 		except Exception:
 			if _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
 				return False
+
+	# Signal 5: Pi sessions (`~/.pi/agent/sessions`). Its extension does not touch
+	# the activity file per turn, so the JSONL transcript is the only live signal.
+	# Headless awakening runs write there too: exclude them via the origin registry
+	# (same policy as opencode). A session with no registry entry is user activity.
+	if PI_SESSIONS_DIR.is_dir():
+		try:
+			pi_origins = read_origins(PROVIDER_PI)
+			for path in PI_SESSIONS_DIR.rglob("*.jsonl"):
+				try:
+					if (now - path.stat().st_mtime) > idle_seconds:
+						continue
+				except OSError:
+					continue
+				if (pi_origins.get(_pi_session_id(path)) or {}).get("origin") != "awakening":
+					return False
+		except Exception:
+			pass
 
 	# All signals indicate idle
 	return True
