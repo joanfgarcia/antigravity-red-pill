@@ -170,3 +170,18 @@ class TestListingAndContracts:
 		from red_pill.session.contracts import PresenceBoard
 
 		assert isinstance(SessionBoard(), PresenceBoard)
+
+	def test_expire_idle_legs_materializes_ttl(self, reg):
+		import time
+
+		reg.upsert_session(originator="opencode:old", continuity_id="a1", mission_id="m")
+		reg.upsert_session(originator="opencode:new", continuity_id="a2", mission_id="m")
+		with reg._connect() as conn:
+			conn.execute("UPDATE session_registry SET updated_at = ? WHERE originator = 'opencode:old'", (time.time() - 7200,))
+			conn.commit()
+		assert reg.expire_idle_legs(ttl_min=30) == 1
+		assert reg.get_by_originator("opencode:old")["ttl_state"] == "expired"
+		assert reg.get_by_originator("opencode:new")["ttl_state"] == "active"
+		# El handshake (upsert) reactiva un leg que vuelve.
+		reg.upsert_session(originator="opencode:old", continuity_id="a1", mission_id="m")
+		assert reg.get_by_originator("opencode:old")["ttl_state"] == "active"

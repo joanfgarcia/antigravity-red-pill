@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-062] Espejo con presupuesto duro (100 MB) y degradación observable
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Endurece AD-060/AD-061; no cambia el contrato del espejo.
+**Context**: el backfill dejó 42 MB / 19.557 turnos en 45 días (~1 MB/día, picos de 4,6 MB/día). El 89 % del payload son **resultados de tools** (18 MB) y argumentos de tool-calls (8,3 MB); el texto de conversación son solo 2 MB. La política anterior (30 días, solo almas muertas) no acotaba el crecimiento de almas activas y, además, el TTL de inactividad nunca se materializaba (`ttl_state` solo cambiaba con `unregister_session`). El Operador fija un presupuesto de **100 MB** para esta pieza, monitorizado, y la intención de un **agente local acotado** (8 GB VRAM/NPU/iGPU) que use el espejo como memoria externa, no como prompt de despertar.
+**Decision**:
+1. **Techo duro configurable** `SESSION_MIRROR_MAX_BYTES=104857600` (100 MB, db+wal). Alertas al `SESSION_MIRROR_WARN_PCT=80` y emergencia al `SESSION_MIRROR_EMERGENCY_PCT=95`. Señales: `session_mirror_stats` (estado) y `session_mirror_budget` (dolor al cruzar umbral).
+2. **Stubbing de resultados de tools** (`SESSION_MIRROR_TOOL_RETENTION_DAYS=7`, `SESSION_MIRROR_KEEP_TOOL_RESULTS=200`): se sustituye el contenido por `[output purgado: N chars]` solo si el turno es viejo **y** queda fuera de los últimos 200 del alma. Se conservan `tool_calls` y `tool_call_id`: la pareja call/resultado sigue siendo válida para replay; se pierde el volcado, no la narrativa.
+3. **Tope por turno** (`SESSION_MIRROR_MAX_TURN_BYTES=262144`): contenido recortado con marcador; `tool_calls` gigantes se compactan a id/nombre + `[truncado N chars]` manteniendo JSON válido. Una fila no puede romper el presupuesto.
+4. **Degradación de emergencia** (`enforce_budget`), en orden: stubbing → purga de almas muertas → recorte de los turnos más viejos de almas activas conservando `SESSION_MIRROR_MIN_TURNS_PER_SOUL=200`. Nunca se baja de ese mínimo; si aun así no cabe, se reporta `over_budget` y se emite dolor (no se destruye contexto reciente para cuadrar).
+5. **TTL de inactividad materializado** (`MULTISESSION_IDLE_TTL_MIN=30`): el Janitor marca `expired` los legs sin latido; el handshake reactiva el leg si vuelve (upsert), y D14 lo borra 24 h después. Esto hace que la retención de almas muertas sea real.
+6. **El espejo sigue siendo pull-only**: no se inyecta en el handshake (test de regresión); el replay explícito tiene tope `SESSION_MIRROR_REPLAY_MAX_CHARS=60000` (~15k tokens). El agente local acotado lo usa como memoria externa, no como wake-up.
+**Alternatives**: (a) presupuesto 1 GB — descartado: 10× el espacio para el mismo valor y más riesgo de arrastrar datos muertos; (b) compresión zlib — 2–3× de ahorro, pero complejidad y migración; se puede añadir después si el stubbing no basta; (c) ventana deslizante de 7 días para todo — perdería narrativa antigua; (d) no espejo / usar solo sesiones nativas — rompe el switch y el histórico unificado; (e) borrar sin stubbing — rompe parejas y replay.
+**Rationale / Evidence**: suite **3214 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests de cap por turno (JSON válido), stubbing (reciente intacto, últimos N, idempotente), presupuesto de emergencia (muertos fuera, activos ≥ mínimo), métricas/señales y TTL de inactividad con reactivación. Medición viva pre/post en el desk.
+**Consequences**: el espejo queda acotado y observable; con el stubbing de 7 días el peso esperado baja de 42 MB a ~14–20 MB. Deuda declarada: (1) el texto `content` y los `tool_calls` no se comprimen (posible siguiente ahorro); (2) si el espejo se convierte en fuente de Memento hace falta frontera `work/social` y backup como infraestructura crítica; (3) la compactación semántica (Fase 3) sigue siendo necesaria para sesiones muy largas; (4) el runner local multiturno (`continue_local_minion`/perfil de agente acotado) no se construye aquí.
+
+---
+
 ## [AD-061] Alma y Coro — retención observable, divergencia y rol transparente
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Cierra los flecos de Fase 2/Fase 1 acordados con el Operador.

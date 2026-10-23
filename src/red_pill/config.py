@@ -518,6 +518,26 @@ class RedPillConfig(BaseSettings):
 	# reencarnar (switch/rehydrate). El espejo NO se inyecta al despertar; esto
 	# solo aplica al replay explícito. 60k ≈ 15k tokens.
 	SESSION_MIRROR_REPLAY_MAX_CHARS: int = 60000
+	# Presupuesto DURO del espejo (db + wal). 100 MB. El janitor avisa al 80 % y
+	# aplica degradación de emergencia al 95 % (stub de tools → purga de almas
+	# muertas → recorte de turnos viejos de almas vivas, conservando los últimos
+	# SESSION_MIRROR_MIN_TURNS_PER_SOUL).
+	SESSION_MIRROR_MAX_BYTES: int = 104857600
+	SESSION_MIRROR_WARN_PCT: float = 80.0
+	SESSION_MIRROR_EMERGENCY_PCT: float = 95.0
+	# Retención de RESULTADOS de tools (el 89 % del peso): se stubbean los más
+	# viejos que `TOOL_RETENTION_DAYS` y que queden fuera de los últimos
+	# `KEEP_TOOL_RESULTS` por alma. Las parejas call/resultado se conservan.
+	SESSION_MIRROR_TOOL_RETENTION_DAYS: int = 7
+	SESSION_MIRROR_KEEP_TOOL_RESULTS: int = 200
+	# Turnos mínimos que NUNCA se recortan en un alma activa (emergencia).
+	SESSION_MIRROR_MIN_TURNS_PER_SOUL: int = 200
+	# Tope por turno (contenido y argumentos de tools) para que una sola fila no
+	# rompa el presupuesto. Se recorta con marcador, conservando JSON válido.
+	SESSION_MIRROR_MAX_TURN_BYTES: int = 262144
+	# TTL de inactividad materializado en el registro (RFC §3.4). Un leg sin
+	# latido entra en `expired`; el handshake lo reactiva si vuelve.
+	MULTISESSION_IDLE_TTL_MIN: int = 30
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False

@@ -665,6 +665,26 @@ class SessionRegistry:
 			conn.commit()
 			return bool(cur.rowcount)
 
+	def expire_idle_legs(self, ttl_min: Optional[float] = None) -> int:
+		"""Materializa el TTL de inactividad: legs sin latido → `expired`.
+
+		El handshake vuelve a poner `active` el leg si reaparece (reactivación), y
+		`purge_expired` (D14) lo borra 24 h después. Sin esto, `ttl_state` solo
+		cambiaba con `unregister_session` y la retención nunca se disparaba.
+		"""
+		import red_pill.config as cfg
+
+		minutes = float(ttl_min) if ttl_min is not None else float(getattr(cfg.get_config(), "MULTISESSION_IDLE_TTL_MIN", 30))
+		cutoff = time.time() - max(0.0, minutes) * 60.0
+		with self._connect() as conn:
+			cur = conn.execute(
+				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ? "
+				"WHERE ttl_state = 'active' AND updated_at < ?",
+				(time.time(), cutoff),
+			)
+			conn.commit()
+			return int(cur.rowcount or 0)
+
 	def purge_expired(self, after_s: Optional[float] = None) -> int:
 		"""Purga D14: borra legs expirados hace más de `after_s` (default config).
 

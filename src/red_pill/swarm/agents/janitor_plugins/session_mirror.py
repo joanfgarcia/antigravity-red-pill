@@ -34,8 +34,14 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 
 		janitor.log(f"[Janitor] Running session_mirror_purge (retention={retention_days}d)...")
 		mirror = SessionMirror()
+		from red_pill.session.store import SessionRegistry
+
+		registry = SessionRegistry(mirror.db_path)
+		expired = registry.expire_idle_legs()
 		before = mirror.stats(retention_days=retention_days)
-		purged = mirror.purge(retention_days=retention_days)
+		stubbed = mirror.stub_tool_results()
+		purged = mirror.purge(registry, retention_days=retention_days)
+		budget = mirror.enforce_budget()
 		after = mirror.stats(retention_days=retention_days)
 		metrics = {
 			"session_mirror_rows_before": before["rows"],
@@ -48,6 +54,14 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 			"session_mirror_undated_rows": after["undated_rows"],
 			"session_mirror_unknown_age_souls": after["unknown_age_souls"],
 			"session_mirror_bytes": after["db_bytes"] + after["wal_bytes"],
+			"session_mirror_budget_bytes": after["budget_bytes"],
+			"session_mirror_budget_pct": after["budget_pct"],
+			"session_mirror_over_budget": after["over_budget"],
+			"session_mirror_stub_rows": stubbed["rows_stubbed"],
+			"session_mirror_stub_chars_saved": stubbed["chars_saved"],
+			"session_mirror_emergency": bool(budget.get("emergency")),
+			"session_mirror_rows_trimmed": int(budget.get("rows_trimmed") or 0),
+			"session_registry_expired": expired,
 			"session_mirror_retention_days": int(retention_days),
 		}
 		janitor.log(f"[Janitor] session_mirror_purge: {json.dumps(metrics, ensure_ascii=False)}")
@@ -84,6 +98,24 @@ def _emit_signals(memory_manager: Any, metrics: Dict[str, Any], after: Dict[str,
 				signal_type="pain",
 				source="Janitor",
 				message="; ".join(problems),
+			)
+		import red_pill.config as cfg
+
+		app_cfg = cfg.get_config()
+		budget_pct = float(after.get("budget_pct") or 0.0)
+		warn_pct = float(getattr(app_cfg, "SESSION_MIRROR_WARN_PCT", 80.0))
+		emergency_pct = float(getattr(app_cfg, "SESSION_MIRROR_EMERGENCY_PCT", 95.0))
+		if budget_pct >= warn_pct:
+			memory_manager.inject_signal(
+				name="session_mirror_budget",
+				intensity=5.0 if budget_pct >= emergency_pct else 3.0,
+				signal_type="pain",
+				source="Janitor",
+				message=(
+					f"espejo al {budget_pct:.1f}% del presupuesto "
+					f"({after['db_bytes'] + after['wal_bytes']}/{after['budget_bytes']} bytes)"
+					+ (" — EMERGENCIA aplicada" if after.get("over_budget") else "")
+				),
 			)
 	except Exception as e:
 		logger.debug(f"[Janitor] session_mirror señal no inyectada: {e}")

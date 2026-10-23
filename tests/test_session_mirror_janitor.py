@@ -100,3 +100,31 @@ def test_plugin_is_discovered_by_the_janitor():
 
 	names = {plugin.name for plugin in discover_plugins()}
 	assert "session_mirror_purge" in names
+
+
+async def test_budget_metrics_and_pain_signal():
+	from red_pill.swarm.agents.janitor_plugins.session_mirror import _emit_signals
+
+	memory = FakeMemory()
+	after = {
+		"rows": 10,
+		"db_bytes": 99,
+		"wal_bytes": 1,
+		"budget_bytes": 100,
+		"budget_pct": 100.0,
+		"over_budget": True,
+		"expired_candidates": 0,
+	}
+	metrics = {"session_mirror_budget_pct": 100.0}
+	_emit_signals(memory, metrics, after, growth_rows=10**9, growth_bytes=10**12)
+	names = [signal["name"] for signal in memory.signals]
+	assert "session_mirror_stats" in names
+	assert "session_mirror_budget" in names
+
+
+async def test_janitor_reports_budget_keys():
+	mirror = SessionMirror()
+	mirror.append_turn(continuity_id="alma-x", mission_id="m", role="user", content="x", ts=time.time())
+	result = await SessionMirrorPurgePlugin().execute(FakeJanitor(), {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=FakeMemory())
+	for key in ("session_mirror_budget_bytes", "session_mirror_budget_pct", "session_registry_expired", "session_mirror_stub_rows"):
+		assert key in result

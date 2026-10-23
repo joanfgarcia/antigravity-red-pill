@@ -476,6 +476,10 @@ that is still needed.
    monitoring data; the review trigger is the metric, not a calendar.
 6. **Idempotent and fail-closed.** Re-running a purge is safe; if the owner/index
    cannot be read (registry down), the purge **does not** delete (safety over space).
+7. **Hard budget + degradation order.** Declare a maximum size and an ordered
+   degradation (e.g. stub old payloads → purge dead owners → trim oldest live
+   items down to a floor). Alert at 80 % and 95 %; never destroy recent/essential
+   data just to hit the number.
 
 Reference implementation: `session/mirror.py` (`stats`/`purge`) +
 `swarm/agents/janitor_plugins/session_mirror.py` (AD-060).

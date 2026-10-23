@@ -354,3 +354,70 @@ class TestRetentionAndStats:
 		monkeypatch.setattr(reg, "active_continuities", lambda: [])
 		assert mirror.purge(registry=reg, retention_days=30)["rows_purged"] == 0
 		assert mirror.count_turns("alive") == 1
+
+
+class TestContainment:
+	def test_per_turn_cap_truncates_content_and_keeps_valid_tool_json(self, tmp_path, monkeypatch):
+		import red_pill.config as cfg
+
+		monkeypatch.setattr(cfg, "get_config", lambda: type("C", (), {"SESSION_MIRROR_MAX_TURN_BYTES": 1000})())
+		mirror = SessionMirror(str(tmp_path / "s.db"))
+		calls = [{"id": f"c{i}", "type": "function", "function": {"name": "bash", "arguments": "x" * 200}} for i in range(20)]
+		mirror.append_turn(continuity_id="a", mission_id="m", role="assistant", content="x" * 10000, tool_calls=calls)
+		turn = mirror.read_turns("a")[0]
+		assert len(turn["content"]) <= 1000 + 40
+		assert isinstance(turn["tool_calls"], list)
+		assert len(json.dumps(turn["tool_calls"], separators=(",", ":"))) <= 1000
+		assert all(call.get("function", {}).get("name") == "bash" for call in turn["tool_calls"])
+
+	def test_stub_tool_results_keeps_recent_and_last_n(self, tmp_path):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		old = time.time() - 30 * 86400
+		for index in range(5):
+			mirror.append_turn(
+				continuity_id="a", mission_id="m", role="tool", content=f"output-{index}" * 100,
+				ts=old, originator="opencode:s1", source="opencode", source_ref=f"t{index}",
+			)
+		# Los 2 más recientes (por seq) no se tocan aunque estén viejos.
+		mirror.append_turn(
+			continuity_id="a", mission_id="m", role="tool", content="reciente" * 100,
+			ts=time.time(), originator="opencode:s1", source="opencode", source_ref="t5",
+		)
+		result = mirror.stub_tool_results(retention_days=7, keep_per_soul=2)
+		assert result["rows_stubbed"] == 4
+		turns = mirror.read_turns("a")
+		assert turns[-1]["content"].startswith("reciente")
+		assert turns[-2]["content"].startswith("output-4")
+		assert turns[0]["content"].startswith("[output purgado:")
+		assert turns[0]["tool_call_id"] is None  # la fila sigue siendo tool
+		assert mirror.stub_tool_results(retention_days=7, keep_per_soul=2)["rows_stubbed"] == 0
+
+	def test_enforce_budget_never_trims_active_below_minimum(self, tmp_path):
+		import time
+
+		db = str(tmp_path / "session.db")
+		mirror = SessionMirror(db)
+		reg = SessionRegistry(db)
+		reg.upsert_session(originator="opencode:live", continuity_id="alive", mission_id="m")
+		reg.upsert_session(originator="opencode:dead", continuity_id="dead", mission_id="m")
+		reg.unregister_session("opencode:dead")
+		payload = "x" * 2000
+		for index in range(120):
+			mirror.append_turn(continuity_id="alive", mission_id="m", role="user", content=payload, ts=time.time(), source_ref=f"a{index}")
+		for index in range(120):
+			mirror.append_turn(continuity_id="dead", mission_id="m", role="user", content=payload, ts=time.time(), source_ref=f"d{index}")
+		before = mirror.count_turns("alive") + mirror.count_turns("dead")
+		result = mirror.enforce_budget(max_bytes=30000, min_turns_per_soul=40)
+		assert result["emergency"] is True
+		assert mirror.count_turns("dead") == 0
+		assert mirror.count_turns("alive") == 40
+		assert mirror.count_turns("alive") + mirror.count_turns("dead") < before
+
+	def test_stats_exposes_budget(self, mirror):
+		stats = mirror.stats()
+		assert stats["budget_bytes"] > 0
+		assert stats["budget_pct"] >= 0
+		assert "over_budget" in stats

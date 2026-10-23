@@ -36,12 +36,63 @@ _SOURCE_CLASSES = {
 }
 
 
-def _json_tool_calls(value: Any) -> Optional[str]:
+_STUB_PREFIX = "[output purgado:"
+
+
+def _max_turn_bytes() -> int:
+	try:
+		import red_pill.config as cfg
+
+		return int(getattr(cfg.get_config(), "SESSION_MIRROR_MAX_TURN_BYTES", 262144))
+	except Exception:
+		return 262144
+
+
+def _cap_text(value: Optional[str], cap: int) -> Optional[str]:
+	if value is None:
+		return None
+	if len(value) <= cap:
+		return value
+	return value[:cap] + f"… [truncado {len(value) - cap} chars]"
+
+
+def _cap_tool_calls_json(value: Any, cap: int) -> Optional[str]:
 	if value is None:
 		return None
 	if not isinstance(value, list):
 		raise ValueError("tool_calls debe ser una lista")
-	return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+	raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+	if len(raw) <= cap:
+		return raw
+	# Se conservan id/nombre (lo que permite emparejar con `role=tool`) y se
+	# sustituyen los argumentos gigantes por un marcador. Sigue siendo JSON válido.
+	compact = []
+	for call in value:
+		if not isinstance(call, dict):
+			continue
+		fn = call.get("function") or {}
+		args = fn.get("arguments")
+		compact.append(
+			{
+				"id": call.get("id"),
+				"type": call.get("type") or "function",
+				"function": {
+					"name": fn.get("name"),
+					"arguments": f"[truncado {len(str(args))} chars]",
+				},
+			}
+		)
+	raw = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+	if len(raw) > cap:
+		# Cola de llamadas enorme: se recorta la lista.
+		while compact and len(json.dumps(compact, ensure_ascii=False, separators=(",", ":"))) > cap:
+			compact.pop()
+		raw = json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+	return raw
+
+
+def _json_tool_calls(value: Any) -> Optional[str]:
+	return _cap_tool_calls_json(value, _max_turn_bytes())
 
 
 def _coerce_ts(value: Any) -> float:
@@ -60,6 +111,7 @@ class SessionMirror:
 		SessionRegistry(self.db_path)  # dueño del esquema (migración v4)
 
 	def _insert_turn(self, conn: Any, *, continuity_id: str, seq: int, mission_id: str, role: str, content: Optional[str], tool_calls: Optional[str], tool_call_id: Optional[str], model: Optional[str], ts: float, global_turn: int, originator: str, source: str, source_ref: Optional[str]) -> bool:
+		content = _cap_text(content, _max_turn_bytes())
 		cur = conn.execute(
 			"""
 			INSERT OR IGNORE INTO session_mirror (
@@ -316,6 +368,8 @@ class SessionMirror:
 			wal_bytes = os.path.getsize(self.db_path + "-wal")
 		except OSError:
 			wal_bytes = 0
+		budget = int(getattr(cfg.get_config(), "SESSION_MIRROR_MAX_BYTES", 104857600))
+		used = db_bytes + wal_bytes
 		return {
 			"rows": int(row["rows"] or 0),
 			"souls": int(row["souls"] or 0),
@@ -332,6 +386,9 @@ class SessionMirror:
 			"expired_candidates": expired_candidates,
 			"db_bytes": db_bytes,
 			"wal_bytes": wal_bytes,
+			"budget_bytes": budget,
+			"budget_pct": round(100.0 * used / budget, 2) if budget > 0 else 0.0,
+			"over_budget": used > budget,
 			"retention_days": days,
 			"retention_cutoff_ts": cutoff,
 		}
@@ -386,6 +443,120 @@ class SessionMirror:
 			"retention_days": days,
 			"retention_cutoff_ts": cutoff,
 		}
+
+	def _db_bytes(self) -> int:
+		import os
+
+		total = 0
+		for suffix in ("", "-wal"):
+			try:
+				total += os.path.getsize(self.db_path + suffix)
+			except OSError:
+				pass
+		return total
+
+	def stub_tool_results(self, *, retention_days: Optional[float] = None, keep_per_soul: Optional[int] = None) -> dict:
+		"""Sustituye el CONTENIDO de resultados de tools viejos por un marcador.
+
+		Conserva `tool_calls` (qué se ejecutó) y el `tool_call_id` (pareja válida):
+		solo se pierde el volcado del output. Se stubbean los que están fuera de
+		los últimos `keep_per_soul` **y** son más viejos que `retention_days`; un
+		resultado reciente nunca se toca, aunque haya muchos.
+		"""
+		import red_pill.config as cfg
+
+		app_cfg = cfg.get_config()
+		days = float(retention_days) if retention_days is not None else float(getattr(app_cfg, "SESSION_MIRROR_TOOL_RETENTION_DAYS", 7))
+		keep = int(keep_per_soul) if keep_per_soul is not None else int(getattr(app_cfg, "SESSION_MIRROR_KEEP_TOOL_RESULTS", 200))
+		cutoff = time.time() - max(0.0, days) * 86400.0
+		stubbed = 0
+		saved = 0
+		with connect_session_db(self.db_path) as conn:
+			souls = conn.execute("SELECT DISTINCT continuity_id FROM session_mirror").fetchall()
+			for soul in souls:
+				cid = str(soul["continuity_id"])
+				rows = conn.execute(
+					"SELECT id, content, ts FROM session_mirror WHERE continuity_id = ? AND role = 'tool' ORDER BY seq DESC",
+					(cid,),
+				).fetchall()
+				for index, row in enumerate(rows):
+					if index < keep:
+						continue
+					content = row["content"]
+					if not content or str(content).startswith(_STUB_PREFIX):
+						continue
+					ts = float(row["ts"] or 0.0)
+					if ts <= 0 or ts >= cutoff:
+						continue
+					marker = f"{_STUB_PREFIX} {len(content)} chars]"
+					conn.execute("UPDATE session_mirror SET content = ? WHERE id = ?", (marker, int(row["id"])))
+					stubbed += 1
+					saved += max(0, len(content) - len(marker))
+			conn.commit()
+			if stubbed:
+				try:
+					conn.execute("VACUUM")
+				except sqlite3.OperationalError:
+					pass
+		return {"rows_stubbed": stubbed, "chars_saved": saved}
+
+	def enforce_budget(self, *, max_bytes: Optional[int] = None, min_turns_per_soul: Optional[int] = None) -> dict:
+		"""Garantiza el techo: stub → purga de muertos → recorte de viejos activos.
+
+		Nunca recorta por debajo de `min_turns_per_soul` en un alma activa. Si aun
+		así no cabe (patológico), devuelve `over_budget=True` y el janitor emite
+		dolor; no se destruye contexto reciente para "cuadrar" el número.
+		"""
+		import red_pill.config as cfg
+
+		app_cfg = cfg.get_config()
+		budget = int(max_bytes) if max_bytes is not None else int(getattr(app_cfg, "SESSION_MIRROR_MAX_BYTES", 104857600))
+		min_turns = int(min_turns_per_soul) if min_turns_per_soul is not None else int(getattr(app_cfg, "SESSION_MIRROR_MIN_TURNS_PER_SOUL", 200))
+		before = self._db_bytes()
+		result: Dict[str, Any] = {
+			"before_bytes": before,
+			"budget_bytes": budget,
+			"over_budget": before > budget,
+			"emergency": False,
+			"rows_trimmed": 0,
+		}
+		if before <= budget:
+			return result
+		result["stub"] = self.stub_tool_results()
+		result["purge"] = self.purge()
+		after = self._db_bytes()
+		if after > budget:
+			result["emergency"] = True
+			active = set(SessionRegistry(self.db_path).active_continuities())
+			removed = 0
+			with connect_session_db(self.db_path) as conn:
+				souls = conn.execute("SELECT continuity_id, COUNT(*) AS n FROM session_mirror GROUP BY continuity_id").fetchall()
+				for soul in souls:
+					cid = str(soul["continuity_id"])
+					n = int(soul["n"])
+					if cid in active:
+						excess = n - min_turns
+						if excess <= 0:
+							continue
+						cur = conn.execute(
+							"DELETE FROM session_mirror WHERE id IN "
+							"(SELECT id FROM session_mirror WHERE continuity_id = ? ORDER BY seq ASC LIMIT ?)",
+							(cid, excess),
+						)
+					else:
+						cur = conn.execute("DELETE FROM session_mirror WHERE continuity_id = ?", (cid,))
+					removed += int(cur.rowcount or 0)
+				conn.commit()
+				if removed:
+					try:
+						conn.execute("VACUUM")
+					except sqlite3.OperationalError:
+						pass
+			result["rows_trimmed"] = removed
+			after = self._db_bytes()
+		result["after_bytes"] = after
+		result["over_budget"] = after > budget
+		return result
 
 
 def _source_plugin(provider: str, base_dir: Optional[str] = None) -> Any:

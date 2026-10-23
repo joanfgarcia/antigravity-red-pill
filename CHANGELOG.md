@@ -39,7 +39,12 @@
   local por env, aislamiento de fuentes (`db_path`/`base_dir`), `tool_calls` no-lista,
   publicación sin reintento del modelo, recorte de turnos gigantes, captura
   idempotente (`run_ref`), parejas tool-call/resultado y filtro D15 en SQL.
-- **[DOCS]** AD-060, AD-061.
+- **[NEW]** Presupuesto duro del espejo (AD-062): techo 100 MB con aviso al 80 %
+  y emergencia al 95 %, stubbing de outputs de tools >7 días (conservando parejas
+  y últimos 200 por alma), tope por turno, TTL de inactividad materializado y
+  métricas/señales (`session_mirror_budget`). Replay explícito capado; el espejo
+  no se inyecta al despertar.
+- **[DOCS]** AD-060, AD-061, AD-062.
 
 ### 🌿 Flujo Git — rama viva `next` y perfil de trabajo seleccionable
 
