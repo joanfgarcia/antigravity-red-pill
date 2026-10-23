@@ -1,5 +1,16 @@
 ## Unreleased
 
+### 🧩 Mini arnés composable — contratos, perfiles y `local-mini`
+
+- **[NEW]** `mini/contracts.py`: `ChatProvider`, `Toolbox` y `AgentProfile`;
+  `mini/profiles.py`: Forge/Loom como datos (sin prompts hardcodeados en el smoke).
+- **[NEW]** `MiniSession.run_profile()` compone perfil + provider + toolbox;
+  el smoke ya es una composición de perfiles.
+- **[NEW]** `MiniLocalBridge` y backend **`local-mini`**: cualquier `AgentBridge`
+  (jobs, DAG, swarm) obtiene multiturno, espejo, tools y perfiles. `AgenticJobDriver`
+  pasa `continuity_id`/`mission_id`/`workspace` y guarda/restaura la continuidad.
+- **[DOCS]** AD-066.
+
 ### 🐕 Mini arnés local — Forge (GPU) + Loom (NPU)
 
 - **[NEW]** `src/red_pill/mini/`: providers OpenAI por UDS/localhost, tools acotadas

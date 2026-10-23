@@ -43,6 +43,12 @@ class AgenticJobDriver(ResumableJobDriver):
 		kwargs: Dict[str, Any] = {}
 		if origin is not None:
 			kwargs["origin"] = origin
+		if str(payload.get("backend") or "").strip().lower() in ("local-mini", "local_mini"):
+			for key in ("profile", "continuity_id", "mission_id", "workspace", "db_path", "gpu_socket", "flm_url", "operator"):
+				if payload.get(key) is not None:
+					kwargs[key] = payload[key]
+			if kwargs.get("workspace") is None and payload.get("cwd"):
+				kwargs["workspace"] = payload["cwd"]
 		return create_bridge(payload.get("backend"), **kwargs)
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
@@ -61,7 +67,11 @@ class AgenticJobDriver(ResumableJobDriver):
 		if not prompt_text:
 			raise ValueError("agentic_job payload requires 'prompt'.")
 
-		bridge = self._create_bridge(payload)
+		job_payload = dict(payload)
+		if str(payload.get("backend") or "").strip().lower() in ("local-mini", "local_mini"):
+			if not job_payload.get("continuity_id"):
+				job_payload["continuity_id"] = checkpoint_data.get("continuity_id")
+		bridge = self._create_bridge(job_payload)
 		kwargs: Dict[str, Any] = {"timeout": int(payload.get("timeout", 600))}
 		if payload.get("model"):
 			kwargs["model"] = payload["model"]
@@ -74,9 +84,13 @@ class AgenticJobDriver(ResumableJobDriver):
 		if not result.ok:
 			raise RuntimeError(f"agentic task failed: {result.error}")
 
+		checkpoint: Dict[str, Any] = {"response": (result.response or "")[:4000], "conversation_id": result.conversation_id}
+		continuity = getattr(bridge, "continuity_id", None)
+		if continuity:
+			checkpoint["continuity_id"] = continuity
 		return StepOutcome(
 			completed=True,
-			new_checkpoint={"response": (result.response or "")[:4000], "conversation_id": result.conversation_id},
+			new_checkpoint=checkpoint,
 			summary=(result.response or "")[:280],
 			progress={"current_step": 1, "total_steps": 1, "percent": 100},
 		)

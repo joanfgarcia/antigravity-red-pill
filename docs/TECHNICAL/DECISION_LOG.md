@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-066] Mini arnés composable — contratos, perfiles y `local-mini` en jobs
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Extiende AD-065 (composición, no un segundo loop).
+**Context**: AD-065 dejó Forge/Loom, prompts y modelos dentro del smoke. El Operador pidió DRY: combinar piezas según el uso (job_manager, swarm, local_minion) sin duplicar código. La disección natural es contratos + perfiles + adaptadores; el smoke debe ser una composición, no el core.
+**Decision**:
+1. **Contratos** (`mini/contracts.py`): `ChatProvider` (chat OpenAI), `Toolbox` (`schemas` + `execute`) y `AgentProfile` (key, name, role, provider, toolbox, system prompt, max_steps, history, temperature, max_tokens). `AgentProfile.render_system` sustituye `{name}`, `{role}`, `{operator}`, `{session_short}`.
+2. **Perfiles como dato** (`mini/profiles.py`): Forge (executor, workspace, tools) y Loom (reviewer, sin tools) dejan de estar hardcodeados en el smoke. Un job/minion puede definir otro perfil sin tocar el loop.
+3. **`MiniSession` composable**: acepta `profiles` y `toolboxes` opcionales; `run_profile(name, task)` resuelve provider, toolbox, rol, prompt y política. `MiniConfig.operator`; el título del leg usa el nombre del perfil. Los tests viejos siguen usando `run(...)` con prompts/tools explícitos (compatibilidad).
+4. **`MiniLocalBridge`** (`mini/bridge.py`): adaptador `AgentBridge` sobre `MiniSession`. `prompt`/`continue_conversation` usan el espejo (misma `continuity_id`) y el perfil; `conversation_resume=True`; `health_check` consulta el provider del perfil. Registrado como **`local-mini`** en `create_bridge`.
+5. **Job manager**: `AgenticJobDriver` acepta `backend: local-mini` con `profile`, `continuity_id`, `mission_id`, `workspace`/`cwd`, `db_path`, `gpu_socket`, `flm_url`, `operator`; si falta `continuity_id`, lo toma del checkpoint; guarda el `continuity_id` en el checkpoint. Preflight usa `health_check` del bridge (deferral si el modelo no está).
+6. **Composición, no unificación**: el loop del `local_minion` clásico (MCP tools, parser nativo, conduct) se queda; `MiniLocalBridge` es la vía nueva para trabajos simples con multiturno. No se mete un loop con flags para todos los formatos.
+**Alternatives**: (a) dejar prompts/modelos en el smoke — no reutilizable; (b) un solo loop para workspace + MCP + texto nativo — god-object y riesgo; (c) duplicar un bridge por uso — viola DRY; (d) hacer que `run_local_minion` cargue historial ya — válido como siguiente slice, pero no bloquea jobs; el bridge ya reutiliza el sustrato.
+**Rationale / Evidence**: suite **3238 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Smoke real tras el refactor: `ok=true`, 25 turnos, 10 tool turns, 1 leg activo, 0 plomería; 19,1 s / 107,6 s / 9,7 s. Tests nuevos: perfiles/render, `run_profile` provider/toolbox, `MiniLocalBridge` (tools, historial, health, factory) y checkpoint de `AgenticJobDriver` con `continuity_id`.
+**Consequences**: el mismo espejo/perfil/bridge sirve para smoke, `job_submit` y minions; `local-mini` es la vía multiturno simple. Deuda: (1) `run_local_minion` aún no carga historial (adaptador pendiente); (2) el CLI `red-pill mini` no está cableado; (3) el E2E real de `job_submit` con Forge/Loom y systemd queda por probar; (4) el 35B/9B siguen diferidos por RAM.
+
+---
+
 ## [AD-065] Mini arnés local Forge/Loom — primera prueba real (GPU + NPU por sockets)
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Implementa RFC_SESION_PORTABLE_MODEL_SWITCH §8.
