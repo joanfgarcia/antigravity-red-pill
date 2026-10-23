@@ -95,6 +95,8 @@ ignore-vuln = [
 	"CVE-2026-40347", # python-multipart vulnerabilities
 	# Pillow 12.3.0: fix 13.0.0 irresoluble con fastembed (pillow<13 en 3.13+ y
 	# cadena de deps). AD-058: sustituir fastembed + re-embeber en la próxima MAYOR.
+	"CVE-2026-114501", # Pillow 12.3.0: parsing image (fix 13.0.0; AD-058).
+	"CVE-2026-112398", # Pillow 12.3.0: parsing image (fix 13.0.0; AD-058).
 	"CVE-2026-112895",
 	"CVE-2026-112400",
 	"CVE-2026-112397",
@@ -140,7 +142,7 @@ fix = false
 [tool.uv]
 constraint-dependencies = [
     "httplib2>=0.32.0",   # PYSEC-2026-3444
-    "setuptools>=83.0.0", # PYSEC-2026-3447
+    "setuptools>=84.1.0", # PYSEC-2026-3447 + GHSA-xmj3-9gf7-h52w (fix 84.1.0)
     "pyasn1>=0.6.4",      # CVE-2026-59885, CVE-2026-59886
 ]
 [tool.ruff]

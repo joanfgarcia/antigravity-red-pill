@@ -159,6 +159,7 @@ This document records the architectural and philosophical pivots of the project.
 6. Verificar instalaciones/actualizaciones en otras máquinas.
 **Alternatives**: (a) forzar pillow 13 ahora — riesgo media/PIL y no arregla fastembed en 3.13+/otras máquinas; (b) ignorar sin plan — deuda sin trigger; (c) sustituir fastembed ahora — coste alto (re-embedding) sin urgencia local.
 **Consequences**: CI verde y riesgo local acotado; deuda explícita con trigger y plan. `certifi` sí se actualizó; el extra `hf-transfer` de `huggingface-hub` se retiró (eliminado en 1.21.0). El plan de re-embedding se desarrolla en la nota de deuda de la próxima mayor.
+**Update 2026-10-23**: dos CVE nuevos de parsing en `pillow 12.3.0` (`CVE-2026-114501`, `CVE-2026-112398`, fix 13.0.0) se aceptan bajo la MISMA política y quedan en `ignore-vuln` de pyproject + CI. `setuptools` sube a `>=84.1.0` (lock 84.2.1) por `GHSA-xmj3-9gf7-h52w`; ya no se ignora.
 
 ---
 

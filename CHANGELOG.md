@@ -1,5 +1,12 @@
 ## Unreleased
 
+### 🔐 Seguridad — setuptools y CVEs de pillow
+
+- **[FIX]** `setuptools>=84.1.0` (lock 84.2.1) por `GHSA-xmj3-9gf7-h52w`.
+- **[SEC]** `CVE-2026-114501` y `CVE-2026-112398` de `pillow 12.3.0` aceptados bajo
+  la política de AD-058 (fix 13.0.0 bloqueado por `fastembed`); añadidos a
+  `ignore-vuln` de pyproject y CI. Re-embedding sigue en la próxima MAYOR.
+
 ### 🧩 Mini arnés composable — contratos, perfiles y `local-mini`
 
 - **[NEW]** `mini/contracts.py`: `ChatProvider`, `Toolbox` y `AgentProfile`;
