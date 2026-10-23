@@ -17,7 +17,7 @@ This document records the architectural and philosophical pivots of the project.
 - **opencode→pi**: el payload filtrado (740 chars, sin `<bunker_context>`) se rehidrató en Pi (`openrouter/xiaomi/mimo-v2.6-flash`); respondió el nonce y **0 tool events**.
 - **pi→opencode**: Pi leyó otro nonce (tool nativa), se cerró; el espejo guardó **1 tool row** con el resultado; OpenCode (sesión nueva, mismo `continuity_id`) respondió el nonce **sin tools** y con **1 leg activo**. Payload 745 chars, sin Búnker.
 - `pytest tests/test_chronicle_sources.py`: alias UUID + `load_canonical` verde.
-**Consequences**: Pi es fuente de primera clase para el switch sin tocar las claves de Memento. Deuda: `antigravity` sigue en texto; el proveedor `opencode-go` de Pi tenía la API key expirada y el smoke usó OpenRouter (dato de operador, no del código). Las sesiones de prueba quedan en `~/.pi/agent/sessions` y `opencode.db`.
+**Consequences**: Pi es fuente de primera clase para el switch sin tocar las claves de Memento. Deuda: `antigravity` sigue en texto. El proveedor usado por Pi es configuración del arnés, no del código: el smoke inicial usó OpenRouter por una key caducada; **verificado después con `opencode-go`** (misma prueba: payload 740 chars, nonce correcto, 0 tools) tras renovar la autenticación del operador. Las sesiones de prueba quedan en `~/.pi/agent/sessions` y `opencode.db`.
 
 ---
 
