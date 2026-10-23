@@ -3,6 +3,7 @@
 ### 🔐 Seguridad — setuptools y CVEs de pillow
 
 - **[FIX]** `setuptools>=84.1.0` (lock 84.2.1) por `GHSA-xmj3-9gf7-h52w`.
+- **[FIX]** `filelock>=4.2.1` por `CVE-2026-112940` (transitiva de torch/huggingface).
 - **[SEC]** `CVE-2026-114501` y `CVE-2026-112398` de `pillow 12.3.0` aceptados bajo
   la política de AD-058 (fix 13.0.0 bloqueado por `fastembed`); añadidos a
   `ignore-vuln` de pyproject y CI. Re-embedding sigue en la próxima MAYOR.
