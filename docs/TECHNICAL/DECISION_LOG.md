@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-065] Mini arnés local Forge/Loom — primera prueba real (GPU + NPU por sockets)
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Implementa RFC_SESION_PORTABLE_MODEL_SWITCH §8.
+**Context**: el RFC §8 quedó ratificado (Forge GPU, Loom NPU, UDS, sin handshake, prompts en inglés). El primer intento con Loom 35B (Qwen3.6-35B-A3B, 22,1 GB de footprint) provocó OOM y reinicio del sistema: no cabe con el IDE/OS en 29 GB. Se midieron alternativas FLM: Qwen3.5-9B usa 11,8 GB, Qwen3-8B usa 7,3 GB (pico 7,6 GB). Forge con Granite-4.1-8B entraba en bucle y rompía la indentación; Qwen3.5-9B Q4 (GPU) resolvió la tarea.
+**Decision**:
+1. **Paquete `src/red_pill/mini/`**: `providers.py` (OpenAI chat por UDS y HTTP localhost), `tools.py` (`list_files`, `read_file`, `write_file`, `edit_file`, `run_tests`; jaula de workspace, caps y timeout), `session.py` (`MiniSession`: system prompt mínimo, replay del espejo, tool loop, migración de leg), `smoke.py` (fixture + 3 fases).
+2. **Modelos v0**: **Forge = Qwen3.5-9B Q4_K_M en GPU** (ctx 4096, `MemoryMax=7G`); **Loom = Qwen3-8B-NPU2 en FLM** (`qwen3:8b`, ctx 4096, `MemoryMax=10G`, pico medido 7,6 GB). Qwen3.5-9B-NPU (11,8 GB) y Qwen3.6-35B-A3B (22,1 GB) quedan **diferidos** por RAM; el 35B no se usa con el IDE abierto.
+3. **Sin handshake/Búnker/RAG**: identidad operativa mínima (Forge/Loom, rol, operador, `SESSION_SHORT`), prompts en inglés técnico, reviewer sin tools. La continuidad la da el historial del espejo.
+4. **Cero puertos para GPU** (`llama-server --host gpu.sock`); **FLM en `127.0.0.1:52625`** (v0 aceptado; netns+UDS es hardening fase 2). Todo corre en unidades transitorias `systemd --user` con `MemoryMax` y `MemorySwapMax=0`: si un modelo se pasa, muere el proceso, no el sistema.
+5. **Migración**: `MiniSession.switch_to` cierra el leg anterior y abre el nuevo con la misma `continuity_id`; un solo leg activo. Cada turno se apenda al espejo con `tool_call_id` y `run_ref`; no se guardan parejas huérfanas.
+6. **Smoke real** (fixture de `median` con RUN_ID): Forge lee, ejecuta, corrige y reporta; Loom revisa sin tools y cita RUN_ID/aserción; Forge añade el test del caso límite. Resultado: `ok=true`, 25 turnos, 10 tool turns, 0 plomería, 1 leg activo; fases 20,8 s / 84,4 s / 9,7 s.
+**Alternatives**: (a) Loom 35B — OOM/reinicio; (b) Loom 9B — 11,8 GB, margen insuficiente; (c) Forge Granite 4.1 — bucle e indentación mixta; (d) Loom API externa — válido pero no prueba NPU local; (e) mismo 8B para ambos cuerpos — válido pero no heterogéneo. Se elige Qwen3.5-9B GPU + Qwen3-8B FLM.
+**Rationale / Evidence**: suite **3229 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/ scripts/` y `mypy src/red_pill/` limpios. Smoke con cgroups; `/tmp/red-pill-mini` (sin BD viva); reporte con `nonce_in_tool_history`, `nonce_in_forge_text`, `nonce_in_loom_text`, `loom_no_tool_calls`, `tests_pass_after_fix`, `tests_pass_after_apply`, `new_test_added`, `one_active_leg`, `plumbing_rows=0`.
+**Consequences**: existe un mini arnés real, local y acotado que usa el sustrato de sesión. Deuda: (1) 35B/9B diferidos por RAM; (2) FLM sigue en puerto loopback hasta el hardening netns+UDS; (3) no hay “coma”/KV persistente entre procesos; (4) las unidades `systemd` son transitorias, no plantillas permanentes; (5) Loom 8B tarda ~90 s por el thinking; se puede ajustar prompt/thinking; (6) el `run_tests` depende de pytest en el Python que ejecuta el arnés.
+
+---
+
 ## [AD-064] Pi como fuente canónica del switch (UUID + tools nativas)
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Habilita el smoke real opencode↔pi.

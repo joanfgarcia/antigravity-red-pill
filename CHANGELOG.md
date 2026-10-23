@@ -1,5 +1,21 @@
 ## Unreleased
 
+### 🐕 Mini arnés local — Forge (GPU) + Loom (NPU)
+
+- **[NEW]** `src/red_pill/mini/`: providers OpenAI por UDS/localhost, tools acotadas
+  (`list_files`, `read_file`, `write_file`, `edit_file`, `run_tests`), `MiniSession`
+  con replay del espejo, tool loop y migración de cuerpo con la misma `continuity_id`.
+- **[NEW]** Identidad operativa mínima y prompts en inglés; **sin handshake, Búnker
+  ni RAG** en los modelos locales. Reviewer sin tools.
+- **[NEW]** Smoke real: Forge (Qwen3.5-9B GPU) corrige un bug sembrado, Loom
+  (Qwen3-8B FLM) revisa citando el RUN_ID sin tools, Forge aplica el test del caso
+  límite. `ok=true`, 31 turnos/13 tool turns, 0 plomería, 1 leg activo.
+- **[SAFETY]** Unidades transitorias `systemd --user` con `MemoryMax` y
+  `MemorySwapMax=0`; GPU por Unix socket; FLM en loopback 52625 (v0). El 35B queda
+  diferido por RAM (OOM documentado).
+- **[DOCS]** AD-065; RFC §8.8/§8.3 con modelos y medición real.
+
+
 ### 🌅 Despertar autónomo — Pi cuenta como actividad
 
 - **[FIX]** `is_ide_idle` ignoraba las sesiones de Pi: trabajar en el IDE `pi`
