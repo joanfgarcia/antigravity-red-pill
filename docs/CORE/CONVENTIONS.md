@@ -208,7 +208,8 @@ docs/<short-hyphenated-description>    ✅  docs/conventions
 Main branches: `main` (stable, PR-only) and `next` (the living integration branch of the
 `solo` profile — optional, fixed name). Work branches and RFC worktrees are cut from `next`
 and land on it by squash; `next` lands on `main` through one release PR. The active profile
-is `GIT_WORKFLOW` in `.env`; the full model lives in [`WORKFLOWS.md`](WORKFLOWS.md) §0.
+is `GIT_WORKFLOW` in `.env`; the seeder renders only the active profile into
+`~/.agent/rules/git_workflow.md`. The full model lives in [`WORKFLOWS.md`](WORKFLOWS.md) §0.
 
 ---
 

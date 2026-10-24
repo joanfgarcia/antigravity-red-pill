@@ -1,8 +1,9 @@
-# Git workflow — active profile
+# Git workflow — active profile: {{profile}}
 
-The project's branch model is defined in `docs/CORE/WORKFLOWS.md` §0. Read it before any
-branch, merge or push. The active profile is `GIT_WORKFLOW` in `.env` (`solo` | `canonical`);
-apply **only** the section that matches it. If the variable is absent, assume `solo`.
+This is the **profile-specific** agent rule, rendered from
+`seeds/rules/git_workflow.md` using `GIT_WORKFLOW` in `.env` (`solo` | `canonical`).
+Do not edit the deployed copy at `~/.agent/rules/git_workflow.md`; change the
+profile in `.env` and re-seed (`red-pill bunker update` or the installer).
 
 ## Invariants (both profiles)
 
@@ -14,7 +15,12 @@ apply **only** the section that matches it. If the variable is absent, assume `s
   `fail_under` in `pyproject.toml`). CI runs on PRs only — it is the second net, not the first.
 - A branch is shared, not owned by the session that created it. Continue work from another
   session instead of opening a parallel one.
+- **Feature branches stay local.** The remote is `main` + `next` (solo) or `main` + PR
+  branches (canonical); do not leave a remote feature branch behind.
+- When a worktree is used, record `branch + path + last commit` in the RFC/note. The branch
+  is the evidence trail until the release PR lands.
 
+<!-- profile:solo:start -->
 ## `solo` — single maintainer, accumulated integration
 
 - **`next` is the living integration branch.** Name is always `next` (never a release/RFC
@@ -33,10 +39,13 @@ apply **only** the section that matches it. If the variable is absent, assume `s
   **squash merge** → delete `next` (local and remote) → tag `vX.Y.Z` on `main`. The next
   cycle recreates `next` from the new `main`.
 - **Hotfix**: `fix/<slug>` from `main` → PR → `main`, then merge `main` back into `next`.
+<!-- profile:solo:end -->
 
+<!-- profile:canonical:start -->
 ## `canonical` — multiple contributors
 
 - **No `next`.** One short-lived branch per change, cut from `main`: `feat/<slug>`,
   `fix/<slug>`, `docs/<slug>`, `chore/<slug>`.
 - Open one PR per change → `main`; merge with **squash** and delete the branch.
 - Release = tag on `main`.
+<!-- profile:canonical:end -->

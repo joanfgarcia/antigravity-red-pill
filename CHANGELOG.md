@@ -1,5 +1,15 @@
 ## Unreleased
 
+### 🌿 Workflow — seed por perfil (solo/canonical)
+
+- **[FIX]** `seeds/rules/git_workflow.md` es una plantilla con bloques `solo`/`canonical`;
+  `red-pill bunker update` y el installer renderizan **solo el perfil activo** en
+  `~/.agent/rules/git_workflow.md` (antes copiaban ambos y el agente elegía en runtime).
+- **[FIX]** El `pre-push` de `solo` rechaza ramas `feat/*` remotas; solo `next` y hotfix PR
+  branches viajan a origin. El mensaje deja de invitar a pushear work branches.
+- **[FIX]** Docs (`WORKFLOWS`, `CONVENTIONS`, `CONTRIBUTING`, `.env.example`) y scaffold
+  alineados con la siembra por perfil.
+
 ### 🧭 B-01j — write-ahead universal en el Job Manager
 
 - **[NEW]** `ResumableJobDriver.begin_step()`/`abort_step()`: el runner persiste

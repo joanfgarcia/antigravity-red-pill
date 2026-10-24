@@ -8,12 +8,23 @@ url="$2"
 
 z40=0000000000000000000000000000000000000000
 
+# Active profile: solo keeps feature branches local; canonical uses remote PR branches.
+workflow=$(sed -n 's/^GIT_WORKFLOW=["]*\([^" ]*\)["]*.*/\1/p' .env 2>/dev/null | tail -1)
+workflow=${workflow:-solo}
+
 while read local_ref local_sha remote_ref remote_sha
 do
 	# 1. Prevent Push to Main
 	if [ "$remote_ref" == "refs/heads/main" ]; then
 		echo -e "\033[0;31m[SOVEREIGN GUARD] REJECTED: Direct push to 'main' is strictly forbidden.\033[0m"
-		echo -e "\033[0;33mPush your work branch or 'next' instead (docs/CORE/WORKFLOWS.md §0).\033[0m"
+		echo -e "\033[0;33mPush 'next' (solo) or a PR branch (canonical) instead (docs/CORE/WORKFLOWS.md §0).\033[0m"
+		exit 1
+	fi
+
+	# 2. Solo: feature branches are local; only 'next' and hotfix PR branches go remote.
+	if [ "$workflow" = "solo" ] && [ "${remote_ref#refs/heads/feat/}" != "$remote_ref" ]; then
+		echo -e "\033[0;31m[SOVEREIGN GUARD] REJECTED: remote feature branch in solo profile.\033[0m"
+		echo -e "\033[0;33mFeature worktrees stay local and enter 'next' by squash.\033[0m"
 		exit 1
 	fi
 

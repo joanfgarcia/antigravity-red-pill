@@ -4,6 +4,22 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-071] Workflow seed por perfil — `solo`/`canonical` se materializa al sembrar
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El modelo de ramas tenía dos perfiles (`solo` single-maintainer, `canonical` múltiples) seleccionados por `GIT_WORKFLOW`, pero la siembra estaba a medias: `bunker_update`/installer copiaban `seeds/rules/git_workflow.md` **entero** (ambos perfiles) y el agente elegía en runtime. El comentario decía “for the active profile” pero el código no lo hacía. Además, el `pre-push` invitaba a “push your work branch”, contradiciendo el remoto limpio de `solo`.
+**Decision**:
+1. `seeds/rules/git_workflow.md` es una **plantilla** con invariantes comunes + bloques `profile:solo` y `profile:canonical`.
+2. `red_pill/core/git_workflow.py` renderiza **solo** el perfil activo (sin bloque inactivo, sin marcadores, `{{profile}}` sustituido).
+3. `bunker_update` lee `GIT_WORKFLOW` de la config y escribe el render en `~/.agent/rules/git_workflow.md`; `scripts/install_neo.sh` hace lo mismo con el helper `scripts/render_git_workflow.py`. El scaffold usa su copia standalone.
+4. `pre-push` en `solo` rechaza `refs/heads/feat/*`; solo `next` y hotfix PR branches van a origin. En `canonical` se permite la rama feature para el PR.
+5. Docs (`WORKFLOWS`, `CONVENTIONS`, `CONTRIBUTING`, `.env.example`) explican que el `.env` selecciona y la siembra materializa **un único** perfil.
+**Alternatives**: (a) mantener ambos perfiles en el fichero desplegado — el agente seguía eligiendo; (b) dos seeds duplicados — drift; (c) auto-detectar single/multi — frágil; (d) no tocar el `pre-push` — seguía invitando a la rama remota.
+**Rationale / Evidence**: tests de render (solo/canonical, sin marcadores, perfil inválido), seed/scaffold con bloques, `pre-push` con guard solo; suite pendiente de cierre. El render es determinista y falla limpio si falta un bloque.
+**Consequences**: cambiar `GIT_WORKFLOW` exige re-seed; el fichero del agente ya no contiene ambos perfiles. La rama de evidencia del worktree sigue viva hasta el release PR (workflow); el remoto en `solo` queda `main` + `next` (+ hotfix PR puntual).
+
+---
+
 ## [AD-070] B-01j — write-ahead universal en el Job Manager
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED. Primer slice de B-01 (D-02); B-01s/B-01h siguen pendientes.

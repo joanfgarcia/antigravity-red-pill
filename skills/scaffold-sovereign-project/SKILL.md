@@ -34,10 +34,13 @@ To properly execute this skill, follow these exact steps sequentially:
      `cp <SKILL_DIR>/templates/PROTOCOL_OF_SILENCE.md ./docs/CORE/PROTOCOL_OF_SILENCE.md`
    - Copy the CHANGELOG template:
      `cp <SKILL_DIR>/templates/CHANGELOG.md ./CHANGELOG.md`
-   - Copy the branch-model rule and declare the chosen profile:
-     `mkdir -p .agent/rules && cp <SKILL_DIR>/templates/git_workflow.md .agent/rules/git_workflow.md`
+   - Declare the profile and render ONLY that profile:
      Add `GIT_WORKFLOW=solo` (single maintainer) or `GIT_WORKFLOW=canonical` (multiple
-     contributors) to `.env` / `.env.example`. See `templates/git_workflow.md`.
+     contributors) to `.env` / `.env.example`, then:
+     `PROFILE=$(grep '^GIT_WORKFLOW=' .env | cut -d= -f2 | tr -d '"'); PROFILE=${PROFILE:-solo}`
+     `mkdir -p .agent/rules && python3 <SKILL_DIR>/scripts/render_git_workflow.py --profile "$PROFILE" --source <SKILL_DIR>/templates/git_workflow.md --output .agent/rules/git_workflow.md`
+     The source template keeps both profiles; the deployed rule must contain only the active
+     one. See `templates/git_workflow.md`.
 
 4. **Protocol of Silence (Linter & Tests Configuration):**
    - Append the strict `ruff`, `mypy`, and `pytest` configuration (with 96% coverage threshold) to `pyproject.toml`. Copy from `<SKILL_DIR>/templates/pyproject_silence.toml`.

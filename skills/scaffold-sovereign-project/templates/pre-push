@@ -3,6 +3,10 @@
 
 z40=0000000000000000000000000000000000000000
 
+# Active profile: solo keeps feature branches local; canonical uses remote PR branches.
+workflow=$(sed -n 's/^GIT_WORKFLOW=["]*\([^" ]*\)["]*.*/\1/p' .env 2>/dev/null | tail -1)
+workflow=${workflow:-solo}
+
 while read local_ref local_sha remote_ref remote_sha
 do
 	if [ "$remote_ref" = "refs/heads/main" ]
@@ -10,7 +14,17 @@ do
 		echo "============================================================"
 		echo "🔴 SOVEREIGNTY GUARD: DIRECT PUSH TO 'main' BLOCKED"
 		echo "main only moves through a Pull Request (docs/CORE/WORKFLOWS.md §0)."
-		echo "Push your work branch or 'next' instead."
+		echo "Push 'next' (solo) or a PR branch (canonical) instead."
+		echo "============================================================"
+		exit 1
+	fi
+
+	if [ "$workflow" = "solo" ] && [ "${remote_ref#refs/heads/feat/}" != "$remote_ref" ]
+	then
+		echo "============================================================"
+		echo "🔴 SOVEREIGNTY GUARD: REMOTE FEATURE BRANCH BLOCKED (solo)"
+		echo "Feature worktrees stay local and enter 'next' by squash."
+		echo "Push only 'next' (or a hotfix PR branch)."
 		echo "============================================================"
 		exit 1
 	fi
