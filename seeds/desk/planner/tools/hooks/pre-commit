@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Desk pre-commit (RFC-ENLACES-001): avisa si el commit introduce refs rotas NUEVAS.
+#
+# Warn-only por defecto (respeta el ethos "backup, no control estricto" del desk).
+# Exporta LINKS_STRICT=1 (o `git config redpill.linksStrict true`) para BLOQUEAR.
+#
+# Instalación: `planner/tools/hooks/install.sh` (fija core.hooksPath=planner/tools/hooks).
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+TOOL="$ROOT/planner/tools/links.py"
+[ -f "$TOOL" ] || exit 0
+
+STRICT="${LINKS_STRICT:-$(git config --bool --get redpill.linksStrict 2>/dev/null || echo 0)}"
+
+if ! python3 "$TOOL" --check; then
+	if [ "$STRICT" = "1" ] || [ "$STRICT" = "true" ]; then
+		echo "[links] commit BLOQUEADO por refs rotas nuevas (LINKS_STRICT)." >&2
+		exit 1
+	fi
+	echo "[links] (aviso) refs rotas nuevas — el commit sigue (modo warn-only)." >&2
+fi
+exit 0

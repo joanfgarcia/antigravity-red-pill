@@ -1,5 +1,23 @@
 ## Unreleased
 
+### 🗂️ Desk — scaffold con dos dueños y grafo de enlaces
+
+- **[FEATURE]** `scripts/scaffold_desk.sh` + `seeds/desk/.germ`: el contenido del
+  Operador es copy-if-absent y el germen (AGENTS, tools, hooks) se actualiza con
+  guard de hash y backup; el instalador deja de copiar todo a ciegas.
+- **[FEATURE]** `seeds/desk/planner/tools/links.py` y hook `pre-commit`: grafo de
+  referencias tipadas, backlinks, dangling y ciclos `depends_on`.
+- **[DOCS]** AGENTS del desk y README de tools.
+
+### 🧰 Instalación — idioma de la capa curada (MEMENTO_PROMPT_LANGUAGE, 2026-10-05)
+
+- **[FEATURE]** `install_neo.sh` pregunta el idioma en el wizard (detectado del
+  locale como default) y lo escribe en `.env`; `upgrade.sh` lo fija si falta
+  (`--ask` interactivo, detección en `--auto`). Nunca pisa una elección existente.
+- **[FEATURE]** `scripts/migrate_prompt_language.py`: resolución idempotente
+  (LC_ALL > LC_MESSAGES > LANG; soportados auto/es/en/ca/gl/eu/fr/de/pt/it;
+  default `es`), con `--print` para el default del instalador y `--env-file`.
+
 ### 🧠 B-02 — compactor de contexto (schema v6 + servicio local)
 
 - **[NEW]** `session_compactions` v6 y `Compactor`: dos políticas de corte

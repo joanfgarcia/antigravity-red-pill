@@ -2,3 +2,9 @@
 	path = 3rdparty/BitNet-1.58b
 	url = https://github.com/joanfgarcia/BitNet-1.58b.git
 	branch = main
+[submodule "3rdparty/bitnet_cuda_fork"]
+	path = 3rdparty/bitnet_cuda_fork
+	url = https://github.com/joanfgarcia/bitnet_cuda.git
+[submodule "3rdparty/llama_official"]
+	path = 3rdparty/llama_official
+	url = https://github.com/ggerganov/llama.cpp.git

@@ -1,0 +1,18 @@
+# Manifiesto del GERMEN (DESK-001). Ficheros del runtime red-pill que el seed
+# ACTUALIZA en cada instalación (con guard de hash: si divergieron en el desk →
+# backup + actualizar). Todo lo que NO esté aquí es contenido del PUESTO:
+# copy-if-absent, el seed NUNCA lo pisa.
+#
+# Un glob por línea (sintaxis `case`: * y ** equivalen a cualquier secuencia).
+AGENTS.md
+README.md
+INDEX.md
+FRONTMATTER_TEMPLATE.md
+archive/README.md
+planner/README.md
+planner/ideas/README.md
+planner/research/README.md
+planner/design/README.md
+planner/pending/README.md
+planner/in_progress/README.md
+planner/tools/**

@@ -47,6 +47,7 @@ SCRIPTS_PRE_SEED = {
 	SCRIPTS_DIR / "inject_mcp.py",
 	SCRIPTS_DIR / "inject_settings.py",
 	SCRIPTS_DIR / "inject_opencode.py",
+	SCRIPTS_DIR / "migrate_prompt_language.py",
 }
 INJECT_PKG = SCRIPTS_DIR / "inject"
 

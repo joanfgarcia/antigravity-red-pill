@@ -367,6 +367,20 @@ else
 	echo -e "${YELLOW}[AUTO] Calibración emocional por defecto o existente.${NC}"
 fi
 
+echo -e "${BLUE}--- Fase: Idioma de la memoria curada ---${NC}"
+DETECTED_PROMPT_LANG=$(python3 "$SCRIPT_DIR/migrate_prompt_language.py" --print 2>/dev/null || echo "es")
+if [ "$AUTO_MODE" = "false" ]; then
+	read -p "Idioma de los prompts de memoria (auto|es|en|ca|gl|eu|fr|de|pt|it) [${DETECTED_PROMPT_LANG}]: " PROMPT_LANG_CHOICE
+	PROMPT_LANG_CHOICE=${PROMPT_LANG_CHOICE:-$DETECTED_PROMPT_LANG}
+else
+	PROMPT_LANG_CHOICE=${MEMENTO_PROMPT_LANGUAGE:-$DETECTED_PROMPT_LANG}
+	echo -e "${YELLOW}[AUTO] Idioma de memoria curada: ${PROMPT_LANG_CHOICE}.${NC}"
+fi
+case "$PROMPT_LANG_CHOICE" in
+	auto|es|en|ca|gl|eu|fr|de|pt|it) ;;
+	*) PROMPT_LANG_CHOICE="$DETECTED_PROMPT_LANG" ;;
+esac
+
 echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
 if [ "$AUTO_MODE" = "false" ]; then
 	echo "Elige tu nivel de seguridad para el Bünker:"
@@ -553,6 +567,7 @@ update_env "AI_NAME" "$AI_NAME"
 update_env "AI_ROLE" "$AI_ROLE"
 update_env "DYNAMIC_EMOTION_SYNC" "$DYNAMIC_EMOTION_SYNC"
 update_env "MULTI_EMOTION_INFERENCE" "$MULTI_EMOTION_INFERENCE"
+update_env "MEMENTO_PROMPT_LANGUAGE" "$PROMPT_LANG_CHOICE"
 update_env "INTERCEPTOR_ENABLED" "${INTERCEPTOR_ENABLED:-False}"
 update_env "INTERCEPTOR_RAG_ENABLED" "${INTERCEPTOR_RAG_ENABLED:-True}"
 update_env "INTERCEPTOR_CIRCUIT_BREAKER_ENABLED" "${INTERCEPTOR_CIRCUIT_BREAKER_ENABLED:-False}"
@@ -575,28 +590,13 @@ mkdir -p "$WORKSPACE_ROOT/scripts" "$WORKSPACE_ROOT/backups/qdrant" "$WORKSPACE_
 # Raíz de temporales del arnés (docs/CORE/MEDIA_MODELS.md): ~/tmp por defecto; .env la sobreescribe.
 RP_TMP="${RP_TMP_DIR:-$HOME/tmp}"; RP_TMP="${RP_TMP/#\~/$HOME}"; mkdir -p "$RP_TMP"
 
-# Desk scaffold (seeds/desk → AGENT_CORE_DIR, copy-if-absent — nunca pisa el
-# contenido que el operador ya ha tocado; las actualizaciones de convención
-# viajan en seeds/desk y se propagan en la próxima instalación).
+# Desk scaffold/refresh (DESK-001): dos dueños. El PUESTO (contenido del operador)
+# es copy-if-absent; el GERMEN (manifiesto seeds/desk/.germ: tools/plantillas) se
+# ACTUALIZA con guard de hash (backup si divergió) + hook pre-commit. Toda la
+# lógica vive en scripts/scaffold_desk.sh (testeable en aislamiento).
 if [ -d "$REPO_ROOT/seeds/desk" ]; then
 	echo -e "${BLUE}--- Fase: Scaffold del Desk (${AGENT_CORE_DIR}) ---${NC}"
-	mkdir -p "$AGENT_CORE_DIR"
-	# Copia la estructura de carpetas (vacías) siempre; los ficheros canónicos solo si no existen.
-	(
-		cd "$REPO_ROOT/seeds/desk" || exit 1
-		find . -type d | while read -r d; do
-			mkdir -p "${AGENT_CORE_DIR}/${d#./}"
-		done
-		find . -type f | while read -r f; do
-			rel="${f#./}"
-			if [ ! -f "$AGENT_CORE_DIR/$rel" ]; then
-				cp "$f" "$AGENT_CORE_DIR/$rel"
-				echo -e "  ✓ seed → ${rel}"
-			else
-				echo -e "  · ${rel} (existe, no se pisa)"
-			fi
-		done
-	)
+	REPO_ROOT="$REPO_ROOT" AGENT_CORE_DIR="$AGENT_CORE_DIR" bash "$REPO_ROOT/scripts/scaffold_desk.sh"
 fi
 
 if [ "$QDRANT_ALIVE" = "false" ]; then

@@ -248,6 +248,14 @@ if command -v uv &> /dev/null; then
 	# Thread Weaving (idempotent)
 	uv run python scripts/thread_weave_migrate.py
 
+	# Idioma de la capa curada (PROMPT-001 F3): set-if-missing, nunca pisa elección
+	echo -e "${BLUE}Resolviendo idioma de la memoria curada (MEMENTO_PROMPT_LANGUAGE)...${NC}"
+	if [ "$AUTO_MODE" = false ]; then
+		uv run python scripts/migrate_prompt_language.py --ask || true
+	else
+		uv run python scripts/migrate_prompt_language.py || true
+	fi
+
 	# soul_memories leak cleanup (v7.4.4 — purge duplicate points from pre-fix homeostasis plugin)
 	echo -e "${BLUE}Purgando duplicados de soul_memories (fix homeostasis singleton)...${NC}"
 	uv run python -c "
