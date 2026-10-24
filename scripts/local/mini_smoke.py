@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the Forge/Loom smoke with real local models, inside systemd cgroups.
 
-Forge: CUDA `llama-server` on a Unix socket (Granite 8B).
+Forge: CUDA `llama-server` on a Unix socket (Qwen3.5-9B Q4).
 Loom: FLM on loopback (Qwen3-8B by default; the 35B does not fit with the IDE).
 
 Both run as transient `systemd --user` units with `MemoryMax` and
@@ -15,82 +15,14 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
-import time
 from pathlib import Path
+
+from mini_services import start_forge, start_loom, stop_unit, tail, wait_http, wait_uds
 
 from red_pill.core.paths import get_models_dir
 from red_pill.mini.providers import HTTPProvider, UnixHTTPProvider
 from red_pill.mini.smoke import run_smoke
-
-
-def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
-	return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
-
-
-def _stop_unit(unit: str) -> None:
-	_run(["systemctl", "--user", "stop", unit])
-	_run(["systemctl", "--user", "reset-failed", unit])
-
-
-def _start_unit(unit: str, cmd: list[str], *, log: Path, memory: str) -> None:
-	log.parent.mkdir(parents=True, exist_ok=True)
-	log.touch()
-	_stop_unit(unit)
-	args = [
-		"systemd-run",
-		"--user",
-		"--unit",
-		unit,
-		"--collect",
-		"-p",
-		f"MemoryMax={memory}",
-		"-p",
-		"MemorySwapMax=0",
-		"-p",
-		f"StandardOutput=append:{log}",
-		"-p",
-		f"StandardError=append:{log}",
-		"--",
-		*cmd,
-	]
-	result = _run(args)
-	if result.returncode != 0:
-		raise RuntimeError(f"systemd-run failed for {unit}: {result.stderr.strip() or result.stdout.strip()}")
-
-
-def _unit_active(unit: str) -> bool:
-	return _run(["systemctl", "--user", "is-active", "--quiet", unit]).returncode == 0
-
-
-def _wait_uds(provider: UnixHTTPProvider, unit: str, seconds: int) -> bool:
-	deadline = time.time() + seconds
-	while time.time() < deadline:
-		if provider.health():
-			return True
-		if not _unit_active(unit):
-			return False
-		time.sleep(1)
-	return False
-
-
-def _wait_http(provider: HTTPProvider, unit: str, seconds: int) -> bool:
-	deadline = time.time() + seconds
-	while time.time() < deadline:
-		if provider.health():
-			return True
-		if not _unit_active(unit):
-			return False
-		time.sleep(2)
-	return False
-
-
-def _tail(path: Path, lines: int = 20) -> str:
-	try:
-		return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
-	except OSError:
-		return "(no log)"
 
 
 def main() -> int:
@@ -124,33 +56,16 @@ def main() -> int:
 	forge_unit = f"red-pill-forge-smoke-{pid}"
 	loom_unit = f"red-pill-loom-smoke-{pid}"
 	try:
-		forge_cmd = [
-			"/usr/bin/env",
-			f"LD_LIBRARY_PATH={Path(args.forge_server).parent}",
-			args.forge_server,
-			"-m", args.forge_model,
-			"--host", args.gpu_socket,
-			"--ctx-size", str(args.forge_ctx),
-			"--n-gpu-layers", "99",
-			"--jinja",
-			"--flash-attn", "on",
-			"--no-webui",
-		]
 		print(f"[mini] starting Forge ({forge_unit}, MemoryMax={args.forge_memory})", flush=True)
-		_start_unit(forge_unit, forge_cmd, log=forge_log, memory=args.forge_memory)
-		if not _wait_uds(UnixHTTPProvider(args.gpu_socket), forge_unit, 180):
-			print("[mini] Forge did not become healthy:\n" + _tail(forge_log), file=sys.stderr)
+		start_forge(forge_unit, server=args.forge_server, model=args.forge_model, socket=args.gpu_socket, log=forge_log, memory=args.forge_memory, ctx=args.forge_ctx)
+		if not wait_uds(UnixHTTPProvider(args.gpu_socket), forge_unit, 180):
+			print("[mini] Forge did not become healthy:\n" + tail(forge_log), file=sys.stderr)
 			return 2
 
-		loom_cmd = [
-			args.flm_bin, "serve", args.loom_model,
-			"--host", "127.0.0.1", "--port", "52625",
-			"--ctx-len", str(args.loom_ctx),
-		]
 		print(f"[mini] starting Loom ({loom_unit}, MemoryMax={args.loom_memory})", flush=True)
-		_start_unit(loom_unit, loom_cmd, log=loom_log, memory=args.loom_memory)
-		if not _wait_http(HTTPProvider(args.flm_url), loom_unit, 240):
-			print("[mini] Loom did not become healthy:\n" + _tail(loom_log), file=sys.stderr)
+		start_loom(loom_unit, flm_bin=args.flm_bin, model=args.loom_model, log=loom_log, url=args.flm_url, memory=args.loom_memory, ctx=args.loom_ctx)
+		if not wait_http(HTTPProvider(args.flm_url), loom_unit, 240):
+			print("[mini] Loom did not become healthy:\n" + tail(loom_log), file=sys.stderr)
 			return 3
 
 		report = run_smoke(
@@ -165,8 +80,8 @@ def main() -> int:
 		if args.keep:
 			print(f"[mini] keeping units: {forge_unit} {loom_unit}", file=sys.stderr)
 		else:
-			_stop_unit(loom_unit)
-			_stop_unit(forge_unit)
+			stop_unit(loom_unit)
+			stop_unit(forge_unit)
 
 
 if __name__ == "__main__":

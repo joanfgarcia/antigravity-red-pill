@@ -1,0 +1,26 @@
+[Unit]
+Description=Red Pill Forge (llama-server CUDA, Unix socket only)
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documents/IA/sharing
+ExecStart=/usr/bin/env LD_LIBRARY_PATH=%h/opt/llama.cpp-prism/build/bin %h/opt/llama.cpp-prism/build/bin/llama-server -m %h/.local/share/red-pill/models/Qwen3.5-9B-Q4_K_M.gguf --host %t/red-pill/forge.sock --ctx-size 4096 --n-gpu-layers 99 --jinja --flash-attn on --no-webui
+Restart=on-failure
+RestartSec=10
+Nice=5
+NoNewPrivileges=yes
+RuntimeDirectory=red-pill
+RuntimeDirectoryMode=0700
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=%h/.local/share/red-pill/models/Qwen3.5-9B-Q4_K_M.gguf
+MemoryMax=7G
+MemorySwapMax=0
+
+[Install]
+WantedBy=default.target

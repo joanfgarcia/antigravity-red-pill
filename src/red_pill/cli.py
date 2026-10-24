@@ -29,6 +29,7 @@ from red_pill.cli_services import (  # noqa: F401  (re-exported for `red_pill.cl
 	handle_identity,
 	handle_license,
 	handle_memory,
+	handle_mini,
 	handle_p2p,
 	handle_runtime,
 	handle_session,
@@ -115,6 +116,10 @@ def main() -> None:
 
 	elif args.command == "session":
 		handle_session(args)
+		return
+
+	elif args.command == "mini":
+		handle_mini(args)
 		return
 
 	# EventBus: let Enterprise/Community know which command was dispatched

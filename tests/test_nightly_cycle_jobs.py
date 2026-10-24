@@ -183,3 +183,9 @@ def test_job_submit_mcp_blocks_agentic_without_model():
 	# Con modelo real pasa.
 	res = asyncio.run(handle_job_submit({"source": "agentic_job", "payload": {"prompt": "x", "model": "opencode-go/deepseek-v4-pro"}}))
 	assert "Job encolado" in res[0].text
+
+	# local-mini no necesita `model`: el perfil resuelve el provider.
+	res = asyncio.run(
+		handle_job_submit({"source": "agentic_job", "payload": {"prompt": "x", "backend": "local-mini", "profile": "forge"}})
+	)
+	assert "Job encolado" in res[0].text

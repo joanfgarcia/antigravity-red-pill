@@ -129,6 +129,31 @@ class TestMiniSession:
 		turns = session.mirror.read_turns("alma-mini-test")
 		assert all(t["role"] != "tool" for t in turns)
 
+	def test_switch_across_instances_closes_previous_leg(self, tmp_path):
+		from red_pill.mini.profiles import PROFILES
+
+		session_a, tools_a, _ = _session(tmp_path, [{"role": "assistant", "content": "forge"}])
+		session_a.profiles = PROFILES
+		session_a.toolboxes = {"workspace": tools_a}
+		session_a.run_profile("forge", "fix")
+		session_b = MiniSession(
+			MiniConfig(
+				workspace=str(tmp_path / "ws"),
+				continuity_id="alma-mini-test",
+				mission_id="mission:mini-test",
+				db_path=str(tmp_path / "session.db"),
+				affinity=["mission:mini-test"],
+			),
+			{"forge": ScriptedProvider([]), "loom": ScriptedProvider([{"role": "assistant", "content": "review"}])},
+			profiles=PROFILES,
+			toolboxes={"workspace": tools_a},
+		)
+		session_b.run_profile("loom", "review")
+		rows = session_b.registry.get_by_continuity("alma-mini-test")
+		active = [r for r in rows if r.get("ttl_state") != "expired"]
+		assert len(active) == 1
+		assert active[0]["originator"].startswith("loom:")
+
 	def test_switching_back_closes_loom(self, tmp_path):
 		session, _, _ = _session(
 			tmp_path,
@@ -196,3 +221,21 @@ class TestProfiles:
 	def test_workspace_tools_exposes_schemas(self, tmp_path):
 		tools = WorkspaceTools(str(tmp_path))
 		assert tools.schemas == TOOL_SCHEMAS
+
+
+class TestReadOnlyLoom:
+	def test_read_only_toolbox_hides_write_tools(self, tmp_path):
+		tools = WorkspaceTools(str(tmp_path), read_only=True)
+		names = {schema["function"]["name"] for schema in tools.schemas}
+		assert names == {"list_files", "read_file", "run_tests"}
+		with pytest.raises(ToolError):
+			tools.write_file("x.py", "x")
+		with pytest.raises(ToolError):
+			tools.edit_file("x.py", "a", "b")
+
+	def test_loom_tools_profile_uses_read_only_toolbox(self):
+		from red_pill.mini.profiles import PROFILES
+
+		profile = PROFILES["loom-tools"]
+		assert profile.toolbox == "workspace_ro"
+		assert "READ-ONLY" in profile.render_system(session_short="abc", operator="Joan")

@@ -28,6 +28,13 @@ Use only the history; do not speculate. Cite exact evidence: RUN_ID, failing
 assertion, command output. Judge correctness, not style. If evidence is missing,
 say so. Answer in at most six bullets."""
 
+LOOM_TOOLS_SYSTEM = """You are {name}, the local NPU body of the same RedPill session for {operator}.
+Session {session_short} is a continuation; your memory is the history below.
+You are a strict code reviewer with READ-ONLY tools. You may read files and run
+the test suite to verify claims, but you must never modify files. Cite exact
+evidence: RUN_ID, failing assertion, command output. If evidence is missing, say
+so. Answer in at most six bullets."""
+
 PROFILES: Dict[str, AgentProfile] = {
 	"forge": AgentProfile(
 		key="forge",
@@ -49,6 +56,18 @@ PROFILES: Dict[str, AgentProfile] = {
 		toolbox=None,
 		system_prompt=LOOM_SYSTEM,
 		max_steps=1,
+		history_turns=40,
+		temperature=0.0,
+		max_tokens=2048,
+	),
+	"loom-tools": AgentProfile(
+		key="loom-tools",
+		name="Loom",
+		role="reviewer",
+		provider="loom",
+		toolbox="workspace_ro",
+		system_prompt=LOOM_TOOLS_SYSTEM,
+		max_steps=8,
 		history_turns=40,
 		temperature=0.0,
 		max_tokens=2048,

@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+from typing import Any, Optional
 
 import red_pill.config as cfg
 from red_pill.core.paths import get_config_dir
@@ -48,6 +49,49 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("[OK] Identity and collections purged. System is a blank slate.")
 		else:
 			print("Purge aborted.")
+
+
+def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = input, output: Any = print) -> None:
+	"""REPL/one-shot sobre un MiniLocalBridge (inyectable para tests)."""
+
+	def ask(prompt: str) -> None:
+		result = bridge.prompt(prompt)
+		if getattr(result, "ok", False):
+			output(result.response)
+		else:
+			output(f"[mini] error: {getattr(result, 'error', 'unknown')}")
+
+	if once:
+		ask(once)
+		return
+	output(f"[mini] profile={getattr(bridge, 'profile', '?')} continuity={getattr(bridge, 'continuity_id', '?')} (exit/quit para salir)")
+	while True:
+		try:
+			line = input_fn("mini> ")
+		except (EOFError, KeyboardInterrupt, StopIteration):
+			break
+		text = str(line or "").strip()
+		if text.lower() in ("exit", "quit"):
+			break
+		if text:
+			ask(text)
+
+
+def handle_mini(args: argparse.Namespace) -> None:
+	"""CLI `red-pill mini`: un paso o REPL sobre Forge/Loom."""
+	from red_pill.mini.bridge import MiniLocalBridge
+
+	bridge = MiniLocalBridge(
+		profile=args.profile,
+		continuity_id=args.continuity,
+		mission_id=args.mission,
+		workspace=args.workspace,
+		db_path=args.db_path,
+		gpu_socket=args.gpu_socket,
+		flm_url=args.flm_url,
+		operator=args.operator,
+	)
+	run_mini_cli(bridge, once=args.once)
 
 
 def handle_session(args: argparse.Namespace) -> None:
