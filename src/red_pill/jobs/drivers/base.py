@@ -339,6 +339,23 @@ class ResumableJobDriver(ABC):
 		"""Id corto — nombra el scope de systemd y el fichero de log del job."""
 		return (self.job_id or "unbound")[:8]
 
+	def begin_step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
+		"""Hook opcional ANTES de `step`: el runner persiste el checkpoint devuelto.
+
+		Un driver que escribe intención (B-01j) lo hace aquí, no en `step`: así
+		la intención queda en disco antes de invocar al modelo/tool. Default:
+		no-op para los drivers que no lo necesitan.
+		"""
+		return checkpoint_data
+
+	def abort_step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any], reason: str) -> Dict[str, Any]:
+		"""Hook opcional al fallar/timeout: marca el step abortado en el checkpoint.
+
+		El runner lo llama antes de `mark_failed`/`_handle_step_timeout` y persiste
+		el checkpoint devuelto. Default: no-op.
+		"""
+		return checkpoint_data
+
 	# ── Mecánica común de subproceso (script/element/dag comparten esto) ──────
 	# Prefijo de log por driver (sobreescribible). El MECANISMO vive AQUÍ, no en cada
 	# driver: un cambio en el scope systemd o en el detector de timeout no se duplica.

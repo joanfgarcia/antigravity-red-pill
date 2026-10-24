@@ -1,5 +1,17 @@
 ## Unreleased
 
+### 🧭 B-01j — write-ahead universal en el Job Manager
+
+- **[NEW]** `ResumableJobDriver.begin_step()`/`abort_step()`: el runner persiste
+  la intención antes de invocar cualquier `AgentBridge` y marca abortado en
+  timeout/error/kill.
+- **[NEW]** `AgenticJobDriver` guarda `pending_turn` en el checkpoint
+  (`request_id`, backend, modelo, hash/preview del prompt); cubre cloud
+  (`agy/claude/opencode/pi`), local, local-mini, local-tools y cascada.
+- **[FIX]** Un checkpoint `completed` no vuelve a invocar al proveedor; un
+  `pending` reintentado conserva `started_at` y cuenta `resume_count`.
+- **[DOCS]** AD-070; contrato del coordinador durable.
+
 ### 🛡️ Mini arnés — hardening zero-trust (AD-069)
 
 - **[SEC]** `redpill-forge.service` usa `RuntimeDirectory=red-pill/forge` y

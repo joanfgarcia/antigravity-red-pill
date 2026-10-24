@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-070] B-01j — write-ahead universal en el Job Manager
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Primer slice de B-01 (D-02); B-01s/B-01h siguen pendientes.
+**Context**: Un corte de proveedor o de conexión podía perder el prompt y no dejar constancia de que el turno quedó sin respuesta. La revisión de Pi Durable (D-01 no migración; D-02 B-01; D-03 B-02) marcó B-01 como el slice más rentable. El diseño inicial se había centrado en Forge/Loom; el Operador pidió que la práctica cubriera **cualquier tarea agéntica**, incluidos los bridges cloud de `AgenticJobDriver` (`agy/claude/opencode/pi`) y las cascadas.
+**Decision**:
+1. **Hook de runner**: `ResumableJobDriver.begin_step()` se llama **antes** de `step()` y el runner persiste el checkpoint; `abort_step()` se llama en timeout/error/kill antes de marcar el fracaso. Default no-op para drivers que no lo necesitan.
+2. **Checkpoint como intención**: `AgenticJobDriver` guarda `pending_turn` con `request_id=job:attempt`, backend, modelo, hash/preview del prompt, `started_at` y `resume_count`. No hace falta una tabla nueva ni inspeccionar el arnés.
+3. **Cualquier bridge**: el hook vive en el driver, no en un proveedor; cubre cloud, local, local-mini, local-tools y `CascadeBridge`. La durabilidad nativa de pi/opencode/claude/agy es opaca y **no se asume**.
+4. **Idempotencia mínima**: si el checkpoint ya tiene el turno `completed` con el mismo `request_id`, `step()` devuelve el resultado guardado sin volver a llamar al bridge. Un reintento `pending` conserva `started_at` y suma `resume_count`.
+5. **Abort explícito**: timeout/error/kill deja `pending_turn.status=aborted` con `reason`; nunca queda un pending silencioso en el camino del runner.
+6. **Sin exactly-once cloud**: B-01j asegura intención persistida, no que un efecto externo no se haya ejecutado. La política `replay: safe|never` (B-04) y la idempotency de `job_submit` (B-08) siguen pendientes.
+**Alternatives**: (a) implementarlo por bridge (cada arnés) — duplicación y huecos; (b) tabla `job_turns` aparte — segunda fuente de verdad; (c) esperar a B-03/B-04 — el corte seguiría perdiendo la intención; (d) depender del checkpoint nativo de cada arnés — no garantizable.
+**Rationale / Evidence**: suite **3272 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/ scripts/` y `mypy src/red_pill/` limpios. Tests nuevos en `tests/test_b01_write_ahead.py` para todos los backends, `completed` sin re-invocación, abort y resume; `test_job_pausing_state`/`test_job_manager` siguen verdes.
+**Consequences**: el coordinador ya puede ver un `pending_turn` antes de invocar cualquier modelo y sobrevivir a un corte con la intención persistida. Deuda: B-01s (espejo `status`/`request_id` y resume por alma), B-01h (hooks externos), política `unknown`/replay (B-04) y compactación (B-02). No se construye harness propio hasta ARCH-001.
+
+---
+
 ## [AD-069] Mini arnés — hardening zero-trust y corrección de la superficie v0
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED. Corrige los hallazgos de la revisión adversarial de AD-068.
