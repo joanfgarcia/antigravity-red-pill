@@ -24,6 +24,7 @@ from red_pill.session.store import SessionRegistry, _clean_key, connect_session_
 logger = logging.getLogger(__name__)
 
 CANONICAL_ROLES = frozenset({"system", "user", "assistant", "tool"})
+_TURN_STATUSES = frozenset({"pending", "completed", "aborted"})
 
 # provider → (módulo, clase, kwarg de aislamiento). `opencode` usa `db_path`, no
 # `base_dir`: sin este mapa explícito, un `base_dir` pretendido acababa leyendo la
@@ -104,20 +105,43 @@ def _coerce_ts(value: Any) -> float:
 
 
 class SessionMirror:
-	"""Implementa `contracts.MirrorStore` sobre la misma `session.db` (schema v4)."""
+	"""Implementa `contracts.MirrorStore` sobre la misma `session.db` (schema v5)."""
 
 	def __init__(self, db_path: Optional[str] = None):
 		self.db_path = str(db_path) if db_path else str(get_session_db())
 		SessionRegistry(self.db_path)  # dueño del esquema (migración v4)
 
-	def _insert_turn(self, conn: Any, *, continuity_id: str, seq: int, mission_id: str, role: str, content: Optional[str], tool_calls: Optional[str], tool_call_id: Optional[str], model: Optional[str], ts: float, global_turn: int, originator: str, source: str, source_ref: Optional[str]) -> bool:
+	def _insert_turn(
+		self,
+		conn: Any,
+		*,
+		continuity_id: str,
+		seq: int,
+		mission_id: str,
+		role: str,
+		content: Optional[str],
+		tool_calls: Optional[str],
+		tool_call_id: Optional[str],
+		model: Optional[str],
+		ts: float,
+		global_turn: int,
+		originator: str,
+		source: str,
+		source_ref: Optional[str],
+		request_id: Optional[str] = None,
+		status: str = "completed",
+		status_reason: Optional[str] = None,
+	) -> bool:
+		if status not in _TURN_STATUSES:
+			raise ValueError(f"estado de turno desconocido: {status!r}")
 		content = _cap_text(content, _max_turn_bytes())
 		cur = conn.execute(
 			"""
 			INSERT OR IGNORE INTO session_mirror (
 				continuity_id, mission_id, global_turn, seq, role, content, tool_calls,
-				tool_call_id, model, ts, originator, source, source_ref
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				tool_call_id, model, ts, originator, source, source_ref,
+				request_id, status, status_reason
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			""",
 			(
 				continuity_id,
@@ -133,6 +157,9 @@ class SessionMirror:
 				originator,
 				source,
 				source_ref,
+				request_id,
+				status,
+				status_reason,
 			),
 		)
 		return bool(cur.rowcount)
@@ -152,6 +179,9 @@ class SessionMirror:
 		originator: str = "",
 		source: str = "",
 		source_ref: Optional[str] = None,
+		request_id: Optional[str] = None,
+		status: str = "completed",
+		status_reason: Optional[str] = None,
 	) -> Optional[dict]:
 		"""Añade UN turno al espejo; `None` si ya existía (`source_ref` repetido)."""
 		continuity = str(continuity_id or "").strip()
@@ -186,6 +216,9 @@ class SessionMirror:
 				originator=str(originator or ""),
 				source=str(source or ""),
 				source_ref=source_ref,
+				request_id=request_id,
+				status=status,
+				status_reason=status_reason,
 			)
 			conn.commit()
 		if not inserted:
@@ -204,6 +237,9 @@ class SessionMirror:
 			"originator": str(originator or ""),
 			"source": str(source or ""),
 			"source_ref": source_ref,
+			"request_id": request_id,
+			"status": status,
+			"status_reason": status_reason,
 		}
 
 	def append_turns(
@@ -252,6 +288,9 @@ class SessionMirror:
 					originator=str(turn.get("originator") or originator or ""),
 					source=str(turn.get("source") or source or ""),
 					source_ref=turn.get("source_ref"),
+					request_id=turn.get("request_id"),
+					status=str(turn.get("status") or "completed"),
+					status_reason=turn.get("status_reason"),
 				)
 				if ok:
 					inserted += 1
@@ -260,19 +299,167 @@ class SessionMirror:
 			conn.commit()
 		return inserted
 
+	def _turn_by_source_ref(self, continuity_id: str, originator: str, source_ref: str) -> Optional[dict]:
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(
+				"SELECT * FROM session_mirror WHERE continuity_id=? AND originator=? AND source_ref=?",
+				(continuity_id, originator, source_ref),
+			).fetchone()
+		return dict(row) if row else None
+
+	def begin_turn(
+		self,
+		*,
+		continuity_id: str,
+		mission_id: str,
+		request_id: str,
+		content: str,
+		originator: str,
+		source: str,
+		model: Optional[str] = None,
+		global_turn: int = 0,
+		source_ref: Optional[str] = None,
+		ts: Optional[float] = None,
+	) -> dict:
+		"""Escribe el user en `pending` o devuelve el turno ya existente."""
+		request = str(request_id or "").strip()
+		if not request:
+			raise ValueError("request_id requerido")
+		ref = str(source_ref or f"{request}:user")
+		created = self.append_turn(
+			continuity_id=continuity_id,
+			mission_id=mission_id,
+			role="user",
+			content=content,
+			model=model,
+			ts=ts,
+			global_turn=global_turn,
+			originator=originator,
+			source=source,
+			source_ref=ref,
+			request_id=request,
+			status="pending",
+		)
+		if created is not None:
+			return created
+		existing = self._turn_by_source_ref(continuity_id, originator, ref)
+		if existing is None:
+			raise RuntimeError("begin_turn: no se pudo leer el turno existente")
+		return existing
+
+	def complete_turn(self, *, continuity_id: str, request_id: str) -> int:
+		"""Marca completed todo el grupo del turno; no reabre un aborted."""
+		continuity = str(continuity_id or "").strip()
+		request = str(request_id or "").strip()
+		if not continuity or not request:
+			return 0
+		with connect_session_db(self.db_path) as conn:
+			cur = conn.execute(
+				"UPDATE session_mirror SET status='completed', status_reason=NULL "
+				"WHERE continuity_id=? AND request_id=? AND status!='aborted'",
+				(continuity, request),
+			)
+			conn.commit()
+			return int(cur.rowcount or 0)
+
+	def abort_turn(
+		self,
+		*,
+		continuity_id: str,
+		request_id: str,
+		reason: str,
+		partial_response: Optional[str] = None,
+		mission_id: Optional[str] = None,
+	) -> int:
+		"""Marca aborted el grupo; guarda una respuesta parcial si la hay."""
+		continuity = str(continuity_id or "").strip()
+		request = str(request_id or "").strip()
+		if not continuity or not request:
+			return 0
+		if partial_response:
+			mission = str(mission_id or "").strip() or "mission:pending"
+			self.append_turn(
+				continuity_id=continuity,
+				mission_id=mission,
+				role="assistant",
+				content=partial_response,
+				originator="",
+				source="",
+				source_ref=f"{request}:partial",
+				request_id=request,
+				status="aborted",
+				status_reason=str(reason)[:500],
+			)
+		with connect_session_db(self.db_path) as conn:
+			cur = conn.execute(
+				"UPDATE session_mirror SET status='aborted', status_reason=? "
+				"WHERE continuity_id=? AND request_id=?",
+				(str(reason or "aborted")[:500], continuity, request),
+			)
+			conn.commit()
+			return int(cur.rowcount or 0)
+
+	def pending_turns(
+		self,
+		continuity_id: Optional[str] = None,
+		*,
+		include_aborted: bool = True,
+		max_age_s: Optional[int] = None,
+	) -> List[dict]:
+		"""Turnos pending (y opcionalmente aborted) para inspección/resume."""
+		statuses = ["pending", "aborted"] if include_aborted else ["pending"]
+		placeholders = ",".join("?" * len(statuses))
+		sql = f"SELECT * FROM session_mirror WHERE status IN ({placeholders})"
+		params: List[Any] = list(statuses)
+		if continuity_id:
+			sql += " AND continuity_id=?"
+			params.append(str(continuity_id).strip())
+		if max_age_s is not None:
+			sql += " AND ts >= ?"
+			params.append(time.time() - max(0, int(max_age_s)))
+		sql += " ORDER BY ts ASC"
+		with connect_session_db(self.db_path) as conn:
+			rows = conn.execute(sql, tuple(params)).fetchall()
+		return [dict(row) for row in rows]
+
+	def expire_pending_turns(self, *, max_age_s: int, continuity_id: Optional[str] = None) -> int:
+		"""TTL: pending viejo → aborted con reason=ttl (no borra historial)."""
+		cutoff = time.time() - max(0, int(max_age_s))
+		sql = "UPDATE session_mirror SET status='aborted', status_reason='ttl' WHERE status='pending' AND ts < ?"
+		params: List[Any] = [cutoff]
+		if continuity_id:
+			sql += " AND continuity_id=?"
+			params.append(str(continuity_id).strip())
+		with connect_session_db(self.db_path) as conn:
+			cur = conn.execute(sql, tuple(params))
+			conn.commit()
+			return int(cur.rowcount or 0)
+
 	def read_turns(
 		self,
 		continuity_id: str,
 		*,
 		since_seq: int = 0,
 		limit: Optional[int] = None,
+		statuses: Optional[List[str]] = None,
 	) -> List[dict]:
-		"""Turnos del alma en orden de `seq` (con `tool_calls` ya deserializados)."""
+		"""Turnos del alma en orden de `seq`; por defecto solo los completados.
+
+		`statuses=None` ⇒ `["completed"]` para que el replay nunca inyecte un turno
+		pending/aborted. Para auditoría, pasar `statuses=["pending", "aborted"]` o
+		usar `pending_turns()`.
+		"""
 		continuity = str(continuity_id or "").strip()
 		if not continuity:
 			return []
-		sql = "SELECT * FROM session_mirror WHERE continuity_id = ? AND seq > ? ORDER BY seq ASC"
-		params: List[Any] = [continuity, int(since_seq or 0)]
+		selected = ["completed"] if statuses is None else [str(s) for s in statuses]
+		if not selected:
+			return []
+		if any(status not in _TURN_STATUSES for status in selected):
+			raise ValueError(f"estado de turno desconocido en statuses: {selected!r}")
+		placeholders = ",".join("?" * len(selected))
+		sql = f"SELECT * FROM session_mirror WHERE continuity_id = ? AND seq > ? AND status IN ({placeholders}) ORDER BY seq ASC"
+		params: List[Any] = [continuity, int(since_seq or 0), *selected]
 		if limit is not None:
 			sql += " LIMIT ?"
 			params.append(max(1, min(int(limit), 5000)))
@@ -326,8 +513,11 @@ class SessionMirror:
 			row = conn.execute(
 				"SELECT COUNT(*) AS rows, COUNT(DISTINCT continuity_id) AS souls, "
 				"SUM(CASE WHEN ts > 0 THEN 1 ELSE 0 END) AS dated_rows, "
-				"MIN(CASE WHEN ts > 0 THEN ts END) AS oldest_ts, MAX(ts) AS newest_ts "
-				"FROM session_mirror"
+				"SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_rows, "
+				"SUM(CASE WHEN status='aborted' THEN 1 ELSE 0 END) AS aborted_rows, "
+				"MIN(CASE WHEN ts > 0 THEN ts END) AS oldest_ts, "
+				"MIN(CASE WHEN status='pending' THEN ts END) AS oldest_pending_ts, "
+				"MAX(ts) AS newest_ts FROM session_mirror"
 			).fetchone()
 			per_soul = conn.execute(
 				"SELECT continuity_id, COUNT(*) AS turns, MAX(ts) AS last_ts, "
@@ -377,6 +567,9 @@ class SessionMirror:
 			"undated_rows": int(row["rows"] or 0) - int(row["dated_rows"] or 0),
 			"oldest_ts": float(row["oldest_ts"]) if row["oldest_ts"] is not None else None,
 			"newest_ts": float(row["newest_ts"]) if row["newest_ts"] is not None else None,
+			"pending_rows": int(row["pending_rows"] or 0),
+			"aborted_rows": int(row["aborted_rows"] or 0),
+			"oldest_pending_ts": float(row["oldest_pending_ts"]) if row["oldest_pending_ts"] is not None else None,
 			"active_souls": active_souls,
 			"dead_souls": dead_souls,
 			"orphan_souls": orphan_souls,

@@ -118,15 +118,15 @@ class TestMirrorStore:
 
 		assert isinstance(mirror, MirrorStore)
 
-	def test_schema_is_v4(self, tmp_path):
+	def test_schema_is_v5(self, tmp_path):
 		path = tmp_path / "session.db"
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 4
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 5
 		assert con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session_mirror'").fetchone()
 		con.close()
 
-	def test_migration_v3_recreates_mirror_table(self, tmp_path):
+	def test_migration_v3_recreates_mirror_table_v5(self, tmp_path):
 		path = tmp_path / "session.db"
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
@@ -136,7 +136,7 @@ class TestMirrorStore:
 		con.close()
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 4
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 5
 		assert con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session_mirror'").fetchone()
 		con.close()
 

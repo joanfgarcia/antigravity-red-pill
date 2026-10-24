@@ -110,7 +110,10 @@ model TEXT,
 ts REAL NOT NULL DEFAULT 0,
 originator TEXT NOT NULL DEFAULT '',
 source TEXT NOT NULL DEFAULT '',
-source_ref TEXT
+source_ref TEXT,
+status TEXT NOT NULL DEFAULT 'completed',
+request_id TEXT,
+status_reason TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_seq ON session_mirror(continuity_id, seq);
@@ -228,6 +231,19 @@ class SessionRegistry:
 				if "event_seq" not in cols:
 					conn.execute("DROP TABLE mission_events")
 			conn.executescript(_SCHEMA)
+			mirror_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_mirror)").fetchall()}
+			if "status" not in mirror_cols:
+				conn.execute("ALTER TABLE session_mirror ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'")
+			if "request_id" not in mirror_cols:
+				conn.execute("ALTER TABLE session_mirror ADD COLUMN request_id TEXT")
+			if "status_reason" not in mirror_cols:
+				conn.execute("ALTER TABLE session_mirror ADD COLUMN status_reason TEXT")
+			conn.execute(
+				"CREATE INDEX IF NOT EXISTS idx_mirror_request ON session_mirror(continuity_id, request_id)"
+			)
+			conn.execute(
+				"CREATE INDEX IF NOT EXISTS idx_mirror_status ON session_mirror(continuity_id, status)"
+			)
 			registry_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_registry)").fetchall()}
 			if "last_seen_event_seq" not in registry_cols:
 				# v3: cursor de eventos para el digest (BD creada antes de v3).
@@ -248,6 +264,9 @@ class SessionRegistry:
 				# v4: espejo canónico de turnos (`session_mirror`). `_SCHEMA` ya la
 				# crea idempotentemente; aquí solo se sella la versión.
 				conn.execute("PRAGMA user_version=4")
+			if current < 5:
+				# v5: estado de turno (B-01s): pending/completed/aborted + request_id.
+				conn.execute("PRAGMA user_version=5")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────

@@ -1,5 +1,17 @@
 ## Unreleased
 
+### 🧵 B-01s — turn write-ahead en el espejo del alma
+
+- **[NEW]** `session_mirror` v5: `status` (`pending|completed|aborted`), `request_id`
+  y `status_reason`; filas viejas `completed`.
+- **[NEW]** `begin_turn` antes del modelo, `complete_turn`/`abort_turn` del grupo,
+  `pending_turns` y TTL (`SESSION_PENDING_TTL_MIN`, janitor `reason=ttl`).
+- **[NEW]** `MiniSession` y `run_local_minion` escriben el user antes del provider;
+  el replay solo ve `completed`.
+- **[NEW]** CLI `red-pill session pending [--expire]` y
+  `red-pill session resume REQUEST_ID`.
+- **[DOCS]** AD-072; B-01j/B-01s en el contrato del coordinador.
+
 ### 🌿 Workflow — seed por perfil (solo/canonical)
 
 - **[FIX]** `seeds/rules/git_workflow.md` es una plantilla con bloques `solo`/`canonical`;

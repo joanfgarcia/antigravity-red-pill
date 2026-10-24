@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-072] B-01s — estado de turno y write-ahead en el espejo del alma
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Completa B-01j para los caminos RedPill; B-01h (hooks externos) sigue pendiente.
+**Context**: B-01j persistía la intención en el checkpoint del Job Manager, pero el espejo del alma seguía escribiéndose post-hoc. Un corte en `MiniSession`/`run_local_minion` podía dejar el prompt sin rastro y el replay podía inyectar un turno a medias. Hacía falta el estado de turno en `session_mirror`, la API de ciclo de vida y una superficie de inspección/resume.
+**Decision**:
+1. **Schema v5** aditivo: `session_mirror` gana `status` (`pending|completed|aborted`), `request_id` y `status_reason`; índices por `(continuity, request_id)` y `(continuity, status)`. Filas viejas quedan `completed`.
+2. **Ciclo de vida**: `begin_turn` escribe el user `pending` antes del modelo; `complete_turn` cierra el grupo; `abort_turn` marca el grupo y opcionalmente guarda respuesta parcial. La idempotencia sigue en `source_ref`; `request_id` agrupa user/assistant/tool.
+3. **Replay seguro**: `read_turns` devuelve solo `completed` por defecto; `pending`/`aborted` no entran al modelo y se consultan con `pending_turns`/`statuses`.
+4. **Integración**: `MiniSession.run` escribe user pending antes del provider y completa/aborta el grupo; `run_local_minion` hace lo mismo y captura assistant/tool con el mismo `request_id`.
+5. **CLI**: `red-pill session pending` (lista/expira TTL/JSON) y `red-pill session resume REQUEST_ID` (muestra el prompt; no invoca al modelo).
+6. **TTL**: `SESSION_PENDING_TTL_MIN` (30 min); el janitor marca `aborted` con `reason=ttl` y métricas `session_pending_expired`.
+**Alternatives**: (a) tabla aparte — segunda fuente de verdad; (b) `read_turns` con todo por defecto — replay contaminado; (c) escribir el user después del modelo — el corte seguiría perdiendo el prompt; (d) CLI que reenvíe solo — el arnés debe decidir.
+**Rationale / Evidence**: suite **3282 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests nuevos: begin idempotente, completed/aborted, parcial, TTL, schema v5, MiniSession success/error y CLI pending/resume; los tests de `local_minion`/espejo siguen verdes.
+**Consequences**: el alma ya puede ver y reanudar un prompt pendiente sin inyectarlo como verdad. Deuda: B-01h (hooks opencode/claude/pi), reapertura explícita de un `aborted` y política de respuesta parcial/efectos cloud (B-04). ARCH-001 sigue siendo el gate del harness propio.
+
+---
+
 ## [AD-071] Workflow seed por perfil — `solo`/`canonical` se materializa al sembrar
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED.

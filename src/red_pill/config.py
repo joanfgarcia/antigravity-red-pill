@@ -514,6 +514,9 @@ class RedPillConfig(BaseSettings):
 	# se purgan almas SIN leg activo; un alma viva nunca pierde turnos (conservador
 	# hasta tener métricas del janitor). Ver CONVENTIONS §10.10.
 	SESSION_MIRROR_RETENTION_DAYS: int = 30
+	# SESSION_PENDING_TTL_MIN: un turno `pending` sin cierre se marca `aborted`
+	# (reason=ttl) tras este tiempo; no se borra. B-01s.
+	SESSION_PENDING_TTL_MIN: int = 30
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912

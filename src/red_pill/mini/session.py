@@ -139,7 +139,16 @@ class MiniSession:
 		self.current_originator = originator
 		return originator
 
-	def _append(self, role: str, content: Optional[str], *, tool_calls: Any = None, tool_call_id: Optional[str] = None, source_ref: str) -> None:
+	def _append(
+		self,
+		role: str,
+		content: Optional[str],
+		*,
+		tool_calls: Any = None,
+		tool_call_id: Optional[str] = None,
+		source_ref: str,
+		request_id: Optional[str] = None,
+	) -> None:
 		self.mirror.append_turn(
 			continuity_id=self.continuity_id,
 			mission_id=self.config.mission_id,
@@ -152,6 +161,8 @@ class MiniSession:
 			originator=self.current_originator or "",
 			source=self.current_body or "",
 			source_ref=source_ref,
+			request_id=request_id,
+			status="completed",
 		)
 
 	@staticmethod
@@ -190,6 +201,7 @@ class MiniSession:
 			self.switch_to(body, role)
 		self.phase += 1
 		phase_ref = f"{self.run_id}:p{self.phase}"
+		request_id = phase_ref
 		turns = self.mirror.read_turns(self.continuity_id)
 		limit = self.config.history_turns if history_turns is None else history_turns
 		if limit > 0:
@@ -198,7 +210,16 @@ class MiniSession:
 		turns = trim_history_window(turns, len(turns))
 		messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
 		messages.extend(replay_messages(turns, current_prompt=task))
-		self._append("user", task, source_ref=f"{phase_ref}:user")
+		self.mirror.begin_turn(
+			continuity_id=self.continuity_id,
+			mission_id=self.config.mission_id,
+			request_id=request_id,
+			content=task,
+			originator=self.current_originator or "",
+			source=self.current_body or "",
+			model=body,
+			source_ref=f"{phase_ref}:user",
+		)
 
 		provider = self.providers[provider_name]
 		steps = int(max_steps or self.config.max_steps)
@@ -208,13 +229,22 @@ class MiniSession:
 		last_text = ""
 		transcript: List[Dict[str, Any]] = []
 		for step in range(max(steps, 1)):
-			assistant = provider.chat(
-				messages,
-				tools=tools,
-				temperature=temp,
-				max_tokens=limit_tokens,
-				**( {"timeout": timeout} if timeout is not None else {} ),
-			)
+			try:
+				assistant = provider.chat(
+					messages,
+					tools=tools,
+					temperature=temp,
+					max_tokens=limit_tokens,
+					**( {"timeout": timeout} if timeout is not None else {} ),
+				)
+			except Exception as e:
+				self.mirror.abort_turn(
+					continuity_id=self.continuity_id,
+					request_id=request_id,
+					reason=f"provider_error: {e}",
+					mission_id=self.config.mission_id,
+				)
+				raise
 			content = assistant.get("content")
 			calls = assistant.get("tool_calls")
 			calls = calls if isinstance(calls, list) else None
@@ -226,7 +256,7 @@ class MiniSession:
 					content = "(tool calls are not available in this body)"
 			assistant_turn = {"role": "assistant", "content": content, "tool_calls": calls}
 			messages.append(assistant_turn)
-			self._append("assistant", content, tool_calls=calls, source_ref=f"{phase_ref}:a{step}")
+			self._append("assistant", content, tool_calls=calls, source_ref=f"{phase_ref}:a{step}", request_id=request_id)
 			transcript.append(assistant_turn)
 			last_text = str(content or "")
 
@@ -239,11 +269,21 @@ class MiniSession:
 				name = str(fn.get("name") or "")
 				args = self._parse_arguments(fn.get("arguments"))
 				call_id = str(call.get("id") or f"{phase_ref}:call{step}-{index}")
-				result = self._execute_tool(executor, name, args)
+				try:
+					result = self._execute_tool(executor, name, args)
+				except Exception as e:
+					self.mirror.abort_turn(
+						continuity_id=self.continuity_id,
+						request_id=request_id,
+						reason=f"tool_error: {e}",
+						mission_id=self.config.mission_id,
+					)
+					raise
 				tool_message = {"role": "tool", "tool_call_id": call_id, "content": result}
 				messages.append(tool_message)
-				self._append("tool", result, tool_call_id=call_id, source_ref=f"{phase_ref}:t{step}-{index}")
+				self._append("tool", result, tool_call_id=call_id, source_ref=f"{phase_ref}:t{step}-{index}", request_id=request_id)
 				transcript.append(tool_message)
+		self.mirror.complete_turn(continuity_id=self.continuity_id, request_id=request_id)
 		return {
 			"body": body,
 			"text": last_text,
@@ -251,6 +291,7 @@ class MiniSession:
 			"tool_calls": tool_calls_made,
 			"messages": messages,
 			"transcript": transcript,
+			"request_id": request_id,
 		}
 
 	def run_profile(self, profile_name: str, task: str, *, max_steps: Optional[int] = None, timeout: Optional[int] = None) -> Dict[str, Any]:

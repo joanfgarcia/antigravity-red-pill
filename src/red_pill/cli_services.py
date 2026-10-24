@@ -119,6 +119,51 @@ def handle_session(args: argparse.Namespace) -> None:
 
 		print(json.dumps(SessionMirror().stats(), ensure_ascii=False, indent=2))
 		return
+	if getattr(args, "session_cmd", None) == "pending":
+		import json
+		import time
+
+		import red_pill.config as cfg
+		from red_pill.session.mirror import SessionMirror
+
+		mirror = SessionMirror()
+		if getattr(args, "expire", False):
+			minutes = getattr(args, "max_age_min", None)
+			if minutes is None:
+				minutes = int(getattr(cfg.get_config(), "SESSION_PENDING_TTL_MIN", 30))
+			expired = mirror.expire_pending_turns(max_age_s=max(0, int(minutes)) * 60, continuity_id=args.continuity)
+			if not getattr(args, "json", False):
+				print(f"[PENDING] expirados={expired} (ttl={minutes}m)")
+		rows = mirror.pending_turns(args.continuity)
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+		elif not rows:
+			print("[PENDING] sin turnos pendientes/abortados")
+		else:
+			now = time.time()
+			for row in rows:
+				age = max(0, int(now - float(row.get("ts") or now)))
+				preview = " ".join(str(row.get("content") or "").split())[:160]
+				print(f"[{str(row.get('status') or '?').upper()}] {row.get('request_id')} alma={row.get('continuity_id')} edad={age}s :: {preview}")
+		return
+	if getattr(args, "session_cmd", None) == "resume":
+		import json
+
+		from red_pill.session.mirror import SessionMirror
+
+		request_id = str(getattr(args, "request_id", "") or "")
+		rows = [r for r in SessionMirror().pending_turns(getattr(args, "continuity", None)) if str(r.get("request_id") or "") == request_id]
+		if not rows:
+			print(f"[RESUME] no hay turno pendiente/abortado con request_id={request_id!r}")
+			return
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+			return
+		for row in rows:
+			print(f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}")
+			print(str(row.get("content") or ""))
+			print("[RESUME] --- fin del prompt ---")
+		return
 	if getattr(args, "session_cmd", None) == "rehydrate":
 		from red_pill.session.switch import rehydrate_payload
 
