@@ -4,6 +4,21 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-067] `local_minion` multiturno — historial del espejo, sin duplicar turnos
+**Date**: 2026-10-23
+**Status**: ACCEPTED & IMPLEMENTED. Extiende AD-066; reutiliza el espejo de AD-060/AD-061.
+**Context**: AD-066 dio multiturno a `MiniLocalBridge` (Forge/Loom), pero el `run_local_minion` clásico —el que usa `local-tools` y las tools MCP— seguía arrancando con `system + task` y sin historial. El Operador quiere una tarea simple con posibilidad de multiturno también en esa vía, sin duplicar el loop ni el espejo.
+**Decision**:
+1. **Identidad y historial en `run_local_minion`**: resuelve `(originator, continuity_id, mission_id)` por parámetros → env del job → registro. Si hay `continuity_id`, carga los últimos `history_turns` (40 por defecto) del `SessionMirror` con `replay_messages` y arranca con `system + historial + task`. Sin identidad, comportamiento legacy exacto.
+2. **Captura sin duplicar**: se guarda `initial_len` antes de añadir la tarea y solo se apendan `messages[initial_len:]` al espejo. El historial replayed no se vuelve a escribir con nuevos `source_ref`.
+3. **`LocalToolBridge`**: acepta `continuity_id`/`mission_id`/`originator`/`history_turns`, los pasa a `run_local_minion`, expone `continuity_id` y declara `conversation_resume=True` (la continuidad es el espejo, no un id nativo). `create_bridge("local-tools")` propaga esos kwargs; `AgenticJobDriver` los pasa y reutiliza `continuity_id` del checkpoint también para `local-tools`.
+4. **Sin unificar loops**: el parser nativo/MCP tools y la conducta del `local_minion` se quedan; el historial es la pieza compartida. Para Forge/Loom sigue `MiniLocalBridge`.
+**Alternatives**: (a) duplicar el loop de `MiniSession` en `local_minion` — dos bucles divergentes; (b) inyectar historial completo como mensajes y capturar todo — duplicaría turnos con nuevos `source_ref`; (c) no tocar `local_minion` y exigir `MiniLocalBridge` — no cubre tools MCP/native; (d) cargar historial siempre sin identidad — inventaría alma.
+**Rationale / Evidence**: suite **3242 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: historial reproducido y captura sin duplicados (4 turnos, no 6), identidad por env, `LocalToolBridge` pasa continuidad, y `AgenticJobDriver` crea `local-tools` con `continuity_id`. No se toca la BD viva en tests (XDG temporal).
+**Consequences**: `local-tools` ya puede continuar una tarea entre runs con el mismo `continuity_id`, y los jobs pueden pasar continuidad. Deuda: (1) historiales con `role=tool` dependen de que el chat-format del modelo los acepte; (2) `local-tools` no cambia de cuerpo (para Forge/Loom, `local-mini`); (3) CLI `red-pill mini` y E2E `job_submit` siguen pendientes.
+
+---
+
 ## [AD-066] Mini arnés composable — contratos, perfiles y `local-mini` en jobs
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Extiende AD-065 (composición, no un segundo loop).

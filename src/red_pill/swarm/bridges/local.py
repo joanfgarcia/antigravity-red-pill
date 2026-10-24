@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid as uuid_mod
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -94,15 +94,30 @@ class LocalToolBridge(AgentBridge):
 	tasks — see docs/TECHNICAL/MINIONS.md for capabilities and limits.
 	"""
 
-	def __init__(self, model_profile: Optional[str] = None):
+	def __init__(
+		self,
+		model_profile: Optional[str] = None,
+		continuity_id: Optional[str] = None,
+		mission_id: Optional[str] = None,
+		originator: str = "",
+		history_turns: int = 40,
+	):
 		self._model_profile = model_profile
+		self._continuity_id = continuity_id
+		self._mission_id = mission_id
+		self._originator = originator
+		self._history_turns = history_turns
+
+	@property
+	def continuity_id(self) -> Optional[str]:
+		return self._continuity_id
 
 	def get_capabilities(self) -> BridgeCapabilities:
 		return BridgeCapabilities(
 			backend=BackendType.LOCAL,
 			auto_approve=True,  # tools run without a human gate (loop is bounded)
 			ephemeral_mode=True,
-			conversation_resume=False,
+			conversation_resume=True,  # historial en el espejo cuando hay continuity_id
 			model_selection=False,
 			mcp_tools=True,
 		)
@@ -123,8 +138,21 @@ class LocalToolBridge(AgentBridge):
 
 		from red_pill.swarm.agents.local_minion import run_local_minion
 
+		extra: Dict[str, Any] = {"cwd": cwd}
+		if self._continuity_id or self._mission_id or self._originator:
+			extra.update(
+				continuity_id=self._continuity_id,
+				mission_id=self._mission_id,
+				originator=self._originator,
+				history_turns=self._history_turns,
+			)
 		try:
-			result = asyncio.run(asyncio.wait_for(run_local_minion(text, cwd=cwd), timeout=timeout))
+			result = asyncio.run(
+				asyncio.wait_for(
+					run_local_minion(text, **extra),
+					timeout=timeout,
+				)
+			)
 		except asyncio.TimeoutError:
 			return ConversationResult(conversation_id="", response="", error=f"local-tools minion timed out after {timeout}s")
 		except Exception as e:
