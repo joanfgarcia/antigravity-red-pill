@@ -2760,7 +2760,16 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 			cascade = payload.get("cascade")
 			has_cascade_models = isinstance(cascade, list) and any(isinstance(t, dict) and t.get("model") for t in cascade)
 			backend = str(payload.get("backend") or "").strip().lower()
-			is_local_mini = backend in ("local-mini", "local_mini") and bool(payload.get("profile"))
+			backend_is_local_mini = backend in ("local-mini", "local_mini")
+			is_local_mini = backend_is_local_mini and bool(payload.get("profile"))
+			if backend_is_local_mini and not payload.get("profile"):
+				return [types.TextContent(type="text", text="[ERROR] local-mini requiere 'profile' (forge | loom | loom-tools).")]
+			if is_local_mini:
+				from red_pill.mini.trust import normalize_local_mini_payload
+
+				session = await _caller_session({})
+				payload = normalize_local_mini_payload(payload, session)
+				mission_id = payload.get("mission_id") or mission_id
 			if (not model or model == "flash") and not has_cascade_models and not is_local_mini:
 				return [
 					types.TextContent(

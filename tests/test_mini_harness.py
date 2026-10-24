@@ -227,7 +227,7 @@ class TestReadOnlyLoom:
 	def test_read_only_toolbox_hides_write_tools(self, tmp_path):
 		tools = WorkspaceTools(str(tmp_path), read_only=True)
 		names = {schema["function"]["name"] for schema in tools.schemas}
-		assert names == {"list_files", "read_file", "run_tests"}
+		assert names == {"list_files", "read_file"}
 		with pytest.raises(ToolError):
 			tools.write_file("x.py", "x")
 		with pytest.raises(ToolError):
@@ -239,3 +239,73 @@ class TestReadOnlyLoom:
 		profile = PROFILES["loom-tools"]
 		assert profile.toolbox == "workspace_ro"
 		assert "READ-ONLY" in profile.render_system(session_short="abc", operator="Joan")
+
+
+class TestHardening:
+	def test_timeout_reaches_provider(self, tmp_path):
+		session, _, _ = _session(tmp_path, [{"role": "assistant", "content": "ok"}])
+		from red_pill.mini.profiles import PROFILES
+
+		session.profiles = PROFILES
+		session.toolboxes = {"workspace": WorkspaceTools(str(tmp_path / "ws"))}
+		session.run_profile("forge", "x", timeout=7)
+		assert session.providers["forge"].calls[0]["timeout"] == 7
+
+	def test_run_ref_is_deterministic_and_deduplicates(self, tmp_path):
+		from red_pill.mini.session import MiniConfig, MiniSession
+
+		class P:
+			def chat(self, messages, **kwargs):
+				return {"role": "assistant", "content": "ok"}
+
+		config = MiniConfig(
+			workspace=str(tmp_path),
+			continuity_id="alma-run-ref",
+			mission_id="mission:mini-test",
+			db_path=str(tmp_path / "session.db"),
+			run_ref="job:attempt",
+		)
+		session = MiniSession(config, {"forge": P()})
+		session.run("forge", system_prompt="s", task="same")
+		session2 = MiniSession(config, {"forge": P()})
+		session2.run("forge", system_prompt="s", task="same")
+		rows = session2.mirror.read_turns("alma-run-ref")
+		assert len(rows) == 2
+		assert all(str(r["source_ref"]).startswith("job:attempt:") for r in rows)
+
+	def test_switch_preserves_lineage(self, tmp_path):
+		from red_pill.mini.session import MiniConfig, MiniSession
+		from red_pill.session.store import SessionRegistry
+
+		registry = SessionRegistry(str(tmp_path / "session.db"))
+		registry.upsert_session(
+			originator="forge:old",
+			continuity_id="alma-lineage",
+			mission_id="mission:mini-test",
+			lineage_id="lineage-42",
+		)
+		session = MiniSession(
+			MiniConfig(
+				workspace=str(tmp_path),
+				continuity_id="alma-lineage",
+				mission_id="mission:mini-test",
+				db_path=str(tmp_path / "session.db"),
+			),
+			{"loom": ScriptedProvider([])},
+		)
+		session.switch_to("loom", "reviewer")
+		row = registry.get_by_originator(session.current_originator)
+		assert row["lineage_id"] == "lineage-42"
+		active = [r for r in registry.get_by_continuity("alma-lineage") if r["ttl_state"] == "active"]
+		assert len(active) == 1
+
+	def test_trim_history_window_keeps_tool_pair(self):
+		from red_pill.session.switch import trim_history_window
+
+		turns = [
+			{"role": "assistant", "tool_calls": [{"id": "c1"}]},
+			{"role": "tool", "tool_call_id": "c1", "content": "r"},
+			{"role": "user", "content": "next"},
+		]
+		window = trim_history_window(turns, 2)
+		assert [t["role"] for t in window] == ["assistant", "tool", "user"]

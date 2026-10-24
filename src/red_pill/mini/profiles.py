@@ -30,10 +30,10 @@ say so. Answer in at most six bullets."""
 
 LOOM_TOOLS_SYSTEM = """You are {name}, the local NPU body of the same RedPill session for {operator}.
 Session {session_short} is a continuation; your memory is the history below.
-You are a strict code reviewer with READ-ONLY tools. You may read files and run
-the test suite to verify claims, but you must never modify files. Cite exact
-evidence: RUN_ID, failing assertion, command output. If evidence is missing, say
-so. Answer in at most six bullets."""
+You are a strict code reviewer with READ-ONLY tools. You may list and read files
+to verify claims, but you must never modify files or execute project code. Cite
+exact evidence: RUN_ID, failing assertion, file content. If evidence is missing,
+say so. Answer in at most six bullets."""
 
 PROFILES: Dict[str, AgentProfile] = {
 	"forge": AgentProfile(
@@ -43,10 +43,11 @@ PROFILES: Dict[str, AgentProfile] = {
 		provider="forge",
 		toolbox="workspace",
 		system_prompt=FORGE_SYSTEM,
-		max_steps=16,
-		history_turns=40,
+		max_steps=8,
+		history_turns=12,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=8192,
 	),
 	"loom": AgentProfile(
 		key="loom",
@@ -56,9 +57,10 @@ PROFILES: Dict[str, AgentProfile] = {
 		toolbox=None,
 		system_prompt=LOOM_SYSTEM,
 		max_steps=1,
-		history_turns=40,
+		history_turns=20,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=4096,
 	),
 	"loom-tools": AgentProfile(
 		key="loom-tools",
@@ -68,8 +70,9 @@ PROFILES: Dict[str, AgentProfile] = {
 		toolbox="workspace_ro",
 		system_prompt=LOOM_TOOLS_SYSTEM,
 		max_steps=8,
-		history_turns=40,
+		history_turns=20,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=4096,
 	),
 }

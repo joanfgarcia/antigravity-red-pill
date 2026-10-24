@@ -48,9 +48,10 @@ class AgentProfile:
 	toolbox: Optional[str] = None
 	system_prompt: str = ""
 	max_steps: int = 16
-	history_turns: int = 40
+	history_turns: int = 20
 	temperature: float = 0.0
 	max_tokens: int = 2048
+	context_tokens: int = 8192
 
 	def render_system(self, *, session_short: str, operator: str) -> str:
 		"""Render the short identity prompt; no Búnker/handshake placeholders."""

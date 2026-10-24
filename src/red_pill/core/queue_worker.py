@@ -184,6 +184,7 @@ def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5, on_
 
 def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int, on_step_boundary=None) -> int:
 	from red_pill.jobs.drivers import JobDeferred, JobPauseRequested, JobStepTimeout, compute_step_timeout, get_driver, update_step_ema
+	from red_pill.jobs.drivers.base import ResumableJobDriver
 
 	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
 	cog_queue.requeue_stale(sources)
@@ -235,6 +236,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					free_mb = VramProbe.get_free_mb()
 					if free_mb < driver.min_vram_mb:
 						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
+
+				# B-01j: la intención se persiste ANTES de invocar al bridge.
+				# Es un hook genérico: cubre cualquier AgentBridge (cloud/local/cascade).
+				if isinstance(driver, ResumableJobDriver):
+					checkpoint = driver.begin_step(task["payload"], checkpoint)
+					cog_queue.save_checkpoint(job_id, checkpoint, progress)
 
 				started = time.time()
 				outcome = driver.step(task["payload"], checkpoint)
@@ -297,6 +304,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			_report_job(job_id, task, "warning", f"Pausado a petición del propio job: {pause.reason}")
 			logger.info(f"Job {job_id} paused at its own request: {pause.reason}")
 		except JobStepTimeout as timeout:
+			try:
+				if isinstance(driver, ResumableJobDriver):
+					checkpoint = driver.abort_step(task["payload"], checkpoint, f"timeout: {timeout}")
+					cog_queue.save_checkpoint(job_id, checkpoint, progress)
+			except Exception as abort_err:
+				logger.warning(f"Job {job_id} abort_step failed after timeout: {abort_err}")
 			_handle_step_timeout(cog_queue, job_id, task, timeout)
 			logger.error(f"Job {job_id} step timed out: {timeout}")
 		except Exception as e:
@@ -304,6 +317,13 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			# (`job kill`, que sella PAUSED ANTES de parar el scope). Un rc≠0 de esa
 			# causa no es un fallo del job: ni quema intentos ni levanta alarma.
 			current = cog_queue.get_task(job_id)
+			try:
+				if isinstance(driver, ResumableJobDriver):
+					reason = "operator_kill" if current and current.get("status") in ("PAUSED", "FRUSTRATED") else str(e)
+					checkpoint = driver.abort_step(task["payload"], checkpoint, reason)
+					cog_queue.save_checkpoint(job_id, checkpoint, progress)
+			except Exception as abort_err:
+				logger.warning(f"Job {job_id} abort_step failed: {abort_err}")
 			if current and current.get("status") in ("PAUSED", "FRUSTRATED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
 				logger.info(f"Job {job_id} killed by operator; checkpoint preserved, no attempt burned.")
 			else:

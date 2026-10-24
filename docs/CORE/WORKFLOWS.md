@@ -12,8 +12,11 @@
 ## 0. Branching Model
 
 Red Pill ships **two working profiles over the same invariants**. Exactly one is active at a
-time; the selector is `GIT_WORKFLOW` in the `.env` (`solo` | `canonical`). The agent reads it
-before touching git — the active profile is not a matter of taste per session.
+time; the selector is `GIT_WORKFLOW` in the `.env` (`solo` | `canonical`). The source seed
+(`seeds/rules/git_workflow.md`) is a template with both profiles; the installer and
+`red-pill bunker update` render **only the active profile** to
+`~/.agent/rules/git_workflow.md`. The deployed rule is profile-specific; the agent does not
+choose between both at runtime. The active profile is not a matter of taste per session.
 
 ### 0.1 Invariants (both profiles)
 
@@ -29,9 +32,12 @@ before touching git — the active profile is not a matter of taste per session.
    `refactor:`, `perf:`, `ci:`). See CONVENTIONS §4.
 4. **The full local gate runs before any push** (§1). CI is deliberately **PR-only** — it is
    the second net, not the first. Do not push hoping CI will tell you.
-5. **A branch is a claim, not a private space.** Any session may continue work on a shared
+5. **Solo: feature branches stay local.** The pre-push hook rejects `refs/heads/feat/*` in
+   `solo`; only `next` (and hotfix PR branches) go to origin. Canonical is the profile that
+   pushes feature branches for PRs.
+6. **A branch is a claim, not a private space.** Any session may continue work on a shared
    integration branch (`next`) — that is by design, not an intrusion.
-6. **The integration branch is always stable.** `next` (when it exists) is a working tree
+7. **The integration branch is always stable.** `next` (when it exists) is a working tree
    from any session's point of view: green tests, no half-done work, no leftover uncommitted
    changes. Work in progress lives in worktrees; only finished, validated work reaches `next`.
 
@@ -178,9 +184,10 @@ For when there is more than one maintainer, or when the project wants review per
 
 ### 0.4 Switching profiles
 
-Set `GIT_WORKFLOW` in `.env` and re-seed (`red-pill bunker update`, or
-`scripts/inject_cli.py`). The agent rule seeded at `~/.agent/rules/git_workflow.md` states
-the active profile, so every harness sees it.
+Set `GIT_WORKFLOW` in `.env` and re-seed (`red-pill bunker update`, or the installer).
+The seeder renders **only the active profile** from `seeds/rules/git_workflow.md` into
+`~/.agent/rules/git_workflow.md`; the inactive section never reaches the agent. If the
+deployed file still says `apply only the section that matches`, it is stale: re-seed.
 
 - `solo → canonical`: finish or park `next` first (merge it via a release PR, or park it as
   `parked/<slug>` with a verdict in the desk). Do not leave an orphan `next`.

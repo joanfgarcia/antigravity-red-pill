@@ -771,9 +771,16 @@ if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
 	ln -sf "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md" "$GEMINI_ROOT/rules/cognitive_integrity_protocol.md"
 fi
 
-# Branch model rule (editable seed; deployed per active GIT_WORKFLOW profile).
+# Branch model rule: render ONLY the active GIT_WORKFLOW profile.
+# The source seed keeps both profiles as a template; the deployed rule is specific.
 if [ -f "$SCRIPT_DIR/../seeds/rules/git_workflow.md" ]; then
-	cp "$SCRIPT_DIR/../seeds/rules/git_workflow.md" "$USER_RULES_DIR/rules/git_workflow.md"
+	PROFILE="${GIT_WORKFLOW:-solo}"
+	if ! python3 "$SCRIPT_DIR/render_git_workflow.py" --profile "$PROFILE" \
+		--source "$SCRIPT_DIR/../seeds/rules/git_workflow.md" \
+		--output "$USER_RULES_DIR/rules/git_workflow.md"; then
+		echo -e "${RED}[FAIL] No se pudo sembrar git_workflow para el perfil '$PROFILE'.${NC}"
+		exit 1
+	fi
 	ln -sf "$USER_RULES_DIR/rules/git_workflow.md" "$GEMINI_ROOT/rules/git_workflow.md"
 fi
 

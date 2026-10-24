@@ -292,7 +292,7 @@ class RedPillConfig(BaseSettings):
 	SIP_ENABLED: bool = True
 	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "red_pill.sock")
 	# Mini harness bodies (Forge GPU over UDS; Loom FLM on loopback v0).
-	MINI_FORGE_SOCKET: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "forge.sock")
+	MINI_FORGE_SOCKET: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "forge", "forge.sock")
 	MINI_FLM_URL: str = "http://127.0.0.1:52625"
 
 	# -----------------------------------------------------------------------
@@ -514,6 +514,17 @@ class RedPillConfig(BaseSettings):
 	# se purgan almas SIN leg activo; un alma viva nunca pierde turnos (conservador
 	# hasta tener métricas del janitor). Ver CONVENTIONS §10.10.
 	SESSION_MIRROR_RETENTION_DAYS: int = 30
+	# SESSION_PENDING_TTL_MIN: un turno `pending` sin cierre se marca `aborted`
+	# (reason=ttl) tras este tiempo; no se borra. B-01s.
+	SESSION_PENDING_TTL_MIN: int = 30
+	# SESSION_COMPACTOR_* (B-02): compactación de contexto. `ENABLED` apagado por
+	# defecto; el resto son parámetros con defaults.
+	SESSION_COMPACTOR_ENABLED: bool = False
+	SESSION_COMPACTOR_ENGINE: str = "samantha"
+	SESSION_COMPACTOR_PROTECT_LAST_N: int = 4
+	SESSION_COMPACTOR_BACKGROUND_TOKENS: int = 8000
+	SESSION_COMPACTOR_RESERVE_TOKENS: int = 2000
+	SESSION_COMPACTOR_MAX_INPUT_CHARS: int = 120000
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912

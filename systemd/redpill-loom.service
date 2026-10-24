@@ -11,7 +11,10 @@ Restart=on-failure
 RestartSec=10
 Nice=5
 NoNewPrivileges=yes
+UMask=0077
 RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
 MemoryMax=10G
 MemorySwapMax=0
 

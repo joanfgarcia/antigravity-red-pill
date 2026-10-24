@@ -100,13 +100,17 @@ class LocalToolBridge(AgentBridge):
 		continuity_id: Optional[str] = None,
 		mission_id: Optional[str] = None,
 		originator: str = "",
-		history_turns: int = 40,
+		history_turns: int = 20,
+		run_ref: Optional[str] = None,
+		context_tokens: Optional[int] = None,
 	):
 		self._model_profile = model_profile
 		self._continuity_id = continuity_id
 		self._mission_id = mission_id
 		self._originator = originator
 		self._history_turns = history_turns
+		self._run_ref = run_ref
+		self._context_tokens = context_tokens
 
 	@property
 	def continuity_id(self) -> Optional[str]:
@@ -145,7 +149,10 @@ class LocalToolBridge(AgentBridge):
 				mission_id=self._mission_id,
 				originator=self._originator,
 				history_turns=self._history_turns,
+				run_ref=self._run_ref,
 			)
+			if self._context_tokens is not None:
+				extra["context_tokens"] = self._context_tokens
 		try:
 			result = asyncio.run(
 				asyncio.wait_for(

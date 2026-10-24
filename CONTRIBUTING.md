@@ -59,7 +59,8 @@ uv run mypy src/red_pill/       # Strict typing
 ## 🌿 Branching & Integration
 
 The full, enforced model is [`docs/CORE/WORKFLOWS.md` §0](docs/CORE/WORKFLOWS.md). It ships
-with two profiles, selected by `GIT_WORKFLOW` in `.env`; **exactly one is active**:
+with two profiles, selected by `GIT_WORKFLOW` in `.env`; **exactly one is active**, and the
+seeder writes only that profile to `~/.agent/rules/git_workflow.md`:
 
 - **`solo`** (this repository today — single maintainer): `main` is stable and PR-only;
   `next` is the living integration branch. Maintainer worktrees squash into `next`, and one

@@ -470,7 +470,7 @@ async def _dispatch(name: str, args: Dict[str, Any], cwd: Optional[str]) -> str:
 		return f"ERROR: {name} failed: {e!r}"
 
 
-def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_ref: Optional[str] = None) -> List[Dict[str, Any]]:
+def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_ref: Optional[str] = None, request_id: Optional[str] = None) -> List[Dict[str, Any]]:
 	"""Turnos del loop local para el espejo, con parejas tool-call/resultado coherentes.
 
 	Si un chat-format no usa `role=tool` (resultado como `user`), el assistant
@@ -491,6 +491,8 @@ def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_r
 				"model": model,
 				"ts": time.time(),
 				"source_ref": f"{run_ref}:{len(turns)}" if run_ref else None,
+				"request_id": request_id,
+				"status": "completed",
 			}
 		)
 	pending: set[str] = set()
@@ -508,6 +510,28 @@ def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_r
 			if any(str((call or {}).get("id") or "") in pending for call in calls):
 				turn["tool_calls"] = None
 	return turns
+
+
+def _resolve_context_tokens(model: object) -> int:
+	"""n_ctx del modelo servido; 8192 conservador si no se puede resolver.
+
+	El SIP se registra con `model=''` y resuelve por `task=minion_tool`; no se
+	puede asumir 8192 porque el tier real (p. ej. Granite 8B) puede ser 6144.
+	"""
+	from pathlib import Path
+
+	from red_pill.core import model_runtime as mr
+
+	name = str(model or "").strip()
+	if name:
+		try:
+			return int(mr.resolve({"model": Path(name).name if "/" in name else name}).n_ctx)
+		except Exception:
+			pass
+	try:
+		return int(mr.resolve({"task": "minion_tool"}).n_ctx)
+	except Exception:
+		return 8192
 
 
 def _resolve_minion_identity(*, originator: str, continuity_id: Optional[str], mission_id: Optional[str]) -> "tuple[str, Optional[str], Optional[str]]":
@@ -537,7 +561,10 @@ async def run_local_minion(
 	originator: str = "",
 	global_turn: int = 0,
 	run_ref: Optional[str] = None,
-	history_turns: int = 40,
+	history_turns: int = 20,
+	history_max_chars: int = 12000,
+	context_tokens: Optional[int] = None,
+	use_compactor: Optional[bool] = None,
 ) -> Dict[str, Any]:
 	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
 
@@ -557,36 +584,79 @@ async def run_local_minion(
 	loop = asyncio.get_event_loop()
 
 	origin, cid, mission = _resolve_minion_identity(originator=originator, continuity_id=continuity_id, mission_id=mission_id)
+	request_id = run_ref or f"local:{secrets.token_hex(6)}"
+	mirror = None
 	history: List[Dict[str, Any]] = []
 	if cid:
 		try:
 			from red_pill.session.mirror import SessionMirror
-			from red_pill.session.switch import replay_messages
+			from red_pill.session.switch import replay_messages, trim_history_chars, trim_history_window
 
-			turns = SessionMirror().read_turns(cid)
+			mirror = SessionMirror()
+			turns = mirror.read_turns(cid)
+			enabled = use_compactor
+			if enabled is None:
+				try:
+					import red_pill.config as cfg
+
+					enabled = bool(getattr(cfg.get_config(), "SESSION_COMPACTOR_ENABLED", False))
+				except Exception:
+					enabled = False
+			if enabled and mission:
+				try:
+					from red_pill.session.compactor import Compactor, estimate_tokens
+
+					compactor = Compactor(mirror)
+					ctx = await loop.run_in_executor(
+						None,
+						lambda: compactor.ensure_context(
+							cid,
+							budget_tokens=context_tokens or _resolve_context_tokens(model),
+							extra_tokens=estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(task),
+							mission_id=mission,
+						),
+					)
+					turns = ctx.turns
+				except Exception as e:
+					logger.warning(f"[local-minion] compaction failed: {e}")
 			if history_turns > 0:
-				turns = turns[-history_turns:]
+				turns = trim_history_window(turns, history_turns)
+			turns = trim_history_chars(turns, history_max_chars)
+			turns = trim_history_window(turns, len(turns))
 			history = replay_messages(turns)
 		except Exception as e:
 			logger.warning(f"[local-minion] history replay failed: {e}")
 	messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
 	messages.extend(history)
-	initial_len = len(messages)
 	messages.append({"role": "user", "content": task})
+	initial_len = len(messages)
+	if mirror is not None and cid and mission:
+		try:
+			mirror.begin_turn(
+				continuity_id=cid,
+				mission_id=mission,
+				request_id=request_id,
+				content=task,
+				originator=origin,
+				source=provider_name,
+				model=model if isinstance(model, str) else None,
+				global_turn=global_turn,
+			)
+		except Exception as e:
+			logger.warning(f"[local-minion] write-ahead failed: {e}")
+			mirror = None
 	consecutive_errors = 0
 	tool_calls_made = 0
 	tool_calls_ok = 0  # results that are not ERROR: only these ground the answer
 	tool_results: List[str] = []
 
 	def _capture() -> None:
-		if not cid or not mission:
+		if mirror is None or not cid or not mission:
 			return
 		try:
-			from red_pill.session.mirror import SessionMirror
-
-			SessionMirror().append_turns(
+			mirror.append_turns(
 				cid,
-				_canonical_turns(messages[initial_len:], model if isinstance(model, str) else None, run_ref),
+				_canonical_turns(messages[initial_len:], model if isinstance(model, str) else None, request_id, request_id),
 				mission_id=mission,
 				originator=origin,
 				source=provider_name,
@@ -597,6 +667,14 @@ async def run_local_minion(
 
 	def _done(ok: bool, answer: str, steps: int) -> Dict[str, Any]:
 		_capture()
+		if mirror is not None and cid and mission:
+			try:
+				if ok:
+					mirror.complete_turn(continuity_id=cid, request_id=request_id)
+				else:
+					mirror.abort_turn(continuity_id=cid, request_id=request_id, reason=answer or "local_minion_failed", mission_id=mission)
+			except Exception as e:
+				logger.warning(f"[local-minion] turn close failed: {e}")
 		return {
 			"ok": ok,
 			"answer": answer,
@@ -604,19 +682,29 @@ async def run_local_minion(
 			"used_tools": tool_calls_ok > 0,
 			"tool_calls": tool_calls_made,
 			"messages": messages,
+			"request_id": request_id,
 		}
 
 	for step in range(MAX_TOOL_ITERS):
-		msg = await loop.run_in_executor(
-			None,
-			lambda: provider.chat(
-				messages,
-				tools=TOOLS,
-				tool_choice="auto",
-				temperature=conduct["temperature"],
-				max_tokens=conduct["max_tokens"],
-			),
-		)
+		try:
+			msg = await loop.run_in_executor(
+				None,
+				lambda: provider.chat(
+					messages,
+					tools=TOOLS,
+					tool_choice="auto",
+					temperature=conduct["temperature"],
+					max_tokens=conduct["max_tokens"],
+				),
+			)
+		except asyncio.CancelledError:
+			if mirror is not None and cid and mission:
+				mirror.abort_turn(continuity_id=cid, request_id=request_id, reason="cancelled", mission_id=mission)
+			raise
+		except Exception as e:
+			if mirror is not None and cid and mission:
+				mirror.abort_turn(continuity_id=cid, request_id=request_id, reason=f"provider_error: {e}", mission_id=mission)
+			raise
 		tool_calls = msg.get("tool_calls") or []
 		malformed = 0
 		if not tool_calls:

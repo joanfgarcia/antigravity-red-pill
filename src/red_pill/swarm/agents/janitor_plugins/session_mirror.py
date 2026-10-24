@@ -39,6 +39,8 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 		registry = SessionRegistry(mirror.db_path)
 		expired = registry.expire_idle_legs()
 		before = mirror.stats(retention_days=retention_days)
+		pending_ttl_s = int(float(getattr(app_cfg, "SESSION_PENDING_TTL_MIN", 30)) * 60)
+		pending_expired = mirror.expire_pending_turns(max_age_s=pending_ttl_s)
 		stubbed = mirror.stub_tool_results()
 		purged = mirror.purge(registry, retention_days=retention_days)
 		budget = mirror.enforce_budget()
@@ -57,6 +59,7 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 			"session_mirror_budget_bytes": after["budget_bytes"],
 			"session_mirror_budget_pct": after["budget_pct"],
 			"session_mirror_over_budget": after["over_budget"],
+			"session_pending_expired": pending_expired,
 			"session_mirror_stub_rows": stubbed["rows_stubbed"],
 			"session_mirror_stub_chars_saved": stubbed["chars_saved"],
 			"session_mirror_emergency": bool(budget.get("emergency")),

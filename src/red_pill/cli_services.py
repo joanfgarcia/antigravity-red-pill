@@ -51,20 +51,21 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("Purge aborted.")
 
 
-def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = input, output: Any = print) -> None:
+def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = input, output: Any = print) -> bool:
 	"""REPL/one-shot sobre un MiniLocalBridge (inyectable para tests)."""
 
-	def ask(prompt: str) -> None:
+	def ask(prompt: str) -> bool:
 		result = bridge.prompt(prompt)
 		if getattr(result, "ok", False):
 			output(result.response)
-		else:
-			output(f"[mini] error: {getattr(result, 'error', 'unknown')}")
+			return True
+		output(f"[mini] error: {getattr(result, 'error', 'unknown')}")
+		return False
 
 	if once:
-		ask(once)
-		return
+		return ask(once)
 	output(f"[mini] profile={getattr(bridge, 'profile', '?')} continuity={getattr(bridge, 'continuity_id', '?')} (exit/quit para salir)")
+	ok = True
 	while True:
 		try:
 			line = input_fn("mini> ")
@@ -74,10 +75,11 @@ def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = inp
 		if text.lower() in ("exit", "quit"):
 			break
 		if text:
-			ask(text)
+			ok = ask(text) and ok
+	return ok
 
 
-def handle_mini(args: argparse.Namespace) -> None:
+def handle_mini(args: argparse.Namespace) -> int:
 	"""CLI `red-pill mini`: un paso o REPL sobre Forge/Loom."""
 	from red_pill.mini.bridge import MiniLocalBridge
 
@@ -91,7 +93,7 @@ def handle_mini(args: argparse.Namespace) -> None:
 		flm_url=args.flm_url,
 		operator=args.operator,
 	)
-	run_mini_cli(bridge, once=args.once)
+	return 0 if run_mini_cli(bridge, once=args.once) else 1
 
 
 def handle_session(args: argparse.Namespace) -> None:
@@ -116,6 +118,102 @@ def handle_session(args: argparse.Namespace) -> None:
 		from red_pill.session.mirror import SessionMirror
 
 		print(json.dumps(SessionMirror().stats(), ensure_ascii=False, indent=2))
+		return
+	if getattr(args, "session_cmd", None) == "pending":
+		import json
+		import time
+
+		import red_pill.config as cfg
+		from red_pill.session.mirror import SessionMirror
+
+		mirror = SessionMirror()
+		if getattr(args, "expire", False):
+			minutes = getattr(args, "max_age_min", None)
+			if minutes is None:
+				minutes = int(getattr(cfg.get_config(), "SESSION_PENDING_TTL_MIN", 30))
+			expired = mirror.expire_pending_turns(max_age_s=max(0, int(minutes)) * 60, continuity_id=args.continuity)
+			if not getattr(args, "json", False):
+				print(f"[PENDING] expirados={expired} (ttl={minutes}m)")
+		rows = mirror.pending_turns(args.continuity)
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+		elif not rows:
+			print("[PENDING] sin turnos pendientes/abortados")
+		else:
+			now = time.time()
+			for row in rows:
+				age = max(0, int(now - float(row.get("ts") or now)))
+				preview = " ".join(str(row.get("content") or "").split())[:160]
+				print(f"[{str(row.get('status') or '?').upper()}] {row.get('request_id')} alma={row.get('continuity_id')} edad={age}s :: {preview}")
+		return
+	if getattr(args, "session_cmd", None) == "resume":
+		import json
+
+		from red_pill.session.mirror import SessionMirror
+
+		request_id = str(getattr(args, "request_id", "") or "")
+		rows = [r for r in SessionMirror().pending_turns(getattr(args, "continuity", None)) if str(r.get("request_id") or "") == request_id]
+		if not rows:
+			print(f"[RESUME] no hay turno pendiente/abortado con request_id={request_id!r}")
+			return
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+			return
+		for row in rows:
+			print(f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}")
+			print(str(row.get("content") or ""))
+			print("[RESUME] --- fin del prompt ---")
+		return
+	if getattr(args, "session_cmd", None) == "compact":
+		import json
+
+		from red_pill.session.compactor import Compactor
+		from red_pill.session.mirror import SessionMirror
+
+		mirror = SessionMirror()
+		compactor = Compactor(
+			mirror,
+			engine=getattr(args, "engine", None),
+			protect_last_n=getattr(args, "protect_last_n", None),
+		)
+		handoff = getattr(args, "handoff", None)
+		done: Optional[dict]
+		if handoff:
+			from pathlib import Path as _Path
+
+			try:
+				summary = _Path(handoff).read_text(encoding="utf-8")
+			except OSError as exc:
+				print(f"[COMPACT] no se pudo leer el handoff {handoff!r}: {exc}")
+				raise SystemExit(1) from exc
+			if not summary.strip():
+				print(f"[COMPACT] el handoff {handoff!r} está vacío")
+				raise SystemExit(1)
+			mission = args.mission
+			if not mission:
+				latest = mirror.latest_compaction(args.continuity)
+				mission = str((latest or {}).get("mission_id") or "")
+			if not mission:
+				turns = mirror.read_turns(args.continuity)
+				mission = str((turns[0].get("mission_id") if turns else "") or "")
+			if not mission:
+				print("[COMPACT] --mission es obligatorio si el alma no tiene turnos previos")
+				raise SystemExit(1)
+			done = compactor.reset(args.continuity, summary=summary, mission_id=mission)
+			action = "handoff"
+		else:
+			done = compactor.compact_now(args.continuity, mission_id=args.mission)
+			action = "compact"
+		if getattr(args, "json", False):
+			print(json.dumps(done, ensure_ascii=False, indent=2, default=str))
+		elif done is None:
+			print(f"[COMPACT] {args.continuity}: nada que compactar (rango vacío)")
+		else:
+			print(
+				f"[COMPACT] {action} {done.get('compaction_id')} "
+				f"rango={done.get('range_start_seq')}-{done.get('range_end_seq')} "
+				f"estado={done.get('status')}"
+			)
 		return
 	if getattr(args, "session_cmd", None) == "rehydrate":
 		from red_pill.session.switch import rehydrate_payload

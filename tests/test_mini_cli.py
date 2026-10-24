@@ -32,7 +32,7 @@ def test_parser_accepts_mini_once():
 def test_run_once_prints_response():
 	out = []
 	bridge = FakeBridge()
-	run_mini_cli(bridge, once="hola", output=out.append)
+	assert run_mini_cli(bridge, once="hola", output=out.append) is True
 	assert out == ["echo:hola"]
 
 
@@ -40,7 +40,7 @@ def test_repl_reads_until_exit():
 	out = []
 	lines = iter(["uno", "dos", "exit"])
 	bridge = FakeBridge()
-	run_mini_cli(bridge, input_fn=lambda _: next(lines), output=out.append)
+	assert run_mini_cli(bridge, input_fn=lambda _: next(lines), output=out.append) is True
 	assert bridge.calls == ["uno", "dos"]
 	assert out[0].startswith("[mini]")
 	assert "echo:uno" in out and "echo:dos" in out
@@ -48,5 +48,5 @@ def test_repl_reads_until_exit():
 
 def test_run_once_reports_error():
 	out = []
-	run_mini_cli(FakeBridge(ok=False, error="boom"), once="x", output=out.append)
+	assert run_mini_cli(FakeBridge(ok=False, error="boom"), once="x", output=out.append) is False
 	assert "boom" in out[0]

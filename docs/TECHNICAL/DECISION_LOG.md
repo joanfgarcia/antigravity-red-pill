@@ -4,14 +4,115 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-074] B-02 — servicio de compactación y cableado local (slice 3)
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED (slice 3). Telegram y el disparo en fondo siguen pendientes; flags OFF por defecto.
+**Context**: AD-073 dejó el almacén y el puerto de resumen, pero ningún consumidor los usaba. Faltaba el servicio que decide rango, protege la cola y escribe el resumen, y cablearlo en los runners locales sin cambiar el comportamiento por defecto.
+**Decision**:
+1. **`session/compactor.py`**: `Compactor` sobre `SessionMirror` con `compact_now`, `ensure_context`, `maybe_compact`, `context` y `reset(handoff)`. `start/complete/abort` siguen siendo la única escritura canónica.
+2. **Rango seguro y contiguo**: se compacta desde `range_end+1` de la última compactación hasta `last_regular - protect_last_n`; `_safe_range_end` baja el corte si partiría una pareja assistant(tool_calls)↔tool (incluidos resultados pending/aborted). La **lectura** (`context_turns`) no aplica `protect_last_n`: devuelve la cadena completa de resúmenes (vigente y ancestros) y todo lo posterior al rango, para no ocultar turnos que aún no fueron resumidos. El resumen anterior puede entrar en el siguiente rango (resumen recursivo), pero no cuenta como turno protegido. `reset(handoff)` supersede las compactaciones vigentes.
+3. **Umbral**: `ensure_context` estima chars/3.2, suma system+task (`extra_tokens`) y compacta una vez si no cabe en `budget - reserve`; si no hay rango, no mintió con `compacted=True`. Un resumen que no reduce en contextos reales se aborta (`summary_not_smaller`). `background_tokens` queda reservado para `B02-WORKER`.
+4. **MiniSession**: `context_tokens` en `MiniConfig`/`AgentProfile`, `compactor_enabled/engine/protect_last_n`; antes del provider usa `ensure_context` y luego aplica los trims existentes. Perfiles: Forge 8192, Loom 4096.
+5. **`run_local_minion`**: `context_tokens` + `use_compactor`; la compactación corre en executor (no bloquea el event loop) y solo si hay alma+misión. Cae al historial anterior si falla.
+6. **CLI**: `red-pill session compact --continuity ID [--mission M] [--engine samantha|memento|extractive] [--protect-last-n N] [--handoff FILE] [--json]`; `--handoff` ejecuta `reset` (con misión inferida o explícita y error CLI legible).
+7. **Compatibilidad**: `SESSION_COMPACTOR_ENABLED=False` por defecto; sin flag, MiniSession/local-minion se comportan exactamente como antes. `purge()` elimina compactaciones de almas muertas para no dejar resúmenes huérfanos ni romper el `seq` al reencarnar.
+**Alternatives**: (a) compactar en cada turno — coste y resúmenes redundantes; (b) borrar turnos — rompe auditoría/B-01s; (c) compactar dentro del provider — acopla el motor al runner; (d) hilo de fondo efímero — no durable, se pierde con el proceso; se deja para el worker/JM.
+**Rationale / Evidence**: suite **3331 passed**, 13 skipped, 3 xfailed; `ruff` y `mypy` limpios. Tests nuevos: rango seguro con pareja tool, hueco no resumido, idempotencia por rango y rangos solapados, cadena de 3+ resúmenes, abort por fallo/resumen no decreciente, `protect_last_n` como política de corte, segunda compactación con `parent_compaction_id`, `reset(handoff)` tras compactar y tras reset, `maybe_compact`, MiniSession/local-minion con ventana corta que conserva el resumen, `rehydrate` compactado con límite y purga de compactaciones.
+**Consequences**: B-02 ya tiene servicio y consumidores locales. Deuda explícita: `B02-WORKER` (Samantha/Job Manager en fondo con dedupe), paridad Telegram (mapear sesión Telegram→alma), reintento tras rechazo por longitud, `compact_parent` en switch/rehydrate, `B02-TOKENS` (usage real) y cap/resumen de resúmenes para la cadena (hoy se conserva completa; crece con cada compactación). ARCH-001 sigue siendo el gate del harness propio. Inspirado en **Pi Durable** (Earendil Works / Mario Zechner, MIT): se copian políticas, no código.
+
+---
+
+## [AD-073] B-02 — schema de compactaciones y puerto de resumen (slices 1-2)
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED (slices 1-2 de B-02). Integración en MiniSession/Telegram/local-minion y `reset(handoff)` siguen pendientes.
+**Context**: B-02 necesita dos piezas antes de cablear umbrales: un almacén canónico de compactaciones (sin borrar el espejo) y un motor de resumen que no sea el modelo de la conversación. Samantha ya resume Telegram; Memento tiene transporte local y `context-distiller` era un skill manual pre-Búnker. Faltaba el contrato entre ellos.
+**Decision**:
+1. **Schema v6 aditivo**: `session_compactions` (`compaction_id` PK, `continuity_id`, `mission_id`, `parent_compaction_id`, `range_start_seq`, `range_end_seq`, `summary`, `model`, `status`, `reason`, `tokens_before`, `tokens_after`, `created_at`, `completed_at`) + índices por alma/estado/rango y por padre. Índice único parcial por `(continuity_id, range_start_seq, range_end_seq)` no abortado: dos productores del mismo rango convergen.
+2. **Ciclo de compactación**: `start_compaction` inserta `pending` (idempotente por id); `complete_compaction` apenda un turno `system` (`source=compactor`, `source_ref=compact:<id>`) y actualiza la fila en **una transacción**; `abort_compaction` no toca el contexto. El histórico original nunca se borra.
+3. **Contexto podado**: `context_turns` devuelve resumen vigente + cola posterior a `range_end_seq`, con `protect_last_n` calculado sobre turnos normales (no sobre el resumen). `context_messages` reutiliza `switch.replay_messages` (parejas tool-call/result intactas).
+4. **Puerto `Summarizer`**: `SamanthaSummarizer` (cola local barata), `MementoSummarizer` (transporte local de calidad/manual/handoff) y `ExtractiveSummarizer` (fallback determinista sin LLM). `FallbackSummarizer` encadena primario + extractivo; `build_summarizer` expone la fábrica.
+5. **Prompt operativo propio** (`session/prompts/compactor_summary_*`): estado, decisiones, cambios/refs, pendientes, blockers y siguiente paso. No reutiliza el prompt de memoria curada de Memento ni el de Telegram.
+6. **Flag apagado por defecto**: `SESSION_COMPACTOR_ENABLED=False`; el resto de parámetros (`ENGINE`, `PROTECT_LAST_N`, `BACKGROUND_TOKENS`, `RESERVE_TOKENS`, `MAX_INPUT_CHARS`) tiene defaults.
+**Alternatives**: (a) reutilizar `session_mirror` con columnas de compactación — mezcla dos ciclos de vida; (b) borrar turnos compactados — pierde auditoría y B-01s; (c) usar el modelo de la conversación — no cabe el contexto que se quiere resumir; (d) usar solo el prompt de Memento — está orientado a memoria curada, no a continuidad operativa; (e) un único motor sin fallback — un fallo local bloquea el turno.
+**Rationale / Evidence**: suite **3299 passed**, 13 skipped, 3 xfailed; `ruff` y `mypy` limpios en los módulos tocados. Tests nuevos: schema v6, roundtrip start/complete/abort, idempotencia, `protect_last_n`, `compact_parent`, pareja tool-call, contrato `CompactionStore`, prompts y los tres adaptadores + fallback.
+**Consequences**: B-02 ya tiene su sustrato canónico y su motor intercambiable. Deuda: cablear umbrales en `MiniSession`/`run_local_minion`/Telegram, `reset(handoff)`/`compact_parent` en switch, y decidir `B02-TOKENS`/`B02-WORKER`. ARCH-001 sigue siendo el gate del harness propio. Inspirado en **Pi Durable** (Earendil Works / Mario Zechner, MIT): se copian políticas, no código.
+
+---
+
+## [AD-072] B-01s — estado de turno y write-ahead en el espejo del alma
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Completa B-01j para los caminos RedPill; B-01h (hooks externos) sigue pendiente.
+**Context**: B-01j persistía la intención en el checkpoint del Job Manager, pero el espejo del alma seguía escribiéndose post-hoc. Un corte en `MiniSession`/`run_local_minion` podía dejar el prompt sin rastro y el replay podía inyectar un turno a medias. Hacía falta el estado de turno en `session_mirror`, la API de ciclo de vida y una superficie de inspección/resume.
+**Decision**:
+1. **Schema v5** aditivo: `session_mirror` gana `status` (`pending|completed|aborted`), `request_id` y `status_reason`; índices por `(continuity, request_id)` y `(continuity, status)`. Filas viejas quedan `completed`.
+2. **Ciclo de vida**: `begin_turn` escribe el user `pending` antes del modelo; `complete_turn` cierra el grupo; `abort_turn` marca el grupo y opcionalmente guarda respuesta parcial. La idempotencia sigue en `source_ref`; `request_id` agrupa user/assistant/tool.
+3. **Replay seguro**: `read_turns` devuelve solo `completed` por defecto; `pending`/`aborted` no entran al modelo y se consultan con `pending_turns`/`statuses`.
+4. **Integración**: `MiniSession.run` escribe user pending antes del provider y completa/aborta el grupo; `run_local_minion` hace lo mismo y captura assistant/tool con el mismo `request_id`.
+5. **CLI**: `red-pill session pending` (lista/expira TTL/JSON) y `red-pill session resume REQUEST_ID` (muestra el prompt; no invoca al modelo).
+6. **TTL**: `SESSION_PENDING_TTL_MIN` (30 min); el janitor marca `aborted` con `reason=ttl` y métricas `session_pending_expired`.
+**Alternatives**: (a) tabla aparte — segunda fuente de verdad; (b) `read_turns` con todo por defecto — replay contaminado; (c) escribir el user después del modelo — el corte seguiría perdiendo el prompt; (d) CLI que reenvíe solo — el arnés debe decidir.
+**Rationale / Evidence**: suite **3282 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests nuevos: begin idempotente, completed/aborted, parcial, TTL, schema v5, MiniSession success/error y CLI pending/resume; los tests de `local_minion`/espejo siguen verdes.
+**Consequences**: el alma ya puede ver y reanudar un prompt pendiente sin inyectarlo como verdad. Deuda: B-01h (hooks opencode/claude/pi), reapertura explícita de un `aborted` y política de respuesta parcial/efectos cloud (B-04). ARCH-001 sigue siendo el gate del harness propio.
+
+---
+
+## [AD-071] Workflow seed por perfil — `solo`/`canonical` se materializa al sembrar
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El modelo de ramas tenía dos perfiles (`solo` single-maintainer, `canonical` múltiples) seleccionados por `GIT_WORKFLOW`, pero la siembra estaba a medias: `bunker_update`/installer copiaban `seeds/rules/git_workflow.md` **entero** (ambos perfiles) y el agente elegía en runtime. El comentario decía “for the active profile” pero el código no lo hacía. Además, el `pre-push` invitaba a “push your work branch”, contradiciendo el remoto limpio de `solo`.
+**Decision**:
+1. `seeds/rules/git_workflow.md` es una **plantilla** con invariantes comunes + bloques `profile:solo` y `profile:canonical`.
+2. `red_pill/core/git_workflow.py` renderiza **solo** el perfil activo (sin bloque inactivo, sin marcadores, `{{profile}}` sustituido).
+3. `bunker_update` lee `GIT_WORKFLOW` de la config y escribe el render en `~/.agent/rules/git_workflow.md`; `scripts/install_neo.sh` hace lo mismo con el helper `scripts/render_git_workflow.py`. El scaffold usa su copia standalone.
+4. `pre-push` en `solo` rechaza `refs/heads/feat/*`; solo `next` y hotfix PR branches van a origin. En `canonical` se permite la rama feature para el PR.
+5. Docs (`WORKFLOWS`, `CONVENTIONS`, `CONTRIBUTING`, `.env.example`) explican que el `.env` selecciona y la siembra materializa **un único** perfil.
+**Alternatives**: (a) mantener ambos perfiles en el fichero desplegado — el agente seguía eligiendo; (b) dos seeds duplicados — drift; (c) auto-detectar single/multi — frágil; (d) no tocar el `pre-push` — seguía invitando a la rama remota.
+**Rationale / Evidence**: tests de render (solo/canonical, sin marcadores, perfil inválido), seed/scaffold con bloques, `pre-push` con guard solo; suite pendiente de cierre. El render es determinista y falla limpio si falta un bloque.
+**Consequences**: cambiar `GIT_WORKFLOW` exige re-seed; el fichero del agente ya no contiene ambos perfiles. La rama de evidencia del worktree sigue viva hasta el release PR (workflow); el remoto en `solo` queda `main` + `next` (+ hotfix PR puntual).
+
+---
+
+## [AD-070] B-01j — write-ahead universal en el Job Manager
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Primer slice de B-01 (D-02); B-01s/B-01h siguen pendientes.
+**Context**: Un corte de proveedor o de conexión podía perder el prompt y no dejar constancia de que el turno quedó sin respuesta. La revisión de Pi Durable (D-01 no migración; D-02 B-01; D-03 B-02) marcó B-01 como el slice más rentable. El diseño inicial se había centrado en Forge/Loom; el Operador pidió que la práctica cubriera **cualquier tarea agéntica**, incluidos los bridges cloud de `AgenticJobDriver` (`agy/claude/opencode/pi`) y las cascadas.
+**Decision**:
+1. **Hook de runner**: `ResumableJobDriver.begin_step()` se llama **antes** de `step()` y el runner persiste el checkpoint; `abort_step()` se llama en timeout/error/kill antes de marcar el fracaso. Default no-op para drivers que no lo necesitan.
+2. **Checkpoint como intención**: `AgenticJobDriver` guarda `pending_turn` con `request_id=job:attempt`, backend, modelo, hash/preview del prompt, `started_at` y `resume_count`. No hace falta una tabla nueva ni inspeccionar el arnés.
+3. **Cualquier bridge**: el hook vive en el driver, no en un proveedor; cubre cloud, local, local-mini, local-tools y `CascadeBridge`. La durabilidad nativa de pi/opencode/claude/agy es opaca y **no se asume**.
+4. **Idempotencia mínima**: si el checkpoint ya tiene el turno `completed` con el mismo `request_id`, `step()` devuelve el resultado guardado sin volver a llamar al bridge. Un reintento `pending` conserva `started_at` y suma `resume_count`.
+5. **Abort explícito**: timeout/error/kill deja `pending_turn.status=aborted` con `reason`; nunca queda un pending silencioso en el camino del runner.
+6. **Sin exactly-once cloud**: B-01j asegura intención persistida, no que un efecto externo no se haya ejecutado. La política `replay: safe|never` (B-04) y la idempotency de `job_submit` (B-08) siguen pendientes.
+**Alternatives**: (a) implementarlo por bridge (cada arnés) — duplicación y huecos; (b) tabla `job_turns` aparte — segunda fuente de verdad; (c) esperar a B-03/B-04 — el corte seguiría perdiendo la intención; (d) depender del checkpoint nativo de cada arnés — no garantizable.
+**Rationale / Evidence**: suite **3272 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/ scripts/` y `mypy src/red_pill/` limpios. Tests nuevos en `tests/test_b01_write_ahead.py` para todos los backends, `completed` sin re-invocación, abort y resume; `test_job_pausing_state`/`test_job_manager` siguen verdes.
+**Consequences**: el coordinador ya puede ver un `pending_turn` antes de invocar cualquier modelo y sobrevivir a un corte con la intención persistida. Deuda: B-01s (espejo `status`/`request_id` y resume por alma), B-01h (hooks externos), política `unknown`/replay (B-04) y compactación (B-02). No se construye harness propio hasta ARCH-001.
+
+---
+
+## [AD-069] Mini arnés — hardening zero-trust y corrección de la superficie v0
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Corrige los hallazgos de la revisión adversarial de AD-068.
+**Context**: La revisión zero-trust de cuatro lentes (plan/security/correctness/env) sobre el mini RFC v0 dio **3 BLOCKER + 1 CLEARED**. El happy path Forge→Loom funcionaba, pero la superficie era más amplia y menos contenida que lo declarado: `RuntimeDirectory` compartido, workspace/DB/socket/URL controlados por payload, continuidad cross-soul, `run_tests` en el revisor "read-only", timeout ignorado, `run_ref` no determinista, replay con parejas huérfanas, leg activo no atómico, linaje perdido y docs de aceptación desalineadas.
+**Decision**:
+1. **Aislamiento systemd**: `redpill-forge.service` usa `RuntimeDirectory=red-pill/forge` (nunca el directorio compartido con Laya/SIP), `UMask=0077` y socket `%t/red-pill/forge/forge.sock`; Loom añade `IPAddressDeny=any` + `IPAddressAllow=localhost`; los lanzadores transitorios aplican `PrivateNetwork`/`RestrictAddressFamilies`/`IPAddress*`/`UMask` y crean directorios 0700.
+2. **Frontera de confianza**: `mini/trust.py` valida workspace (roots locales), `db_path`, socket y `flm_url` (solo loopback). `job_submit` local-mini descarta overrides de transporte, ata `continuity_id`/`mission_id` a la sesión llamante y valida el workspace; la cola directa (tests/E2E) valida en el driver. Un perfil/workspace inválido es fallo permanente, no `JobDeferred`.
+3. **Loom read-only real**: `READONLY_TOOL_SCHEMAS` solo expone `list_files`/`read_file`; se retira `run_tests` del revisor. Forge conserva `run_tests`, pero con env whitelist, `PYTHONDONTWRITEBYTECODE`, timeout y salida redactada con `scrub_secrets` antes de espejar.
+4. **Correctness**: el timeout se propaga hasta `provider.chat`; `run_ref` estable (`job_id:attempt`) deduplica reintentos; el replay usa ventana pair-safe + presupuesto de 12k chars (12/20 turnos); `activate_leg` cierra otros legs y hace upsert en un `BEGIN IMMEDIATE`; `lineage_id` se conserva; el CLI devuelve exit code no-cero en fallo.
+5. **Aceptación y docs**: `run_smoke` incluye `metrics` (fases, turnos, tool turns), exige `nonce_in_forge_text` y el E2E exige RUN_ID de Forge + evidencia en el espejo + un leg activo; el E2E borra `test_calc.py` antes de Loom (prueba de historial, no de fichero) y verifica `forge.sock` + `127.0.0.1:52625` sin `0.0.0.0`. La guarda de tests incluye 52625 y el auto-registro NPU no sondea FLM en tests. `session.db` pasa a 0600 al conectar. RFC §8 se alinea con lo real (forge.sock, loopback, sin run_tests en Loom, presupuestos, métricas manuales); AD-068 deja de decir "RFC entero".
+**Alternatives**: (a) dejar el v0 como estaba y solo documentar — los P0 eran explotables con `job_submit`; (b) sandbox completo de `run_tests` — más infra; se opta por retirarlo del revisor y endurecer el ejecutor; (c) broker/aislamiento OS — sigue diferido a D26/rogue local; (d) aceptar continuidad del payload — permitía poisoning cross-soul.
+**Rationale / Evidence**: suite **3264 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/ scripts/` y `mypy src/red_pill/` limpios. Tests nuevos de trust (workspace fuera de roots, symlink, URL loopback, DB/socket, payload cross-soul, env scrub), timeout, `run_ref`, linaje/leg atómico, replay pair-safe, unit files y CLI exit. E2E real repetido tras el hardening: `processed=2`, ambos `COMPLETED`, `tests_ok`, `forge_cites_run_id`, `loom_saw_forge`, `loom_loopback_only`, `forge_socket_ok`, `one_active_leg=true` (`loom-tools`), socket 0700, sin unidades/procesos residuales; Loom citó el RUN_ID con `test_calc.py` borrado.
+**Consequences**: el mini v0 queda usable sin overrides de transporte desde agentes y con Loom sin ejecución de código. Deuda: Loom ya no ejecuta tests (los ejecuta Forge); la cola directa sigue siendo de confianza; FLM sigue en loopback (netns+UDS fase 2); 35B/9B diferidos; el broker/aislamiento OS se reabre en D26.
+
+---
+
 ## [AD-068] Mini arnés v0 completo — CLI, systemd, Loom read-only y E2E de jobs
 **Date**: 2026-10-24
-**Status**: ACCEPTED & IMPLEMENTED. Cierra la superficie operativa de AD-065/066/067; no cambia el contrato del mini arnés.
-**Context**: AD-067 dejó `local_minion` multiturno y `local-mini` listo para jobs, pero faltaba la superficie para usarlo: `red-pill mini`, unidades persistentes, una variante de Loom con tools de solo lectura y un E2E que atravesara el Job Manager real (no el smoke in-process). El Operador pidió cerrar el RFC entero, no solo el core.
+**Status**: ACCEPTED & IMPLEMENTED. Cierra la superficie operativa de AD-065/066/067; no cambia el contrato del mini arnés. **Hardening posterior: AD-069.**
+**Context**: AD-067 dejó `local_minion` multiturno y `local-mini` listo para jobs, pero faltaba la superficie para usarlo: `red-pill mini`, unidades persistentes, una variante de Loom con tools de solo lectura y un E2E que atravesara el Job Manager real (no el smoke in-process). El Operador pidió cerrar la superficie §8 del RFC (no el RFC global), no solo el core.
 **Decision**:
 1. **CLI `red-pill mini`**: parser con `--profile`, `--continuity`, `--mission`, `--workspace`, `--gpu-socket`, `--flm-url`, `--db-path`, `--operator` y `--once`; `handle_mini` construye `MiniLocalBridge` y `run_mini_cli` ofrece one-shot o REPL (exit/quit). El loop es inyectable en tests; no duplica el bucle de `MiniSession`.
-2. **Unidades persistentes**: `systemd/redpill-forge.service` (UDS, `PrivateNetwork=yes`, `RestrictAddressFamilies=AF_UNIX`, `RuntimeDirectory=red-pill`, `MemoryMax=7G`) y `systemd/redpill-loom.service` (FLM loopback, `MemoryMax=10G`), ambas con `MemorySwapMax=0`. `scripts/install_mini_services.sh` las instala; no las habilita salvo `--enable` (decisión del Operador).
-3. **Loom read-only**: `READONLY_TOOL_SCHEMAS` (list/read/run_tests), `WorkspaceTools(read_only=True)` que oculta write/edit y los rechaza si se invocan, perfil `loom-tools` con prompt de revisor. `MiniLocalBridge` ofrece `workspace` y `workspace_ro`; el perfil `loom` sin tools sigue existiendo para revisión pura.
+2. **Unidades persistentes**: `systemd/redpill-forge.service` (UDS, `PrivateNetwork=yes`, `RestrictAddressFamilies=AF_UNIX`, `RuntimeDirectory=red-pill` (sustituido por `red-pill/forge` en AD-069), `MemoryMax=7G`) y `systemd/redpill-loom.service` (FLM loopback, `MemoryMax=10G`), ambas con `MemorySwapMax=0`. `scripts/install_mini_services.sh` las instala; no las habilita salvo `--enable` (decisión del Operador).
+3. **Loom read-only**: `READONLY_TOOL_SCHEMAS` (list/read; `run_tests` retirado en AD-069), `WorkspaceTools(read_only=True)` que oculta write/edit y los rechaza si se invocan, perfil `loom-tools` con prompt de revisor. `MiniLocalBridge` ofrece `workspace` y `workspace_ro`; el perfil `loom` sin tools sigue existiendo para revisión pura.
 4. **`job_submit`**: `agentic_job` con `backend: local-mini` + `profile` ya no exige `model`; el perfil resuelve el provider. El guard sigue exigiendo modelo para los demás backends.
 5. **E2E real de jobs**: `scripts/local/mini_services.py` factoriza el arranque/parada con cgroups; `scripts/local/mini_job_e2e.py` enciende Forge/Loom, crea el fixture, encola dos `agentic_job` con la misma `continuity_id` (Forge ejecuta; Loom read-only revisa), llama a `process_driver_jobs` y valida estado/checkpoint/tests/RUN_ID/leg activo. Cola y `session.db` temporales.
 6. **Un alma, un cuerpo activo a través de procesos**: el E2E destapó dos legs activos (el bridge de cada job abre su propio leg). `MiniSession.switch_to` ahora cierra los legs activos anteriores de la misma `continuity_id` al abrir el nuevo, no solo el que conoce en memoria; test de regresión entre dos `MiniSession`.

@@ -21,9 +21,28 @@ def stop_unit(unit: str) -> None:
 	_run(["systemctl", "--user", "reset-failed", unit])
 
 
-def start_unit(unit: str, cmd: list[str], *, log: Path, memory: str) -> None:
-	log.parent.mkdir(parents=True, exist_ok=True)
+def _private_dir(path: Path) -> None:
+	path.mkdir(parents=True, exist_ok=True, mode=0o700)
+	try:
+		path.chmod(0o700)
+	except OSError:
+		pass
+
+
+def start_unit(
+	unit: str,
+	cmd: list[str],
+	*,
+	log: Path,
+	memory: str,
+	properties: list[str] | None = None,
+) -> None:
+	_private_dir(log.parent)
 	log.touch()
+	try:
+		log.chmod(0o600)
+	except OSError:
+		pass
 	stop_unit(unit)
 	args = [
 		"systemd-run",
@@ -36,12 +55,18 @@ def start_unit(unit: str, cmd: list[str], *, log: Path, memory: str) -> None:
 		"-p",
 		"MemorySwapMax=0",
 		"-p",
+		"UMask=0077",
+	]
+	for prop in properties or []:
+		args.extend(["-p", prop])
+	args.extend([
+		"-p",
 		f"StandardOutput=append:{log}",
 		"-p",
 		f"StandardError=append:{log}",
 		"--",
 		*cmd,
-	]
+	])
 	result = _run(args)
 	if result.returncode != 0:
 		raise RuntimeError(f"systemd-run failed for {unit}: {result.stderr.strip() or result.stdout.strip()}")
@@ -102,7 +127,18 @@ def start_forge(
 		"--flash-attn", "on",
 		"--no-webui",
 	]
-	start_unit(unit, cmd, log=log, memory=memory)
+	_private_dir(Path(socket).parent)
+	start_unit(
+		unit,
+		cmd,
+		log=log,
+		memory=memory,
+		properties=[
+			"PrivateNetwork=yes",
+			"RestrictAddressFamilies=AF_UNIX",
+			"NoNewPrivileges=yes",
+		],
+	)
 
 
 def start_loom(
@@ -117,4 +153,15 @@ def start_loom(
 ) -> None:
 	port = url.rsplit(":", 1)[-1].rstrip("/") if ":" in url else "52625"
 	cmd = [flm_bin, "serve", model, "--host", "127.0.0.1", "--port", port, "--ctx-len", str(ctx)]
-	start_unit(unit, cmd, log=log, memory=memory)
+	start_unit(
+		unit,
+		cmd,
+		log=log,
+		memory=memory,
+		properties=[
+			"RestrictAddressFamilies=AF_UNIX AF_INET",
+			"IPAddressDeny=any",
+			"IPAddressAllow=localhost",
+			"NoNewPrivileges=yes",
+		],
+	)

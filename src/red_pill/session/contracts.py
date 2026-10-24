@@ -6,7 +6,8 @@ pieza es intercambiable sin tocar al resto.
 - `SessionStore` → `store.SessionRegistry`.
 - `PresenceBoard` → `board.SessionBoard`.
 - `AffinityResolver` → `core.affinity.derive_affinity`.
-- `HydrationPolicy` (Fase 2), `ClaimDriver` (Fase 4) y `Compactor` (Fase 3): declarados, sin implementación aún.
+- `HydrationPolicy` (Fase 2) y `ClaimDriver` (Fase 4): declarados, sin implementación aún.
+- `CompactionStore`/`Compactor` (Fase 3): implementados por `SessionMirror` y `session/compactor.py`; el disparo en fondo sigue pendiente.
 
 Estructurales: ninguna implementación necesita heredar de estos Protocols.
 """
@@ -66,7 +67,7 @@ class MirrorStore(Protocol):
 
 	def append_turns(self, continuity_id: str, turns: List[dict], **kwargs: Any) -> int: ...
 
-	def read_turns(self, continuity_id: str, *, since_seq: int = 0, limit: Optional[int] = None) -> List[dict]: ...
+	def read_turns(self, continuity_id: str, *, since_seq: int = 0, limit: Optional[int] = None, statuses: Optional[List[str]] = None) -> List[dict]: ...
 
 	def count_turns(self, continuity_id: str) -> int: ...
 
@@ -113,6 +114,25 @@ class ClaimDriver(Protocol):
 	def renew(self, claim_key: str, *, owner: str, ttl_s: float) -> bool: ...
 
 	def release(self, claim_key: str, *, owner: str) -> None: ...
+
+
+@runtime_checkable
+class CompactionStore(Protocol):
+	"""Persistencia de compactaciones y lectura del contexto podado (B-02)."""
+
+	def start_compaction(self, **kwargs: Any) -> dict: ...
+
+	def complete_compaction(self, compaction_id: str, *, summary: str, model: Optional[str] = None, tokens_after: Optional[int] = None) -> dict: ...
+
+	def abort_compaction(self, compaction_id: str, *, reason: str) -> dict: ...
+
+	def latest_compaction(self, continuity_id: str) -> Optional[dict]: ...
+
+	def compactions(self, continuity_id: str) -> List[dict]: ...
+
+	def context_turns(self, continuity_id: str) -> List[dict]: ...
+
+	def context_messages(self, continuity_id: str, *, current_prompt: Optional[str] = None) -> List[dict]: ...
 
 
 class Compactor(Protocol):
