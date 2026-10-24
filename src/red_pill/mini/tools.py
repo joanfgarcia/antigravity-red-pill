@@ -84,6 +84,9 @@ TOOL_SCHEMAS: List[dict] = [
 ]
 
 
+READONLY_TOOL_SCHEMAS: List[dict] = [schema for schema in TOOL_SCHEMAS if schema["function"]["name"] in ("list_files", "read_file", "run_tests")]
+
+
 class WorkspaceTools:
 	"""Execute the five bounded tools against a workspace jail."""
 
@@ -96,11 +99,13 @@ class WorkspaceTools:
 		max_output: int = 8192,
 		timeout: int = 60,
 		tests_cmd: Optional[List[str]] = None,
+		read_only: bool = False,
 	):
 		self.root = Path(workspace).resolve()
 		if not self.root.is_dir():
 			raise ToolError(f"workspace does not exist: {workspace}")
-		self.schemas = list(TOOL_SCHEMAS)
+		self.read_only = read_only
+		self.schemas = list(READONLY_TOOL_SCHEMAS if read_only else TOOL_SCHEMAS)
 		self.max_read = int(max_read)
 		self.max_write = int(max_write)
 		self.max_output = int(max_output)
@@ -138,6 +143,8 @@ class WorkspaceTools:
 		return {"ok": True, "path": str(target.relative_to(self.root)), "content": self._cap(text, self.max_read), "chars": len(text)}
 
 	def write_file(self, path: str, content: str) -> Dict[str, Any]:
+		if self.read_only:
+			raise ToolError("read-only toolbox: write_file disabled")
 		target = self._resolve(path)
 		text = str(content)
 		if len(text) > self.max_write:
@@ -147,6 +154,8 @@ class WorkspaceTools:
 		return {"ok": True, "path": str(target.relative_to(self.root)), "chars": len(text)}
 
 	def edit_file(self, path: str, old_string: str, new_string: str) -> Dict[str, Any]:
+		if self.read_only:
+			raise ToolError("read-only toolbox: edit_file disabled")
 		target = self._resolve(path)
 		if not target.is_file():
 			raise ToolError(f"not a file: {path}")

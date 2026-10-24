@@ -2759,7 +2759,9 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 			model = payload.get("model")
 			cascade = payload.get("cascade")
 			has_cascade_models = isinstance(cascade, list) and any(isinstance(t, dict) and t.get("model") for t in cascade)
-			if (not model or model == "flash") and not has_cascade_models:
+			backend = str(payload.get("backend") or "").strip().lower()
+			is_local_mini = backend in ("local-mini", "local_mini") and bool(payload.get("profile"))
+			if (not model or model == "flash") and not has_cascade_models and not is_local_mini:
 				return [
 					types.TextContent(
 						type="text",

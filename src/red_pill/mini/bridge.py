@@ -53,7 +53,13 @@ class MiniLocalBridge(AgentBridge):
 				"forge": UnixHTTPProvider(gpu, timeout=300),
 				"loom": HTTPProvider(flm, timeout=360),
 			}
-		self._toolboxes = dict(toolboxes or {"workspace": WorkspaceTools(self.workspace)})
+		self._toolboxes = dict(
+			toolboxes
+			or {
+				"workspace": WorkspaceTools(self.workspace),
+				"workspace_ro": WorkspaceTools(self.workspace, read_only=True),
+			}
+		)
 		self._session = MiniSession(
 			MiniConfig(
 				workspace=self.workspace,

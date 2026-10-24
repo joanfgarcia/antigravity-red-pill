@@ -93,6 +93,15 @@ class MiniSession:
 		if old and old != self._leg(body):
 			self.registry.unregister_session(old)
 		originator = self._ensure_leg(body, role)
+		# Un alma, un cuerpo activo: una migración abierta desde otro proceso/turno
+		# debe cerrar los legs activos anteriores de la MISMA continuity_id.
+		try:
+			for row in self.registry.get_by_continuity(self.continuity_id):
+				other = str(row.get("originator") or "")
+				if other and other != originator and row.get("ttl_state") != "expired":
+					self.registry.unregister_session(other)
+		except Exception as e:
+			logger.warning(f"[MiniSession] could not close previous legs: {e}")
 		global_turn = 0
 		try:
 			global_turn = self.registry.next_global_turn(originator, self.affinity)

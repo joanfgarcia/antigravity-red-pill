@@ -173,6 +173,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_rehydrate.add_argument("--limit", type=int, default=None, help="Máximo de turnos (los últimos)")
 	session_rehydrate.add_argument("--kind", default="opencode", help="Arnés destino (solo etiqueta el bloque)")
 
+	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")
+	mini_parser.add_argument("--profile", default="forge", help="Perfil del cuerpo (forge | loom | loom-tools)")
+	mini_parser.add_argument("--continuity", default=None, help="Alma (continuity_id); si se omite se emite una")
+	mini_parser.add_argument("--mission", default="mission:mini-cli", help="Misión del job")
+	mini_parser.add_argument("--workspace", default=None, help="Workspace con jaula de tools (default: cwd)")
+	mini_parser.add_argument("--gpu-socket", default=None, help="UDS de Forge (default: MINI_FORGE_SOCKET)")
+	mini_parser.add_argument("--flm-url", default=None, help="URL de Loom/FLM (default: MINI_FLM_URL)")
+	mini_parser.add_argument("--db-path", default=None, help="session.db (default: la viva)")
+	mini_parser.add_argument("--operator", default="Joan", help="Operador para el system prompt")
+	mini_parser.add_argument("--once", default=None, metavar="PROMPT", help="Ejecuta un solo prompt y sale")
+
 	int_parser = subparsers.add_parser("interceptor", help="Bünker Interceptor Management")
 	int_sub = int_parser.add_subparsers(dest="int_cmd")
 	int_sub.add_parser("enable", help="Manually enable personal identity injection")

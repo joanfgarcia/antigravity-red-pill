@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-068] Mini arnés v0 completo — CLI, systemd, Loom read-only y E2E de jobs
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED. Cierra la superficie operativa de AD-065/066/067; no cambia el contrato del mini arnés.
+**Context**: AD-067 dejó `local_minion` multiturno y `local-mini` listo para jobs, pero faltaba la superficie para usarlo: `red-pill mini`, unidades persistentes, una variante de Loom con tools de solo lectura y un E2E que atravesara el Job Manager real (no el smoke in-process). El Operador pidió cerrar el RFC entero, no solo el core.
+**Decision**:
+1. **CLI `red-pill mini`**: parser con `--profile`, `--continuity`, `--mission`, `--workspace`, `--gpu-socket`, `--flm-url`, `--db-path`, `--operator` y `--once`; `handle_mini` construye `MiniLocalBridge` y `run_mini_cli` ofrece one-shot o REPL (exit/quit). El loop es inyectable en tests; no duplica el bucle de `MiniSession`.
+2. **Unidades persistentes**: `systemd/redpill-forge.service` (UDS, `PrivateNetwork=yes`, `RestrictAddressFamilies=AF_UNIX`, `RuntimeDirectory=red-pill`, `MemoryMax=7G`) y `systemd/redpill-loom.service` (FLM loopback, `MemoryMax=10G`), ambas con `MemorySwapMax=0`. `scripts/install_mini_services.sh` las instala; no las habilita salvo `--enable` (decisión del Operador).
+3. **Loom read-only**: `READONLY_TOOL_SCHEMAS` (list/read/run_tests), `WorkspaceTools(read_only=True)` que oculta write/edit y los rechaza si se invocan, perfil `loom-tools` con prompt de revisor. `MiniLocalBridge` ofrece `workspace` y `workspace_ro`; el perfil `loom` sin tools sigue existiendo para revisión pura.
+4. **`job_submit`**: `agentic_job` con `backend: local-mini` + `profile` ya no exige `model`; el perfil resuelve el provider. El guard sigue exigiendo modelo para los demás backends.
+5. **E2E real de jobs**: `scripts/local/mini_services.py` factoriza el arranque/parada con cgroups; `scripts/local/mini_job_e2e.py` enciende Forge/Loom, crea el fixture, encola dos `agentic_job` con la misma `continuity_id` (Forge ejecuta; Loom read-only revisa), llama a `process_driver_jobs` y valida estado/checkpoint/tests/RUN_ID/leg activo. Cola y `session.db` temporales.
+6. **Un alma, un cuerpo activo a través de procesos**: el E2E destapó dos legs activos (el bridge de cada job abre su propio leg). `MiniSession.switch_to` ahora cierra los legs activos anteriores de la misma `continuity_id` al abrir el nuevo, no solo el que conoce en memoria; test de regresión entre dos `MiniSession`.
+**Alternatives**: (a) dejar el CLI fuera del RFC — no se podía usar sin escribir Python; (b) unidades habilitadas por el installer — arrancar modelos de 9B/8B al login sin decisión explícita; (c) Loom con el toolbox completo y prompt “no escribas” — una alucinación podía editar; (d) E2E reutilizando `run_smoke` in-process — no probaba `job_submit`/driver/checkpoint; (e) cerrar el leg anterior solo si es el mismo proceso — dejaba dos activos tras migrar entre jobs.
+**Rationale / Evidence**: suite **3252 passed**, 13 skipped, 3 xfailed; `ruff check src/ tests/ scripts/` y `mypy src/red_pill/` limpios. E2E real (Forge Qwen3.5-9B GPU + Loom `qwen3:8b` FLM, cgroups): `processed=2`, ambos jobs `COMPLETED`, `tests_ok=true`, `loom_cites_run_id=true`, `one_active_leg=true`, `active_body=loom-tools`; Forge citó el RUN_ID y el diff, Loom verificó con read-only tools y `run_tests`. Sin unidades ni procesos residuales; `52625` libre al terminar. Tests nuevos: CLI (one-shot/REPL/args), submit local-mini, unidades/instalador, toolbox read-only/perfil y cierre de legs entre instancias.
+**Consequences**: el mini arnés v0 queda usable por CLI, systemd o Job Manager, con Loom capaz de verificar sin poder editar. Deuda: (1) FLM sigue en loopback 52625; netns+UDS es hardening fase 2; (2) 35B/9B diferidos por RAM; (3) no hay “coma”/KV persistente entre procesos; (4) `run_tests` en read-only puede escribir cachés del runner (no edita fuentes); (5) el installer no habilita las unidades; (6) el CLI usa la `session.db` viva por defecto; (7) Laya on-demand sigue parked.
+
+---
+
 ## [AD-067] `local_minion` multiturno — historial del espejo, sin duplicar turnos
 **Date**: 2026-10-23
 **Status**: ACCEPTED & IMPLEMENTED. Extiende AD-066; reutiliza el espejo de AD-060/AD-061.

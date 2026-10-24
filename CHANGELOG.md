@@ -1,5 +1,24 @@
 ## Unreleased
 
+### 🧪 Mini arnés v0 — CLI, systemd, Loom read-only y E2E de jobs
+
+- **[NEW]** `red-pill mini` (REPL o `--once`) sobre `MiniLocalBridge`, con perfil,
+  continuidad, misión, workspace, socket/URL y `session.db` configurables.
+- **[NEW]** Plantillas `systemd/redpill-forge.service` y `redpill-loom.service`
+  (cgroups, Forge por UDS con `PrivateNetwork`, Loom loopback) e instalador
+  `scripts/install_mini_services.sh`; no se habilitan sin `--enable`.
+- **[NEW]** Loom read-only: `WorkspaceTools(read_only=True)` +
+  `READONLY_TOOL_SCHEMAS` (list/read/run_tests) y perfil `loom-tools`; `loom`
+  sin tools sigue disponible.
+- **[NEW]** `job_submit` acepta `agentic_job` con `backend: local-mini` + `profile`
+  sin `model`; el perfil resuelve el provider.
+- **[FIX]** `MiniSession.switch_to` cierra los legs activos anteriores de la misma
+  `continuity_id` al abrir otro cuerpo, incluso desde otro proceso/job.
+- **[NEW]** E2E real `scripts/local/mini_job_e2e.py` (Forge→Loom, dos
+  `agentic_job`, misma continuidad): 2/2 `COMPLETED`, tests OK, RUN_ID citado,
+  1 leg activo; runner compartido en `scripts/local/mini_services.py`.
+- **[DOCS]** AD-068; RFC §8.3/§8.6/§8.8/§8.9.
+
 ### 🔐 Seguridad — setuptools y CVEs de pillow
 
 - **[FIX]** `setuptools>=84.1.0` (lock 84.2.1) por `GHSA-xmj3-9gf7-h52w`.
