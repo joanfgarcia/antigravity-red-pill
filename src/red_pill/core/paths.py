@@ -520,6 +520,12 @@ def get_workspace_root() -> Path:
 	return Path(os.path.expanduser(env)) if env else Path.home() / "Documents" / "IA"
 
 
+def get_worktrees_root() -> Path:
+	"""Raíz de worktrees (`$WORKTREES_ROOT`, default `~/worktrees`)."""
+	env = os.getenv("WORKTREES_ROOT")
+	return Path(os.path.expanduser(env)) if env else Path.home() / "worktrees"
+
+
 def get_xdg_data_home() -> Path:
 	"""Base XDG de datos (`$XDG_DATA_HOME`, default `~/.local/share`)."""
 	env = os.getenv("XDG_DATA_HOME")

@@ -537,7 +537,8 @@ async def run_local_minion(
 	originator: str = "",
 	global_turn: int = 0,
 	run_ref: Optional[str] = None,
-	history_turns: int = 40,
+	history_turns: int = 20,
+	history_max_chars: int = 12000,
 ) -> Dict[str, Any]:
 	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
 
@@ -561,11 +562,13 @@ async def run_local_minion(
 	if cid:
 		try:
 			from red_pill.session.mirror import SessionMirror
-			from red_pill.session.switch import replay_messages
+			from red_pill.session.switch import replay_messages, trim_history_chars, trim_history_window
 
 			turns = SessionMirror().read_turns(cid)
 			if history_turns > 0:
-				turns = turns[-history_turns:]
+				turns = trim_history_window(turns, history_turns)
+			turns = trim_history_chars(turns, history_max_chars)
+			turns = trim_history_window(turns, len(turns))
 			history = replay_messages(turns)
 		except Exception as e:
 			logger.warning(f"[local-minion] history replay failed: {e}")

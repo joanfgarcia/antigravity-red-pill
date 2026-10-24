@@ -3,6 +3,8 @@
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from red_pill.jobs.drivers.agentic import AgenticJobDriver
 from red_pill.mini.bridge import MiniLocalBridge
 from red_pill.mini.tools import WorkspaceTools
@@ -95,6 +97,12 @@ def test_factory_creates_local_mini(tmp_path):
 	)
 	assert isinstance(bridge, MiniLocalBridge)
 	assert bridge.prompt("x").response == "ok"
+
+
+def test_preflight_rejects_invalid_profile_not_deferral():
+	driver = AgenticJobDriver()
+	with pytest.raises(ValueError):
+		driver.preflight({"backend": "local-mini", "profile": "no-such-profile"})
 
 
 def test_agentic_job_passes_continuity_and_checkpoints_it(tmp_path):

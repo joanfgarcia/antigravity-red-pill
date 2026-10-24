@@ -837,15 +837,18 @@ try:
 except Exception:
 	pass
 
-# NPU Provider: auto-register if FastFlowLM server is reachable
-try:
-	import red_pill.config as cfg  # noqa: F811
+# NPU Provider: auto-register if FastFlowLM server is reachable.
+# En tests NO se sondea el FLM vivo: el import no debe abrir 127.0.0.1:52625
+# (la guarda de aislamiento lo bloquea, y el proveedor se prueba explícitamente).
+if os.environ.get("REDPILL_TESTING") != "1":
+	try:
+		import red_pill.config as cfg  # noqa: F811
 
-	_flm_url = os.environ.get("FLM_BASE_URL", "http://localhost:52625")
-	_flm_model = os.environ.get("FLM_MODEL", "qwen3:8b")
-	_npu_provider = FastFlowLMInferenceProvider(base_url=_flm_url, model=_flm_model)
-	if _npu_provider.is_available():
-		ProviderRegistry.register_inference_provider("npu", _npu_provider)
-		logger.info(f"[NPU] FastFlowLM provider registered: {_flm_url} ({_flm_model})")
-except Exception:
-	pass
+		_flm_url = os.environ.get("FLM_BASE_URL", "http://localhost:52625")
+		_flm_model = os.environ.get("FLM_MODEL", "qwen3:8b")
+		_npu_provider = FastFlowLMInferenceProvider(base_url=_flm_url, model=_flm_model)
+		if _npu_provider.is_available():
+			ProviderRegistry.register_inference_provider("npu", _npu_provider)
+			logger.info(f"[NPU] FastFlowLM provider registered: {_flm_url} ({_flm_model})")
+	except Exception:
+		pass

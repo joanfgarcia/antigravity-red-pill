@@ -45,15 +45,29 @@ class AgenticJobDriver(ResumableJobDriver):
 			kwargs["origin"] = origin
 		backend_name = str(payload.get("backend") or "").strip().lower()
 		if backend_name in ("local-mini", "local_mini"):
-			for key in ("profile", "continuity_id", "mission_id", "workspace", "db_path", "gpu_socket", "flm_url", "operator"):
+			from red_pill.mini.trust import validate_db_path, validate_loopback_url, validate_socket_path, validate_workspace
+
+			for key in ("profile", "continuity_id", "mission_id", "workspace", "db_path", "gpu_socket", "flm_url", "operator", "lineage_id"):
 				if payload.get(key) is not None:
 					kwargs[key] = payload[key]
 			if kwargs.get("workspace") is None and payload.get("cwd"):
 				kwargs["workspace"] = payload["cwd"]
+			if kwargs.get("workspace") is not None:
+				kwargs["workspace"] = validate_workspace(str(kwargs["workspace"]))
+			if kwargs.get("db_path") is not None:
+				kwargs["db_path"] = validate_db_path(str(kwargs["db_path"]))
+			if kwargs.get("gpu_socket") is not None:
+				kwargs["gpu_socket"] = validate_socket_path(str(kwargs["gpu_socket"]))
+			if kwargs.get("flm_url") is not None:
+				kwargs["flm_url"] = validate_loopback_url(str(kwargs["flm_url"]))
+			if getattr(self, "job_id", None):
+				kwargs["run_ref"] = f"{self.job_id}:{getattr(self, 'attempts', 0)}"
 		elif backend_name in ("local-tools", "local_tools"):
-			for key in ("continuity_id", "mission_id", "originator", "history_turns"):
+			for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref"):
 				if payload.get(key) is not None:
 					kwargs[key] = payload[key]
+			if getattr(self, "job_id", None):
+				kwargs["run_ref"] = f"{self.job_id}:{getattr(self, 'attempts', 0)}"
 		return create_bridge(payload.get("backend"), **kwargs)
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
@@ -61,6 +75,10 @@ class AgenticJobDriver(ResumableJobDriver):
 		try:
 			bridge = self._create_bridge(payload)
 			healthy = bridge.health_check()
+		except ValueError:
+			# Configuración inválida (perfil/workspace/ruta/URL): fallo permanente,
+			# no un deferral infinito que esconda el error.
+			raise
 		except Exception as e:
 			raise JobDeferred(f"bridge unavailable: {e}") from e
 		if not healthy:

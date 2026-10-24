@@ -1,5 +1,29 @@
 ## Unreleased
 
+### 🛡️ Mini arnés — hardening zero-trust (AD-069)
+
+- **[SEC]** `redpill-forge.service` usa `RuntimeDirectory=red-pill/forge` y
+  `UMask=0077`; ya no puede borrar los sockets de Laya/SIP al parar. Loom añade
+  `IPAddressDeny=any` + `IPAddressAllow=localhost`; los runners transitorios
+  aplican el mismo aislamiento.
+- **[SEC]** `mini/trust.py`: workspace bajo roots locales, `db_path`/socket
+  acotados, `flm_url` solo loopback. `job_submit` local-mini ignora overrides de
+  transporte y ata continuidad/misión a la sesión; un payload no puede escribir
+  en el espejo de otra alma.
+- **[SEC]** Loom read-only solo lista/lee (`run_tests` fuera); Forge ejecuta tests
+  con env whitelist y salida redactada antes de espejar.
+- **[FIX]** timeout propagado al provider; `run_ref` estable para reintentos;
+  replay pair-safe con presupuesto de 12k chars; `activate_leg` atómico; linaje
+  preservado; errores de perfil/workspace ya no son deferrals infinitos; CLI
+  devuelve exit code no-cero.
+- **[FIX]** `session.db` 0600; smoke exige `nonce_in_forge_text` y reporta
+  métricas; E2E exige RUN_ID de Forge, evidencia en el espejo, socket y loopback
+  (`ss`), y borra `test_calc.py` antes de Loom para probar historial real.
+- **[TEST]** La guarda de aislamiento vigila `52625`; el auto-registro NPU no
+  sondea FLM durante los tests.
+- **[DOCS]** AD-069; RFC §8 alineado con la implementación real; AD-068 corregido
+  (superficie §8, no RFC global).
+
 ### 🧪 Mini arnés v0 — CLI, systemd, Loom read-only y E2E de jobs
 
 - **[NEW]** `red-pill mini` (REPL o `--once`) sobre `MiniLocalBridge`, con perfil,
@@ -8,8 +32,8 @@
   (cgroups, Forge por UDS con `PrivateNetwork`, Loom loopback) e instalador
   `scripts/install_mini_services.sh`; no se habilitan sin `--enable`.
 - **[NEW]** Loom read-only: `WorkspaceTools(read_only=True)` +
-  `READONLY_TOOL_SCHEMAS` (list/read/run_tests) y perfil `loom-tools`; `loom`
-  sin tools sigue disponible.
+  `READONLY_TOOL_SCHEMAS` (list/read; `run_tests` retirado en AD-069) y perfil
+  `loom-tools`; `loom` sin tools sigue disponible.
 - **[NEW]** `job_submit` acepta `agentic_job` con `backend: local-mini` + `profile`
   sin `model`; el perfil resuelve el provider.
 - **[FIX]** `MiniSession.switch_to` cierra los legs activos anteriores de la misma

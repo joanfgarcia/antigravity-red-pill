@@ -11,11 +11,12 @@ def _unit(name: str) -> str:
 
 def test_forge_unit_uses_uds_and_cgroup():
 	text = _unit("redpill-forge.service")
-	assert "--host %t/red-pill/forge.sock" in text
+	assert "--host %t/red-pill/forge/forge.sock" in text
 	assert "--port" not in text
 	assert "RestrictAddressFamilies=AF_UNIX" in text
 	assert "PrivateNetwork=yes" in text
-	assert "RuntimeDirectory=red-pill" in text
+	assert "RuntimeDirectory=red-pill/forge" in text
+	assert "UMask=0077" in text
 	assert "MemoryMax=7G" in text
 	assert "MemorySwapMax=0" in text
 
@@ -26,7 +27,9 @@ def test_loom_unit_is_loopback_and_cgroup():
 	assert "--port 52625" in text
 	assert "MemoryMax=10G" in text
 	assert "MemorySwapMax=0" in text
-	assert "PrivateNetwork=yes" not in text
+	assert "IPAddressDeny=any" in text
+	assert "IPAddressAllow=localhost" in text
+	assert "UMask=0077" in text
 
 
 def test_installer_exists():

@@ -48,7 +48,7 @@ class AgentProfile:
 	toolbox: Optional[str] = None
 	system_prompt: str = ""
 	max_steps: int = 16
-	history_turns: int = 40
+	history_turns: int = 20
 	temperature: float = 0.0
 	max_tokens: int = 2048
 

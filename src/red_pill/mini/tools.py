@@ -8,10 +8,13 @@ output cap. Tool outputs are data for the model, never instructions.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from red_pill.mini.trust import validate_workspace
 
 
 class ToolError(RuntimeError):
@@ -84,7 +87,7 @@ TOOL_SCHEMAS: List[dict] = [
 ]
 
 
-READONLY_TOOL_SCHEMAS: List[dict] = [schema for schema in TOOL_SCHEMAS if schema["function"]["name"] in ("list_files", "read_file", "run_tests")]
+READONLY_TOOL_SCHEMAS: List[dict] = [schema for schema in TOOL_SCHEMAS if schema["function"]["name"] in ("list_files", "read_file")]
 
 
 class WorkspaceTools:
@@ -101,9 +104,7 @@ class WorkspaceTools:
 		tests_cmd: Optional[List[str]] = None,
 		read_only: bool = False,
 	):
-		self.root = Path(workspace).resolve()
-		if not self.root.is_dir():
-			raise ToolError(f"workspace does not exist: {workspace}")
+		self.root = Path(validate_workspace(workspace))
 		self.read_only = read_only
 		self.schemas = list(READONLY_TOOL_SCHEMAS if read_only else TOOL_SCHEMAS)
 		self.max_read = int(max_read)
@@ -172,6 +173,13 @@ class WorkspaceTools:
 		return {"ok": True, "path": str(target.relative_to(self.root)), "replacements": 1}
 
 	def run_tests(self) -> Dict[str, Any]:
+		env = {
+			key: os.environ[key]
+			for key in ("PATH", "HOME", "LANG", "LC_ALL", "LANGUAGE", "TERM", "TZ", "PYTHONPATH", "VIRTUAL_ENV")
+			if key in os.environ
+		}
+		env["PYTHONDONTWRITEBYTECODE"] = "1"
+		env["PYTHONHASHSEED"] = "0"
 		try:
 			proc = subprocess.run(
 				self.tests_cmd,
@@ -179,10 +187,13 @@ class WorkspaceTools:
 				capture_output=True,
 				text=True,
 				timeout=self.timeout,
+				env=env,
 			)
 		except subprocess.TimeoutExpired:
 			return {"ok": False, "exit_code": -1, "output": f"tests timed out after {self.timeout}s"}
-		output = (proc.stdout or "") + (proc.stderr or "")
+		from red_pill.memento.scrub import scrub_secrets
+
+		output = scrub_secrets((proc.stdout or "") + (proc.stderr or ""))
 		return {"ok": proc.returncode == 0, "exit_code": proc.returncode, "output": self._cap(output.strip(), self.max_output)}
 
 	def execute(self, name: str, arguments: Any) -> str:

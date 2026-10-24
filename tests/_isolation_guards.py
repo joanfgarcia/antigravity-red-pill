@@ -38,7 +38,7 @@ SANDBOX_ENV = "REDPILL_TEST_SANDBOX"
 KEEP_ENV = "REDPILL_TEST_KEEP_TMP"
 
 # Qdrant (HTTP/gRPC), LLM local (dual-bind + reserva), neon-link (API/webhook).
-GUARDED_TCP_PORTS = frozenset({6333, 6334, 8760, 8761, 8770, 8771})
+GUARDED_TCP_PORTS = frozenset({6333, 6334, 8760, 8761, 8770, 8771, 52625})
 _LOOPBACK_NAMES = frozenset({"localhost", "ip6-localhost", "ip6-loopback", "::1", "0.0.0.0", "::"})
 
 _violations: List[str] = []

@@ -31,6 +31,7 @@ def _tcp_server():
 
 
 def test_tcp_a_un_puerto_de_servicio_real_se_bloquea_aunque_escuche(monkeypatch, consume_violations):
+	guards.take_violations()  # el guard es global: parte de cero en este test
 	srv = _tcp_server()
 	port = srv.getsockname()[1]
 	try:
@@ -62,7 +63,7 @@ def test_host_remoto_se_bloquea_sin_salir_a_la_red(consume_violations):
 
 
 def test_puertos_de_servicios_del_operador_estan_vigilados():
-	assert {6333, 6334, 8760, 8761, 8770, 8771} <= guards.GUARDED_TCP_PORTS
+	assert {6333, 6334, 8760, 8761, 8770, 8771, 52625} <= guards.GUARDED_TCP_PORTS
 
 
 def test_uds_dentro_del_sandbox_se_permite_y_fuera_se_bloquea(tmp_path, monkeypatch, consume_violations):

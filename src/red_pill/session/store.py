@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 import time
@@ -181,6 +182,11 @@ def connect_session_db(db_path: str) -> Iterator[sqlite3.Connection]:
 	"""Conexión a `session.db` (WAL + busy_timeout), compartida por store y espejo."""
 	conn = sqlite3.connect(db_path, timeout=30.0)
 	try:
+		if db_path != ":memory:":
+			try:
+				os.chmod(db_path, 0o600)
+			except OSError:
+				pass
 		# busy_timeout ANTES del WAL: el pragma de journal no usa el handler y
 		# en un arranque concurrente en frío puede dar "database is locked".
 		conn.execute("PRAGMA busy_timeout=5000;")
@@ -271,6 +277,75 @@ class SessionRegistry:
 		return [dict(r) for r in rows]
 
 	# ── Escrituras ──────────────────────────────────────────────────────────
+	def _upsert_session_conn(
+		self,
+		conn: sqlite3.Connection,
+		*,
+		originator: str,
+		continuity_id: str,
+		mission_id: str,
+		campaign_id: Optional[str] = None,
+		role: str = "task",
+		lineage_id: Optional[str] = None,
+		affinity: Any = None,
+		branch: Optional[str] = None,
+		worktree: Optional[str] = None,
+		head_commit: Optional[str] = None,
+		title: Optional[str] = None,
+		intent: Optional[str] = None,
+		last_seen_global_turn: int = 0,
+		last_seen_event_seq: int = 0,
+	) -> None:
+		provider, session_id = _split_originator(originator)
+		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
+		now = time.time()
+		conn.execute(
+			"""
+			INSERT INTO session_registry (
+				originator, continuity_id, mission_id, campaign_id, role, lineage_id,
+				provider, session_id, last_seen_global_turn, last_seen_event_seq,
+				affinity_json, updated_at, branch, worktree, head_commit, title, intent
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(originator) DO UPDATE SET
+				continuity_id = session_registry.continuity_id,
+				mission_id = excluded.mission_id,
+				campaign_id = excluded.campaign_id,
+				role = excluded.role,
+				lineage_id = COALESCE(excluded.lineage_id, session_registry.lineage_id),
+				provider = excluded.provider,
+				session_id = excluded.session_id,
+				last_seen_global_turn = excluded.last_seen_global_turn,
+				last_seen_event_seq = excluded.last_seen_event_seq,
+				affinity_json = excluded.affinity_json,
+				updated_at = excluded.updated_at,
+				branch = COALESCE(excluded.branch, session_registry.branch),
+				worktree = COALESCE(excluded.worktree, session_registry.worktree),
+				head_commit = COALESCE(excluded.head_commit, session_registry.head_commit),
+				title = COALESCE(excluded.title, session_registry.title),
+				intent = COALESCE(excluded.intent, session_registry.intent),
+				ttl_state = 'active'
+			""",
+			(
+				originator,
+				continuity_id,
+				mission_id,
+				campaign_id,
+				role,
+				lineage_id,
+				provider,
+				session_id,
+				last_seen_global_turn,
+				last_seen_event_seq,
+				affinity_json,
+				now,
+				branch,
+				worktree,
+				head_commit,
+				title,
+				intent,
+			),
+		)
+
 	def upsert_session(
 		self,
 		*,
@@ -295,55 +370,81 @@ class SessionRegistry:
 		cláusula `ON CONFLICT ... SET continuity_id=session_registry.continuity_id`).
 		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe).
 	Un leg vuelto a ver tras `unregister_session` se reactiva (`ttl_state=active`)."""
-		provider, session_id = _split_originator(originator)
-		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
+		with self._connect() as conn:
+			self._upsert_session_conn(
+				conn,
+				originator=originator,
+				continuity_id=continuity_id,
+				mission_id=mission_id,
+				campaign_id=campaign_id,
+				role=role,
+				lineage_id=lineage_id,
+				affinity=affinity,
+				branch=branch,
+				worktree=worktree,
+				head_commit=head_commit,
+				title=title,
+				intent=intent,
+				last_seen_global_turn=last_seen_global_turn,
+				last_seen_event_seq=last_seen_event_seq,
+			)
+			conn.commit()
+
+	def activate_leg(
+		self,
+		*,
+		originator: str,
+		continuity_id: str,
+		mission_id: str,
+		campaign_id: Optional[str] = None,
+		role: str = "task",
+		lineage_id: Optional[str] = None,
+		affinity: Any = None,
+		branch: Optional[str] = None,
+		worktree: Optional[str] = None,
+		head_commit: Optional[str] = None,
+		title: Optional[str] = None,
+		intent: Optional[str] = None,
+		last_seen_global_turn: int = 0,
+		last_seen_event_seq: int = 0,
+	) -> None:
+		"""Cierra otros legs activos del alma y activa este, en UNA transacción.
+
+		La migración de cuerpo no puede dejar dos legs activos por un lock o un
+		fallo intermedio: el cierre y el upsert comparten `BEGIN IMMEDIATE`.
+		"""
 		now = time.time()
 		with self._connect() as conn:
+			conn.execute("BEGIN IMMEDIATE")
+			if lineage_id is None:
+				row = conn.execute(
+					"SELECT lineage_id FROM session_registry WHERE continuity_id=? AND lineage_id IS NOT NULL "
+					"ORDER BY updated_at DESC LIMIT 1",
+					(continuity_id,),
+				).fetchone()
+				if row and row["lineage_id"]:
+					lineage_id = str(row["lineage_id"])
 			conn.execute(
-				"""
-				INSERT INTO session_registry (
-					originator, continuity_id, mission_id, campaign_id, role, lineage_id,
-					provider, session_id, last_seen_global_turn, last_seen_event_seq,
-					affinity_json, updated_at, branch, worktree, head_commit, title, intent
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(originator) DO UPDATE SET
-					continuity_id = session_registry.continuity_id,
-					mission_id = excluded.mission_id,
-					campaign_id = excluded.campaign_id,
-					role = excluded.role,
-					lineage_id = excluded.lineage_id,
-					provider = excluded.provider,
-					session_id = excluded.session_id,
-					last_seen_global_turn = excluded.last_seen_global_turn,
-					last_seen_event_seq = excluded.last_seen_event_seq,
-					affinity_json = excluded.affinity_json,
-					updated_at = excluded.updated_at,
-					branch = COALESCE(excluded.branch, session_registry.branch),
-					worktree = COALESCE(excluded.worktree, session_registry.worktree),
-					head_commit = COALESCE(excluded.head_commit, session_registry.head_commit),
-					title = COALESCE(excluded.title, session_registry.title),
-					intent = COALESCE(excluded.intent, session_registry.intent),
-					ttl_state = 'active'
-				""",
-				(
-					originator,
-					continuity_id,
-					mission_id,
-					campaign_id,
-					role,
-					lineage_id,
-					provider,
-					session_id,
-					last_seen_global_turn,
-					last_seen_event_seq,
-					affinity_json,
-					now,
-					branch,
-					worktree,
-					head_commit,
-					title,
-					intent,
-				),
+				"UPDATE session_registry SET ttl_state='expired', ttl_checked_at=?, updated_at=? "
+				"WHERE continuity_id=? AND originator<>? AND ttl_state='active'",
+				(now, now, continuity_id, originator),
+			)
+			self._upsert_session_conn(
+				conn,
+				originator=originator,
+				continuity_id=continuity_id,
+				mission_id=mission_id,
+				campaign_id=campaign_id,
+				role=role,
+				lineage_id=lineage_id,
+				affinity=affinity,
+				branch=branch,
+				worktree=worktree,
+				head_commit=head_commit,
+				title=title,
+				intent=intent,
+				last_seen_global_turn=last_seen_global_turn,
+				last_seen_event_seq=last_seen_event_seq,
 			)
 			conn.commit()
 

@@ -51,20 +51,21 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("Purge aborted.")
 
 
-def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = input, output: Any = print) -> None:
+def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = input, output: Any = print) -> bool:
 	"""REPL/one-shot sobre un MiniLocalBridge (inyectable para tests)."""
 
-	def ask(prompt: str) -> None:
+	def ask(prompt: str) -> bool:
 		result = bridge.prompt(prompt)
 		if getattr(result, "ok", False):
 			output(result.response)
-		else:
-			output(f"[mini] error: {getattr(result, 'error', 'unknown')}")
+			return True
+		output(f"[mini] error: {getattr(result, 'error', 'unknown')}")
+		return False
 
 	if once:
-		ask(once)
-		return
+		return ask(once)
 	output(f"[mini] profile={getattr(bridge, 'profile', '?')} continuity={getattr(bridge, 'continuity_id', '?')} (exit/quit para salir)")
+	ok = True
 	while True:
 		try:
 			line = input_fn("mini> ")
@@ -74,10 +75,11 @@ def run_mini_cli(bridge: Any, *, once: Optional[str] = None, input_fn: Any = inp
 		if text.lower() in ("exit", "quit"):
 			break
 		if text:
-			ask(text)
+			ok = ask(text) and ok
+	return ok
 
 
-def handle_mini(args: argparse.Namespace) -> None:
+def handle_mini(args: argparse.Namespace) -> int:
 	"""CLI `red-pill mini`: un paso o REPL sobre Forge/Loom."""
 	from red_pill.mini.bridge import MiniLocalBridge
 
@@ -91,7 +93,7 @@ def handle_mini(args: argparse.Namespace) -> None:
 		flm_url=args.flm_url,
 		operator=args.operator,
 	)
-	run_mini_cli(bridge, once=args.once)
+	return 0 if run_mini_cli(bridge, once=args.once) else 1
 
 
 def handle_session(args: argparse.Namespace) -> None:

@@ -20,7 +20,7 @@ from red_pill.mini.contracts import AgentProfile, Toolbox
 from red_pill.session.identity import new_continuity_id
 from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
-from red_pill.session.switch import replay_messages
+from red_pill.session.switch import replay_messages, trim_history_chars, trim_history_window
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,14 @@ class MiniConfig:
 	mission_id: str = "mission:mini-smoke"
 	campaign_id: Optional[str] = None
 	db_path: Optional[str] = None
+	run_ref: Optional[str] = None
+	lineage_id: Optional[str] = None
 	affinity: List[str] = field(default_factory=lambda: ["mission:mini-smoke"])
 	operator: str = "Joan"
 	body_names: Dict[str, str] = field(default_factory=lambda: {"forge": "Forge", "loom": "Loom"})
-	max_steps: int = 16
-	history_turns: int = 40
+	max_steps: int = 8
+	history_turns: int = 12
+	history_max_chars: int = 12000
 	temperature: float = 0.0
 	max_tokens: int = 2048
 
@@ -59,7 +62,7 @@ class MiniSession:
 		self.continuity_id = config.continuity_id or new_continuity_id()
 		self.mirror = SessionMirror(config.db_path)
 		self.registry = SessionRegistry(self.mirror.db_path)
-		self.run_id = uuid.uuid4().hex[:12]
+		self.run_id = str(config.run_ref or uuid.uuid4().hex[:12])
 		self.phase = 0
 		self.current_body: Optional[str] = None
 		self.current_originator: Optional[str] = None
@@ -88,20 +91,23 @@ class MiniSession:
 		return originator
 
 	def switch_to(self, body: str, role: str) -> str:
-		"""Migrate the soul to `body`: close the old leg, open the new one."""
+		"""Migrate the soul to `body`: close the old leg, open the new one.
+
+		`activate_leg` does the close + upsert in one `BEGIN IMMEDIATE`; a lock or
+		crash cannot leave two active legs for the same soul.
+		"""
 		old = self.current_originator
-		if old and old != self._leg(body):
-			self.registry.unregister_session(old)
-		originator = self._ensure_leg(body, role)
-		# Un alma, un cuerpo activo: una migración abierta desde otro proceso/turno
-		# debe cerrar los legs activos anteriores de la MISMA continuity_id.
-		try:
-			for row in self.registry.get_by_continuity(self.continuity_id):
-				other = str(row.get("originator") or "")
-				if other and other != originator and row.get("ttl_state") != "expired":
-					self.registry.unregister_session(other)
-		except Exception as e:
-			logger.warning(f"[MiniSession] could not close previous legs: {e}")
+		originator = self._leg(body)
+		self.registry.activate_leg(
+			originator=originator,
+			continuity_id=self.continuity_id,
+			mission_id=self.config.mission_id,
+			campaign_id=self.config.campaign_id,
+			role=role,
+			lineage_id=self.config.lineage_id,
+			affinity=self.affinity,
+			title=self._display_name(body),
+		)
 		global_turn = 0
 		try:
 			global_turn = self.registry.next_global_turn(originator, self.affinity)
@@ -174,6 +180,7 @@ class MiniSession:
 		temperature: Optional[float] = None,
 		max_tokens: Optional[int] = None,
 		history_turns: Optional[int] = None,
+		timeout: Optional[int] = None,
 	) -> Dict[str, Any]:
 		"""Run one task on `body`; returns text, messages and tool statistics."""
 		provider_name = provider_key or body
@@ -186,7 +193,9 @@ class MiniSession:
 		turns = self.mirror.read_turns(self.continuity_id)
 		limit = self.config.history_turns if history_turns is None else history_turns
 		if limit > 0:
-			turns = turns[-limit:]
+			turns = trim_history_window(turns, limit)
+		turns = trim_history_chars(turns, self.config.history_max_chars)
+		turns = trim_history_window(turns, len(turns))
 		messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
 		messages.extend(replay_messages(turns, current_prompt=task))
 		self._append("user", task, source_ref=f"{phase_ref}:user")
@@ -204,6 +213,7 @@ class MiniSession:
 				tools=tools,
 				temperature=temp,
 				max_tokens=limit_tokens,
+				**( {"timeout": timeout} if timeout is not None else {} ),
 			)
 			content = assistant.get("content")
 			calls = assistant.get("tool_calls")
@@ -243,7 +253,7 @@ class MiniSession:
 			"transcript": transcript,
 		}
 
-	def run_profile(self, profile_name: str, task: str, *, max_steps: Optional[int] = None) -> Dict[str, Any]:
+	def run_profile(self, profile_name: str, task: str, *, max_steps: Optional[int] = None, timeout: Optional[int] = None) -> Dict[str, Any]:
 		"""Compose a profile (identity + provider + toolbox + policy) and run it."""
 		profile = self.profiles.get(profile_name)
 		if profile is None:
@@ -265,6 +275,7 @@ class MiniSession:
 			temperature=profile.temperature,
 			max_tokens=profile.max_tokens,
 			history_turns=profile.history_turns,
+			timeout=timeout,
 		)
 
 	@staticmethod

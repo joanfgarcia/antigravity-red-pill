@@ -198,6 +198,46 @@ def render_history(
 	return f'<history continuity_id="{sanitize_inline(continuity_id, 80)}">\n{body}\n</history>'
 
 
+def trim_history_chars(turns: list[dict], max_chars: int) -> list[dict]:
+	"""Drop oldest turns until the textual history fits a character budget."""
+	if max_chars <= 0:
+		return turns
+	total = sum(len(str(t.get("content") or "")) for t in turns)
+	start = 0
+	while start < len(turns) and total > max_chars:
+		total -= len(str(turns[start].get("content") or ""))
+		start += 1
+	while start < len(turns) and str(turns[start].get("role") or "") == "tool":
+		start += 1
+	return turns[start:]
+
+
+def trim_history_window(turns: list[dict], limit: int) -> list[dict]:
+	"""Return a replay-safe window: no leading orphan tool or trailing orphan call.
+
+	A blind `turns[-limit:]` can start on a `tool` result whose assistant call was
+	cut, or end on an assistant `tool_calls` without its result. Both are invalid
+	chat histories for the next model.
+	"""
+	if limit <= 0 or len(turns) <= limit:
+		start = 0
+	else:
+		start = len(turns) - limit
+	end = len(turns)
+	while start > 0 and str(turns[start].get("role") or "") == "tool":
+		start -= 1
+	while start < end:
+		last = turns[end - 1]
+		if str(last.get("role") or "") == "assistant" and last.get("tool_calls"):
+			end -= 1
+		else:
+			break
+	if start < end and str(turns[start].get("role") or "") == "assistant" and turns[start].get("tool_calls"):
+		if not any(str(t.get("role") or "") == "tool" for t in turns[start:end]):
+			start += 1
+	return turns[start:end]
+
+
 def replay_messages(turns: List[Dict[str, Any]], *, current_prompt: Optional[str] = None) -> List[Dict[str, Any]]:
 	"""Replay nativo (OpenAI messages) para donde RedPill ES el arnés.
 

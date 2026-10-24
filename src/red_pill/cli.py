@@ -119,8 +119,7 @@ def main() -> None:
 		return
 
 	elif args.command == "mini":
-		handle_mini(args)
-		return
+		sys.exit(handle_mini(args))
 
 	# EventBus: let Enterprise/Community know which command was dispatched
 	get_event_bus().emit(

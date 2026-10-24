@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -24,15 +25,18 @@ from red_pill.core.queue_worker import process_driver_jobs
 from red_pill.mini.providers import HTTPProvider, UnixHTTPProvider
 from red_pill.mini.smoke import PHASE1_TASK, prepare_fixture
 from red_pill.mini.tools import WorkspaceTools
+from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
 
 PHASE2_TOOLS_TASK = """Using the session history and the read-only tools:
 1. State the RUN_ID from the first failing test output.
 2. Quote the failing assertion.
-3. Verify the current workspace: read calc.py and test_calc.py, and run the tests.
+3. Verify the current workspace by reading calc.py. test_calc.py may be
+unavailable; if so, use the session history. Do not run commands and do not
+modify files.
 4. Judge whether the fix is correct and why.
 5. Name one missing edge case (do not implement it).
-Do not modify files. Cite exact evidence."""
+Cite exact evidence."""
 
 
 def main() -> int:
@@ -90,14 +94,25 @@ def main() -> int:
 		forge_payload = {**base, "profile": "forge", "prompt": PHASE1_TASK, "title": "e2e-forge"}
 		loom_payload = {**base, "profile": "loom-tools", "prompt": PHASE2_TOOLS_TASK, "title": "e2e-loom"}
 		forge_job = jobs.enqueue_task("agentic_job", forge_payload, mission_id=mission)
-		loom_job = jobs.enqueue_task("agentic_job", loom_payload, mission_id=mission)
-		processed = process_driver_jobs(jobs, max_jobs=2)
+		forge_processed = process_driver_jobs(jobs, max_jobs=1)
 		forge_task = jobs.get_task(forge_job) or {}
-		loom_task = jobs.get_task(loom_job) or {}
 		tests = WorkspaceTools(args.workspace).run_tests()
+		# Loom must cite the RUN_ID from the mirror, not from a file it can read.
+		(Path(args.workspace) / "test_calc.py").unlink(missing_ok=True)
+		loom_job = jobs.enqueue_task("agentic_job", loom_payload, mission_id=mission)
+		loom_processed = process_driver_jobs(jobs, max_jobs=1)
+		processed = forge_processed + loom_processed
+		loom_task = jobs.get_task(loom_job) or {}
 		active = [row for row in SessionRegistry(session_db).get_by_continuity(continuity) if row.get("ttl_state") != "expired"]
 		forge_response = str((forge_task.get("checkpoint_data") or {}).get("response") or "")
 		loom_response = str((loom_task.get("checkpoint_data") or {}).get("response") or "")
+		mirror_turns = SessionMirror(session_db).read_turns(continuity)
+		forge_turns = [t for t in mirror_turns if str(t.get("originator") or "").startswith("forge:")]
+		forge_cites_run_id = run_id in forge_response
+		loom_saw_forge = any(run_id in str(t.get("content") or "") for t in forge_turns)
+		ss_out = subprocess.run(["ss", "-ltn"], capture_output=True, text=True).stdout
+		loom_loopback_only = "127.0.0.1:52625" in ss_out and "0.0.0.0:52625" not in ss_out
+		forge_socket_ok = Path(args.gpu_socket).exists()
 		report = {
 			"processed": processed,
 			"run_id": run_id,
@@ -108,17 +123,23 @@ def main() -> int:
 			"loom_status": loom_task.get("status"),
 			"loom_response": loom_response[:1000],
 			"tests_ok": tests.get("ok"),
+			"forge_cites_run_id": forge_cites_run_id,
 			"loom_cites_run_id": run_id in loom_response,
+			"loom_saw_forge": loom_saw_forge,
+			"loom_loopback_only": loom_loopback_only,
+			"forge_socket_ok": forge_socket_ok,
+			"mirror_turns": len(mirror_turns),
 			"one_active_leg": len(active) == 1,
 			"active_body": active[0]["originator"].split(":", 1)[0] if active else None,
 		}
 		print(json.dumps(report, ensure_ascii=False, indent=2))
-		ok = bool(report["tests_ok"]) and report["forge_status"] == "COMPLETED" and report["loom_status"] == "COMPLETED" and report["loom_cites_run_id"] and report["one_active_leg"]
+		ok = bool(report["tests_ok"]) and report["forge_status"] == "COMPLETED" and report["loom_status"] == "COMPLETED" and report["forge_cites_run_id"] and report["loom_cites_run_id"] and report["loom_saw_forge"] and report["loom_loopback_only"] and report["forge_socket_ok"] and report["one_active_leg"]
 		return 0 if ok else 1
 	finally:
 		if not args.keep:
 			stop_unit(loom_unit)
 			stop_unit(forge_unit)
+			Path(args.gpu_socket).unlink(missing_ok=True)
 		else:
 			print(f"[e2e] keeping {forge_unit} {loom_unit}", file=sys.stderr)
 

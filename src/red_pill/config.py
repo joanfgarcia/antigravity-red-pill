@@ -292,7 +292,7 @@ class RedPillConfig(BaseSettings):
 	SIP_ENABLED: bool = True
 	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "red_pill.sock")
 	# Mini harness bodies (Forge GPU over UDS; Loom FLM on loopback v0).
-	MINI_FORGE_SOCKET: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "forge.sock")
+	MINI_FORGE_SOCKET: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "forge", "forge.sock")
 	MINI_FLM_URL: str = "http://127.0.0.1:52625"
 
 	# -----------------------------------------------------------------------

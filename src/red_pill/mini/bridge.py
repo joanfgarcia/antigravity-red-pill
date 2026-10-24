@@ -17,6 +17,7 @@ from red_pill.mini.profiles import PROFILES
 from red_pill.mini.providers import HTTPProvider, UnixHTTPProvider
 from red_pill.mini.session import MiniConfig, MiniSession
 from red_pill.mini.tools import WorkspaceTools
+from red_pill.mini.trust import validate_db_path, validate_loopback_url, validate_profile, validate_socket_path, validate_workspace
 from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
 logger = logging.getLogger(__name__)
@@ -37,18 +38,21 @@ class MiniLocalBridge(AgentBridge):
 		flm_url: Optional[str] = None,
 		operator: str = "Joan",
 		origin: Optional[str] = None,
+		run_ref: Optional[str] = None,
+		lineage_id: Optional[str] = None,
 		providers: Optional[Dict[str, ChatProvider]] = None,
 		toolboxes: Optional[Dict[str, Any]] = None,
 	):
-		self.profile = str(profile or "forge").strip().lower()
-		if self.profile not in PROFILES:
-			raise ValueError(f"unknown mini profile: {profile!r}")
-		self.workspace = str(workspace or os.getcwd())
+		self.profile = validate_profile(profile)
+		self.workspace = validate_workspace(str(workspace or os.getcwd()))
+		db_path = validate_db_path(db_path)
+		gpu_socket = validate_socket_path(gpu_socket)
+		flm_url = validate_loopback_url(flm_url)
 		app_cfg = cfg.get_config()
 		self._providers = dict(providers or {})
 		if not self._providers:
-			gpu = str(gpu_socket or getattr(app_cfg, "MINI_FORGE_SOCKET", "") or "")
-			flm = str(flm_url or getattr(app_cfg, "MINI_FLM_URL", "http://127.0.0.1:52625"))
+			gpu = validate_socket_path(str(gpu_socket or getattr(app_cfg, "MINI_FORGE_SOCKET", "") or "")) or ""
+			flm = validate_loopback_url(str(flm_url or getattr(app_cfg, "MINI_FLM_URL", "http://127.0.0.1:52625"))) or ""
 			self._providers = {
 				"forge": UnixHTTPProvider(gpu, timeout=300),
 				"loom": HTTPProvider(flm, timeout=360),
@@ -66,6 +70,8 @@ class MiniLocalBridge(AgentBridge):
 				continuity_id=continuity_id,
 				mission_id=mission_id,
 				db_path=db_path,
+				run_ref=run_ref,
+				lineage_id=lineage_id,
 				affinity=[mission_id if mission_id.startswith("mission:") else f"mission:{mission_id}"],
 				operator=operator,
 			),
@@ -109,7 +115,7 @@ class MiniLocalBridge(AgentBridge):
 		timeout: int = 300,
 	) -> ConversationResult:
 		try:
-			result = self._session.run_profile(self.profile, text)
+			result = self._session.run_profile(self.profile, text, timeout=timeout)
 		except Exception as e:
 			logger.warning(f"[MiniLocalBridge] {self.profile} failed: {e}")
 			return ConversationResult(conversation_id=self.continuity_id, response="", error=str(e))
