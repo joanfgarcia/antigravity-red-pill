@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from red_pill.core.affinity import canonize_affinity
 from red_pill.mini.contracts import AgentProfile, Toolbox
+from red_pill.session.compactor import Compactor, estimate_tokens
 from red_pill.session.identity import new_continuity_id
 from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
@@ -42,6 +43,10 @@ class MiniConfig:
 	history_max_chars: int = 12000
 	temperature: float = 0.0
 	max_tokens: int = 2048
+	context_tokens: int = 8192
+	compactor_enabled: Optional[bool] = None
+	compactor_engine: Optional[str] = None
+	compactor_protect_last_n: Optional[int] = None
 
 
 class MiniSession:
@@ -54,6 +59,7 @@ class MiniSession:
 		*,
 		profiles: Optional[Dict[str, AgentProfile]] = None,
 		toolboxes: Optional[Dict[str, Toolbox]] = None,
+		compactor: Optional[Compactor] = None,
 	):
 		self.config = config
 		self.providers = providers
@@ -67,6 +73,24 @@ class MiniSession:
 		self.current_body: Optional[str] = None
 		self.current_originator: Optional[str] = None
 		self.affinity = canonize_affinity(config.affinity)
+		self.compactor = compactor or self._build_compactor()
+
+	def _build_compactor(self) -> Optional[Compactor]:
+		enabled = self.config.compactor_enabled
+		if enabled is None:
+			try:
+				import red_pill.config as cfg
+
+				enabled = bool(getattr(cfg.get_config(), "SESSION_COMPACTOR_ENABLED", False))
+			except Exception:
+				enabled = False
+		if not enabled:
+			return None
+		return Compactor(
+			self.mirror,
+			engine=self.config.compactor_engine,
+			protect_last_n=self.config.compactor_protect_last_n,
+		)
 
 	def _leg(self, body: str) -> str:
 		return f"{body}:{self.run_id}"
@@ -192,6 +216,7 @@ class MiniSession:
 		max_tokens: Optional[int] = None,
 		history_turns: Optional[int] = None,
 		timeout: Optional[int] = None,
+		context_tokens: Optional[int] = None,
 	) -> Dict[str, Any]:
 		"""Run one task on `body`; returns text, messages and tool statistics."""
 		provider_name = provider_key or body
@@ -203,6 +228,15 @@ class MiniSession:
 		phase_ref = f"{self.run_id}:p{self.phase}"
 		request_id = phase_ref
 		turns = self.mirror.read_turns(self.continuity_id)
+		if self.compactor is not None:
+			budget = self.config.context_tokens if context_tokens is None else int(context_tokens)
+			ctx = self.compactor.ensure_context(
+				self.continuity_id,
+				budget_tokens=budget,
+				extra_tokens=estimate_tokens(system_prompt) + estimate_tokens(task),
+				mission_id=self.config.mission_id,
+			)
+			turns = ctx.turns
 		limit = self.config.history_turns if history_turns is None else history_turns
 		if limit > 0:
 			turns = trim_history_window(turns, limit)
@@ -317,6 +351,7 @@ class MiniSession:
 			max_tokens=profile.max_tokens,
 			history_turns=profile.history_turns,
 			timeout=timeout,
+			context_tokens=profile.context_tokens or None,
 		)
 
 	@staticmethod

@@ -517,6 +517,14 @@ class RedPillConfig(BaseSettings):
 	# SESSION_PENDING_TTL_MIN: un turno `pending` sin cierre se marca `aborted`
 	# (reason=ttl) tras este tiempo; no se borra. B-01s.
 	SESSION_PENDING_TTL_MIN: int = 30
+	# SESSION_COMPACTOR_* (B-02): compactación de contexto. `ENABLED` apagado por
+	# defecto; el resto son parámetros con defaults.
+	SESSION_COMPACTOR_ENABLED: bool = False
+	SESSION_COMPACTOR_ENGINE: str = "samantha"
+	SESSION_COMPACTOR_PROTECT_LAST_N: int = 4
+	SESSION_COMPACTOR_BACKGROUND_TOKENS: int = 8000
+	SESSION_COMPACTOR_RESERVE_TOKENS: int = 2000
+	SESSION_COMPACTOR_MAX_INPUT_CHARS: int = 120000
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912

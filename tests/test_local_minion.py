@@ -696,6 +696,43 @@ async def test_mirror_capture_with_continuity(monkeypatch):
 	assert turns[0]["source"] == "sip"
 
 
+async def test_compactor_reduces_history_before_provider(monkeypatch):
+	from types import SimpleNamespace
+
+	import red_pill.config as cfg
+	from red_pill.session.mirror import SessionMirror
+
+	mirror = SessionMirror()
+	for i in range(1, 9):
+		mirror.append_turn(
+			continuity_id="alma-compact",
+			mission_id="repo:m",
+			role="user" if i % 2 else "assistant",
+			content=f"turno {i}",
+			source_ref=f"t{i}",
+		)
+	monkeypatch.setattr(
+		cfg,
+		"get_config",
+		lambda: SimpleNamespace(SESSION_COMPACTOR_ENGINE="extractive"),
+	)
+	provider = FakeProvider([{"role": "assistant", "content": "ok"}])
+	_use_provider(monkeypatch, provider)
+	res = await local_minion.run_local_minion(
+		"continúa",
+		continuity_id="alma-compact",
+		mission_id="repo:m",
+		use_compactor=True,
+		context_tokens=20,
+		history_turns=5,
+	)
+	assert res["ok"] is True
+	sent = "\n".join(str(m.get("content") or "") for m in provider.sent[0])
+	assert "Resumen extractivo" in sent
+	assert len(provider.sent[0]) <= 8
+	assert SessionMirror().latest_compaction("alma-compact") is not None
+
+
 async def test_mirror_capture_skipped_without_soul(monkeypatch):
 	from red_pill.session.mirror import SessionMirror
 
@@ -722,6 +759,19 @@ async def test_mirror_capture_with_run_ref_is_idempotent(monkeypatch):
 	await local_minion.run_local_minion("hola", continuity_id="alma-rr", mission_id="m", run_ref="job:1")
 	await local_minion.run_local_minion("hola", continuity_id="alma-rr", mission_id="m", run_ref="job:1")
 	assert SessionMirror().count_turns("alma-rr") == 2
+
+
+def test_context_tokens_resolve_from_model_profile(monkeypatch):
+	from types import SimpleNamespace
+
+	from red_pill.core import model_runtime
+
+	monkeypatch.setattr(model_runtime, "resolve", lambda body: SimpleNamespace(n_ctx=4096))
+	assert local_minion._resolve_context_tokens("loom") == 4096
+	monkeypatch.setattr(model_runtime, "resolve", lambda body: SimpleNamespace(n_ctx=6144))
+	assert local_minion._resolve_context_tokens("") == 6144
+	monkeypatch.setattr(model_runtime, "resolve", lambda body: (_ for _ in ()).throw(RuntimeError("no")))
+	assert local_minion._resolve_context_tokens("loom") == 8192
 
 
 def test_canonical_turns_drops_unpaired_tool_calls():
@@ -823,8 +873,10 @@ def test_agentic_job_creates_local_tools_with_continuity():
 			"mission_id": "mission:job-tools",
 			"originator": "local-tools:job",
 			"history_turns": 9,
+			"context_tokens": 4096,
 		}
 	)
 	assert isinstance(bridge, LocalToolBridge)
 	assert bridge.continuity_id == "alma-job-tools"
+	assert bridge._context_tokens == 4096
 	assert bridge._history_turns == 9

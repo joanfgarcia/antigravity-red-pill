@@ -47,6 +47,7 @@ PROFILES: Dict[str, AgentProfile] = {
 		history_turns=12,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=8192,
 	),
 	"loom": AgentProfile(
 		key="loom",
@@ -59,6 +60,7 @@ PROFILES: Dict[str, AgentProfile] = {
 		history_turns=20,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=4096,
 	),
 	"loom-tools": AgentProfile(
 		key="loom-tools",
@@ -71,5 +73,6 @@ PROFILES: Dict[str, AgentProfile] = {
 		history_turns=20,
 		temperature=0.0,
 		max_tokens=2048,
+		context_tokens=4096,
 	),
 }

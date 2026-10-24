@@ -4,6 +4,41 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-074] B-02 — servicio de compactación y cableado local (slice 3)
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED (slice 3). Telegram y el disparo en fondo siguen pendientes; flags OFF por defecto.
+**Context**: AD-073 dejó el almacén y el puerto de resumen, pero ningún consumidor los usaba. Faltaba el servicio que decide rango, protege la cola y escribe el resumen, y cablearlo en los runners locales sin cambiar el comportamiento por defecto.
+**Decision**:
+1. **`session/compactor.py`**: `Compactor` sobre `SessionMirror` con `compact_now`, `ensure_context`, `maybe_compact`, `context` y `reset(handoff)`. `start/complete/abort` siguen siendo la única escritura canónica.
+2. **Rango seguro y contiguo**: se compacta desde `range_end+1` de la última compactación hasta `last_regular - protect_last_n`; `_safe_range_end` baja el corte si partiría una pareja assistant(tool_calls)↔tool (incluidos resultados pending/aborted). La **lectura** (`context_turns`) no aplica `protect_last_n`: devuelve la cadena completa de resúmenes (vigente y ancestros) y todo lo posterior al rango, para no ocultar turnos que aún no fueron resumidos. El resumen anterior puede entrar en el siguiente rango (resumen recursivo), pero no cuenta como turno protegido. `reset(handoff)` supersede las compactaciones vigentes.
+3. **Umbral**: `ensure_context` estima chars/3.2, suma system+task (`extra_tokens`) y compacta una vez si no cabe en `budget - reserve`; si no hay rango, no mintió con `compacted=True`. Un resumen que no reduce en contextos reales se aborta (`summary_not_smaller`). `background_tokens` queda reservado para `B02-WORKER`.
+4. **MiniSession**: `context_tokens` en `MiniConfig`/`AgentProfile`, `compactor_enabled/engine/protect_last_n`; antes del provider usa `ensure_context` y luego aplica los trims existentes. Perfiles: Forge 8192, Loom 4096.
+5. **`run_local_minion`**: `context_tokens` + `use_compactor`; la compactación corre en executor (no bloquea el event loop) y solo si hay alma+misión. Cae al historial anterior si falla.
+6. **CLI**: `red-pill session compact --continuity ID [--mission M] [--engine samantha|memento|extractive] [--protect-last-n N] [--handoff FILE] [--json]`; `--handoff` ejecuta `reset` (con misión inferida o explícita y error CLI legible).
+7. **Compatibilidad**: `SESSION_COMPACTOR_ENABLED=False` por defecto; sin flag, MiniSession/local-minion se comportan exactamente como antes. `purge()` elimina compactaciones de almas muertas para no dejar resúmenes huérfanos ni romper el `seq` al reencarnar.
+**Alternatives**: (a) compactar en cada turno — coste y resúmenes redundantes; (b) borrar turnos — rompe auditoría/B-01s; (c) compactar dentro del provider — acopla el motor al runner; (d) hilo de fondo efímero — no durable, se pierde con el proceso; se deja para el worker/JM.
+**Rationale / Evidence**: suite **3331 passed**, 13 skipped, 3 xfailed; `ruff` y `mypy` limpios. Tests nuevos: rango seguro con pareja tool, hueco no resumido, idempotencia por rango y rangos solapados, cadena de 3+ resúmenes, abort por fallo/resumen no decreciente, `protect_last_n` como política de corte, segunda compactación con `parent_compaction_id`, `reset(handoff)` tras compactar y tras reset, `maybe_compact`, MiniSession/local-minion con ventana corta que conserva el resumen, `rehydrate` compactado con límite y purga de compactaciones.
+**Consequences**: B-02 ya tiene servicio y consumidores locales. Deuda explícita: `B02-WORKER` (Samantha/Job Manager en fondo con dedupe), paridad Telegram (mapear sesión Telegram→alma), reintento tras rechazo por longitud, `compact_parent` en switch/rehydrate, `B02-TOKENS` (usage real) y cap/resumen de resúmenes para la cadena (hoy se conserva completa; crece con cada compactación). ARCH-001 sigue siendo el gate del harness propio. Inspirado en **Pi Durable** (Earendil Works / Mario Zechner, MIT): se copian políticas, no código.
+
+---
+
+## [AD-073] B-02 — schema de compactaciones y puerto de resumen (slices 1-2)
+**Date**: 2026-10-24
+**Status**: ACCEPTED & IMPLEMENTED (slices 1-2 de B-02). Integración en MiniSession/Telegram/local-minion y `reset(handoff)` siguen pendientes.
+**Context**: B-02 necesita dos piezas antes de cablear umbrales: un almacén canónico de compactaciones (sin borrar el espejo) y un motor de resumen que no sea el modelo de la conversación. Samantha ya resume Telegram; Memento tiene transporte local y `context-distiller` era un skill manual pre-Búnker. Faltaba el contrato entre ellos.
+**Decision**:
+1. **Schema v6 aditivo**: `session_compactions` (`compaction_id` PK, `continuity_id`, `mission_id`, `parent_compaction_id`, `range_start_seq`, `range_end_seq`, `summary`, `model`, `status`, `reason`, `tokens_before`, `tokens_after`, `created_at`, `completed_at`) + índices por alma/estado/rango y por padre. Índice único parcial por `(continuity_id, range_start_seq, range_end_seq)` no abortado: dos productores del mismo rango convergen.
+2. **Ciclo de compactación**: `start_compaction` inserta `pending` (idempotente por id); `complete_compaction` apenda un turno `system` (`source=compactor`, `source_ref=compact:<id>`) y actualiza la fila en **una transacción**; `abort_compaction` no toca el contexto. El histórico original nunca se borra.
+3. **Contexto podado**: `context_turns` devuelve resumen vigente + cola posterior a `range_end_seq`, con `protect_last_n` calculado sobre turnos normales (no sobre el resumen). `context_messages` reutiliza `switch.replay_messages` (parejas tool-call/result intactas).
+4. **Puerto `Summarizer`**: `SamanthaSummarizer` (cola local barata), `MementoSummarizer` (transporte local de calidad/manual/handoff) y `ExtractiveSummarizer` (fallback determinista sin LLM). `FallbackSummarizer` encadena primario + extractivo; `build_summarizer` expone la fábrica.
+5. **Prompt operativo propio** (`session/prompts/compactor_summary_*`): estado, decisiones, cambios/refs, pendientes, blockers y siguiente paso. No reutiliza el prompt de memoria curada de Memento ni el de Telegram.
+6. **Flag apagado por defecto**: `SESSION_COMPACTOR_ENABLED=False`; el resto de parámetros (`ENGINE`, `PROTECT_LAST_N`, `BACKGROUND_TOKENS`, `RESERVE_TOKENS`, `MAX_INPUT_CHARS`) tiene defaults.
+**Alternatives**: (a) reutilizar `session_mirror` con columnas de compactación — mezcla dos ciclos de vida; (b) borrar turnos compactados — pierde auditoría y B-01s; (c) usar el modelo de la conversación — no cabe el contexto que se quiere resumir; (d) usar solo el prompt de Memento — está orientado a memoria curada, no a continuidad operativa; (e) un único motor sin fallback — un fallo local bloquea el turno.
+**Rationale / Evidence**: suite **3299 passed**, 13 skipped, 3 xfailed; `ruff` y `mypy` limpios en los módulos tocados. Tests nuevos: schema v6, roundtrip start/complete/abort, idempotencia, `protect_last_n`, `compact_parent`, pareja tool-call, contrato `CompactionStore`, prompts y los tres adaptadores + fallback.
+**Consequences**: B-02 ya tiene su sustrato canónico y su motor intercambiable. Deuda: cablear umbrales en `MiniSession`/`run_local_minion`/Telegram, `reset(handoff)`/`compact_parent` en switch, y decidir `B02-TOKENS`/`B02-WORKER`. ARCH-001 sigue siendo el gate del harness propio. Inspirado en **Pi Durable** (Earendil Works / Mario Zechner, MIT): se copian políticas, no código.
+
+---
+
 ## [AD-072] B-01s — estado de turno y write-ahead en el espejo del alma
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED. Completa B-01j para los caminos RedPill; B-01h (hooks externos) sigue pendiente.

@@ -7,6 +7,7 @@ DECISION_LOG del repo.
 """
 
 from red_pill.session.board import SessionBoard
+from red_pill.session.compactor import Compactor
 from red_pill.session.identity import (
 	decorate_with_session_tag,
 	new_continuity_id,
@@ -16,6 +17,7 @@ from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
 
 __all__ = [
+	"Compactor",
 	"SessionBoard",
 	"SessionMirror",
 	"SessionRegistry",

@@ -120,6 +120,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_seq ON session_mirror(continuity_id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_source ON session_mirror(continuity_id, originator, source_ref)
 WHERE source_ref IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mirror_ts ON session_mirror(continuity_id, ts);
+
+CREATE TABLE IF NOT EXISTS session_compactions (
+compaction_id TEXT PRIMARY KEY,
+continuity_id TEXT NOT NULL,
+mission_id TEXT NOT NULL,
+parent_compaction_id TEXT,
+range_start_seq INTEGER NOT NULL,
+range_end_seq INTEGER NOT NULL,
+summary TEXT NOT NULL,
+model TEXT,
+status TEXT NOT NULL DEFAULT 'completed',
+reason TEXT,
+tokens_before INTEGER,
+tokens_after INTEGER,
+created_at REAL NOT NULL,
+completed_at REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_compactions_latest ON session_compactions(continuity_id, status, range_end_seq DESC);
+CREATE INDEX IF NOT EXISTS idx_compactions_parent ON session_compactions(parent_compaction_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compactions_range ON session_compactions(continuity_id, range_start_seq, range_end_seq) WHERE status != 'aborted';
 """
 
 # Taxonomía civil de eventos de misión (Fase 2, RFC_CONSCIENCIA_MULTISESION §3.6).
@@ -267,6 +288,9 @@ class SessionRegistry:
 			if current < 5:
 				# v5: estado de turno (B-01s): pending/completed/aborted + request_id.
 				conn.execute("PRAGMA user_version=5")
+			if current < 6:
+				# v6: compactaciones de contexto (B-02): rangos, resumen y linaje.
+				conn.execute("PRAGMA user_version=6")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────

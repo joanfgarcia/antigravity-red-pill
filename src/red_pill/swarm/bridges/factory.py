@@ -69,7 +69,7 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	if backend in ("local-tools", "local_tools"):
 		from .local import LocalToolBridge
 
-		allowed = {key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref") if key in kwargs}
+		allowed = {key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens") if key in kwargs}
 		return LocalToolBridge(**allowed)
 	if backend == "local":
 		from .local import LocalBridge

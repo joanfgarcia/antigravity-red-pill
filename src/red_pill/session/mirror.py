@@ -16,6 +16,7 @@ import json
 import logging
 import sqlite3
 import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 from red_pill.core.paths import get_session_db
@@ -38,6 +39,24 @@ _SOURCE_CLASSES = {
 
 
 _STUB_PREFIX = "[output purgado:"
+
+
+def _is_compaction_summary(turn: dict) -> bool:
+	return str(turn.get("role") or "") == "system" and str(turn.get("source") or "") == "compactor"
+
+
+def _turn_from_row(row: Any) -> dict:
+	turn = dict(row)
+	raw_calls = turn.get("tool_calls")
+	if raw_calls:
+		try:
+			parsed = json.loads(raw_calls)
+		except json.JSONDecodeError:
+			parsed = None
+		turn["tool_calls"] = parsed if isinstance(parsed, list) else None
+	else:
+		turn["tool_calls"] = None
+	return turn
 
 
 def _max_turn_bytes() -> int:
@@ -105,7 +124,7 @@ def _coerce_ts(value: Any) -> float:
 
 
 class SessionMirror:
-	"""Implementa `contracts.MirrorStore` sobre la misma `session.db` (schema v5)."""
+	"""Implementa `contracts.MirrorStore` sobre la misma `session.db` (schema v6)."""
 
 	def __init__(self, db_path: Optional[str] = None):
 		self.db_path = str(db_path) if db_path else str(get_session_db())
@@ -465,20 +484,7 @@ class SessionMirror:
 			params.append(max(1, min(int(limit), 5000)))
 		with connect_session_db(self.db_path) as conn:
 			rows = conn.execute(sql, tuple(params)).fetchall()
-		turns: List[dict] = []
-		for row in rows:
-			turn = dict(row)
-			raw_calls = turn.get("tool_calls")
-			if raw_calls:
-				try:
-					parsed = json.loads(raw_calls)
-				except json.JSONDecodeError:
-					parsed = None
-				turn["tool_calls"] = parsed if isinstance(parsed, list) else None
-			else:
-				turn["tool_calls"] = None
-			turns.append(turn)
-		return turns
+		return [_turn_from_row(row) for row in rows]
 
 	def count_turns(self, continuity_id: str) -> int:
 		with connect_session_db(self.db_path) as conn:
@@ -495,6 +501,309 @@ class SessionMirror:
 				(str(continuity_id or "").strip(),),
 			).fetchone()
 		return int(row["m"]) if row else 0
+
+	# ── Compactación de contexto (B-02, schema v6) ─────────────────────────
+	def start_compaction(
+		self,
+		*,
+		continuity_id: str,
+		mission_id: str,
+		range_start_seq: int,
+		range_end_seq: int,
+		compaction_id: Optional[str] = None,
+		parent_compaction_id: Optional[str] = None,
+		model: Optional[str] = None,
+		tokens_before: Optional[int] = None,
+	) -> dict:
+		"""Registra una compactación `pending`; idempotente por id y por rango.
+
+		Si ya existe una compactación no abortada que solapa el rango, devuelve
+		esa fila (el llamador debe resumir el rango reclamado, no el calculado).
+		"""
+		continuity = str(continuity_id or "").strip()
+		mission = _clean_key(mission_id)
+		if not continuity:
+			raise ValueError("continuity_id requerido")
+		if not mission:
+			raise ValueError("mission_id requerido")
+		start = int(range_start_seq)
+		end = int(range_end_seq)
+		if start < 0 or end < start:
+			raise ValueError("rango de compactación inválido")
+		compact_id = str(compaction_id or uuid.uuid4().hex).strip()
+		now = time.time()
+		with connect_session_db(self.db_path) as conn:
+			conn.execute("BEGIN IMMEDIATE")
+			existing = conn.execute(
+				"SELECT * FROM session_compactions WHERE compaction_id = ?",
+				(compact_id,),
+			).fetchone()
+			if existing is None:
+				existing = conn.execute(
+					"SELECT * FROM session_compactions WHERE continuity_id=? AND status != 'aborted' "
+					"AND range_start_seq <= ? AND range_end_seq >= ? ORDER BY range_end_seq DESC LIMIT 1",
+					(continuity, end, start),
+				).fetchone()
+			if existing is not None:
+				conn.commit()
+				return dict(existing)
+			previous = conn.execute(
+				"SELECT range_end_seq FROM session_compactions WHERE continuity_id=? AND status='completed' "
+				"ORDER BY range_end_seq DESC, created_at DESC LIMIT 1",
+				(continuity,),
+			).fetchone()
+			if previous is not None and start != 0 and start != int(previous["range_end_seq"]) + 1:
+				conn.rollback()
+				raise ValueError(
+					f"rango no contiguo: empieza en {start}, la compactación previa termina en {previous['range_end_seq']}"
+				)
+			if previous is None and start not in (0, 1):
+				conn.rollback()
+				raise ValueError(
+					f"el primer rango debe empezar en 0 o 1 (recibido {start})"
+				)
+			conn.execute(
+				"""
+				INSERT OR IGNORE INTO session_compactions (
+					compaction_id, continuity_id, mission_id, parent_compaction_id,
+					range_start_seq, range_end_seq, summary, model, status, reason,
+					tokens_before, tokens_after, created_at, completed_at
+				) VALUES (?, ?, ?, ?, ?, ?, '', ?, 'pending', NULL, ?, NULL, ?, NULL)
+				""",
+				(
+					compact_id,
+					continuity,
+					mission,
+					parent_compaction_id,
+					start,
+					end,
+					model,
+					tokens_before,
+					now,
+				),
+			)
+			conn.commit()
+			row = conn.execute(
+				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
+			).fetchone()
+		if row is None:
+			raise RuntimeError("start_compaction: no se pudo leer la compactación")
+		return dict(row)
+
+	def complete_compaction(
+		self,
+		compaction_id: str,
+		*,
+		summary: str,
+		model: Optional[str] = None,
+		tokens_after: Optional[int] = None,
+	) -> dict:
+		"""Cierra la compactación y apenda su resumen como turno `system`.
+
+		La operación es atómica: si el turno resumen ya existía (reintento), no
+		se duplica y la compactación queda completada igualmente.
+		"""
+		compact_id = str(compaction_id or "").strip()
+		text = str(summary or "").strip()
+		if not compact_id:
+			raise ValueError("compaction_id requerido")
+		if not text:
+			raise ValueError("summary requerido")
+		now = time.time()
+		with connect_session_db(self.db_path) as conn:
+			conn.execute("BEGIN IMMEDIATE")
+			row = conn.execute(
+				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
+			).fetchone()
+			if row is None:
+				conn.rollback()
+				raise KeyError(f"compactación desconocida: {compact_id}")
+			continuity = str(row["continuity_id"])
+			mission = str(row["mission_id"])
+			if str(row["status"]) == "aborted":
+				conn.rollback()
+				raise ValueError(f"compactación abortada: {compact_id}")
+			if str(row["status"]) == "completed" and str(row["summary"] or "").strip():
+				conn.commit()
+				return dict(row)
+			seq_row = conn.execute(
+				"SELECT COALESCE(MAX(seq), 0) AS m FROM session_mirror WHERE continuity_id = ?",
+				(continuity,),
+			).fetchone()
+			seq = int(seq_row["m"]) + 1
+			self._insert_turn(
+				conn,
+				continuity_id=continuity,
+				seq=seq,
+				mission_id=mission,
+				role="system",
+				content=text,
+				tool_calls=None,
+				tool_call_id=None,
+				model=model,
+				ts=now,
+				global_turn=0,
+				originator="",
+				source="compactor",
+				source_ref=f"compact:{compact_id}",
+				request_id=compact_id,
+				status="completed",
+			)
+			conn.execute(
+				"UPDATE session_compactions SET summary=?, model=COALESCE(?, model), "
+				"status='completed', tokens_after=?, completed_at=? WHERE compaction_id=?",
+				(text, model, tokens_after, now, compact_id),
+			)
+			conn.commit()
+			done = conn.execute(
+				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
+			).fetchone()
+		if done is None:
+			raise RuntimeError("complete_compaction: no se pudo leer la compactación")
+		return dict(done)
+
+	def abort_compaction(self, compaction_id: str, *, reason: str) -> dict:
+		"""Marca una compactación como abortada sin tocar el contexto."""
+		compact_id = str(compaction_id or "").strip()
+		if not compact_id:
+			raise ValueError("compaction_id requerido")
+		with connect_session_db(self.db_path) as conn:
+			conn.execute(
+				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? "
+				"WHERE compaction_id=? AND status != 'completed'",
+				(str(reason or "aborted")[:500], time.time(), compact_id),
+			)
+			conn.commit()
+			row = conn.execute(
+				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
+			).fetchone()
+		if row is None:
+			raise KeyError(f"compactación desconocida: {compact_id}")
+		return dict(row)
+
+	def supersede_compactions(self, continuity_id: str, *, reason: str = "superseded") -> int:
+		"""Marca como abortadas las compactaciones vigentes (para un reset/handoff).
+
+		No borra filas ni turnos: el handoff nuevo pasa a ser el contexto vigente y
+		los resúmenes viejos quedan auditables pero fuera del replay.
+		"""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return 0
+		with connect_session_db(self.db_path) as conn:
+			cur = conn.execute(
+				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? "
+				"WHERE continuity_id=? AND status != 'aborted'",
+				(str(reason or "superseded")[:500], time.time(), continuity),
+			)
+			conn.commit()
+			return int(cur.rowcount or 0)
+
+	def latest_compaction(self, continuity_id: str) -> Optional[dict]:
+		"""Última compactación completada del alma (o None)."""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return None
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(
+				"SELECT * FROM session_compactions WHERE continuity_id=? AND status='completed' "
+				"ORDER BY range_end_seq DESC, created_at DESC LIMIT 1",
+				(continuity,),
+			).fetchone()
+		return dict(row) if row else None
+
+	def compactions(self, continuity_id: str) -> List[dict]:
+		"""Historial de compactaciones del alma, de más antigua a más nueva."""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return []
+		with connect_session_db(self.db_path) as conn:
+			rows = conn.execute(
+				"SELECT * FROM session_compactions WHERE continuity_id=? "
+				"ORDER BY range_end_seq ASC, created_at ASC",
+				(continuity,),
+			).fetchall()
+		return [dict(row) for row in rows]
+
+	def _compaction_summary_turn(self, continuity_id: str, compaction_id: str) -> Optional[dict]:
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(
+				"SELECT * FROM session_mirror WHERE continuity_id=? AND source='compactor' AND source_ref=?",
+				(continuity_id, f"compact:{compaction_id}"),
+			).fetchone()
+		return _turn_from_row(row) if row else None
+
+	def context_turns(self, continuity_id: str) -> List[dict]:
+		"""Turnos que debe ver el modelo: cadena de resúmenes + cola posterior.
+
+		No borra nada: el histórico completo sigue en `session_mirror`. Si no hay
+		compactación completada, devuelve todos los turnos completados. La cola es
+		**todo** lo posterior al rango resumido; `protect_last_n` pertenece al corte
+		de compactación, no a la lectura.
+		"""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return []
+		latest = self.latest_compaction(continuity)
+		if latest is None:
+			return self.read_turns(continuity)
+		# Cadena completa de resúmenes: un hijo puede no incluir el texto del
+		# abuelo aunque lo cubra por rango. Mostrar solo el padre pierde tramos
+		# a partir de la tercera compactación; se recorre el linaje entero.
+		summaries: List[dict] = []
+		seen: set[str] = set()
+		current: Optional[dict] = latest
+		while current is not None:
+			compact_id = str(current.get("compaction_id") or "")
+			if not compact_id or compact_id in seen:
+				break
+			seen.add(compact_id)
+			turn = self._compaction_summary_turn(continuity, compact_id)
+			if turn is not None:
+				summaries.append(turn)
+			parent_id = current.get("parent_compaction_id")
+			if not parent_id:
+				break
+			with connect_session_db(self.db_path) as conn:
+				current = conn.execute(
+					"SELECT * FROM session_compactions WHERE compaction_id=? AND status='completed'",
+					(str(parent_id),),
+				).fetchone()
+				current = dict(current) if current is not None else None
+		summaries.reverse()
+		# La cola es TODO lo posterior al rango resumido. `protect_last_n` es una
+		# política del corte de compactación, no de lectura: aplicarlo aquí tiraría
+		# turnos que aún no han entrado en ningún resumen (hueco silencioso).
+		floor = int(latest["range_end_seq"])
+		while floor > 0:
+			turns = [
+				t
+				for t in self.read_turns(continuity, since_seq=floor)
+				if not _is_compaction_summary(t)
+			]
+			if not turns or str(turns[0].get("role") or "") != "tool":
+				break
+			# El corte cayó entre un assistant(tool_calls) y su resultado: se
+			# retrocede hasta incluir la llamada, nunca un `tool` huérfano.
+			floor -= 1
+		else:
+			turns = [
+				t
+				for t in self.read_turns(continuity, since_seq=floor)
+				if not _is_compaction_summary(t)
+			]
+		return summaries + turns
+
+	def context_messages(
+		self,
+		continuity_id: str,
+		*,
+		current_prompt: Optional[str] = None,
+	) -> List[dict]:
+		"""`context_turns` en formato OpenAI (replay nativo)."""
+		from red_pill.session.switch import replay_messages
+
+		return replay_messages(self.context_turns(continuity_id), current_prompt=current_prompt)
 
 	# ── Ciclo de vida y observabilidad (TTL + monitorización, AD-060) ───────
 	def stats(self, *, retention_days: Optional[float] = None) -> dict:
@@ -622,6 +931,9 @@ class SessionMirror:
 					(cid, cutoff, cid),
 				)
 				if cur.rowcount:
+					# Un alma muerta no debe dejar resúmenes (posibles secretos) ni
+					# rangos huérfanos que rompan el `seq` de una reencarnación.
+					conn.execute("DELETE FROM session_compactions WHERE continuity_id = ?", (cid,))
 					purged_rows += int(cur.rowcount)
 					purged_souls += 1
 			conn.commit()
@@ -738,6 +1050,7 @@ class SessionMirror:
 						)
 					else:
 						cur = conn.execute("DELETE FROM session_mirror WHERE continuity_id = ?", (cid,))
+						conn.execute("DELETE FROM session_compactions WHERE continuity_id = ?", (cid,))
 					removed += int(cur.rowcount or 0)
 				conn.commit()
 				if removed:

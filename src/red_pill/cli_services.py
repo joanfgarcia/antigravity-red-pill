@@ -164,6 +164,57 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(str(row.get("content") or ""))
 			print("[RESUME] --- fin del prompt ---")
 		return
+	if getattr(args, "session_cmd", None) == "compact":
+		import json
+
+		from red_pill.session.compactor import Compactor
+		from red_pill.session.mirror import SessionMirror
+
+		mirror = SessionMirror()
+		compactor = Compactor(
+			mirror,
+			engine=getattr(args, "engine", None),
+			protect_last_n=getattr(args, "protect_last_n", None),
+		)
+		handoff = getattr(args, "handoff", None)
+		done: Optional[dict]
+		if handoff:
+			from pathlib import Path as _Path
+
+			try:
+				summary = _Path(handoff).read_text(encoding="utf-8")
+			except OSError as exc:
+				print(f"[COMPACT] no se pudo leer el handoff {handoff!r}: {exc}")
+				raise SystemExit(1) from exc
+			if not summary.strip():
+				print(f"[COMPACT] el handoff {handoff!r} está vacío")
+				raise SystemExit(1)
+			mission = args.mission
+			if not mission:
+				latest = mirror.latest_compaction(args.continuity)
+				mission = str((latest or {}).get("mission_id") or "")
+			if not mission:
+				turns = mirror.read_turns(args.continuity)
+				mission = str((turns[0].get("mission_id") if turns else "") or "")
+			if not mission:
+				print("[COMPACT] --mission es obligatorio si el alma no tiene turnos previos")
+				raise SystemExit(1)
+			done = compactor.reset(args.continuity, summary=summary, mission_id=mission)
+			action = "handoff"
+		else:
+			done = compactor.compact_now(args.continuity, mission_id=args.mission)
+			action = "compact"
+		if getattr(args, "json", False):
+			print(json.dumps(done, ensure_ascii=False, indent=2, default=str))
+		elif done is None:
+			print(f"[COMPACT] {args.continuity}: nada que compactar (rango vacío)")
+		else:
+			print(
+				f"[COMPACT] {action} {done.get('compaction_id')} "
+				f"rango={done.get('range_start_seq')}-{done.get('range_end_seq')} "
+				f"estado={done.get('status')}"
+			)
+		return
 	if getattr(args, "session_cmd", None) == "rehydrate":
 		from red_pill.session.switch import rehydrate_payload
 

@@ -1,5 +1,19 @@
 ## Unreleased
 
+### 🧠 B-02 — compactor de contexto (schema v6 + servicio local)
+
+- **[NEW]** `session_compactions` v6 y `Compactor`: dos políticas de corte
+  (`reserve_tokens`, `background_tokens` reservado), `protect_last_n`, rango
+  seguro para parejas tool-call/result, `reset(handoff)` y `compact_parent`.
+- **[NEW]** Puerta `Summarizer` con Samantha, Memento y extractivo; el resumen
+  nunca usa el modelo de la conversación.
+- **[NEW]** Cableado en `MiniSession` y `run_local_minion` (flags
+  `SESSION_COMPACTOR_*` OFF por defecto) y CLI `red-pill session compact`.
+- **[FIX]** `rehydrate`/`switch` usan el contexto compactado, no el espejo
+  completo; `purge` limpia compactaciones de almas muertas.
+- **[DOCS]** AD-073/AD-074; inspirado en **Pi Durable** (Earendil Works / Mario
+  Zechner, MIT): se copian políticas, no código.
+
 ### 🧵 B-01s — turn write-ahead en el espejo del alma
 
 - **[NEW]** `session_mirror` v5: `status` (`pending|completed|aborted`), `request_id`

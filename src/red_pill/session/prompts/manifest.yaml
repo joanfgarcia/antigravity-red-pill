@@ -1,0 +1,8 @@
+# Prompts del subsistema de sesiones (B-02, compactor de contexto).
+component: session
+
+prompts:
+  compactor_summary_user:
+    template: compactor_summary_user.txt
+    system: compactor_summary_system.txt
+    runtime: [history, instructions]

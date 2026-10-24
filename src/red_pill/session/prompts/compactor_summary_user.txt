@@ -1,0 +1,29 @@
+Compacta el siguiente tramo de conversación para que el agente pueda continuar después de liberar contexto.
+
+<historial>
+${history}
+</historial>
+
+<instrucciones_extra>
+${instructions}
+</instrucciones_extra>
+
+Devuelve un resumen operativo con estas secciones (omite las que queden vacías):
+
+## Estado
+Qué se estaba haciendo y en qué punto exacto quedó.
+
+## Decisiones
+Decisiones tomadas y su razón, con IDs/commits/refs si existen.
+
+## Cambios y referencias
+Archivos, rutas, commits, jobs, RUN_ID y artefactos relevantes.
+
+## Pendientes
+Trabajo pendiente, en orden si se conoce.
+
+## Blockers y riesgos
+Impedimentos, dudas abiertas y riesgos.
+
+## Siguiente paso
+La acción concreta más probable para retomar.

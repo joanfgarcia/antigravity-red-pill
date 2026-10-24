@@ -65,7 +65,7 @@ class AgenticJobDriver(ResumableJobDriver):
 			if getattr(self, "job_id", None):
 				kwargs["run_ref"] = f"{self.job_id}:{getattr(self, 'attempts', 0)}"
 		elif backend_name in ("local-tools", "local_tools"):
-			for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref"):
+			for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens"):
 				if payload.get(key) is not None:
 					kwargs[key] = payload[key]
 			if getattr(self, "job_id", None):

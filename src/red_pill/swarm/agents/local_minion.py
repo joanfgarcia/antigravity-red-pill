@@ -512,6 +512,28 @@ def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_r
 	return turns
 
 
+def _resolve_context_tokens(model: object) -> int:
+	"""n_ctx del modelo servido; 8192 conservador si no se puede resolver.
+
+	El SIP se registra con `model=''` y resuelve por `task=minion_tool`; no se
+	puede asumir 8192 porque el tier real (p. ej. Granite 8B) puede ser 6144.
+	"""
+	from pathlib import Path
+
+	from red_pill.core import model_runtime as mr
+
+	name = str(model or "").strip()
+	if name:
+		try:
+			return int(mr.resolve({"model": Path(name).name if "/" in name else name}).n_ctx)
+		except Exception:
+			pass
+	try:
+		return int(mr.resolve({"task": "minion_tool"}).n_ctx)
+	except Exception:
+		return 8192
+
+
 def _resolve_minion_identity(*, originator: str, continuity_id: Optional[str], mission_id: Optional[str]) -> "tuple[str, Optional[str], Optional[str]]":
 	"""Parámetros → env del job → registro. Sin cuerpo compuesto no hay alma."""
 	origin = originator or os.getenv("REDPILL_ORIGINATOR") or ""
@@ -541,6 +563,8 @@ async def run_local_minion(
 	run_ref: Optional[str] = None,
 	history_turns: int = 20,
 	history_max_chars: int = 12000,
+	context_tokens: Optional[int] = None,
+	use_compactor: Optional[bool] = None,
 ) -> Dict[str, Any]:
 	"""Run a bounded tool loop for `task` on the local model. Returns a result dict.
 
@@ -570,6 +594,31 @@ async def run_local_minion(
 
 			mirror = SessionMirror()
 			turns = mirror.read_turns(cid)
+			enabled = use_compactor
+			if enabled is None:
+				try:
+					import red_pill.config as cfg
+
+					enabled = bool(getattr(cfg.get_config(), "SESSION_COMPACTOR_ENABLED", False))
+				except Exception:
+					enabled = False
+			if enabled and mission:
+				try:
+					from red_pill.session.compactor import Compactor, estimate_tokens
+
+					compactor = Compactor(mirror)
+					ctx = await loop.run_in_executor(
+						None,
+						lambda: compactor.ensure_context(
+							cid,
+							budget_tokens=context_tokens or _resolve_context_tokens(model),
+							extra_tokens=estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(task),
+							mission_id=mission,
+						),
+					)
+					turns = ctx.turns
+				except Exception as e:
+					logger.warning(f"[local-minion] compaction failed: {e}")
 			if history_turns > 0:
 				turns = trim_history_window(turns, history_turns)
 			turns = trim_history_chars(turns, history_max_chars)

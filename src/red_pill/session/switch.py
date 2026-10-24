@@ -177,39 +177,63 @@ def render_history(
 		except Exception:
 			max_chars = _HISTORY_MAX_CHARS
 	turns = _filter_replay_turns(turns)
+	pinned, rest = _split_summary(turns)
+	pinned_lines = [_neutralize(_turn_line(t)) for t in pinned]
+	pinned_chars = sum(len(line) + 1 for line in pinned_lines)
+	budget = max(0, max_chars - pinned_chars)
 	lines: List[str] = []
 	used = 0
-	for turn in reversed(turns):
+	for turn in reversed(rest):
 		line = _neutralize(_turn_line(turn))
-		if used + len(line) + 1 > max_chars:
+		if used + len(line) + 1 > budget:
 			# Nunca perder el turno más reciente por ser grande: se recorta y se
 			# conserva (un tool result de 70 KB no debe dejar el historial vacío).
 			if not lines:
-				room = max(0, max_chars - used - 1)
+				room = max(0, budget - used - 1)
 				if room:
 					lines.append(line[:room] + "…")
 			break
 		lines.append(line)
 		used += len(line) + 1
 	lines.reverse()
-	body = "\n".join(lines)
+	body = "\n".join(pinned_lines + lines)
 	if current_prompt:
 		body += f"\n\n<current>\n{_neutralize(current_prompt)}\n</current>"
 	return f'<history continuity_id="{sanitize_inline(continuity_id, 80)}">\n{body}\n</history>'
 
 
+def _is_summary_turn(turn: dict) -> bool:
+	"""Turno de resumen del compactor: cabeza no recortable del replay."""
+	return str(turn.get("role") or "") == "system" and str(turn.get("source") or "") == "compactor"
+
+
+def _split_summary(turns: list[dict]) -> tuple[list[dict], list[dict]]:
+	pinned = [t for t in turns if _is_summary_turn(t)]
+	rest = [t for t in turns if not _is_summary_turn(t)]
+	return pinned, rest
+
+
 def trim_history_chars(turns: list[dict], max_chars: int) -> list[dict]:
-	"""Drop oldest turns until the textual history fits a character budget."""
+	"""Drop oldest turns until the textual history fits a character budget.
+
+	El resumen del compactor queda pineado: sin él, el cuerpo nuevo perdería
+	todo el rango ya compactado y la cola posterior no lo cubre. Por eso el
+	`max_chars` es **soft** cuando la cadena de resúmenes ya lo supera: nunca se
+	tira un resumen en favor del presupuesto.
+	"""
 	if max_chars <= 0:
 		return turns
-	total = sum(len(str(t.get("content") or "")) for t in turns)
+	pinned, rest = _split_summary(turns)
+	pinned_chars = sum(len(str(t.get("content") or "")) for t in pinned)
+	budget = max(0, max_chars - pinned_chars)
+	total = sum(len(str(t.get("content") or "")) for t in rest)
 	start = 0
-	while start < len(turns) and total > max_chars:
-		total -= len(str(turns[start].get("content") or ""))
+	while start < len(rest) and total > budget:
+		total -= len(str(rest[start].get("content") or ""))
 		start += 1
-	while start < len(turns) and str(turns[start].get("role") or "") == "tool":
+	while start < len(rest) and str(rest[start].get("role") or "") == "tool":
 		start += 1
-	return turns[start:]
+	return pinned + rest[start:]
 
 
 def trim_history_window(turns: list[dict], limit: int) -> list[dict]:
@@ -219,23 +243,24 @@ def trim_history_window(turns: list[dict], limit: int) -> list[dict]:
 	cut, or end on an assistant `tool_calls` without its result. Both are invalid
 	chat histories for the next model.
 	"""
-	if limit <= 0 or len(turns) <= limit:
+	pinned, rest = _split_summary(turns)
+	if limit <= 0 or len(rest) <= limit:
 		start = 0
 	else:
-		start = len(turns) - limit
-	end = len(turns)
-	while start > 0 and str(turns[start].get("role") or "") == "tool":
+		start = len(rest) - limit
+	end = len(rest)
+	while start > 0 and str(rest[start].get("role") or "") == "tool":
 		start -= 1
 	while start < end:
-		last = turns[end - 1]
+		last = rest[end - 1]
 		if str(last.get("role") or "") == "assistant" and last.get("tool_calls"):
 			end -= 1
 		else:
 			break
-	if start < end and str(turns[start].get("role") or "") == "assistant" and turns[start].get("tool_calls"):
-		if not any(str(t.get("role") or "") == "tool" for t in turns[start:end]):
+	if start < end and str(rest[start].get("role") or "") == "assistant" and rest[start].get("tool_calls"):
+		if not any(str(t.get("role") or "") == "tool" for t in rest[start:end]):
 			start += 1
-	return turns[start:end]
+	return pinned + rest[start:end]
 
 
 def replay_messages(turns: List[Dict[str, Any]], *, current_prompt: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -269,9 +294,9 @@ def rehydrate_payload(
 ) -> str:
 	"""Bloque para abrir una sesión nueva (mismo `continuity_id`) en arnés externo."""
 	store = mirror or SessionMirror()
-	turns = store.read_turns(continuity_id)
+	turns = store.context_turns(continuity_id)
 	if limit is not None and limit > 0:
-		turns = turns[-int(limit) :]
+		turns = trim_history_window(turns, int(limit))
 	history = render_history(continuity_id, turns)
 	return (
 		f"<!-- REENCARNACIÓN: {kind} debe abrir una sesión NUEVA con continuity_id="
@@ -463,7 +488,7 @@ def switch_model(
 			)
 		except Exception as e:
 			logger.info(f"[SessionSwitch] no transcript que sincronizar para {old_origin}: {e}")
-	turns = store.read_turns(continuity)
+	turns = store.context_turns(continuity)
 	payload = render_history(continuity, turns, current_prompt=prompt)
 
 	candidates = [target] + list(fallbacks or [])

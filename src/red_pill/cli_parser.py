@@ -181,6 +181,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_resume.add_argument("request_id", help="request_id del turno")
 	session_resume.add_argument("--continuity", default=None, help="Filtra por alma (continuity_id)")
 	session_resume.add_argument("--json", action="store_true", help="Salida JSON")
+	session_compact = session_sub.add_parser("compact", help="Compacta el contexto de un alma (B-02)")
+	session_compact.add_argument("--continuity", required=True, help="Alma a compactar (continuity_id)")
+	session_compact.add_argument("--mission", default=None, help="Misión para el registro (default: la del último turno)")
+	session_compact.add_argument("--engine", default=None, help="Motor: samantha | memento | extractive (default: config)")
+	session_compact.add_argument("--protect-last-n", type=int, default=None, help="Turnos recientes que nunca se compactan")
+	session_compact.add_argument("--handoff", default=None, help="Fichero con una nota de handoff: reset del contexto")
+	session_compact.add_argument("--json", action="store_true", help="Salida JSON")
 
 	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")
 	mini_parser.add_argument("--profile", default="forge", help="Perfil del cuerpo (forge | loom | loom-tools)")
