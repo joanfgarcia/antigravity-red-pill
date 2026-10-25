@@ -4,6 +4,22 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-079] RFC-INTEROP-003 S6 — identidad de alma en arneses externos
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S6.1/S6.3; S6.2 real E2E pendiente).
+**Context**: S0-S5 propagaban la identidad a local-mini/local-tools y a las etapas command, pero opencode/claude/pi nacían sin `REDPILL_*`: el hijo no heredaba el alma y el handshake podía resolver otro cuerpo.
+**Decision**:
+1. **Env de confianza**: `identity_env` exporta solo IDs (`REDPILL_CONTINUITY_ID`, `REDPILL_MISSION_ID`, `REDPILL_PARENT_MISSION_ID`, `REDPILL_ORIGINATOR`, `REDPILL_ROLE`, `REDPILL_JOB_ID`). `REDPILL_MISSION_ID` es la misión del alma (`parent_mission_id`), nunca la de aislamiento del forge.
+2. **Bridges**: `ClaudeBridge`, `OpenCodeBridge` y `PiBridge` aceptan la identidad en el constructor y la inyectan en el `env` del subproceso. OpenCode conserva `REDPILL_SCRIBE_DISABLE` para Telegram/captura.
+3. **Callers**: `AgentMinion` y `AgenticJobDriver` pasan la identidad a bridges externos y cascadas (`CascadeBridge` la propaga a cada target).
+4. **Sin alma**: no se exporta ningún `REDPILL_*` inventado; los jobs/callers legacy siguen igual (D-02/A-06).
+5. **Límite**: S6.2 (E2E real con opencode) no se ejecutó en este corte; B-01h (write-ahead en hooks externos) sigue fuera.
+**Alternatives**: (a) inyectar identidad en el prompt — spoof; (b) pasar env al MCP en vez del CLI — no cubre al hijo; (c) solo local-mini — deja el gap de S6.
+**Rationale / Evidence**: suite **3398 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: env por bridge, `AgentMinion`, `AgenticJobDriver`, cascada y no-soul.
+**Consequences**: el hijo opencode/claude/pi hereda el alma por canal de confianza. Quedan S6.2 (E2E real) y B-01h (hooks externos con `request_id` compartido).
+
+---
+
 ## [AD-078] RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad (P3)
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED (S0-S5; S6 opcional pendiente).

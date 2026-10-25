@@ -39,6 +39,7 @@ from red_pill.core.origins import PROVIDER_PI, record_origin
 from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
+from .identity_env import identity_env, merged_env
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,18 @@ def _text_of(content: Any) -> str:
 class PiBridge(AgentBridge):
 	"""Execution backend: Pi CLI, headless (--mode json), sessions persisted."""
 
-	def __init__(self, pi_path: Optional[str] = None, origin: str = "pi"):
+	def __init__(
+		self,
+		pi_path: Optional[str] = None,
+		origin: str = "pi",
+		*,
+		continuity_id: Optional[str] = None,
+		mission_id: Optional[str] = None,
+		parent_mission_id: Optional[str] = None,
+		originator: Optional[str] = None,
+		role: Optional[str] = None,
+		job_id: Optional[str] = None,
+	):
 		resolved = pi_path or _resolve_pi_bin()
 		if not resolved:
 			raise RuntimeError(
@@ -73,6 +85,14 @@ class PiBridge(AgentBridge):
 			)
 		self._pi_path = resolved
 		self._origin = origin
+		self._identity = identity_env(
+			continuity_id=continuity_id,
+			mission_id=mission_id,
+			parent_mission_id=parent_mission_id,
+			originator=originator,
+			role=role,
+			job_id=job_id,
+		)
 		# When the red-pill harness extension is deployed, Pi itself relays the
 		# turn (agent_before_settle / agent_settled) and injects identity/RAG — the
 		# bridge skips its own scribe to avoid double-queueing.
@@ -98,6 +118,7 @@ class PiBridge(AgentBridge):
 				text=True,
 				timeout=timeout + 10,
 				cwd=cwd or str(get_bunker_root().parent),
+				env=merged_env(self._identity),
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[PiBridge] Command timed out after {timeout + 10}s")

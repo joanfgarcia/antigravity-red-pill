@@ -1,5 +1,13 @@
 ## Unreleased
 
+### 🧬 RFC-INTEROP-003 S6 — identidad de alma en arneses externos
+
+- **[NEW]** `opencode`, `claude` y `pi` reciben `REDPILL_*` por env de confianza;
+  el hijo hereda `continuity_id`, misión del alma, originator, rol y job.
+- **[NEW]** `AgentMinion`, `AgenticJobDriver` y `CascadeBridge` propagan la identidad;
+  los jobs sin alma no reciben variables inventadas.
+- **[DOCS]** AD-079; S6.1/S6.3 implementados. S6.2 (E2E real) y B-01h pendientes.
+
 ### 🎛️ RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad
 
 - **[NEW]** El alma reclama `session_leases` `scope=mission` al encolar/transferir/reanudar;

@@ -22,6 +22,7 @@ from red_pill.core.origins import PROVIDER_CLAUDE, record_origin
 from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
+from .identity_env import identity_env, merged_env
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +36,30 @@ class ClaudeBridge(AgentBridge):
 
 	CLAUDE_BIN = "claude"
 
-	def __init__(self, claude_path: Optional[str] = None, origin: str = "user"):
+	def __init__(
+		self,
+		claude_path: Optional[str] = None,
+		origin: str = "user",
+		*,
+		continuity_id: Optional[str] = None,
+		mission_id: Optional[str] = None,
+		parent_mission_id: Optional[str] = None,
+		originator: Optional[str] = None,
+		role: Optional[str] = None,
+		job_id: Optional[str] = None,
+	):
 		self._claude_path = claude_path or shutil.which(self.CLAUDE_BIN)
 		if not self._claude_path:
 			raise RuntimeError("Claude CLI (claude) not found in PATH. Install Claude Code and ensure `claude` is available.")
 		self._origin = origin
+		self._identity = identity_env(
+			continuity_id=continuity_id,
+			mission_id=mission_id,
+			parent_mission_id=parent_mission_id,
+			originator=originator,
+			role=role,
+			job_id=job_id,
+		)
 
 	def _run_claude(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
 		"""Execute claude CLI with common flags and parse the JSON result object.
@@ -56,6 +76,7 @@ class ClaudeBridge(AgentBridge):
 				text=True,
 				timeout=timeout + 10,
 				cwd=cwd or str(get_bunker_root().parent),
+				env=merged_env(self._identity),
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[ClaudeBridge] Command timed out after {timeout + 10}s")

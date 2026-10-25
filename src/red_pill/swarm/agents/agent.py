@@ -58,6 +58,10 @@ class AgentMinion(Minion):
 				for key in ("continuity_id", "mission_id", "originator"):
 					if kwargs.get(key) is not None:
 						bridge_kwargs[key] = kwargs[key]
+			else:
+				for key in ("continuity_id", "mission_id", "parent_mission_id", "originator", "role", "job_id"):
+					if kwargs.get(key) is not None:
+						bridge_kwargs[key] = kwargs[key]
 
 			if backend is None:
 				from red_pill.swarm.bridges import create_cascade_bridge
