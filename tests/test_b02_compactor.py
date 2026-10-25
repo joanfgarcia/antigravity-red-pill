@@ -38,11 +38,11 @@ def _seed(mirror: SessionMirror, n: int = 5) -> None:
 
 
 class TestCompactionSchema:
-	def test_schema_has_session_compactions_v6(self, tmp_path):
+	def test_schema_has_session_compactions_v7(self, tmp_path):
 		path = tmp_path / "session.db"
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 6
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 7
 		cols = {row[1] for row in con.execute("PRAGMA table_info(session_compactions)").fetchall()}
 		assert {"compaction_id", "continuity_id", "range_start_seq", "range_end_seq", "summary", "parent_compaction_id"} <= cols
 		con.close()

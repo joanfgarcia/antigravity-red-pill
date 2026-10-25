@@ -13,11 +13,13 @@ from red_pill.session.identity import (
 	new_continuity_id,
 	resolve_default_mission,
 )
+from red_pill.session.lease import LeaseStore
 from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
 
 __all__ = [
 	"Compactor",
+	"LeaseStore",
 	"SessionBoard",
 	"SessionMirror",
 	"SessionRegistry",

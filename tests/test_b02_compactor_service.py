@@ -462,3 +462,21 @@ def test_reset_then_compaction_keeps_handoff(mirror):
 	compactor.compact_now("alma-1")
 	turns = mirror.context_turns("alma-1")
 	assert "HANDOFF" in [t["content"] for t in turns if t["role"] == "system"]
+
+
+def test_maybe_start_enqueues_one_durable_script_job(mirror):
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	qm = CognitiveQueueManager(str(mirror.db_path + ".queue"))
+	_seed(mirror, 8)
+	compactor = Compactor(mirror, summarizer=FakeSummarizer(), background_tokens=1, queue_manager=qm)
+	job_id = compactor.maybe_start("alma-1", mission_id="repo:next")
+	assert job_id
+	again = compactor.maybe_start("alma-1", mission_id="repo:next")
+	assert again == job_id
+	task = qm.get_task(job_id)
+	assert task is not None
+	payload = task["payload"]
+	assert payload["continuity_id"] == "alma-1"
+	assert payload["mission_id"] == "repo:next"
+	assert payload["step_command"][-6:] == ["--continuity", "alma-1", "--mission", "repo:next", "--protect-last-n", "4"]

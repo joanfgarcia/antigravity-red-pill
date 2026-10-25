@@ -141,6 +141,28 @@ completed_at REAL
 CREATE INDEX IF NOT EXISTS idx_compactions_latest ON session_compactions(continuity_id, status, range_end_seq DESC);
 CREATE INDEX IF NOT EXISTS idx_compactions_parent ON session_compactions(parent_compaction_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_compactions_range ON session_compactions(continuity_id, range_start_seq, range_end_seq) WHERE status != 'aborted';
+
+CREATE TABLE IF NOT EXISTS session_leases (
+lease_key TEXT PRIMARY KEY,
+scope TEXT NOT NULL,
+subject_id TEXT NOT NULL,
+continuity_id TEXT NOT NULL,
+mission_id TEXT,
+holder_originator TEXT NOT NULL DEFAULT '',
+owner_kind TEXT NOT NULL,
+state TEXT NOT NULL DEFAULT 'active',
+started_at REAL NOT NULL,
+last_heartbeat_at REAL NOT NULL,
+idle_ttl_s INTEGER NOT NULL,
+max_wall_s INTEGER NOT NULL,
+extended_by TEXT,
+reason TEXT,
+metadata_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_leases_heartbeat ON session_leases(state, last_heartbeat_at);
+CREATE INDEX IF NOT EXISTS idx_leases_scope ON session_leases(scope, subject_id, state);
+CREATE INDEX IF NOT EXISTS idx_leases_continuity ON session_leases(continuity_id, state);
 """
 
 # Taxonomía civil de eventos de misión (Fase 2, RFC_CONSCIENCIA_MULTISESION §3.6).
@@ -291,6 +313,9 @@ class SessionRegistry:
 			if current < 6:
 				# v6: compactaciones de contexto (B-02): rangos, resumen y linaje.
 				conn.execute("PRAGMA user_version=6")
+			if current < 7:
+				# v7: leases de trabajo y misión (B-01L/RFC-INTEROP-003).
+				conn.execute("PRAGMA user_version=7")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────
