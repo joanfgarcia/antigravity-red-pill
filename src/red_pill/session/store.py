@@ -770,6 +770,15 @@ class SessionRegistry:
 			out.append(event)
 		return out
 
+	def event_exists(self, *, mission_id: str, event_type: str, ref: str, summary: str) -> bool:
+		"""Idempotencia de eventos de job (S2): misma señal, mismo ref/summary."""
+		with self._connect() as conn:
+			row = conn.execute(
+				"SELECT 1 FROM mission_events WHERE mission_id=? AND type=? AND ref=? AND summary=? LIMIT 1",
+				(_clean_key(mission_id), str(event_type), str(ref), _clean_text(summary, _EVENT_SUMMARY_MAX)),
+			).fetchone()
+		return row is not None
+
 	def count_events(
 		self,
 		mission_id: str,

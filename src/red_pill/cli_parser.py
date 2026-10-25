@@ -305,6 +305,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
 	job_list.add_argument("--mission", help="Solo jobs de esa misión (aislamiento entre forges)")
+	job_list.add_argument("--continuity", help="Solo jobs de esa alma (continuity_id)")
 	job_list.add_argument(
 		"--json",
 		action="store_true",

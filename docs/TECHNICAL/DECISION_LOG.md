@@ -10,10 +10,11 @@ This document records the architectural and philosophical pivots of the project.
 **Context**: S0/S1 daban identidad al payload/etapas, pero el coro no veía el job como leg ni el alma podía descubrirlo. P2 materializa el ciclo S2/S3 sin tocar el motor del DAG.
 **Decision**:
 1. **Leg `dag:<job_id>`** en `DagJobDriver.begin_step` cuando hay `continuity_id`: `mission_id = parent_mission_id` (misión del alma), `role=job`, linaje/afinidad; se expira en `on_terminal` (completed/failed/timeout).
-2. **Eventos**: `phase_done` por etapa nueva y `mission_closed` al completar se publican en `mission_events` con `ref=job_id`; best-effort, sin romper el step.
-3. **Descubrimiento**: `CognitiveQueueManager.list_tasks(continuity_id=...)`, `job_list` acepta `continuity_id` y `job_status` devuelve `continuity_id`/`parent_mission_id`.
+2. **Eventos**: `phase_done` por hoja nueva, `blocked` por etapa fallida y `mission_closed` al completar; idempotentes por `(mission,type,ref,summary)` y solo con `parent_mission_id` (nunca la misión de aislamiento del forge).
+3. **Descubrimiento**: `CognitiveQueueManager.list_tasks(continuity_id=...)`, `job_list`/CLI `job list --continuity` y `job_status` con `continuity_id`/`parent_mission_id`/`originator`/`role`/`lease`.
 4. **Rol `job`**: política de hidratación compacta equivalente a `task`, registrada para que el tablón/digest no la degrade.
-5. **Límite**: `[JOBS]` en wake-up, lease de misión y handoff no se tocan en P2; sin auto-reanudación.
+5. **Anti-spoof**: `job_submit` exige que el `continuity_id` declarado coincida con el canal de confianza (salvo Operador); `DagJobDriver` valida `REDPILL_CONTINUITY_ID`.
+6. **Límite**: `[JOBS]` en wake-up, lease de misión y handoff no se tocan en P2; sin auto-reanudación.
 **Alternatives**: (a) leg por etapa — multiplica el tablón; (b) eventos desde MCP — exige sesión y no cubre jobs headless; (c) auto-resume al descubrir — riesgo de duplicar efectos.
 **Rationale / Evidence**: suite **3370 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: leg activo/rol job, phase_done, mission_closed, expiración y filtro por continuidad.
 **Consequences**: un job con alma ya se ve en el coro y se puede descubrir por `continuity_id`; faltan wake-up `[JOBS]`, lease de misión, handoff y env a arneses externos.

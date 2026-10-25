@@ -2755,13 +2755,14 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		trusted_mission = str(session.get("mission_id") or "").strip()
 		operator = os.getenv("REDPILL_OPERATOR") == "1"
 		provided_continuity = str(payload.get("continuity_id") or "").strip()
-		if provided_continuity and trusted_continuity and provided_continuity != trusted_continuity and not operator:
-			return [
-				types.TextContent(
-					type="text",
-					text="[ERROR] job_submit continuity_id no pertenece al llamante (anti-spoof).",
-				)
-			]
+		if provided_continuity and not operator:
+			if not trusted_continuity or provided_continuity != trusted_continuity:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ERROR] job_submit continuity_id no pertenece al llamante (anti-spoof).",
+					)
+				]
 		if not provided_continuity and trusted_continuity:
 			payload["continuity_id"] = trusted_continuity
 		if payload.get("continuity_id"):
@@ -2936,6 +2937,9 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"mission_id": task.get("mission_id"),
 			"continuity_id": task.get("continuity_id"),
 			"parent_mission_id": task.get("parent_mission_id"),
+			"originator": (task.get("checkpoint_data") or {}).get("originator"),
+			"role": (task.get("checkpoint_data") or {}).get("role"),
+			"lease": (task.get("checkpoint_data") or {}).get("lease"),
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),

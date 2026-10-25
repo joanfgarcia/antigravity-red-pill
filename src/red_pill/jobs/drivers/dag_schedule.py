@@ -133,11 +133,12 @@ class DagScheduleMixin:
 		after: list[str],
 		*,
 		done: bool,
+		blocked: Optional[list[str]] = None,
 	) -> None:
 		"""RFC-INTEROP-003 S2: phase_done/mission_closed al coro (best-effort)."""
 		if not identity or not getattr(self, "job_id", None):
 			return
-		mission = str(identity.get("parent_mission_id") or payload.get("mission_id") or "")
+		mission = str(identity.get("parent_mission_id") or "")
 		if not mission:
 			return
 		try:
@@ -145,23 +146,38 @@ class DagScheduleMixin:
 
 			registry = SessionRegistry()
 			for path in [p for p in after if p not in before]:
-				registry.add_event(
-					event_type="phase_done",
-					mission_id=mission,
-					summary=f"stage {path} done",
-					continuity_id=str(identity.get("continuity_id") or ""),
-					originator=str(identity.get("originator") or ""),
-					ref=str(self.job_id),
-				)
+				summary = f"stage {path} done"
+				if not registry.event_exists(mission_id=mission, event_type="phase_done", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="phase_done",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
+			for path in blocked or []:
+				summary = f"stage {path} blocked"
+				if not registry.event_exists(mission_id=mission, event_type="blocked", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="blocked",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
 			if done:
-				registry.add_event(
-					event_type="mission_closed",
-					mission_id=mission,
-					summary=f"job {str(self.job_id)[:8]} completed",
-					continuity_id=str(identity.get("continuity_id") or ""),
-					originator=str(identity.get("originator") or ""),
-					ref=str(self.job_id),
-				)
+				summary = f"job {str(self.job_id)[:8]} completed"
+				if not registry.event_exists(mission_id=mission, event_type="mission_closed", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="mission_closed",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
 		except Exception as exc:
 			logger.warning(f"[DagJob] no se pudieron publicar eventos: {exc}")
 
@@ -453,7 +469,17 @@ class DagScheduleMixin:
 				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
 				f"{leaves_done}/{total_leaves} hojas completas preservadas en el checkpoint."
 			)
-		self._publish_stage_events(payload, identity, before_completed, new_completed, done=done and not paused)
+		leaf_paths = {lp for lp, _ in _iter_leaves(stages)}
+		new_leaves = [p for p in new_completed if p in leaf_paths]
+		failed_paths = [path for path, _summary, failed in all_tasks if failed]
+		self._publish_stage_events(
+			payload,
+			identity,
+			before_completed,
+			new_leaves,
+			done=done and not paused,
+			blocked=failed_paths,
+		)
 		return StepOutcome(
 			completed=done and not paused,
 			new_checkpoint=checkpoint,

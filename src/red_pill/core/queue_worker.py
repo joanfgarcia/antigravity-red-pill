@@ -314,10 +314,6 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					cog_queue.save_checkpoint(job_id, checkpoint, progress)
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed after timeout: {abort_err}")
-			try:
-				driver.on_terminal(task["payload"], checkpoint, "failed", f"timeout: {timeout}")
-			except Exception as term_err:
-				logger.warning(f"Job {job_id} on_terminal failed after timeout: {term_err}")
 			_handle_step_timeout(cog_queue, job_id, task, timeout)
 			logger.error(f"Job {job_id} step timed out: {timeout}")
 		except Exception as e:

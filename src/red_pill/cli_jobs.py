@@ -144,7 +144,11 @@ def handle_job(args: argparse.Namespace) -> None:
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
-		tasks = queue.list_tasks(statuses=statuses, mission_id=getattr(args, "mission", None))
+		tasks = queue.list_tasks(
+			statuses=statuses,
+			mission_id=getattr(args, "mission", None),
+			continuity_id=getattr(args, "continuity", None),
+		)
 		if getattr(args, "json", False):
 			# JOB-001: salida estructurada para parseo agéntico directo
 			print(_json.dumps(tasks, ensure_ascii=False, indent=1, default=str))

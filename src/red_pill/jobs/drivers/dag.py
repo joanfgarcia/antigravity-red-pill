@@ -16,6 +16,7 @@ per node type (adding a node = write its module and register it).
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, Optional, Tuple
 
 from red_pill.jobs.drivers.base import ResumableJobDriver
@@ -72,6 +73,9 @@ class DagJobDriver(DagScheduleMixin, DagExecMixin, DagFanoutMixin, ResumableJobD
 		continuity = checkpoint.get("continuity_id") or payload.get("continuity_id")
 		if not continuity or not getattr(self, "job_id", None):
 			return checkpoint
+		trusted = os.getenv("REDPILL_CONTINUITY_ID")
+		if trusted and str(continuity) != str(trusted):
+			raise ValueError("dag_job continuity_id no coincide con REDPILL_CONTINUITY_ID")
 		mission = str(checkpoint.get("parent_mission_id") or payload.get("parent_mission_id") or payload.get("mission_id") or "")
 		try:
 			from red_pill.core.affinity import derive_affinity
