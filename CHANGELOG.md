@@ -1,5 +1,16 @@
 ## Unreleased
 
+### 🧷 B-01L P0 — leases v7 y worker durable de compactación
+
+- **[NEW]** `session_leases` v7 con `scope=work|mission` y `LeaseStore`
+  (heartbeat, extensión acotada, finish, sweep compare-and-set).
+- **[NEW]** `Compactor.maybe_start` encola un `script_job` durable con
+  `session compact --db-path`, dedupe por continuity y `control.max_step_minutes`.
+- **[FIX]** El worker apunta a la DB del mirror, no a la default; el umbral de
+  fondo respeta `extra_tokens` y `budget-reserve`; `extend_lease` sin techo ya no
+  es un no-op; heartbeat/finish validan dueño; purga de leases.
+- **[DOCS]** AD-075; B01L P0. Watchdog/heartbeat de runners y Telegram pendientes.
+
 ### 🗂️ Desk — scaffold con dos dueños y grafo de enlaces
 
 - **[FEATURE]** `scripts/scaffold_desk.sh` + `seeds/desk/.germ`: el contenido del

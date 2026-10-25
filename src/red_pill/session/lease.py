@@ -40,6 +40,9 @@ class LeaseStore:
 
 	def __init__(self, db_path: Optional[str] = None):
 		self.db_path = str(db_path) if db_path else str(get_session_db())
+		from red_pill.session.store import SessionRegistry
+
+		SessionRegistry(self.db_path)  # dueño del schema v7
 
 	def _connect(self):
 		return connect_session_db(self.db_path)
@@ -68,6 +71,18 @@ class LeaseStore:
 	@staticmethod
 	def _row(row: Any) -> Optional[dict]:
 		return dict(row) if row is not None else None
+
+	@staticmethod
+	def _check_owner(
+		row: Any,
+		*,
+		continuity_id: Optional[str] = None,
+		holder_originator: Optional[str] = None,
+	) -> None:
+		if continuity_id is not None and str(row["continuity_id"]) != str(continuity_id):
+			raise LeaseHeld(f"lease de otra alma: {row['continuity_id']}")
+		if holder_originator is not None and str(row["holder_originator"] or "") != str(holder_originator):
+			raise LeaseHeld(f"lease de otro holder: {row['holder_originator'] or '-'}")
 
 	def begin_lease(
 		self,
@@ -216,7 +231,14 @@ class LeaseStore:
 			rows = conn.execute(sql, (str(continuity_id),)).fetchall()
 		return [dict(row) for row in rows]
 
-	def heartbeat(self, lease_key: str, *, source: str = "runner") -> dict:
+	def heartbeat(
+		self,
+		lease_key: str,
+		*,
+		source: str = "runner",
+		continuity_id: Optional[str] = None,
+		holder_originator: Optional[str] = None,
+	) -> dict:
 		key = str(lease_key or "").strip()
 		now = _now()
 		with self._connect() as conn:
@@ -225,6 +247,7 @@ class LeaseStore:
 			if row is None:
 				conn.rollback()
 				raise LeaseError(f"lease desconocido: {key!r}")
+			self._check_owner(row, continuity_id=continuity_id, holder_originator=holder_originator)
 			state = str(row["state"])
 			if state != "active":
 				conn.commit()
@@ -254,6 +277,8 @@ class LeaseStore:
 		reason: str,
 		actor: str = "model",
 		max_ceiling_s: Optional[int] = None,
+		continuity_id: Optional[str] = None,
+		holder_originator: Optional[str] = None,
 	) -> dict:
 		key = str(lease_key or "").strip()
 		extra = int(seconds)
@@ -267,12 +292,13 @@ class LeaseStore:
 			if row is None:
 				conn.rollback()
 				raise LeaseError(f"lease desconocido: {key!r}")
+			self._check_owner(row, continuity_id=continuity_id, holder_originator=holder_originator)
 			if str(row["state"]) != "active":
 				conn.commit()
 				return dict(row)
 			current = int(row["max_wall_s"])
-			ceiling = int(max_ceiling_s) if max_ceiling_s is not None else int(row["max_wall_s"])
-			new_max = min(max(current, current + extra), ceiling)
+			ceiling = int(max_ceiling_s) if max_ceiling_s is not None else current + extra
+			new_max = min(current + extra, max(current, ceiling))
 			conn.execute(
 				"UPDATE session_leases SET max_wall_s=?, extended_by=?, reason=?, last_heartbeat_at=? WHERE lease_key=?",
 				(new_max, str(actor or "model"), str(reason)[:500], _now(), key),
@@ -281,20 +307,41 @@ class LeaseStore:
 			out = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
 		return dict(out)
 
-	def finish(self, lease_key: str, *, state: str = "completed", reason: Optional[str] = None) -> dict:
+	def finish(
+		self,
+		lease_key: str,
+		*,
+		state: str = "completed",
+		reason: Optional[str] = None,
+		continuity_id: Optional[str] = None,
+		holder_originator: Optional[str] = None,
+	) -> dict:
 		key = str(lease_key or "").strip()
 		if state not in {"completed", "aborted", "stalled"}:
 			raise ValueError(f"estado final desconocido: {state!r}")
 		with self._connect() as conn:
+			conn.execute("BEGIN IMMEDIATE")
+			row = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
+			if row is None:
+				conn.rollback()
+				raise LeaseError(f"lease desconocido: {key!r}")
+			self._check_owner(row, continuity_id=continuity_id, holder_originator=holder_originator)
+			current = str(row["state"])
+			if current in {"completed", "aborted"}:
+				conn.commit()
+				if current != state:
+					raise LeaseError(f"lease {key!r} ya está {current}")
+				return dict(row)
+			if state == "completed" and current == "stalled" and str(row["reason"] or "") == "max_wall":
+				conn.rollback()
+				raise LeaseError(f"lease {key!r} superó max_wall; no se puede completar")
 			conn.execute(
 				"UPDATE session_leases SET state=?, reason=?, extended_by='runner' WHERE lease_key=?",
 				(str(state), str(reason)[:500] if reason else None, key),
 			)
 			conn.commit()
-			row = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
-		if row is None:
-			raise LeaseError(f"lease desconocido: {key!r}")
-		return dict(row)
+			out = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
+		return dict(out)
 
 	def sweep(self, *, now: Optional[float] = None, mark_stalled: bool = True) -> List[dict]:
 		"""Lista leases vencidos; opcionalmente los marca `stalled`.
@@ -315,10 +362,14 @@ class LeaseStore:
 				out["expired_reason"] = reason
 				expired.append(out)
 				if mark_stalled:
-					conn.execute(
-						"UPDATE session_leases SET state='stalled', reason=? WHERE lease_key=? AND state='active'",
-						(reason, row["lease_key"]),
+					cur = conn.execute(
+						"UPDATE session_leases SET state='stalled', reason=? "
+						"WHERE lease_key=? AND state='active' AND last_heartbeat_at=?",
+						(reason, row["lease_key"], float(row["last_heartbeat_at"])),
 					)
+					if cur.rowcount:
+						out["state"] = "stalled"
+						out["reason"] = reason
 			if mark_stalled and expired:
 				conn.commit()
 		return expired

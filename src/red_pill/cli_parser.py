@@ -187,6 +187,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_compact.add_argument("--engine", default=None, help="Motor: samantha | memento | extractive (default: config)")
 	session_compact.add_argument("--protect-last-n", type=int, default=None, help="Turnos recientes que nunca se compactan")
 	session_compact.add_argument("--handoff", default=None, help="Fichero con una nota de handoff: reset del contexto")
+	session_compact.add_argument("--db-path", default=None, help="session.db alternativa (jobs de test/worktree)")
 	session_compact.add_argument("--json", action="store_true", help="Salida JSON")
 
 	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")

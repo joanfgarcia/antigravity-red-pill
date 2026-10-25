@@ -4,6 +4,22 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-075] B-01L Fase 1 — leases v7 y worker durable de compactación (P0)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (P0). Watchdog/heartbeat de runners y Telegram quedan pendientes.
+**Context**: B-01L separó el TTL de huérfanos del lease de trabajo vivo, pero no existía implementación; B-02 tampoco tenía disparo en fondo. P0 materializa el sustrato común: `session_leases` v7 con scopes work/mission y un worker durable para compactar sin bloquear el turno.
+**Decision**:
+1. **Schema v7 aditivo**: `session_leases` con `lease_key`, `scope=work|mission`, `subject_id`, `continuity_id`, `mission_id`, `holder_originator`, `owner_kind`, `state`, heartbeat, `idle_ttl_s`, `max_wall_s`, `extended_by`, `reason`; índices por heartbeat/scope/alma.
+2. **`LeaseStore`**: begin idempotente por dueño, `LeaseHeld` para otro cuerpo, heartbeat, `extend_lease` acotado por techo, `finish` con transiciones válidas, `sweep` con compare-and-set para no perder un heartbeat concurrente. Work y mission comparten tabla; RFC-INTEROP-003 no crea `mission_leases`.
+3. **B02 worker durable**: `Compactor.maybe_start` encola un `script_job` con `session compact --db-path <mirror>` y dedupe por continuity; `control.max_step_minutes=15`. `MiniSession`/`run_local_minion` lo disparan solo cuando el contexto cruza el umbral de fondo sin necesitar compactación inline.
+4. **Correcciones del adversarial P0**: targeting de `session.db` (no la DB por defecto del worker), `extra_tokens` coherente entre caller y worker, timeout real vía `control`, extensión sin techo ya no es no-op, owner en heartbeat/finish, purga de leases con el alma, y `sweep` no marca `stalled` si el heartbeat cambió.
+5. **Compatibilidad**: `SESSION_COMPACTOR_ENABLED` sigue OFF; sin flag no se encola nada. Jobs sin alma no cambian.
+**Alternatives**: (a) worker Python in-process — no durable; (b) Samantha queue — no devuelve el resumen salvo callback Telegram; (c) dos tablas de lease — duplica schema y rompe RFC-003; (d) `timeout` en payload — el driver no lo lee, se usa `control.max_step_minutes`.
+**Rationale / Evidence**: suite completa verde; tests nuevos de schema v7, work/mission, idempotencia, owner, max_wall, extensión, sweep, worker/dedupe y targeting. Adversarial P0 corrigió 3 BLOCKER/HIGH de ejecución.
+**Consequences**: B01L Fase 1 y B02 worker están en el sustrato. Deuda: cablear heartbeat a MiniSession/local-minion/job runner, janitor que consulte leases activos, watchdog, paridad Telegram y retry por longitud. El lease aún no protege del TTL hasta la fase 2.
+
+---
+
 ## [AD-074] B-02 — servicio de compactación y cableado local (slice 3)
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED (slice 3). Telegram y el disparo en fondo siguen pendientes; flags OFF por defecto.

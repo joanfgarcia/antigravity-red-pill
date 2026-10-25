@@ -238,9 +238,20 @@ class MiniSession:
 				mission_id=self.config.mission_id,
 			)
 			turns = ctx.turns
-			if not ctx.compacted and self.compactor.should_start_background(ctx.messages, extra_tokens=extra_tokens):
+			if not ctx.compacted and self.compactor.should_start_background(
+				ctx.messages,
+				extra_tokens=extra_tokens,
+				budget_tokens=budget,
+				reserve_tokens=self.compactor.reserve_tokens,
+			):
 				try:
-					self.compactor.maybe_start(self.continuity_id, mission_id=self.config.mission_id)
+					self.compactor.maybe_start(
+						self.continuity_id,
+						mission_id=self.config.mission_id,
+						extra_tokens=extra_tokens,
+						budget_tokens=budget,
+						reserve_tokens=self.compactor.reserve_tokens,
+					)
 				except Exception as exc:
 					logger.warning("[MiniSession] background compaction enqueue failed: %s", exc)
 		limit = self.config.history_turns if history_turns is None else history_turns

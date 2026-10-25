@@ -618,9 +618,24 @@ async def run_local_minion(
 						),
 					)
 					turns = ctx.turns
-					if not ctx.compacted and compactor.should_start_background(ctx.messages, extra_tokens=extra_tokens):
+					budget = context_tokens or _resolve_context_tokens(model)
+					if not ctx.compacted and compactor.should_start_background(
+						ctx.messages,
+						extra_tokens=extra_tokens,
+						budget_tokens=budget,
+						reserve_tokens=compactor.reserve_tokens,
+					):
 						try:
-							await loop.run_in_executor(None, lambda: compactor.maybe_start(cid, mission_id=mission))
+							await loop.run_in_executor(
+								None,
+								lambda: compactor.maybe_start(
+									cid,
+									mission_id=mission,
+									extra_tokens=extra_tokens,
+									budget_tokens=budget,
+									reserve_tokens=compactor.reserve_tokens,
+								),
+							)
 						except Exception as exc:
 							logger.warning(f"[local-minion] background compaction enqueue failed: {exc}")
 				except Exception as e:

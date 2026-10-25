@@ -479,4 +479,7 @@ def test_maybe_start_enqueues_one_durable_script_job(mirror):
 	payload = task["payload"]
 	assert payload["continuity_id"] == "alma-1"
 	assert payload["mission_id"] == "repo:next"
-	assert payload["step_command"][-6:] == ["--continuity", "alma-1", "--mission", "repo:next", "--protect-last-n", "4"]
+	cmd = payload["step_command"]
+	assert "--continuity" in cmd and "alma-1" in cmd
+	assert "--mission" in cmd and "repo:next" in cmd
+	assert "--db-path" in cmd and payload["control"] == {"max_step_minutes": 15}

@@ -75,17 +75,36 @@ def test_max_wall_cannot_be_exceeded_by_extension(leases):
 	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m", idle_ttl_s=100, max_wall_s=100)
 	row = leases.extend_lease("req-1", seconds=100, reason="compilación", max_ceiling_s=150)
 	assert row["max_wall_s"] == 150
+	row = leases.extend_lease("req-1", seconds=100, reason="compilación")
+	assert row["max_wall_s"] == 250
 	with pytest.raises(ValueError):
 		leases.extend_lease("req-1", seconds=1, reason="")
 
 
-def test_heartbeat_marks_stalled_after_max_wall(leases):
-	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m", max_wall_s=1)
+def test_owner_is_enforced_on_heartbeat_and_finish(leases):
+	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m")
+	with pytest.raises(LeaseHeld):
+		leases.heartbeat("req-1", continuity_id="alma-2")
+	with pytest.raises(LeaseHeld):
+		leases.finish("req-1", continuity_id="alma-2")
+
+
+def test_completed_lease_cannot_be_downgraded(leases):
+	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m")
+	leases.finish("req-1", state="completed")
+	with pytest.raises(LeaseError):
+		leases.finish("req-1", state="stalled")
+
+
+def test_heartbeat_marks_stalled_after_max_wall(leases, monkeypatch):
+	import red_pill.session.lease as lease_mod
+
+	clock = [1000.0]
+	monkeypatch.setattr(lease_mod, "_now", lambda: clock[0])
+	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m", max_wall_s=10)
+	clock[0] = 1011.0
 	row = leases.heartbeat("req-1")
-	# El reloj real ya superó el techo de 1 s; no renueva un trabajo muerto.
-	assert row["state"] in {"stalled", "active"}
-	if row["state"] == "stalled":
-		assert row["reason"] == "max_wall"
+	assert row["state"] == "stalled" and row["reason"] == "max_wall"
 
 
 def test_unknown_lease_is_explicit(leases):

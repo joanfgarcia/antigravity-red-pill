@@ -934,6 +934,7 @@ class SessionMirror:
 					# Un alma muerta no debe dejar resúmenes (posibles secretos) ni
 					# rangos huérfanos que rompan el `seq` de una reencarnación.
 					conn.execute("DELETE FROM session_compactions WHERE continuity_id = ?", (cid,))
+					conn.execute("DELETE FROM session_leases WHERE continuity_id = ?", (cid,))
 					purged_rows += int(cur.rowcount)
 					purged_souls += 1
 			conn.commit()
@@ -1051,6 +1052,7 @@ class SessionMirror:
 					else:
 						cur = conn.execute("DELETE FROM session_mirror WHERE continuity_id = ?", (cid,))
 						conn.execute("DELETE FROM session_compactions WHERE continuity_id = ?", (cid,))
+						conn.execute("DELETE FROM session_leases WHERE continuity_id = ?", (cid,))
 					removed += int(cur.rowcount or 0)
 				conn.commit()
 				if removed:

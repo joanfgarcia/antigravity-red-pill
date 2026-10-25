@@ -319,9 +319,25 @@ class Compactor:
 			tokens_after=after.tokens_after,
 		)
 
-	def should_start_background(self, messages: List[dict], *, extra_tokens: int = 0) -> bool:
-		"""True si el contexto supera el umbral de compactación en fondo."""
-		return estimate_messages_tokens(messages) + max(0, int(extra_tokens)) >= self.background_tokens
+	def should_start_background(
+		self,
+		messages: List[dict],
+		*,
+		extra_tokens: int = 0,
+		budget_tokens: Optional[int] = None,
+		reserve_tokens: Optional[int] = None,
+	) -> bool:
+		"""True si el contexto supera el umbral de compactación en fondo.
+
+		El umbral se recorta al hueco real (`budget - reserve`) para que el
+		background pueda dispararse antes de que `ensure_context` compacte inline.
+		Sin presupuesto explícito manda `background_tokens`.
+		"""
+		threshold = self.background_tokens
+		if budget_tokens is not None:
+			reserve = self.reserve_tokens if reserve_tokens is None else max(0, int(reserve_tokens))
+			threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
+		return estimate_messages_tokens(messages) + max(0, int(extra_tokens)) >= threshold
 
 	def maybe_start(
 		self,
@@ -329,6 +345,9 @@ class Compactor:
 		*,
 		mission_id: Optional[str] = None,
 		protect_last_n: Optional[int] = None,
+		extra_tokens: int = 0,
+		budget_tokens: Optional[int] = None,
+		reserve_tokens: Optional[int] = None,
 	) -> Optional[str]:
 		"""Encola un `script_job` durable que ejecuta `session compact`.
 
@@ -340,13 +359,20 @@ class Compactor:
 		if not continuity:
 			raise ValueError("continuity_id requerido")
 		messages = self.mirror.context_messages(continuity)
-		if not self.should_start_background(messages):
+		if not self.should_start_background(
+			messages,
+			extra_tokens=extra_tokens,
+			budget_tokens=budget_tokens,
+			reserve_tokens=reserve_tokens,
+		):
 			return None
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		qm = self.queue_manager or CognitiveQueueManager()
 		try:
-			existing = qm.find_task_by_payload_key(source="script_job", key="continuity_id", value=continuity)
+			existing = qm.find_task_by_payload_key(
+				source="script_job", key="continuity_id", value=continuity, limit=None
+			)
 		except Exception:
 			existing = None
 		if existing:
@@ -370,6 +396,8 @@ class Compactor:
 			mission,
 			"--protect-last-n",
 			str(protect),
+			"--db-path",
+			self.mirror.db_path,
 		]
 		payload = {
 			"continuity_id": continuity,
@@ -377,7 +405,7 @@ class Compactor:
 			"title": f"compact:{continuity[:8]}",
 			"step_command": command,
 			"progress": {"mode": "single"},
-			"timeout": 900,
+			"control": {"max_step_minutes": 15},
 		}
 		priority = _config_int("SESSION_COMPACTOR_JOB_PRIORITY", 4)
 		return str(qm.enqueue_task(source="script_job", payload=payload, priority=priority, mission_id=mission))

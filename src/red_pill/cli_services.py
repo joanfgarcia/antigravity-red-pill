@@ -170,7 +170,7 @@ def handle_session(args: argparse.Namespace) -> None:
 		from red_pill.session.compactor import Compactor
 		from red_pill.session.mirror import SessionMirror
 
-		mirror = SessionMirror()
+		mirror = SessionMirror(getattr(args, "db_path", None))
 		compactor = Compactor(
 			mirror,
 			engine=getattr(args, "engine", None),
