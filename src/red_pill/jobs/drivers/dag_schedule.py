@@ -39,6 +39,7 @@ class DagScheduleMixin:
 	if TYPE_CHECKING:
 		# Members provided by the sibling mixins / ResumableJobDriver at runtime.
 		short_id: str
+		job_id: str
 		_step_started: Optional[float]
 		_sleep_cutoff_ts: float
 
@@ -105,9 +106,25 @@ class DagScheduleMixin:
 		except OSError as e:
 			logger.warning(f"[DagJob] telemetría no escrita: {e}")
 
+	def _identity_fields(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
+		"""RFC-INTEROP-003 S1: identidad opcional que viaja al checkpoint."""
+		continuity = payload.get("continuity_id") or checkpoint_data.get("continuity_id")
+		if not continuity:
+			return {}
+		identity: Dict[str, Any] = {
+			"continuity_id": str(continuity),
+			"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else str(payload.get("originator") or ""),
+			"role": str(payload.get("role") or checkpoint_data.get("role") or "job"),
+		}
+		parent = payload.get("parent_mission_id") or checkpoint_data.get("parent_mission_id")
+		if parent:
+			identity["parent_mission_id"] = str(parent)
+		return identity
+
 	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		self._step_started = time.monotonic()
+		identity = self._identity_fields(payload, checkpoint_data)
 		stages = self._stages(payload)
 		completed = list(checkpoint_data.get("completed_stage_ids", []))
 		results = dict(checkpoint_data.get("results", {}))
@@ -182,6 +199,7 @@ class DagScheduleMixin:
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint={
 					**checkpoint_data,
+					**identity,
 					"completed_stage_ids": list(completed),
 					"fanout_items": fanout_items,
 				},
@@ -367,6 +385,7 @@ class DagScheduleMixin:
 			payload,
 			{
 				"mission_id": payload.get("mission_id"),
+				**identity,
 				"completed": leaves_done,
 				"total": total_leaves,
 				"status": "running" if leaves_done < total_leaves else "completed",
@@ -376,6 +395,7 @@ class DagScheduleMixin:
 
 		done = leaves_done >= total_leaves
 		checkpoint = {
+			**identity,
 			"completed_stage_ids": new_completed,
 			"results": new_results,
 			"stage_flags": new_flags,

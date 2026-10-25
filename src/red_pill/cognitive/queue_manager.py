@@ -76,6 +76,24 @@ class CognitiveQueueManager:
 			except sqlite3.OperationalError:
 				pass
 
+			# RFC-INTEROP-003 S0: continuidad de alma en el job (aditiva).
+			for ddl in (
+				"ALTER TABLE cognitive_tasks ADD COLUMN continuity_id TEXT DEFAULT NULL",
+				"ALTER TABLE cognitive_tasks ADD COLUMN parent_mission_id TEXT DEFAULT NULL",
+			):
+				try:
+					conn.execute(ddl)
+				except sqlite3.OperationalError:
+					pass
+			conn.execute(
+				"CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_continuity "
+				"ON cognitive_tasks(continuity_id, status)"
+			)
+			conn.execute(
+				"CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_parent_mission "
+				"ON cognitive_tasks(parent_mission_id, status)"
+			)
+
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
 				CREATE INDEX IF NOT EXISTS idx_queue_routing
@@ -95,6 +113,8 @@ class CognitiveQueueManager:
 		payload_str = json.dumps(payload)
 		initial_status = "BLOCKED" if parent_task_id else "PENDING"
 		mission = mission_id or payload.get("mission_id")
+		continuity = payload.get("continuity_id")
+		parent_mission = payload.get("parent_mission_id")
 
 		with self._get_connection() as conn:
 			if parent_task_id:
@@ -114,10 +134,12 @@ class CognitiveQueueManager:
 					raise ValueError(f"el padre {parent_task_id} está FRUSTRATED: el hijo nunca arrancaría (re-encola el padre primero)")
 			conn.execute(
 				"""
-				INSERT INTO cognitive_tasks (id, source, priority, payload, status, parent_task_id, mission_id)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
+				INSERT INTO cognitive_tasks (
+					id, source, priority, payload, status, parent_task_id, mission_id,
+					continuity_id, parent_mission_id
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
-				(task_id, source, priority, payload_str, initial_status, parent_task_id, mission),
+				(task_id, source, priority, payload_str, initial_status, parent_task_id, mission, continuity, parent_mission),
 			)
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
@@ -134,18 +156,22 @@ class CognitiveQueueManager:
 				row = conn.execute("SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1").fetchone()
 			return row is not None
 
-	def find_task_by_payload_key(self, source: str, key: str, value: str) -> Optional[Dict[str, Any]]:
-		"""Find a task by a key in its JSON payload. Used for exclusion checks (e.g. compaction dedup)."""
+	def find_task_by_payload_key(
+		self, source: str, key: str, value: str, *, limit: Optional[int] = 10
+	) -> Optional[Dict[str, Any]]:
+		"""Find a task by a key in its JSON payload. Used for exclusion checks."""
+		sql = """
+			SELECT id, source, status, payload
+			FROM cognitive_tasks
+			WHERE source = ? AND status IN ('PENDING', 'PROCESSING')
+			ORDER BY created_at DESC
+		"""
+		params: list = [source]
+		if limit is not None:
+			sql += " LIMIT ?"
+			params.append(max(1, int(limit)))
 		with self._get_connection() as conn:
-			cursor = conn.execute(
-				"""
-				SELECT id, source, status, payload
-				FROM cognitive_tasks
-				WHERE source = ? AND status IN ('PENDING', 'PROCESSING')
-				ORDER BY created_at DESC LIMIT 10
-				""",
-				(source,),
-			)
+			cursor = conn.execute(sql, tuple(params))
 			for row in cursor:
 				try:
 					payload = json.loads(row["payload"])

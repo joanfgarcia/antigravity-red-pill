@@ -1,5 +1,16 @@
 ## Unreleased
 
+### 🧭 RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job`
+
+- **[NEW]** `dag_job` acepta `continuity_id`/`parent_mission_id`/`role` opcionales;
+  `cognitive_tasks` persiste la identidad (columnas + índices).
+- **[NEW]** El checkpoint/status del DAG lleva `continuity_id`, `originator=dag:<job_id>`
+  y `role=job`; resume los conserva.
+- **[NEW]** Etapas command reciben `REDPILL_*`; etapas agénticas reciben un bloque
+  `<redpill-identity>` (solo IDs); local-mini/local-tools heredan el alma.
+- **[DOCS]** AD-076; RFC-003 S0/S1. S2-S6 (leg, eventos, descubrimiento, lease
+  de misión y handoff) pendientes.
+
 ### 🧷 B-01L P0 — leases v7 y worker durable de compactación
 
 - **[NEW]** `session_leases` v7 con `scope=work|mission` y `LeaseStore`

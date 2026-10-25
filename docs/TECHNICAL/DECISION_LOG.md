@@ -4,6 +4,22 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-076] RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job` (P1)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S0/S1). S2-S6 (leg/eventos, descubrimiento, lease de misión, handoff, arneses externos) pendientes.
+**Context**: El RFC-INTEROP-003 verificó que `dag_job` solo conocía `mission_id`: no heredaba `continuity_id`, no lo propagaba a etapas/checkpoint y el alma no podía reconocer el job. P1 implementa el contrato mínimo sin cambiar el motor del DAG.
+**Decision**:
+1. **S0 contrato**: `dag_validate` acepta `continuity_id` (UUID), `parent_mission_id` (`<scope>:<id>`) y `role` (`orchestrator|job|task|spawn`) opcionales; `cognitive_tasks` gana `continuity_id`/`parent_mission_id` + índices, sin romper jobs sin alma.
+2. **S1 checkpoint**: `DagScheduleMixin.step` deriva `originator=dag:<job_id>`, `role=job` y copia identidad al checkpoint/status; se conserva en resume.
+3. **S1 etapas**: `dag_exec` pasa identidad a minions, inyecta `REDPILL_*` en command/script y añade `<redpill-identity>` (solo IDs) al prompt de etapas agénticas.
+4. **Local-mini/local-tools** heredan `continuity_id`/`mission_id`/`originator`; los arneses externos (opencode/claude/pi) se difieren a S6.
+5. **Compatibilidad**: jobs de sistema sin `continuity_id` no crean leg, no reciben env y siguen igual; migración de cola aditiva.
+**Alternatives**: (a) derivar el alma de `mission_id` — dos almas comparten rama; (b) inyectar identidad por prompt — spoof; (c) crear un bus nuevo — RFC-001 sigue sin implementación.
+**Rationale / Evidence**: suite **3364 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: validación de UUID/misión/role, columnas de cola, checkpoint con linaje, env `REDPILL_*` en command y bloque de identidad en agente.
+**Consequences**: un dag_job puede declarar su alma y las etapas la reciben; todavía no hay leg `dag:`, `[JOBS]`, eventos ni handoff (S2-S6). La lease de misión reutiliza `session_leases` de B01L.
+
+---
+
 ## [AD-075] B-01L Fase 1 — leases v7 y worker durable de compactación (P0)
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED (P0). Watchdog/heartbeat de runners y Telegram quedan pendientes.

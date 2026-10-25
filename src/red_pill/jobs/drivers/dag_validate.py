@@ -6,11 +6,32 @@ node type contributes its own checks through `StageType.validate`.
 
 from __future__ import annotations
 
+import re
+import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from red_pill.jobs.drivers.dag_manifest import _SAFE_STAGE_ID, _collect_ids
 from red_pill.jobs.drivers.dag_types import StageContext, get_stage_type, registered_kinds
 from red_pill.jobs.drivers.dag_types.base import RecipeLoader
+
+_MISSION_RE = re.compile(r"^[a-z][a-z0-9_-]*:[^\s:]+$")
+_ROLES = frozenset({"orchestrator", "job", "task", "spawn"})
+
+
+def _validate_identity(payload: Dict[str, Any]) -> None:
+	"""RFC-INTEROP-003 S0: campos opcionales de alma/misión, sin cambiarlos."""
+	continuity = payload.get("continuity_id")
+	if continuity is not None:
+		try:
+			uuid.UUID(str(continuity))
+		except (ValueError, TypeError) as exc:
+			raise ValueError(f"dag_job continuity_id inválido (UUID esperado): {continuity!r}") from exc
+	parent_mission = payload.get("parent_mission_id")
+	if parent_mission is not None and not _MISSION_RE.match(str(parent_mission)):
+		raise ValueError(f"dag_job parent_mission_id inválido: {parent_mission!r}")
+	role = payload.get("role")
+	if role is not None and str(role) not in _ROLES:
+		raise ValueError(f"dag_job role inválido: {role!r}")
 
 
 def default_load_recipe(reference: str) -> Tuple[str, Dict[str, Any], int, Optional[str], bool]:
@@ -28,6 +49,7 @@ def validate_payload(payload: Dict[str, Any], load_recipe: RecipeLoader = defaul
 	"""Validate a dag_job payload EN EL SUBMIT (recursive over the manifest tree)."""
 	if not payload.get("mission_id"):
 		raise ValueError("dag_job payload requires 'mission_id'.")
+	_validate_identity(payload)
 	manifest = payload.get("manifest")
 	if not isinstance(manifest, dict) or not manifest.get("workdir"):
 		raise ValueError("dag_job manifest requires 'workdir'.")
