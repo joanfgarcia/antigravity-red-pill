@@ -183,9 +183,11 @@ class TestMCPEvents:
 def test_event_type_schema_matches_store():
 	"""El enum del schema MCP y la taxonomía del store no pueden divergir."""
 	from red_pill.mcp_server import _EVENT_TYPES_SCHEMA
-	from red_pill.session.store import EVENT_TYPES
+	from red_pill.session.store import _INTERNAL_EVENT_TYPES, EVENT_TYPES
 
-	assert set(_EVENT_TYPES_SCHEMA) == set(EVENT_TYPES)
+	# El enum MCP es la superficie pública; los `decision_*` son auditoría interna
+	# que solo escribe el store (D23-SCORE).
+	assert set(_EVENT_TYPES_SCHEMA) == set(EVENT_TYPES) - set(_INTERNAL_EVENT_TYPES)
 
 
 class TestHardening:

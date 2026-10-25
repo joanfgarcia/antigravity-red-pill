@@ -2273,6 +2273,21 @@ _EVENT_TYPES_SCHEMA = [
 			"sealed": {"type": "boolean", "description": "Si true, el evento solo lo ve su propia misión."},
 			"mission_id": {"type": "string", "description": "Debe coincidir con la misión de tu sesión (anti-spoof)."},
 			"campaign_id": {"type": "string", "description": "Debe coincidir con la campaña de tu sesión (si difiere, se rechaza)."},
+			"target_event_id": {
+				"type": "string",
+				"description": "Solo objection: event_id de la nota objetada (misma misión).",
+			},
+			"severity": {
+				"type": "string",
+				"enum": ["low", "medium", "high"],
+				"description": "Solo objection: severidad (default low). high → Operador.",
+			},
+			"proposed_action": {
+				"type": "string",
+				"enum": ["flag", "hide", "retract"],
+				"description": "Solo objection: acción propuesta (default flag). retract → Operador.",
+			},
+			"evidence": {"type": "string", "description": "Solo objection: evidencia breve (sin secretos)."},
 		},
 		"required": ["summary"],
 	},
@@ -2314,8 +2329,77 @@ async def handle_announce_intent(arguments: Dict[str, Any]):
 		if not isinstance(sealed_raw, bool):
 			return [types.TextContent(type="text", text="[ANNOUNCE] `sealed` debe ser boolean (true/false).")]
 		registry_obj = SessionRegistry()
+		event_type = str(arguments.get("type") or "intent_updated")
+		target = str(arguments.get("target_event_id") or "").strip()
+		if event_type == "objection":
+			if not target:
+				return [types.TextContent(type="text", text="[ANNOUNCE] objection requiere `target_event_id`.")]
+			if sealed_raw:
+				return [types.TextContent(type="text", text="[ANNOUNCE] una objection no puede ser sealed (v0).")]
+			continuity = str(session.get("continuity_id") or "").strip()
+			if not continuity:
+				return [types.TextContent(type="text", text="[ANNOUNCE] sin alma resuelta; no se publica la objeción.")]
+			subject = registry_obj.get_event(target)
+			if not subject:
+				return [types.TextContent(type="text", text="[ANNOUNCE] la nota objetivo no existe.")]
+			if subject["mission_id"] != mission:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ANNOUNCE] objeción cross-misión no soportada en v0 (misma misión que la nota).",
+					)
+				]
+			if subject.get("sealed") and subject.get("originator") != originator:
+				return [types.TextContent(type="text", text="[ANNOUNCE] la nota objetivo es sealed y no la ves.")]
+			decision = registry_obj.open_decision(
+				subject_event_id=target,
+				claim=str(arguments.get("summary") or ""),
+				created_by=continuity,
+				mission_id=mission,
+				evidence=str(arguments.get("evidence") or ""),
+				severity=str(arguments.get("severity") or "low"),
+				proposed_action=str(arguments.get("proposed_action") or "flag"),
+			)
+			if not decision.get("created"):
+				return [
+					types.TextContent(
+						type="text",
+						text=(
+							f"[OBJECTION] ya existe D-obj {decision['decision_id'][:12]} "
+							f"state={decision['state']} note={target[:12]}"
+						),
+					)
+				]
+			event = registry_obj.add_event(
+				event_type="objection",
+				mission_id=mission,
+				campaign_id=campaign,
+				continuity_id=continuity,
+				originator=originator,
+				global_turn=registry_obj.get_max_global_turn(),
+				summary=str(arguments.get("summary") or ""),
+				ref=decision["decision_id"],
+				sealed=False,
+			)
+			op = " [requiere Operador]" if decision.get("requires_operator") else ""
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						f"[OBJECTION] decision={decision['decision_id']} · state={decision['state']}{op} · "
+						f"note={target} · event={event['event_id']} · seq={event['event_seq']}"
+					),
+				)
+			]
+		if target or arguments.get("severity") or arguments.get("proposed_action") or arguments.get("evidence"):
+			return [
+				types.TextContent(
+					type="text",
+					text="[ANNOUNCE] target_event_id/severity/proposed_action/evidence solo valen con type=objection.",
+				)
+			]
 		event = registry_obj.add_event(
-			event_type=str(arguments.get("type") or "intent_updated"),
+			event_type=event_type,
 			mission_id=mission,
 			campaign_id=campaign,
 			continuity_id=session.get("continuity_id"),
@@ -2381,6 +2465,8 @@ async def handle_fetch_events(arguments: Dict[str, Any]):
 			types=arguments.get("types"),
 			limit=int(arguments.get("limit") or 50),
 			viewer_originator=session.get("originator"),
+			viewer_continuity_id=session.get("continuity_id"),
+			include_hidden=os.getenv("REDPILL_OPERATOR") == "1",
 		)
 		safe_target = sanitize_inline(target)
 		if not events:
@@ -2389,10 +2475,165 @@ async def handle_fetch_events(arguments: Dict[str, Any]):
 		for event in events:
 			ref = f" · {event['ref']}" if event.get("ref") else ""
 			seal = " [sealed]" if event.get("sealed") else ""
-			lines.append(f"[{event.get('event_seq', 0)}] {event['type']}: {event['summary']}{ref}{seal}")
+			status = str(event.get("note_status") or "visible")
+			tag = f" [{status}]" if status in {"flagged", "hidden", "retracted"} else ""
+			open_decisions = int(event.get("open_decisions") or 0)
+			if open_decisions > 0:
+				tag += f" [disputed:{open_decisions}]"
+			lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}")
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[EVENTS] error: {e}")]
+
+
+def _fmt_decision_age(seconds: float) -> str:
+	age = max(0, int(seconds or 0))
+	if age < 3600:
+		return f"{age // 60}m"
+	if age < 86400:
+		return f"{age / 3600:.1f}h"
+	return f"{age / 86400:.1f}d"
+
+
+@registry.register(
+	name="review_decision",
+	description=(
+		"[OFFICIAL] Revisor independiente de una D-obj (D23-SCORE): uphold (aplica flag), "
+		"dismiss o escalate. No puede revisar el objetor ni el autor de la nota; "
+		"severidad high/retract solo la resuelve el Operador."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"decision_id": {"type": "string", "description": "decision_id de la D-obj."},
+			"action": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
+			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
+		},
+		"required": ["decision_id", "action"],
+	},
+)
+async def handle_review_decision(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		session = await _caller_session(arguments)
+		continuity = str(session.get("continuity_id") or "").strip()
+		if not continuity:
+			return [types.TextContent(type="text", text="[DECISION] sin alma resuelta; no puedes revisar.")]
+		decision = SessionRegistry().review_decision(
+			str(arguments.get("decision_id") or ""),
+			reviewer_continuity_id=continuity,
+			action=str(arguments.get("action") or ""),
+			reason=str(arguments.get("reason") or ""),
+		)
+		op = " [Operador]" if decision.get("requires_operator") else ""
+		return [
+			types.TextContent(
+				type="text",
+				text=f"[DECISION] {decision['decision_id'][:12]} → {decision['state']}{op} · note={decision['subject_event_id'][:12]}",
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[DECISION] error: {e}")]
+
+
+@registry.register(
+	name="list_decisions",
+	description=(
+		"[OFFICIAL] Bandeja de D-obj (D23-SCORE): decisiones pendientes de moderación. "
+		"Por defecto solo open/escalated, con las que requieren Operador primero. "
+		"Solo lectura."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"mission_id": {"type": "string", "description": "Filtra por misión (default: todas)."},
+			"states": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "Estados a listar (default open/escalated).",
+			},
+			"include_resolved": {"type": "boolean", "description": "Incluye upheld/dismissed."},
+			"limit": {"type": "integer", "description": "Máximo (default 100, tope 500)."},
+		},
+	},
+)
+async def handle_list_decisions(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry, sanitize_inline
+
+		include_resolved = bool(arguments.get("include_resolved"))
+		states = arguments.get("states")
+		rows = SessionRegistry().list_decisions(
+			mission_id=arguments.get("mission_id"),
+			states=states if isinstance(states, list) else None,
+			limit=int(arguments.get("limit") or 100),
+			pending_only=not include_resolved,
+		)
+		if not rows:
+			return [types.TextContent(type="text", text="[DECISIONS] sin decisiones pendientes.")]
+		ops = sum(1 for row in rows if row.get("requires_operator"))
+		lines = [f"--- DECISIONES ({len(rows)}; {ops} requieren Operador) ---"]
+		for row in rows:
+			tag = "OP" if row.get("requires_operator") else "AG"
+			lines.append(
+				f"[{tag}] {row.get('decision_id')} · sev={row.get('severity')} · "
+				f"{row.get('proposed_action')} · state={row.get('state')} · "
+				f"by={str(row.get('created_by'))[:8]} · age={_fmt_decision_age(float(row.get('age_s') or 0))} · "
+				f"mission={sanitize_inline(row.get('mission_id'), 60)}"
+			)
+			if row.get("note_summary"):
+				note_ref = f" · {sanitize_inline(row.get('note_ref'), 80)}" if row.get("note_ref") else ""
+				lines.append(f"     nota: {sanitize_inline(row.get('note_summary'), 160)}{note_ref}")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[DECISIONS] error: {e}")]
+
+
+@registry.register(
+	name="moderate_note",
+	description=(
+		"[OFFICIAL] Operador: flag/hide/retract/restore una nota del tablón (D23-SCORE). "
+		"Requiere REDPILL_OPERATOR=1; en su defecto usa `red-pill session moderate`."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"event_id": {"type": "string", "description": "event_id de la nota."},
+			"action": {"type": "string", "enum": ["flag", "hide", "retract", "restore"]},
+			"reason": {"type": "string", "description": "Motivo (queda auditado)."},
+		},
+		"required": ["event_id", "action"],
+	},
+)
+async def handle_moderate_note(arguments: Dict[str, Any]):
+	if os.getenv("REDPILL_OPERATOR") != "1":
+		return [
+			types.TextContent(
+				type="text",
+				text="[MODERATE] solo Operador (REDPILL_OPERATOR=1 o `red-pill session moderate`).",
+			)
+		]
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		result = SessionRegistry().moderate_note(
+			str(arguments.get("event_id") or ""),
+			action=str(arguments.get("action") or ""),
+			actor="operator",
+			reason=str(arguments.get("reason") or ""),
+		)
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[MODERATE] {result['event_id'][:12]} → {result['status']} "
+					f"({result['action']}); D-obj resueltas={result['resolved_decisions']}"
+				),
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[MODERATE] error: {e}")]
 
 
 @registry.register(

@@ -231,6 +231,57 @@ def handle_session(args: argparse.Namespace) -> None:
 			)
 		)
 		return
+	if getattr(args, "session_cmd", None) == "decisions":
+		import json
+
+		from red_pill.session.store import SessionRegistry
+
+		rows = SessionRegistry().list_decisions(
+			mission_id=getattr(args, "mission", None),
+			states=getattr(args, "state", None),
+			limit=int(getattr(args, "limit", 100) or 100),
+			pending_only=not getattr(args, "include_resolved", False),
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+			return
+		if not rows:
+			print("[DECISIONS] sin decisiones pendientes.")
+			return
+		ops = sum(1 for row in rows if row.get("requires_operator"))
+		print(f"--- DECISIONES ({len(rows)}; {ops} requieren Operador) ---")
+		for row in rows:
+			tag = "OP" if row.get("requires_operator") else "AG"
+			age = max(0, int(row.get("age_s") or 0))
+			print(
+				f"[{tag}] {row.get('decision_id')} · sev={row.get('severity')} · "
+				f"{row.get('proposed_action')} · state={row.get('state')} · "
+				f"by={str(row.get('created_by'))[:8]} · age={age // 60}m · mission={row.get('mission_id')}"
+			)
+			if row.get("note_summary"):
+				ref = f" · {row.get('note_ref')}" if row.get("note_ref") else ""
+				note = " ".join(str(row.get("note_summary") or "").split())[:160]
+				print(f"     nota: {note}{ref}")
+		return
+	if getattr(args, "session_cmd", None) == "moderate":
+		import json
+
+		from red_pill.session.store import SessionRegistry
+
+		result = SessionRegistry().moderate_note(
+			args.event_id,
+			action=args.action,
+			actor="operator",
+			reason=getattr(args, "reason", ""),
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+			return
+		print(
+			f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); "
+			f"D-obj resueltas={result['resolved_decisions']}"
+		)
+		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 
 

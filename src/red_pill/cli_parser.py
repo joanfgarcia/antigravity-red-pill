@@ -189,6 +189,22 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_compact.add_argument("--handoff", default=None, help="Fichero con una nota de handoff: reset del contexto")
 	session_compact.add_argument("--db-path", default=None, help="session.db alternativa (jobs de test/worktree)")
 	session_compact.add_argument("--json", action="store_true", help="Salida JSON")
+	session_decisions = session_sub.add_parser("decisions", help="Bandeja de D-obj pendientes (D23-SCORE)")
+	session_decisions.add_argument("--mission", default=None, help="Filtra por misión")
+	session_decisions.add_argument(
+		"--state",
+		action="append",
+		choices=["open", "escalated", "upheld", "dismissed"],
+		help="Estado a listar (repetible; default open/escalated)",
+	)
+	session_decisions.add_argument("--include-resolved", action="store_true", help="Incluye upheld/dismissed")
+	session_decisions.add_argument("--limit", type=int, default=100, help="Máximo (default 100)")
+	session_decisions.add_argument("--json", action="store_true", help="Salida JSON")
+	session_moderate = session_sub.add_parser("moderate", help="Operador: flag/hide/retract/restore una nota")
+	session_moderate.add_argument("event_id", help="event_id de la nota")
+	session_moderate.add_argument("--action", required=True, choices=["flag", "hide", "retract", "restore"])
+	session_moderate.add_argument("--reason", default="", help="Motivo (queda auditado)")
+	session_moderate.add_argument("--json", action="store_true", help="Salida JSON")
 
 	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")
 	mini_parser.add_argument("--profile", default="forge", help="Perfil del cuerpo (forge | loom | loom-tools)")

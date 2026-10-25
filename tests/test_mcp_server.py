@@ -321,7 +321,11 @@ class TestListTools:
 		assert "check_parallel_sessions" in tool_names
 		assert "unregister_session" in tool_names
 		assert "fetch_divergent_turns" in tool_names
-		assert len(result) == 10
+		# D23-SCORE v0: bandeja, revisión y moderación (Operador).
+		assert "list_decisions" in tool_names
+		assert "review_decision" in tool_names
+		assert "moderate_note" in tool_names
+		assert len(result) == 13
 
 
 class TestControlBunkerAdditional:
