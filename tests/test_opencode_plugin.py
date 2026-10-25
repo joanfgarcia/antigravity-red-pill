@@ -60,7 +60,26 @@ console.log(JSON.stringify({ row, bridge }));
 """
 
 
-def _run_plugin(tmp_path: Path) -> dict:
+# Dos instancias en el MISMO proceso (como la app de escritorio): si el cwd vive
+# en un global, la segunda (b) pisa el de la primera (a) antes de que esta
+# procese su turno. La sesión debe resolver el directorio de su instancia.
+_HARNESS_MULTI = """
+import { readFileSync } from "node:fs";
+
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const a = await plugin.server({ directory: "/ws/a" });
+const b = await plugin.server({ directory: "/ws/b" });
+
+await a["chat.message"]({ sessionID: "s1" }, { parts: [{ type: "text", text: "uno" }] });
+const bp = `${process.env.STATE_DIR}/opencode_session.json`;
+const first = JSON.parse(readFileSync(bp, "utf8"));
+await b["chat.message"]({ sessionID: "s2" }, { parts: [{ type: "text", text: "dos" }] });
+const second = JSON.parse(readFileSync(bp, "utf8"));
+console.log(JSON.stringify({ first, second }));
+"""
+
+
+def _run_plugin(tmp_path: Path, harness_src: str = _HARNESS) -> dict:
 	state = tmp_path / "state"
 	state.mkdir()
 	queue_db = tmp_path / "bunker_queue.db"
@@ -75,7 +94,7 @@ def _run_plugin(tmp_path: Path) -> dict:
 	plugin.write_text(src, encoding="utf-8")
 
 	harness = tmp_path / "harness.mjs"
-	harness.write_text(_HARNESS, encoding="utf-8")
+	harness.write_text(harness_src, encoding="utf-8")
 
 	res = subprocess.run(
 		["bun", str(harness)],
@@ -111,3 +130,10 @@ def test_plugin_no_pisa_bridge_con_subsession(tmp_path):
 	out = _run_plugin(tmp_path)
 	# Tras la sub-sesión child1, el bridge debe seguir siendo el del padre s1.
 	assert out["bridge"]["session_id"] == "s1"
+
+
+def test_plugin_cwd_por_instancia_no_se_pisa_entre_sesiones(tmp_path):
+	out = _run_plugin(tmp_path, _HARNESS_MULTI)
+	# a procesa DESPUÉS de que b haya arrancado: debe conservar /ws/a.
+	assert out["first"]["workdir"] == "/ws/a"
+	assert out["second"]["workdir"] == "/ws/b"

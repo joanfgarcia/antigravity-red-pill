@@ -91,12 +91,19 @@ const CAPTURE_DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
 // eventos session.created/updated (v1); si un `.start` se cuela antes del
 // evento, el tablón las descarta igualmente por `parent_id` en opencode.db.
 const childSessions = new Set();
+// `directory` real de cada sesión (session.created/updated). Es la fuente más
+// fiable: el proceso de escritorio hospeda varias instancias (incluida `/`) y
+// un `harnessCwd` global acababa pisado por la última que arrancaba.
+const sessionDirs = new Map();
 
 function trackSessionInfo(event) {
   const info = event?.properties?.info;
   if (!info?.id) return;
-  if (event.type === "session.deleted") childSessions.delete(info.id);
-  else if (info.parentID) childSessions.add(info.id);
+  if (typeof info.directory === "string" && info.directory) sessionDirs.set(info.id, info.directory);
+  if (event.type === "session.deleted") {
+    childSessions.delete(info.id);
+    sessionDirs.delete(info.id);
+  } else if (info.parentID) childSessions.add(info.id);
 }
 
 // ── WRITE-AHEAD (B-01h) ─────────────────────────────────────────────────────
@@ -189,18 +196,18 @@ function touchLiveness(sessionId, phase) {
 // pasa originator → `opencode:<session_id>` real + rama del workspace.
 const BRIDGE_PATH = `${STATE_DIR}/opencode_session.json`;
 
-// Directorio del workspace que opencode pasa al plugin (PluginInput.directory en
-// v1 / ctx.directory en v2). El server MCP corre con cwd=kernel, así que este es
-// el único modo de que A2 derive `repo:<rama>` del workspace REAL del agente.
-let harnessCwd = "";
-
+// Directorio del workspace de la instancia que sirve la sesión (PluginInput.
+// directory en v1 / ctx.directory en v2). Viaja en una closure por instancia,
+// NO en un global: la app de escritorio arranca varias instancias (`/`,
+// `~/Documents/IA`, cada workspace) en el mismo proceso y la última pisaba el
+// cwd de todas (bug destapado por B01H-CWD-CHECK).
 function writeBridge(sessionId, cwdHint) {
   if (!sessionId || childSessions.has(sessionId) || !STATE_DIR || STATE_DIR.includes("${")) return;
   try {
     const payload = {
       provider: "opencode",
       session_id: String(sessionId),
-      workdir: String(cwdHint || harnessCwd || "").trim(),
+      workdir: String(cwdHint || "").trim(),
       updated_at: Date.now() / 1000,
     };
     const tmp = `${BRIDGE_PATH}.${process.pid}.tmp`;
@@ -209,12 +216,27 @@ function writeBridge(sessionId, cwdHint) {
   } catch (_) {}
 }
 
-function pluckCwd() {
-  for (const arg of arguments) {
-    const v = arg?.cwd || arg?.workspaceDirectory || arg?.workspace;
-    if (typeof v === "string" && v) return v;
+// v2 no expone `cwd` en los eventos de prompt/chat. Prioridad: payload del
+// hook → `directory` de la sesión (session.created/updated) → `directory` de
+// la instancia que sirve la sesión.
+function dirOf(arg) {
+  const v =
+    arg?.cwd ||
+    arg?.workspaceDirectory ||
+    arg?.workspace ||
+    arg?.directory ||
+    arg?.worktree ||
+    arg?.app?.path?.cwd;
+  return typeof v === "string" && v ? v : "";
+}
+
+function resolveCwd(sessionId, instanceCwd, ...args) {
+  for (const arg of args) {
+    const v = dirOf(arg);
+    if (v) return v;
   }
-  return "";
+  const known = sessionId ? sessionDirs.get(sessionId) : "";
+  return known || instanceCwd || "";
 }
 
 function hasQueue(db) {
@@ -337,8 +359,14 @@ async function flushSession(sessionId, status = "completed", reason = "") {
 async function handleV2Event(event) {
   const type = event?.type;
   const data = event?.data;
+  if (!type) return;
+
+  // `directory` de la sesión en eventos session.* (aunque no traigan sessionID).
+  const info = data?.info;
+  if (info?.id && typeof info.directory === "string" && info.directory) sessionDirs.set(info.id, info.directory);
+
   const sessionId = data?.sessionID;
-  if (!type || !sessionId) return;
+  if (!sessionId) return;
 
   // Fin de turno: el latido va antes del estado de captura (sin captura no hay
   // state, pero la sesión sí ha terminado su turno). flushSession sin state = no-op.
@@ -366,9 +394,8 @@ export default {
   id: "redpill-scribe",
 
   async setup(ctx) {
-    // Workspace del agente (A2): ctx.directory puede no existir en versiones
-    // antiguas; best-effort.
-    if (typeof ctx?.directory === "string" && ctx.directory) harnessCwd = ctx.directory;
+    // Workspace de ESTA instancia (A2), capturado en la closure.
+    const instanceCwd = dirOf(ctx);
     // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
     // minions), el bridge ya relaya el turno a la cola: el plugin no captura
     // (no duplica ni guarda el prompt envuelto sin respuesta), pero sí late.
@@ -379,10 +406,10 @@ export default {
       const text = event?.prompt?.text;
       if (sessionId) {
         touchLiveness(sessionId, "start");
-        writeBridge(sessionId, pluckCwd(event, event?.data));
+        writeBridge(sessionId, resolveCwd(sessionId, instanceCwd, event, event?.data));
       }
       if (sessionId && text && !CAPTURE_DISABLED) {
-        beginExternalTurn(sessionId, text, pluckCwd(event, event?.data));
+        beginExternalTurn(sessionId, text, resolveCwd(sessionId, instanceCwd, event, event?.data));
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
     });
@@ -410,11 +437,9 @@ export default {
   },
 
   async server(input) {
-    // Workspace del agente (A2): PluginInput.directory/worktree (v1). El server
-    // MCP corre con cwd=checkout del kernel, así que esto alimenta el bridge.
-    if (typeof input?.directory === "string" && input.directory) harnessCwd = input.directory;
-    else if (typeof input?.worktree === "string" && input.worktree) harnessCwd = input.worktree;
-    else if (typeof input?.app?.path?.cwd === "string" && input.app.path.cwd) harnessCwd = input.app.path.cwd;
+    // Workspace de ESTA instancia (v1), capturado en la closure: el server MCP
+    // corre con cwd=checkout del kernel, esto es lo único que ve el workspace.
+    const instanceCwd = dirOf(input);
     // Sin captura no se crea state: los hooks de captura quedan inertes
     // (`!state`) y solo se marca el latido.
     return {
@@ -434,7 +459,7 @@ export default {
         const { sessionID } = input;
         if (sessionID) {
           touchLiveness(sessionID, "start");
-          writeBridge(sessionID, pluckCwd(input, output));
+          writeBridge(sessionID, resolveCwd(sessionID, instanceCwd, input, output));
         }
         if (CAPTURE_DISABLED) return;
         const parts = output.parts || [];
@@ -443,7 +468,7 @@ export default {
           .map((p) => p.text)
           .join("\n");
         if (textParts) {
-          beginExternalTurn(sessionID, textParts, pluckCwd(input, output));
+          beginExternalTurn(sessionID, textParts, resolveCwd(sessionID, instanceCwd, input, output));
           sessions.set(sessionID, {
             prompt: textParts,
             response: "",
