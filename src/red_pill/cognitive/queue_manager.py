@@ -427,6 +427,7 @@ class CognitiveQueueManager:
 		limit: int = 50,
 		mission_id: Optional[str] = None,
 		mission_prefix: Optional[str] = None,
+		continuity_id: Optional[str] = None,
 	) -> List[Dict[str, Any]]:
 		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo).
 
@@ -440,7 +441,7 @@ class CognitiveQueueManager:
 		placeholders = ",".join(["?"] * len(statuses))
 		query = f"""
 			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
-				parent_task_id,
+				continuity_id, parent_mission_id, parent_task_id,
 				json_extract(payload, '$.title') AS title,
 				json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 			FROM cognitive_tasks
@@ -453,6 +454,9 @@ class CognitiveQueueManager:
 		if mission_prefix is not None:
 			query += " AND mission_id LIKE ? || '%'"
 			params.append(mission_prefix)
+		if continuity_id is not None:
+			query += " AND continuity_id = ?"
+			params.append(continuity_id)
 		query += " ORDER BY status = 'PROCESSING' DESC, status = 'PAUSING' DESC, priority DESC, created_at ASC LIMIT ?"
 		params.append(limit)
 

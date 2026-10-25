@@ -125,6 +125,46 @@ class DagScheduleMixin:
 			identity["parent_mission_id"] = str(parent)
 		return identity
 
+	def _publish_stage_events(
+		self,
+		payload: Dict[str, Any],
+		identity: Dict[str, Any],
+		before: set[str],
+		after: list[str],
+		*,
+		done: bool,
+	) -> None:
+		"""RFC-INTEROP-003 S2: phase_done/mission_closed al coro (best-effort)."""
+		if not identity or not getattr(self, "job_id", None):
+			return
+		mission = str(identity.get("parent_mission_id") or payload.get("mission_id") or "")
+		if not mission:
+			return
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			registry = SessionRegistry()
+			for path in [p for p in after if p not in before]:
+				registry.add_event(
+					event_type="phase_done",
+					mission_id=mission,
+					summary=f"stage {path} done",
+					continuity_id=str(identity.get("continuity_id") or ""),
+					originator=str(identity.get("originator") or ""),
+					ref=str(self.job_id),
+				)
+			if done:
+				registry.add_event(
+					event_type="mission_closed",
+					mission_id=mission,
+					summary=f"job {str(self.job_id)[:8]} completed",
+					continuity_id=str(identity.get("continuity_id") or ""),
+					originator=str(identity.get("originator") or ""),
+					ref=str(self.job_id),
+				)
+		except Exception as exc:
+			logger.warning(f"[DagJob] no se pudieron publicar eventos: {exc}")
+
 	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		self._step_started = time.monotonic()
@@ -141,6 +181,7 @@ class DagScheduleMixin:
 		stages, fanout_items, _skip_empty = self._expand_fanout(stages, completed, fanout_items, _id_path_map(stages), self._workdir(payload))
 		completed = list(completed) + _skip_empty
 		total_leaves = _count_leaves(stages)
+		before_completed = set(completed)
 
 		# Drain cutoff del ciclo de sueño: anclado en el PRIMER step del job y
 		# persistido en el checkpoint — un pause/resume no desliza la ventana y
@@ -196,6 +237,7 @@ class DagScheduleMixin:
 					f"dag sin frente ejecutable: {leaves_done}/{total_leaves} hojas completas "
 					f"y ninguna dependencia satisfecha (deps imposibles o checkpoint corrupto)"
 				)
+			self._publish_stage_events(payload, identity, before_completed, list(completed), done=True)
 			return StepOutcome(
 				completed=True,
 				# el árbol ya no incluye las plantillas skipped (lista vacía):
@@ -411,6 +453,7 @@ class DagScheduleMixin:
 				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
 				f"{leaves_done}/{total_leaves} hojas completas preservadas en el checkpoint."
 			)
+		self._publish_stage_events(payload, identity, before_completed, new_completed, done=done and not paused)
 		return StepOutcome(
 			completed=done and not paused,
 			new_checkpoint=checkpoint,

@@ -2840,6 +2840,7 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		"type": "object",
 		"properties": {
 			"mission_id": {"type": "string", "description": "Solo jobs de esa misión (aislamiento entre forges)."},
+			"continuity_id": {"type": "string", "description": "Solo jobs de esa alma (RFC-INTEROP-003 S3)."},
 			"all": {"type": "boolean", "description": "Incluir COMPLETED (default: solo activos)."},
 		},
 	},
@@ -2851,7 +2852,11 @@ async def handle_job_list(arguments: Dict[str, Any]):
 		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
 		# la lista completa explícita o el flag es un no-op.
 		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
-		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
+		tasks = _queue().list_tasks(
+			statuses=statuses,
+			mission_id=arguments.get("mission_id"),
+			continuity_id=arguments.get("continuity_id"),
+		)
 		if arguments.get("json") or arguments.get("format") == "json":
 			# JOB-001: salida estructurada para parseo agéntico (agente/IDE/Telegram)
 			return [
@@ -2865,6 +2870,8 @@ async def handle_job_list(arguments: Dict[str, Any]):
 								"status": t["status"],
 								"priority": t["priority"],
 								"mission_id": t.get("mission_id"),
+								"continuity_id": t.get("continuity_id"),
+								"parent_mission_id": t.get("parent_mission_id"),
 								"parent_task_id": t.get("parent_task_id"),
 								"title": t.get("title"),
 								"progress": t.get("progress"),
@@ -2927,6 +2934,8 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"priority": task["priority"],
 			"attempts": task["attempts"],
 			"mission_id": task.get("mission_id"),
+			"continuity_id": task.get("continuity_id"),
+			"parent_mission_id": task.get("parent_mission_id"),
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),

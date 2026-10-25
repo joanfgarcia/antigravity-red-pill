@@ -254,6 +254,10 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 				if outcome.completed:
 					cog_queue.mark_completed(job_id)
+					try:
+						driver.on_terminal(task["payload"], checkpoint, "completed", outcome.summary or "")
+					except Exception as term_err:
+						logger.warning(f"Job {job_id} on_terminal failed: {term_err}")
 					_report_job(job_id, task, "success", outcome.summary or "completed")
 					completed_jobs += 1
 					break
@@ -310,6 +314,10 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					cog_queue.save_checkpoint(job_id, checkpoint, progress)
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed after timeout: {abort_err}")
+			try:
+				driver.on_terminal(task["payload"], checkpoint, "failed", f"timeout: {timeout}")
+			except Exception as term_err:
+				logger.warning(f"Job {job_id} on_terminal failed after timeout: {term_err}")
 			_handle_step_timeout(cog_queue, job_id, task, timeout)
 			logger.error(f"Job {job_id} step timed out: {timeout}")
 		except Exception as e:
@@ -328,6 +336,10 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				logger.info(f"Job {job_id} killed by operator; checkpoint preserved, no attempt burned.")
 			else:
 				cog_queue.mark_failed(job_id, str(e))
+				try:
+					driver.on_terminal(task["payload"], checkpoint, "failed", str(e))
+				except Exception as term_err:
+					logger.warning(f"Job {job_id} on_terminal failed: {term_err}")
 				_report_job(job_id, task, "failed", str(e))
 				logger.error(f"Job {job_id} step failed: {e}")
 		finally:

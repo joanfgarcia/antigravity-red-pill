@@ -66,6 +66,42 @@ class DagJobDriver(DagScheduleMixin, DagExecMixin, DagFanoutMixin, ResumableJobD
 
 		return expand_manifest(payload, cls._load_recipe)
 
+	def begin_step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
+		"""RFC-INTEROP-003 S2: registra el leg `dag:<job_id>` si hay alma."""
+		checkpoint = super().begin_step(payload, checkpoint_data)
+		continuity = checkpoint.get("continuity_id") or payload.get("continuity_id")
+		if not continuity or not getattr(self, "job_id", None):
+			return checkpoint
+		mission = str(checkpoint.get("parent_mission_id") or payload.get("parent_mission_id") or payload.get("mission_id") or "")
+		try:
+			from red_pill.core.affinity import derive_affinity
+			from red_pill.session.store import SessionRegistry
+
+			SessionRegistry().upsert_session(
+				originator=f"dag:{self.job_id}",
+				continuity_id=str(continuity),
+				mission_id=mission or f"mission:job-{str(self.job_id)[:8]}",
+				role="job",
+				lineage_id=payload.get("lineage_id"),
+				affinity=derive_affinity(workdir=str(self._workdir(payload)), mission_id=mission or None),
+				title=str(payload.get("title") or f"dag {str(self.job_id)[:8]}"),
+			)
+			checkpoint["leg_originator"] = f"dag:{self.job_id}"
+		except Exception as exc:
+			logger.warning(f"[DagJob] no se pudo registrar leg dag:{self.job_id}: {exc}")
+		return checkpoint
+
+	def on_terminal(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any], status: str, reason: str = "") -> None:
+		"""S2: el leg del job expira al terminar; no deja jobs muertos en el tablón."""
+		if not getattr(self, "job_id", None):
+			return
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			SessionRegistry().unregister_session(f"dag:{self.job_id}")
+		except Exception as exc:
+			logger.warning(f"[DagJob] no se pudo expirar leg dag:{self.job_id}: {exc}")
+
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		from red_pill.jobs.drivers.base import JobDeferred
 

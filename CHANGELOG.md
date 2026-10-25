@@ -1,5 +1,13 @@
 ## Unreleased
 
+### 🛰️ RFC-INTEROP-003 S2/S3 — leg, eventos y descubrimiento
+
+- **[NEW]** `dag_job` con alma registra leg `dag:<job_id>` (`role=job`) y lo expira
+  al terminar.
+- **[NEW]** Eventos automáticos `phase_done` y `mission_closed` con `ref=job_id`.
+- **[NEW]** `job_list --continuity` y `job_status` muestran la identidad del job;
+  `list_tasks` filtra por alma. `[JOBS]` en wake-up y handoff quedan para S3/S4.
+
 ### 🧭 RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job`
 
 - **[NEW]** `dag_job` acepta `continuity_id`/`parent_mission_id`/`role` opcionales;
