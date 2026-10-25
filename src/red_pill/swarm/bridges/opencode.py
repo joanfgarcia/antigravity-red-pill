@@ -262,7 +262,7 @@ class OpenCodeBridge(AgentBridge):
 		)
 
 		try:
-			extra = dict(self._identity)
+			extra = {**self._identity, "REDPILL_TURN_JOURNAL_DISABLE": "1"}
 			# El canal Telegram tiene relay autoritativo en el worker (session_id =
 			# uuid de Telegram): el plugin del hijo no debe capturar el prompt
 			# envuelto sin respuesta. En el resto, el flag decide quién captura.

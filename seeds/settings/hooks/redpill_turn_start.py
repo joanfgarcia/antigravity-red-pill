@@ -27,6 +27,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 
 PROVIDER = "claude_code"
@@ -49,7 +50,75 @@ def _bridge_path() -> Path:
 
 
 def _safe(token: str) -> str:
-	return token.strip().replace("/", "_").replace("__", "_")
+	return token.strip().replace("/", "_").replace("__", "_").replace(":", "_")
+
+
+def _state_root() -> Path:
+	xdg = os.environ.get("XDG_DATA_HOME")
+	base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+	return base / "red-pill" / "state"
+
+
+def _turn_current(session_id: str) -> Path:
+	return _state_root() / "external_turns" / "current" / f"{PROVIDER}__{_safe(session_id)}.json"
+
+
+def _turn_archive(session_id: str, request_id: str) -> Path:
+	return _state_root() / "external_turns" / "archive" / f"{PROVIDER}__{_safe(session_id)}__{_safe(request_id)}.json"
+
+
+def _read_json(path: Path) -> dict | None:
+	try:
+		data = json.loads(path.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return None
+	return data if isinstance(data, dict) else None
+
+
+def _write_json(path: Path, data: dict) -> None:
+	path.parent.mkdir(parents=True, exist_ok=True)
+	tmp = path.with_suffix(".json.tmp")
+	tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+	os.replace(tmp, path)
+
+
+def _begin_turn(payload: dict, session_id: str) -> None:
+	prompt = payload.get("prompt")
+	if not isinstance(prompt, str) or not prompt.strip():
+		return
+	path = _turn_current(session_id)
+	previous = _read_json(path)
+	if previous and previous.get("status") == "pending":
+		if previous.get("prompt") == prompt:
+			return
+		previous.update({"status": "aborted", "reason": "superseded", "ended_at": time.time()})
+		_write_json(_turn_archive(session_id, str(previous.get("request_id") or "unknown")), previous)
+	stamp = time.time()
+	data = {
+		"provider": PROVIDER,
+		"session_id": session_id,
+		"originator": f"{PROVIDER}:{session_id}",
+		"request_id": f"{PROVIDER}:{session_id}:{int(stamp * 1000)}:{uuid.uuid4().hex[:8]}",
+		"prompt": prompt,
+		"cwd": str(payload.get("cwd") or ""),
+		"model": None,
+		"started_at": stamp,
+		"status": "pending",
+	}
+	_write_json(path, data)
+
+
+def _finish_turn(payload: dict, session_id: str, status: str, reason: str) -> None:
+	path = _turn_current(session_id)
+	data = _read_json(path)
+	if not data:
+		return
+	data.update({"status": status, "reason": reason or None, "ended_at": time.time()})
+	_write_json(_turn_archive(session_id, str(data.get("request_id") or "unknown")), data)
+	try:
+		path.unlink()
+	except FileNotFoundError:
+		pass
 
 
 def _phase(payload: dict) -> str:
@@ -99,6 +168,9 @@ def _run() -> None:
 	if phase == "start":
 		cwd = payload.get("cwd")
 		_write_bridge(session_id, cwd if isinstance(cwd, str) else "")
+		_begin_turn(payload, session_id)
+	else:
+		_finish_turn(payload, session_id, "aborted", str(payload.get("hook_event_name") or "session_end"))
 
 
 def main() -> int:

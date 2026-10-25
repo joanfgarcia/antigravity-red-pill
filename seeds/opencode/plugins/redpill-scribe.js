@@ -66,7 +66,7 @@
  * Runtime: Bun — uses bun:sqlite.
  */
 
-import { mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync, readFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 const QUEUE_DB = "${QUEUE_DB}";
@@ -97,6 +97,78 @@ function trackSessionInfo(event) {
   if (!info?.id) return;
   if (event.type === "session.deleted") childSessions.delete(info.id);
   else if (info.parentID) childSessions.add(info.id);
+}
+
+// ── WRITE-AHEAD (B-01h) ─────────────────────────────────────────────────────
+// Journal JSON antes del modelo; el kernel lo importa al espejo. Sin ruta a
+// Python y sin schema SQL en JS: un fichero por turno, atómico.
+const TURN_JOURNAL_DISABLED = process.env.REDPILL_TURN_JOURNAL_DISABLE === "1";
+const TURN_ROOT = `${STATE_DIR}/external_turns`;
+
+function safeTurn(token) {
+  return String(token ?? "").replace(/[/:]/g, "_").replace(/__/g, "_");
+}
+
+function turnCurrent(sessionId) {
+  return `${TURN_ROOT}/current/opencode__${safeTurn(sessionId)}.json`;
+}
+
+function turnArchive(sessionId, requestId) {
+  return `${TURN_ROOT}/archive/opencode__${safeTurn(sessionId)}__${safeTurn(requestId)}.json`;
+}
+
+function writeJson(path, data) {
+  const tmp = `${path}.tmp`;
+  mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+  writeFileSync(tmp, JSON.stringify(data));
+  renameSync(tmp, path);
+}
+
+function readJson(path) {
+  try { return JSON.parse(readFileSync(path, "utf8")); } catch (_) { return null; }
+}
+
+function beginExternalTurn(sessionId, prompt, cwd) {
+  if (TURN_JOURNAL_DISABLED || !sessionId || !prompt || !String(prompt).trim()) return;
+  try {
+    const current = turnCurrent(sessionId);
+    const previous = readJson(current);
+    if (previous?.status === "pending") {
+      if (previous.prompt === prompt) return;
+      previous.status = "aborted";
+      previous.reason = "superseded";
+      previous.ended_at = Date.now() / 1000;
+      writeJson(turnArchive(sessionId, previous.request_id || "unknown"), previous);
+    }
+    const stamp = Date.now() / 1000;
+    writeJson(current, {
+      provider: "opencode",
+      session_id: sessionId,
+      originator: compositeOriginator(sessionId),
+      request_id: `opencode:${sessionId}:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`,
+      prompt: String(prompt),
+      cwd: String(cwd || ""),
+      model: null,
+      started_at: stamp,
+      status: "pending",
+    });
+  } catch (_) {}
+}
+
+function finishExternalTurn(sessionId, response, status = "completed", reason = "", model = null) {
+  if (TURN_JOURNAL_DISABLED || !sessionId) return;
+  try {
+    const current = turnCurrent(sessionId);
+    const data = readJson(current);
+    if (!data) return;
+    data.status = status === "aborted" ? "aborted" : "completed";
+    data.response = String(response || "");
+    data.reason = reason || null;
+    data.model = model || data.model || null;
+    data.ended_at = Date.now() / 1000;
+    writeJson(turnArchive(sessionId, data.request_id || "unknown"), data);
+    unlinkSync(current);
+  } catch (_) {}
 }
 
 function touchLiveness(sessionId, phase) {
@@ -247,10 +319,11 @@ function closeStore() {
 
 const sessions = new Map();
 
-async function flushSession(sessionId) {
+async function flushSession(sessionId, status = "completed", reason = "") {
   const state = sessions.get(sessionId);
   if (!state) return;
   sessions.delete(sessionId);
+  if (state.prompt) finishExternalTurn(sessionId, state.response, status, reason, state.modelID);
   if (!state.prompt && !state.response) return;
   const store = await getStore();
   if (!store) return;
@@ -271,7 +344,7 @@ async function handleV2Event(event) {
   // state, pero la sesión sí ha terminado su turno). flushSession sin state = no-op.
   if (type === "session.execution.succeeded" || type === "session.execution.failed") {
     touchLiveness(sessionId, "end");
-    await flushSession(sessionId);
+    await flushSession(sessionId, type.endsWith("failed") ? "aborted" : "completed", type.endsWith("failed") ? "execution_failed" : "");
     return;
   }
 
@@ -309,6 +382,7 @@ export default {
         writeBridge(sessionId, pluckCwd(event, event?.data));
       }
       if (sessionId && text && !CAPTURE_DISABLED) {
+        beginExternalTurn(sessionId, text, pluckCwd(event, event?.data));
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
     });
@@ -369,6 +443,7 @@ export default {
           .map((p) => p.text)
           .join("\n");
         if (textParts) {
+          beginExternalTurn(sessionID, textParts, pluckCwd(input, output));
           sessions.set(sessionID, {
             prompt: textParts,
             response: "",

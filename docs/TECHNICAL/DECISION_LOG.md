@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-080] B-01h — write-ahead en hooks externos (journal + import al espejo)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (B-01h; E2E real/S6.2 pendiente).
+**Context**: B-01j/B-01s persistían la intención en los caminos RedPill, pero Claude/opencode/Pi escribían el turno solo al cerrar. Un corte del proceso dejaba el prompt fuera del espejo y sin evidencia de turno pendiente.
+**Decision**:
+1. **Journal JSON atómico** por turno (`state/external_turns/current/<provider>__<session>.json`), escrito ANTES de invocar al modelo. Al cerrar se archiva con `completed`/`aborted`, respuesta (parcial) y motivo.
+2. **Hooks**: Claude (`UserPromptSubmit`/`Stop`/`StopFailure`/`SessionEnd`), opencode (`chat.message`/`session.idle|execution.*`) y Pi (`before_agent_start`/`agent_before_settle|agent_settled`). `request_id` compartido entre inicio y cierre.
+3. **Import**: `import_external_turns()` al despertar (`wake_up_v6`/`refresh_session_context`) y en `session pending`; resuelve `originator → continuity_id/misión` desde `session_registry`. Sin fila registrada, el journal se queda (no se inventa alma).
+4. **Idempotencia**: `begin_turn`/`complete_turn`/`abort_turn` por `request_id`; un turno nuevo sin Stop archiva el anterior como `aborted/superseded`.
+5. **Aislamiento**: los hijos lanzados por bridges ponen `REDPILL_TURN_JOURNAL_DISABLE=1` (el Job Manager ya persiste su intención); el journal es para sesiones externas del Operador.
+6. **Límite**: no exactly-once de efectos cloud (B-04); una respuesta perdida queda `aborted`, no se resucita.
+**Alternatives**: (a) SQL directo en cada lenguaje — schema duplicado y frágil; (b) exigir import de Python en los hooks — path/entorno roto; (c) mirror solo al Stop — pierde la intención si muere el proceso.
+**Rationale / Evidence**: suite **3403 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: journal roundtrip/supersede, import completed/aborted, originator sin alma, hooks Claude, y env de journal desactivado en bridges.
+**Consequences**: B-01h cierra el write-ahead externo sin acoplar los hooks al repo. Queda S6.2 (misión real multi-proveedor) como validación E2E.
+
+---
+
 ## [AD-079] RFC-INTEROP-003 S6 — identidad de alma en arneses externos
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED (S6.1/S6.3; S6.2 real E2E pendiente).

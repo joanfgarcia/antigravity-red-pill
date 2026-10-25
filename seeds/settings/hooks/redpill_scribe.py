@@ -67,6 +67,50 @@ def _touch_liveness(session_id: str, phase: str) -> None:
 		pass
 
 
+def _state_root() -> Path:
+	xdg = os.environ.get("XDG_DATA_HOME")
+	base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+	return base / "red-pill" / "state"
+
+
+def _turn_current(session_id: str) -> Path:
+	safe = session_id.strip().replace("/", "_").replace("__", "_").replace(":", "_")
+	return _state_root() / "external_turns" / "current" / f"claude_code__{safe}.json"
+
+
+def _turn_archive(session_id: str, request_id: str) -> Path:
+	safe_s = session_id.strip().replace("/", "_").replace("__", "_").replace(":", "_")
+	safe_r = str(request_id).strip().replace("/", "_").replace("__", "_").replace(":", "_")
+	return _state_root() / "external_turns" / "archive" / f"claude_code__{safe_s}__{safe_r}.json"
+
+
+def _finish_turn(session_id: str, response: str, model, status: str, reason: str = "") -> None:
+	"""Cierra el journal write-ahead del turno; nunca bloquea el hook."""
+	try:
+		path = _turn_current(session_id)
+		data = json.loads(path.read_text(encoding="utf-8"))
+		if not isinstance(data, dict):
+			return
+		data.update(
+			{
+				"status": status,
+				"response": str(response or ""),
+				"model": str(model or data.get("model") or "") or None,
+				"reason": str(reason or "") or None,
+				"ended_at": time.time(),
+			}
+		)
+		path.parent.mkdir(parents=True, exist_ok=True)
+		archive = _turn_archive(session_id, str(data.get("request_id") or "unknown"))
+		archive.parent.mkdir(parents=True, exist_ok=True)
+		tmp = archive.with_suffix(".json.tmp")
+		tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+		os.replace(tmp, archive)
+		path.unlink(missing_ok=True)
+	except Exception:
+		pass
+
+
 def _text_from_content(content) -> str:
 	"""Extract plain text from a message.content that is a str or block list."""
 	if isinstance(content, str):
@@ -226,18 +270,23 @@ def _run() -> None:
 	# o Stop venga de clear/resume/compact → un `.end` extra es inocuo).
 	_touch_liveness(session_id, "end")
 	if not isinstance(transcript_path, str) or not os.path.isfile(transcript_path):
+		_finish_turn(session_id, "", None, "aborted", "missing_transcript")
 		return
 
 	entries = _load_entries(transcript_path)
 	parsed = _parse_transcript(transcript_path, entries)
 	if not parsed:
+		_finish_turn(session_id, "", None, "aborted", "stop_unparsed")
 		return
 	user_prompt, agent_response, model, marker = parsed
 	if not user_prompt and not agent_response:
+		_finish_turn(session_id, agent_response, model, "aborted", "empty_turn")
 		return
 	if _dedup_seen(session_id, marker):
+		_finish_turn(session_id, agent_response, model, "completed")
 		return
 	_write(user_prompt, agent_response, model, session_id=session_id)
+	_finish_turn(session_id, agent_response, model, "completed")
 
 
 def main() -> int:

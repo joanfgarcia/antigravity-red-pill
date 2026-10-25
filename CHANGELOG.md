@@ -1,5 +1,15 @@
 ## Unreleased
 
+### 🪝 B-01h — write-ahead en arneses externos
+
+- **[NEW]** Journal JSON atómico por turno antes del modelo en Claude/opencode/Pi;
+  al cerrar archiva `completed`/`aborted` con respuesta parcial y motivo.
+- **[NEW]** `import_external_turns()` en el despertar y `session pending`; sin
+  `continuity_id` registrado no se inventa identidad.
+- **[FIX]** Los hijos de bridges desactivan el journal (`REDPILL_TURN_JOURNAL_DISABLE`)
+  para no duplicar el write-ahead del Job Manager.
+- **[DOCS]** AD-080; B-01h implementado. S6.2 real pendiente.
+
 ### 🧬 RFC-INTEROP-003 S6 — identidad de alma en arneses externos
 
 - **[NEW]** `opencode`, `claude` y `pi` reciben `REDPILL_*` por env de confianza;

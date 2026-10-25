@@ -1442,6 +1442,12 @@ async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	is_compaction = arguments.get("is_compaction", False)
+	try:
+		from red_pill.session.external_turns import import_external_turns
+
+		import_external_turns()
+	except Exception:
+		pass
 	force_inject = arguments.get("force_inject", False)
 	mode = arguments.get("mode", "full")
 

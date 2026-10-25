@@ -124,8 +124,13 @@ def handle_session(args: argparse.Namespace) -> None:
 		import time
 
 		import red_pill.config as cfg
+		from red_pill.session.external_turns import import_external_turns
 		from red_pill.session.mirror import SessionMirror
 
+		try:
+			import_external_turns()
+		except Exception:
+			pass
 		mirror = SessionMirror()
 		if getattr(args, "expire", False):
 			minutes = getattr(args, "max_age_min", None)

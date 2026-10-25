@@ -221,7 +221,9 @@ class TestRunOpencode:
 		bridge._scribe_plugin = True
 		with patch("subprocess.run", return_value=fake) as run:
 			bridge._run_opencode(["hi"], timeout=5)
-		assert run.call_args.kwargs["env"] is None
+		env = run.call_args.kwargs["env"]
+		assert env["REDPILL_TURN_JOURNAL_DISABLE"] == "1"
+		assert "REDPILL_SCRIBE_DISABLE" not in env
 
 	def test_disables_plugin_for_telegram_origin(self):
 		tg = OpenCodeBridge(opencode_path="/bin/true", origin="telegram")

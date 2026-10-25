@@ -349,6 +349,14 @@ def main():
 	)
 	args = parser.parse_args()
 
+	# B-01h: importar journals de turnos externos (best-effort; no bloquea el despertar).
+	try:
+		from red_pill.session.external_turns import import_external_turns
+
+		import_external_turns()
+	except Exception:
+		pass
+
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
 		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
 		sys.exit(1)

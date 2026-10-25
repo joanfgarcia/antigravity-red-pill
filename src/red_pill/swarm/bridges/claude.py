@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 from typing import Any, Optional, cast
@@ -76,7 +77,7 @@ class ClaudeBridge(AgentBridge):
 				text=True,
 				timeout=timeout + 10,
 				cwd=cwd or str(get_bunker_root().parent),
-				env=merged_env(self._identity),
+				env={**(merged_env(self._identity) or os.environ.copy()), "REDPILL_TURN_JOURNAL_DISABLE": "1"},
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[ClaudeBridge] Command timed out after {timeout + 10}s")
