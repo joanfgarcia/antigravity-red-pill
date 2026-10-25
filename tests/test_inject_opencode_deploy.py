@@ -66,6 +66,9 @@ def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
 	for skill in ("job-manager", "dag", "forge", "scout"):
 		path = os.path.join(tmp, "skills", skill, "SKILL.md")
 		assert os.path.exists(path), f"skill '{skill}' no desplegado en instalación limpia"
+	# Skill multi-fichero: los companions (no solo SKILL.md) también viajan.
+	ledger = os.path.join(tmp, "skills", "context-distiller", "snapshot_read.py")
+	assert os.path.exists(ledger), "companion de skill multi-fichero no desplegado"
 	assert n > 0
 
 

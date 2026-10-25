@@ -113,6 +113,12 @@ def _skill_capability(skill_md: str) -> str | None:
 
 
 def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -> int:
+	"""Deploy skills with full-directory copy (SKILL.md + scripts/references).
+
+	Multi-file skills (forge scripts, context-distiller ledger) must ship complete;
+	copying only SKILL.md silently drops companions. Placeholders are resolved in
+	.md files only; the rest copy byte-identical.
+	"""
 	deployed = 0
 	if not os.path.isdir(src_dir):
 		return 0
@@ -137,19 +143,39 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 			if not _keep:
 				logger.info(f"  Skill '{entry}' gated (capability '{_cap}' inactiva) → skip")
 				continue
-		dest = os.path.join(dest_dir, entry, "SKILL.md")
-		os.makedirs(os.path.dirname(dest), exist_ok=True)
-		resolved = subst(_read_seed(skill_md), variables)
-		if os.path.exists(dest):
-			with open(dest, encoding="utf-8") as f:
-				if f.read() == resolved:
-					continue
-			if backup:
-				shutil.copy2(dest, dest + ".bak")
-		with open(dest, "w", encoding="utf-8") as f:
-			f.write(resolved)
-		deployed += 1
-		logger.info(f"  Skill '{entry}' → {os.path.dirname(dest)}")
+		skill_dest = os.path.join(dest_dir, entry)
+		os.makedirs(skill_dest, exist_ok=True)
+		skill_changed = 0
+		for root, dirs, files in os.walk(skill_src):
+			dirs[:] = [d for d in dirs if d != "__pycache__"]
+			rel_root = os.path.relpath(root, skill_src)
+			dest_root = skill_dest if rel_root == "." else os.path.join(skill_dest, rel_root)
+			os.makedirs(dest_root, exist_ok=True)
+			for name in files:
+				src_file = os.path.join(root, name)
+				dest_file = os.path.join(dest_root, name)
+				if name.endswith(".md"):
+					resolved = subst(_read_seed(src_file), variables)
+					if os.path.exists(dest_file):
+						with open(dest_file, encoding="utf-8") as f:
+							if f.read() == resolved:
+								continue
+						if backup:
+							shutil.copy2(dest_file, dest_file + ".bak")
+					with open(dest_file, "w", encoding="utf-8") as f:
+						f.write(resolved)
+				else:
+					if os.path.exists(dest_file):
+						with open(dest_file, "rb") as a, open(src_file, "rb") as b:
+							if a.read() == b.read():
+								continue
+						if backup:
+							shutil.copy2(dest_file, dest_file + ".bak")
+					shutil.copy2(src_file, dest_file)
+				skill_changed += 1
+		if skill_changed:
+			deployed += 1
+			logger.info(f"  Skill '{entry}' → {skill_dest}")
 	return deployed
 
 
