@@ -12,6 +12,8 @@ import base64
 import contextlib
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -69,6 +71,19 @@ def build_app(json_response: bool = False) -> Starlette:
 	)
 
 
+def _chmod_socket_when_ready(path: Path, mode: int = 0o600) -> None:
+	"""Uvicorn puede crear el UDS con 0666; el directorio ya es 0700, pero
+	endurecemos el fichero en cuanto exista (defensa en profundidad)."""
+	for _ in range(200):
+		try:
+			if path.exists():
+				path.chmod(mode)
+				return
+		except OSError:
+			pass
+		time.sleep(0.05)
+
+
 def serve(socket_path: str | None = None, json_response: bool = False) -> None:
 	"""Run the shared backend on a Unix socket (blocks)."""
 	sock = Path(socket_path or default_socket())
@@ -81,6 +96,7 @@ def serve(socket_path: str | None = None, json_response: bool = False) -> None:
 		sock.unlink()
 	except FileNotFoundError:
 		pass
+	threading.Thread(target=_chmod_socket_when_ready, args=(sock,), daemon=True).start()
 	old_umask = os.umask(0o077)
 	try:
 		uvicorn.run(build_app(json_response=json_response), uds=str(sock), log_level="warning")

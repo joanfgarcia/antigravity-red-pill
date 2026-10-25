@@ -34,6 +34,16 @@ def adapter():
 	return _load_adapter()
 
 
+def test_deep_merge_reemplaza_command_mcp(adapter) -> None:
+	"""Un command MCP se reemplaza; concatenarlo rompía el proxy con el directo."""
+	base = {"mcp": {"RedPill-Kernel": {"command": ["direct", "old"], "environment": {"A": "1"}}}}
+	overlay = {"mcp": {"RedPill-Kernel": {"command": ["proxy", "new"], "environment": {"B": "2"}}}}
+	out = adapter._deep_merge(base, overlay)
+	assert out["mcp"]["RedPill-Kernel"]["command"] == ["proxy", "new"]
+	assert out["mcp"]["RedPill-Kernel"]["environment"] == {"A": "1", "B": "2"}
+	assert adapter._deep_merge({"plugin": ["a"]}, {"plugin": ["a", "b"]})["plugin"] == ["a", "b"]
+
+
 def test_repo_root_apunta_a_la_raiz_del_repo(adapter) -> None:
 	# El adapter deriva repo_root en inject(); verificamos que la ruta resuelve a
 	# la RAÍZ del repo (no a scripts/) — el nombre del directorio cambia según el

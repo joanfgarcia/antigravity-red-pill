@@ -34,6 +34,11 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 		if key in base and isinstance(base[key], dict) and isinstance(val, dict):
 			_deep_merge(base[key], val)
 		elif key in base and isinstance(base[key], list) and isinstance(val, list):
+			if key in ("command", "args"):
+				# Comandos MCP: la lista del seed REEMPLAZA, no se concatena. Un
+				# union dejaba el comando directo + el proxy mezclados.
+				base[key] = val
+				continue
 			for item in val:
 				if item not in base[key]:
 					base[key].append(item)
