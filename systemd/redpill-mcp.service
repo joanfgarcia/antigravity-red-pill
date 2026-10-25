@@ -5,16 +5,16 @@ StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
-# Plantilla: %h = HOME; ajusta la ruta si el repo no vive en ~/Documents/IA/sharing.
+# Renderizado por scripts/install_mcp_service.sh (@REPO_ROOT@/@PYTHON@/@MCP_SOCKET@).
 Type=simple
-WorkingDirectory=%h/Documents/IA/sharing
-Environment=PYTHONPATH=%h/Documents/IA/sharing/src
-ExecStart=%h/Documents/IA/sharing/.venv/bin/python -m red_pill.mcp_backend --socket %t/red-pill/mcp.sock
+WorkingDirectory=@REPO_ROOT@
+Environment=PYTHONPATH=@REPO_ROOT@/src
+ExecStart=@PYTHON@ -m red_pill.mcp_backend --socket @MCP_SOCKET@
 Restart=on-failure
 RestartSec=2
 UMask=0077
 NoNewPrivileges=yes
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 MemoryMax=4G
 MemorySwapMax=0
 
