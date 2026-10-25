@@ -196,6 +196,28 @@ reason TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_note_status_mission ON note_status(mission_id, status);
+
+CREATE TABLE IF NOT EXISTS decision_suggestions (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+decision_id TEXT NOT NULL,
+reviewer_continuity_id TEXT NOT NULL,
+verdict TEXT NOT NULL,
+confidence TEXT NOT NULL,
+reason TEXT,
+created_at REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_suggestions_decision ON decision_suggestions(decision_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS decision_reviews (
+job_id TEXT PRIMARY KEY,
+decision_id TEXT NOT NULL,
+reviewer_continuity_id TEXT NOT NULL,
+mode TEXT NOT NULL,
+created_at REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_decision ON decision_reviews(decision_id, created_at DESC);
 """
 
 # Taxonomía civil de eventos de misión (Fase 2, RFC_CONSCIENCIA_MULTISESION §3.6).
@@ -218,6 +240,7 @@ EVENT_TYPES = frozenset(
 		"decision_dismissed",
 		"decision_escalated",
 		"decision_moderated",
+		"decision_suggested",
 	}
 )
 
@@ -230,6 +253,7 @@ _INTERNAL_EVENT_TYPES = frozenset(
 		"decision_dismissed",
 		"decision_escalated",
 		"decision_moderated",
+		"decision_suggested",
 	}
 )
 
@@ -811,7 +835,7 @@ class SessionRegistry:
 		params.append(_clean_key(viewer_originator) if viewer_originator else "")
 		sql += " AND (COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted') OR ? = 1 OR e.continuity_id = ?)"
 		params.extend([1 if include_hidden else 0, _clean_key(viewer_continuity_id) if viewer_continuity_id else ""])
-		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated')"
+		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated', 'decision_suggested')"
 		if types:
 			if not isinstance(types, (list, tuple)):
 				raise ValueError("types debe ser una lista")
@@ -887,7 +911,7 @@ class SessionRegistry:
 		params.append(_clean_key(viewer_originator) if viewer_originator else "")
 		sql += " AND (COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted') OR ? = 1 OR e.continuity_id = ?)"
 		params.extend([1 if include_hidden else 0, _clean_key(viewer_continuity_id) if viewer_continuity_id else ""])
-		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated')"
+		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated', 'decision_suggested')"
 		if types:
 			if not isinstance(types, (list, tuple)):
 				raise ValueError("types debe ser una lista")
@@ -1080,6 +1104,95 @@ class SessionRegistry:
 			logger.warning(f"[D-obj] audit event failed for {decision['decision_id']}: {e}")
 		return self.get_decision(decision["decision_id"]) or {}
 
+	def suggest_review(
+		self,
+		decision_id: str,
+		*,
+		reviewer_continuity_id: str,
+		verdict: str,
+		confidence: str,
+		reason: str = "",
+	) -> dict:
+		"""Modo review: registra una sugerencia del revisor SIN mutar la D-obj.
+
+		La decisión sigue siendo del Operador. Se guarda el último veredicto y su
+		confianza; el reviewer no puede ser el autor de la nota ni el objetor.
+		"""
+		reviewer = _clean_key(reviewer_continuity_id)
+		if not reviewer:
+			raise ValueError("reviewer_continuity_id requerido")
+		act = str(verdict or "").strip().lower()
+		if act not in {"uphold", "dismiss", "escalate"}:
+			raise ValueError(f"verdict inválido: {verdict!r}")
+		conf = str(confidence or "").strip().lower()
+		if conf not in {"low", "medium", "high"}:
+			raise ValueError(f"confidence inválida: {confidence!r}")
+		with self._connect() as conn:
+			row = conn.execute("SELECT * FROM dynamic_decisions WHERE decision_id = ?", (str(decision_id or ""),)).fetchone()
+			if not row:
+				raise ValueError("la decisión no existe")
+			decision = dict(row)
+			if decision["state"] in {"upheld", "dismissed"}:
+				raise ValueError(f"decisión ya cerrada: {decision['state']}")
+			subject = conn.execute(
+				"SELECT continuity_id FROM mission_events WHERE event_id = ?",
+				(decision["subject_event_id"],),
+			).fetchone()
+			if reviewer == decision["created_by"]:
+				raise ValueError("el objetor no puede revisar su propia objeción")
+			if subject and reviewer == subject["continuity_id"]:
+				raise ValueError("el autor de la nota no puede revisarla")
+			now = time.time()
+			cur = conn.execute(
+				"INSERT INTO decision_suggestions (decision_id, reviewer_continuity_id, verdict, confidence, reason, created_at) "
+				"VALUES (?, ?, ?, ?, ?, ?)",
+				(
+					decision["decision_id"],
+					reviewer,
+					act,
+					conf,
+					_clean_text(reason, _EVENT_SUMMARY_MAX) or None,
+					now,
+				),
+			)
+			conn.commit()
+			suggestion_id = int(cur.lastrowid or 0)
+		try:
+			self.add_event(
+				event_type="decision_suggested",
+				mission_id=decision["mission_id"],
+				summary=f"{decision['decision_id'][:8]} suggest {act}/{conf}: {reason or ''}",
+				continuity_id=reviewer,
+				ref=decision["decision_id"],
+			)
+		except Exception as e:
+			logger.warning(f"[D-obj] audit event failed for suggestion {decision['decision_id']}: {e}")
+		return {
+			"suggestion_id": suggestion_id,
+			"decision_id": decision["decision_id"],
+			"reviewer_continuity_id": reviewer,
+			"verdict": act,
+			"confidence": conf,
+			"reason": _clean_text(reason, _EVENT_SUMMARY_MAX) or None,
+			"created_at": now,
+		}
+
+	def register_review_job(self, decision_id: str, *, job_id: str, reviewer_continuity_id: str, mode: str) -> None:
+		"""Enlaza una D-obj con el job revisor que la está analizando."""
+		with self._connect() as conn:
+			conn.execute(
+				"INSERT OR REPLACE INTO decision_reviews (job_id, decision_id, reviewer_continuity_id, mode, created_at) "
+				"VALUES (?, ?, ?, ?, ?)",
+				(
+					str(job_id),
+					str(decision_id),
+					_clean_key(reviewer_continuity_id),
+					str(mode),
+					time.time(),
+				),
+			)
+			conn.commit()
+
 	def moderate_note(self, event_id: str, *, action: str, actor: str = "operator", reason: str = "") -> dict:
 		"""Operador: flag/hide/retract/restore. Resuelve D-objs abiertas de la nota."""
 		act = str(action or "").strip().lower()
@@ -1192,8 +1305,18 @@ class SessionRegistry:
 		params: list = []
 		sql = (
 			"SELECT d.*, e.summary AS note_summary, e.ref AS note_ref, e.type AS note_type, "
-			"e.continuity_id AS note_author, e.created_at AS note_created_at "
-			"FROM dynamic_decisions d LEFT JOIN mission_events e ON e.event_id = d.subject_event_id WHERE 1=1"
+			"e.continuity_id AS note_author, e.created_at AS note_created_at, "
+			"dr.job_id AS review_job_id, dr.mode AS review_mode, dr.reviewer_continuity_id AS reviewer, "
+			"ds.verdict AS suggested_verdict, ds.confidence AS suggestion_confidence, "
+			"ds.reason AS suggestion_reason, ds.created_at AS suggested_at "
+			"FROM dynamic_decisions d LEFT JOIN mission_events e ON e.event_id = d.subject_event_id "
+			"LEFT JOIN (SELECT decision_id, job_id, mode, reviewer_continuity_id, created_at, "
+			"ROW_NUMBER() OVER (PARTITION BY decision_id ORDER BY created_at DESC) AS rn "
+			"FROM decision_reviews) dr ON dr.decision_id = d.decision_id AND dr.rn = 1 "
+			"LEFT JOIN (SELECT decision_id, verdict, confidence, reason, created_at, "
+			"ROW_NUMBER() OVER (PARTITION BY decision_id ORDER BY created_at DESC) AS rn "
+			"FROM decision_suggestions) ds ON ds.decision_id = d.decision_id AND ds.rn = 1 "
+			"WHERE 1=1"
 		)
 		if mission:
 			sql += " AND d.mission_id = ?"

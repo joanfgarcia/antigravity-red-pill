@@ -556,6 +556,16 @@ class RedPillConfig(BaseSettings):
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
+	# D23-SCORE v0.1 — auto-revisor de objeciones (RFC_ALMA_Y_CORO / D23).
+	# off: solo Operador; review: sugiere sin mutar; semi: actúa solo con
+	# confianza alta (si no, escala); auto: decide low/medium (high/retract
+	# siguen siendo del Operador).
+	D23_REVIEW_MODE: str = "off"
+	# Alma dedicada del revisor. Vacío = UUID estable derivado de
+	# "red-pill:d23-reviewer" (independiente del autor/objetor).
+	D23_REVIEWER_CONTINUITY_ID: str = ""
+	# Receta del job revisor (cascade de modelos; por defecto OpenRouter).
+	D23_REVIEW_RECIPE: str = "configs/jobs/d23-review.yaml"
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

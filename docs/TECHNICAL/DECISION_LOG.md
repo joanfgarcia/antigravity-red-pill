@@ -4,6 +4,21 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-084] D23-SCORE v0.1 — auto-revisor con modos off/review/semi/auto
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: D23 v0 (AD-083) dejó la revisión en el Operador (`review_decision`/`moderate_note` + bandeja), sin revisor autónomo. El Operador pidió un revisor con modos y un filtro para no revisar todo a mano, manteniendo la última palabra en high/retract.
+**Decision**:
+1. **Modos** (`D23_REVIEW_MODE`, default `off`): `off` solo Operador; `review` el revisor sugiere (`suggest_review`, sin mutar); `semi` actúa solo con confianza alta (si no, `escalate`); `auto` decide low/medium (high/retract siempre Operador).
+2. **Job revisor** `d23_review` (`agentic_job`): se encola al crear la objeción si el modo no es `off`, con alma dedicada estable (`D23_REVIEWER_CONTINUITY_ID`), `parent_mission_id` de la D-obj, `originator=d23-review:<decision>` y `role=reviewer`; el prompt incluye nota/claim/evidence/severidad/estado/modo y las tools `suggest_review`/`review_decision`.
+3. **Modelo**: cascade OpenRouter `openrouter/~z-ai/glm-latest` → `openrouter/~deepseek/deepseek-pro-latest` → `openrouter/~z-ai/glm-flash-latest`; backend `opencode`, `effort: low`, `timeout: 240` en `configs/jobs/d23-review.yaml`. Los tres IDs se verificaron con `opencode run -m ... --pure` (rc=0), aunque `opencode models` no lista `openrouter`.
+4. **Persistencia**: `decision_suggestions` (verdict/confidence/reason), `decision_reviews` (job/mode/reviewer), evento interno `decision_suggested`; `list_decisions` y CLI muestran sugerencia, confianza, job y modo. El Operador conserva `review_decision`/`moderate_note`; un agente no puede hide/retract.
+**Alternatives**: (a) auto con high/retract incluidos — daría rango de Operador de facto al revisor; descartado; (b) usar `opencode`/`opencode-go` — más caro/cuota Go; descartado frente a OpenRouter; (c) un solo modelo sin cascade — pierde fallback barato.
+**Rationale / Evidence**: `tests/test_d23_review.py` (7) + `test_d23_score`/`test_mission_events`/`test_mcp_server` → **133 passed**; `ruff` limpio. El tool `suggest_review` eleva el inventario MCP a 14; el job se valida contra la receta real y la identidad del revisor.
+**Consequences**: D23-SCORE v0.1 cerrada; validación operativa en `review` → `semi` → `auto`. `D23_REVIEW_MODE` default `off`: el Operador lo activa en `.env` y reinicia `redpill-mcp`. high/retract siguen en el Operador. La receta y los modos quedan versionados; los jobs revisores aparecen en la cola con su leg propio y la bandeja muestra su sugerencia/estado/job.
+
+---
+
 ## [AD-083] D23-SCORE v0 — objeciones, D-obj y moderación del tablón
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED (v0; votos/score y auto-reviewer job diferidos).

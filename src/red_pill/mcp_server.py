@@ -2410,12 +2410,25 @@ async def handle_announce_intent(arguments: Dict[str, Any]):
 				sealed=False,
 			)
 			op = " [requiere Operador]" if decision.get("requires_operator") else ""
+			review_job = None
+			mode = "off"
+			try:
+				from red_pill.session.d23_review import enqueue_review, review_mode
+
+				mode = review_mode()
+				if mode != "off":
+					review_job = enqueue_review(decision, subject, mode)
+			except Exception as e:
+				logger.warning(f"[OBJECTION] review enqueue failed: {e}")
+			review_note = f" · review_job={review_job}" if review_job else ""
+			mode_note = f" · mode={mode}" if mode != "off" else ""
 			return [
 				types.TextContent(
 					type="text",
 					text=(
 						f"[OBJECTION] decision={decision['decision_id']} · state={decision['state']}{op} · "
 						f"note={target} · event={event['event_id']} · seq={event['event_seq']}"
+						f"{review_note}{mode_note}"
 					),
 				)
 			]
@@ -2566,6 +2579,52 @@ async def handle_review_decision(arguments: Dict[str, Any]):
 
 
 @registry.register(
+	name="suggest_review",
+	description=(
+		"[OFFICIAL] Revisor D23-SCORE (modo review): registra una sugerencia "
+		"(uphold/dismiss/escalate + confianza) sin cambiar el estado de la D-obj. "
+		"El Operador decide."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"decision_id": {"type": "string", "description": "decision_id de la D-obj."},
+			"verdict": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
+			"confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
+		},
+		"required": ["decision_id", "verdict", "confidence"],
+	},
+)
+async def handle_suggest_review(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		session = await _caller_session(arguments)
+		continuity = str(session.get("continuity_id") or "").strip()
+		if not continuity:
+			return [types.TextContent(type="text", text="[SUGGEST] sin alma resuelta; no puedes revisar.")]
+		suggestion = SessionRegistry().suggest_review(
+			str(arguments.get("decision_id") or ""),
+			reviewer_continuity_id=continuity,
+			verdict=str(arguments.get("verdict") or ""),
+			confidence=str(arguments.get("confidence") or ""),
+			reason=str(arguments.get("reason") or ""),
+		)
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[SUGGEST] {suggestion['decision_id'][:12]} → {suggestion['verdict']}/"
+					f"{suggestion['confidence']} (sin mutar; el Operador decide)"
+				),
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[SUGGEST] error: {e}")]
+
+
+@registry.register(
 	name="list_decisions",
 	description=(
 		"[OFFICIAL] Bandeja de D-obj (D23-SCORE): decisiones pendientes de moderación. "
@@ -2613,6 +2672,16 @@ async def handle_list_decisions(arguments: Dict[str, Any]):
 			if row.get("note_summary"):
 				note_ref = f" · {sanitize_inline(row.get('note_ref'), 80)}" if row.get("note_ref") else ""
 				lines.append(f"     nota: {sanitize_inline(row.get('note_summary'), 160)}{note_ref}")
+			if row.get("review_job_id"):
+				lines.append(
+					f"     review: job={str(row.get('review_job_id'))[:12]} "
+					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+				)
+			if row.get("suggested_verdict"):
+				lines.append(
+					f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · "
+					f"{sanitize_inline(row.get('suggestion_reason'), 160)}"
+				)
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[DECISIONS] error: {e}")]

@@ -283,6 +283,16 @@ def handle_session(args: argparse.Namespace) -> None:
 				ref = f" · {row.get('note_ref')}" if row.get("note_ref") else ""
 				note = " ".join(str(row.get("note_summary") or "").split())[:160]
 				print(f"     nota: {note}{ref}")
+			if row.get("review_job_id"):
+				print(
+					f"     review: job={str(row.get('review_job_id'))[:12]} "
+					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+				)
+			if row.get("suggested_verdict"):
+				reason = " ".join(str(row.get("suggestion_reason") or "").split())[:160]
+				print(
+					f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · {reason}"
+				)
 		return
 	if getattr(args, "session_cmd", None) == "moderate":
 		import json

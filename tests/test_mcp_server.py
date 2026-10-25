@@ -324,8 +324,9 @@ class TestListTools:
 		# D23-SCORE v0: bandeja, revisión y moderación (Operador).
 		assert "list_decisions" in tool_names
 		assert "review_decision" in tool_names
+		assert "suggest_review" in tool_names
 		assert "moderate_note" in tool_names
-		assert len(result) == 13
+		assert len(result) == 14
 
 
 class TestControlBunkerAdditional:
