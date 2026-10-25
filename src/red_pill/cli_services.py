@@ -96,6 +96,27 @@ def handle_mini(args: argparse.Namespace) -> int:
 	return 0 if run_mini_cli(bridge, once=args.once) else 1
 
 
+def handle_mcp(args: argparse.Namespace) -> None:
+	"""MCP compartido: backend UDS (serve) y proxy stdio (proxy)."""
+	if getattr(args, "mcp_cmd", None) == "serve":
+		from red_pill.mcp_backend import serve
+
+		serve(
+			socket_path=getattr(args, "socket", None),
+			json_response=bool(getattr(args, "json_response", False)),
+		)
+		return
+	if getattr(args, "mcp_cmd", None) == "proxy":
+		from red_pill.mcp_proxy import run_proxy
+
+		run_proxy(
+			socket_path=getattr(args, "socket", None),
+			harness=getattr(args, "harness", None),
+		)
+		return
+	print("uso: red-pill mcp [serve|proxy]")
+
+
 def handle_session(args: argparse.Namespace) -> None:
 	"""Alma y Coro: operaciones sobre el espejo canónico de turnos."""
 	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "sync":

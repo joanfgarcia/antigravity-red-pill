@@ -206,6 +206,15 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_moderate.add_argument("--reason", default="", help="Motivo (queda auditado)")
 	session_moderate.add_argument("--json", action="store_true", help="Salida JSON")
 
+	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
+	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")
+	mcp_serve = mcp_sub.add_parser("serve", help="Backend MCP compartido sobre UDS")
+	mcp_serve.add_argument("--socket", default=None, help="UDS (default: $XDG_RUNTIME_DIR/red-pill/mcp.sock)")
+	mcp_serve.add_argument("--json-response", action="store_true", help="Responder JSON en vez de SSE")
+	mcp_proxy = mcp_sub.add_parser("proxy", help="Proxy stdio ↔ backend UDS")
+	mcp_proxy.add_argument("--socket", default=None, help="UDS del backend")
+	mcp_proxy.add_argument("--harness", default=None, help="opencode | claude_code | pi (default: REDPILL_HARNESS)")
+
 	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")
 	mini_parser.add_argument("--profile", default="forge", help="Perfil del cuerpo (forge | loom | loom-tools)")
 	mini_parser.add_argument("--continuity", default=None, help="Alma (continuity_id); si se omite se emite una")

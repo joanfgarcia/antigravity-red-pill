@@ -28,6 +28,7 @@ from red_pill.cli_services import (  # noqa: F401  (re-exported for `red_pill.cl
 	handle_ide,
 	handle_identity,
 	handle_license,
+	handle_mcp,
 	handle_memory,
 	handle_mini,
 	handle_p2p,
@@ -116,6 +117,10 @@ def main() -> None:
 
 	elif args.command == "session":
 		handle_session(args)
+		return
+
+	elif args.command == "mcp":
+		handle_mcp(args)
 		return
 
 	elif args.command == "mini":

@@ -1221,7 +1221,7 @@ Separation of responsibilities by layer (extraction / selection / serving / main
 ## [AD-018] Daemon-Hosted MCPs over the Network *(ACCEPTED — spike validated)*
 **Date**: 2026-06-18  
 **Context**: v7.3.0 — MCP serving / coordination  
-**Status**: ACCEPTED — spike validado 2026-10-25; implementación pendiente (servicio dedicado, no `DaemonPlugin`).
+**Status**: ACCEPTED — slice A implementada 2026-10-25 (`mcp serve` + `mcp_proxy` + unit systemd); instalación/inject pendiente.
 
 ### 1. The Problem
 MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = duplicated processes and no shared, central state — so cross-agent coordination has no common substrate, and per-client process sprawl grows.
@@ -1251,12 +1251,19 @@ Proyección: 3 pestañas → ~582 MB (backend + 3 proxies) vs 1.33 GB actuales; 
 
 **Identidad**: el proxy pone `redpill-proxy:<base64(json)>` en el `clientInfo` del `initialize` (canal de confianza del proxy, no del modelo). Dos proxies vieron `alma-spike-a`/`spike-a` y `alma-spike-b`/`spike-b`, sin fugas; el coro listó ambas legs. **Validado también con opencode real** (`opencode run` con `OPENCODE_CONFIG` override, proxy PID confirmado, tag `<session continuity_id="alma-spike-oc" leg="opencode:spike-oc" mission="repo:spike"/>`).
 
+**Slice A implementada (2026-10-25)**:
+- `red-pill mcp serve --socket <UDS>` → backend compartido (`src/red_pill/mcp_backend.py`); el kernel se importa una vez.
+- `python -m red_pill.mcp_proxy --socket <UDS> --harness opencode` → proxy stdio ligero (`src/red_pill/mcp_proxy.py`). La variante `red-pill mcp proxy` existe por comodidad, pero importa el CLI completo (~2.3s); el installer debe usar el módulo (`-m`) para el arranque rápido (~0.3s).
+- Identidad por petición: el proxy lee env/bridge en cada request y manda `X-RedPill-Proxy: <b64(json)>`; el backend la publica en un contextvar y `_resolve_session_identity` la usa como canal de confianza. Verificado con dos sesiones concurrentes: `alma-prod-a`/`opencode:prod-a` y `alma-prod-b`/`opencode:prod-b`, 13 tools, backend **452.8 MB**, proxies **0.29–0.35 s**.
+- `systemd/redpill-mcp.service` (servicio de usuario, UDS `%t/red-pill/mcp.sock`, UMask 0077).
+- Tests: `tests/test_mcp_shared.py` (unitarios + E2E gateado por `REDPILL_MCP_SHARED_E2E=1`; en esta máquina el E2E queda bloqueado por SEC-TEST-001, se ejecuta en instancia de test dedicada).
+
 **Pendiente antes de producción**:
-1. `InvalidStateError` al cerrar el cliente streamable HTTP (2 avisos en el spike; verificar/remediar).
-2. Punto único de fallo (socket activation + restart) y concurrencia (handlers síncronos → thread/lock).
-3. Identidad de la instancia real: el spike usó env estático; el proxy debe leer el env/bridge del arnés y, si se puede, mejorar el bridge global por sesión.
+1. `InvalidStateError` al cerrar el cliente streamable HTTP (sigue apareciendo; verificar/remediar).
+2. Punto único de fallo (socket activation/restart) y concurrencia (handlers síncronos → thread/lock).
+3. Identidad real multi-arnés: el proxy ya lee env/bridge; falta mejorar el bridge global por sesión (last-writer) y cablear Claude/Pi.
 4. Seguridad: UDS 0600, sin TCP abierto; el proxy es la frontera de identidad (mismo UID).
-5. Migración: `inject_mcp`/`inject_opencode`/Claude/Pi al proxy, con modo stdio directo como fallback; tests de dos sesiones y de reinicio del backend.
+5. Migración: `inject_mcp`/`inject_opencode`/Claude/Pi al proxy, con modo stdio directo como fallback; instalar `systemd/redpill-mcp.service`; tests de dos sesiones y de reinicio del backend.
 
 Los scripts del spike viven en `/tmp/opencode/mcp-spike/` (fuera del repo; no se commitean).
 

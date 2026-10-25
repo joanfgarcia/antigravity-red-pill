@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -32,6 +33,12 @@ from red_pill.utils.mystique import mystique_engine
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# Identidad de confianza inyectada por el proxy del MCP compartido (AD-018).
+# El backend es un único proceso para N clientes; el proxy de cada instancia
+# adjunta la identidad del arnés (no del modelo) en cada petición HTTP. El
+# middleware de `mcp_shared` la publica en este contextvar.
+_shared_identity_var: ContextVar[Optional[dict]] = ContextVar("redpill_shared_identity", default=None)
 
 
 def _safe_create_task(coro, *, name: str = "background"):
@@ -1876,9 +1883,19 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# así el bridge NO se confunde entre IDEs simultáneos (dos servidores MCP
 	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
 	# aunque el originator venga explícito.
+	shared = _shared_identity_var.get()
 	explicit_originator = str(arguments.get("originator") or "").strip() or None
 	env_originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
 	harness_env = os.getenv("REDPILL_HARNESS") or None
+	if shared:
+		# Canal de confianza del proxy (AD-018): sustituye env/bridge del backend
+		# compartido, que es común a todas las instancias.
+		shared_originator = str(shared.get("originator") or "").strip() or None
+		if shared_originator:
+			explicit_originator = shared_originator
+			env_originator = shared_originator
+		if str(shared.get("harness") or "").strip():
+			harness_env = str(shared["harness"]).strip()
 	harness = harness_env or (explicit_originator.split(":", 1)[0] if explicit_originator else None)
 	bridge = _harness_bridge(harness)
 	bridge_originator = bridge["originator"] or None
@@ -1891,8 +1908,12 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		originator = env_originator or bridge_originator or explicit_originator
 	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
 	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
+	if shared and str(shared.get("workdir") or "").strip():
+		workspace = str(shared["workdir"]).strip()
 	# El alma NO se acepta del modelo: env de confianza (job/relay) → registro.
 	continuity_id = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip() or None
+	if shared and str(shared.get("continuity_id") or "").strip():
+		continuity_id = str(shared["continuity_id"]).strip()
 	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
 	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
 	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
@@ -1907,6 +1928,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 			existing = registry_obj.get_by_originator(originator)
 		except Exception as e:
 			logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
+	if shared and existing and existing.get("continuity_id"):
+		# Primer enlace gana: el registro manda sobre el hint del proxy.
+		continuity_id = existing["continuity_id"]
 	# Campaña: env (canal de confianza) → la ya atada al leg. Sin valor, no se infiere.
 	campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or (existing or {}).get("campaign_id")
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
@@ -1928,7 +1952,11 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# La misión sale del manifiesto (env de confianza) → repo:rama → adhoc. El
 	# argumento del modelo NO la declara (evita spoofing y params innecesarios).
 	mission_id = resolve_default_mission(os.getenv("REDPILL_MISSION_ID") or None, branch=branch)
+	if shared and str(shared.get("mission_id") or "").strip():
+		mission_id = str(shared["mission_id"]).strip()
 	role = str(os.getenv("REDPILL_ROLE") or (existing or {}).get("role") or "task").strip() or "task"
+	if shared and str(shared.get("role") or "").strip():
+		role = str(shared["role"]).strip()
 
 	# La afinidad explícita es del OPERADOR (env AFFINITY), no del modelo: si el
 	# modelo pudiera añadirla, se auto-otorgaría lectura en `fetch_divergent_turns`.
