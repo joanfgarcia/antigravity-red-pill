@@ -120,7 +120,11 @@ class DagScheduleMixin:
 			"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else str(payload.get("originator") or ""),
 			"role": str(payload.get("role") or checkpoint_data.get("role") or "job"),
 		}
-		parent = checkpoint_data.get("parent_mission_id") or payload.get("parent_mission_id")
+		parent_saved = checkpoint_data.get("parent_mission_id")
+		parent_payload = payload.get("parent_mission_id")
+		if parent_saved and parent_payload and str(parent_saved) != str(parent_payload):
+			raise ValueError("dag_job parent_mission_id cambió a mitad de job (resume inconsistente)")
+		parent = parent_payload or parent_saved
 		if parent:
 			identity["parent_mission_id"] = str(parent)
 		return identity

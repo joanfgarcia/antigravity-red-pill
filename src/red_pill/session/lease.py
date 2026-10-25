@@ -97,6 +97,7 @@ class LeaseStore:
 		idle_ttl_s: int = 900,
 		max_wall_s: int = 1800,
 		metadata: Optional[dict] = None,
+		allow_takeover: bool = False,
 	) -> dict:
 		"""Crea/renueva un lease; idempotente si el mismo dueño ya lo tiene.
 
@@ -120,6 +121,17 @@ class LeaseStore:
 		with self._connect() as conn:
 			conn.execute("BEGIN IMMEDIATE")
 			current = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
+			if (
+				current is not None
+				and str(current["state"]) in ("active", "stalled")
+				and str(current["continuity_id"]) != continuity
+				and not allow_takeover
+			):
+				conn.rollback()
+				raise LeaseHeld(
+					f"lease {key!r} de otra alma ({current['continuity_id']}); "
+					"se requiere --force/Operador para reclamarlo"
+				)
 			if current is not None and str(current["state"]) == "active":
 				expires = min(
 					float(current["last_heartbeat_at"]) + int(current["idle_ttl_s"]),
@@ -130,22 +142,35 @@ class LeaseStore:
 						str(current["continuity_id"]) == continuity
 						and str(current["holder_originator"] or "") == str(holder_originator or "")
 					)
-					if not same_owner:
+					if not same_owner and not allow_takeover:
 						conn.rollback()
 						raise LeaseHeld(
 							f"lease {key!r} activo de continuity={current['continuity_id']} "
 							f"holder={current['holder_originator'] or '-'}"
 						)
-					conn.execute(
-						"UPDATE session_leases SET last_heartbeat_at=?, extended_by='runner' WHERE lease_key=?",
-						(now, key),
-					)
-					conn.commit()
-					row = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
-					out = self._row(row)
-					if out is None:
-						raise LeaseError("no se pudo leer el lease")
-					return out
+					if same_owner:
+						conn.execute(
+							"UPDATE session_leases SET last_heartbeat_at=?, extended_by='runner', "
+							"subject_id=?, mission_id=?, owner_kind=?, metadata_json=?, "
+							"idle_ttl_s=?, max_wall_s=? WHERE lease_key=?",
+							(
+								now,
+								subject,
+								mission_id,
+								str(owner_kind or "work"),
+								meta,
+								int(idle_ttl_s),
+								max(int(current["max_wall_s"]), int(max_wall_s)),
+								key,
+							),
+						)
+						conn.commit()
+						row = conn.execute("SELECT * FROM session_leases WHERE lease_key=?", (key,)).fetchone()
+						out = self._row(row)
+						if out is None:
+							raise LeaseError("no se pudo leer el lease")
+						return out
+
 			conn.execute(
 				"""
 				INSERT INTO session_leases (

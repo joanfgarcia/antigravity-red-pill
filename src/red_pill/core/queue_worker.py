@@ -54,17 +54,30 @@ def _clean_turn(prompt: str, response: str) -> "tuple[str, str]":
 
 
 def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
-	"""Deposita el reporte de fin/error de un job en el MinionInbox (patrón SAS)."""
+	"""Deposita el reporte de fin/error de un job en el MinionInbox (patrón SAS).
+
+	RFC-INTEROP-003 S5: el cierre lleva la identidad del alma y, si el job
+	terminó, un `result.json` durable con el mismo contrato. Un job sin alma
+	sigue funcionando con `continuity_id=None` (D-02).
+	"""
 	try:
 		from red_pill.core.inbox import MinionInbox
+		from red_pill.jobs.artifacts import job_identity, write_job_result
 
+		identity = job_identity(task)
+		result_path = ""
+		if status in ("success", "failed", "killed"):
+			result = write_job_result(task, status=status, summary=content, error="" if status == "success" else content)
+			result_path = str((result.get("paths") or {}).get("state_json") or "")
 		title = task.get("payload", {}).get("title") or task.get("source", "job")
+		suffix = f" [result: {result_path}]" if result_path else ""
 		MinionInbox().drop_report(
 			event_id=job_id[:8],
 			source="JobRunner",
 			status=status,
-			content=f"Job '{title}' ({task.get('source')}) → {status}: {content}",
-			originator=f"queue_worker.process_driver_jobs({job_id})",
+			content=f"Job '{title}' ({task.get('source')}) → {status}: {content}{suffix}",
+			originator=identity.get("originator") or f"queue_worker.process_driver_jobs({job_id})",
+			continuity_id=identity.get("continuity_id") or None,
 		)
 	except Exception as e:
 		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
@@ -215,6 +228,22 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 		try:
 			while True:
+				# El kill puede aterrizar entre el pop y el primer step (o entre dos
+				# steps). Releer SIEMPRE antes de empezar: un FRUSTRATED/PAUSED no
+				# debe ejecutar un step más ni resucitar a COMPLETED.
+				guard = cog_queue.get_task(job_id)
+				if guard and str(guard.get("status") or "") in ("PAUSED", "FRUSTRATED"):
+					checkpoint = guard.get("checkpoint_data") or checkpoint
+					if isinstance(checkpoint, dict) and checkpoint.get("dirty_kill"):
+						try:
+							driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+						except Exception as term_err:
+							logger.warning(f"Job {job_id} on_terminal failed before step: {term_err}")
+						_report_job(job_id, task, "killed", "interrumpido por el Operador")
+					break
+				if guard and str(guard.get("status") or "") not in ("PROCESSING", "PAUSING"):
+					break
+
 				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/ciclos nocturnos)
 				# Exención anti-deadlock (RFC_SLEEP_JOB_DRIVER §2.3): si el sueño es un
 				# driver job, su propio fichero "running" lo diferiría a sí mismo entre
@@ -253,7 +282,29 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				cog_queue.save_checkpoint(job_id, checkpoint, progress)
 
 				if outcome.completed:
+					pre_final = cog_queue.get_task(job_id)
+					if (
+						pre_final
+						and str(pre_final.get("status") or "") in ("PAUSED", "FRUSTRATED")
+						and (pre_final.get("checkpoint_data") or {}).get("dirty_kill")
+					):
+						try:
+							driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+						except Exception as term_err:
+							logger.warning(f"Job {job_id} on_terminal failed after kill-before-complete: {term_err}")
+						_report_job(job_id, task, "killed", "interrumpido por el Operador")
+						break
 					cog_queue.mark_completed(job_id)
+					final = cog_queue.get_task(job_id)
+					if final and str(final.get("status") or "") != "COMPLETED":
+						# Un kill/discard ganó la carrera al cierre: no publicar como
+						# éxito ni dejar el leg vivo.
+						try:
+							driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+						except Exception as term_err:
+							logger.warning(f"Job {job_id} on_terminal failed after completion race: {term_err}")
+						_report_job(job_id, task, "killed", "interrumpido por el Operador")
+						break
 					try:
 						driver.on_terminal(task["payload"], checkpoint, "completed", outcome.summary or "")
 					except Exception as term_err:
@@ -282,9 +333,18 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 				# R3: releer estado — una pausa del operador a mitad de step gana (PAUSING/PAUSED)
 				current = cog_queue.get_task(job_id)
-				if current and current.get("status") in ("PAUSING", "PAUSED"):
-					cog_queue.mark_paused(job_id)
-					logger.info(f"Job {job_id} reached step boundary while {current.get('status')}; checkpoint saved, now PAUSED.")
+				if current and current.get("status") in ("PAUSING", "PAUSED", "FRUSTRATED"):
+					checkpoint = current.get("checkpoint_data") or checkpoint
+					killed = isinstance(checkpoint, dict) and bool(checkpoint.get("dirty_kill"))
+					if current.get("status") != "FRUSTRATED":
+						cog_queue.mark_paused(job_id)
+					if killed:
+						try:
+							driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+						except Exception as term_err:
+							logger.warning(f"Job {job_id} on_terminal failed at kill boundary: {term_err}")
+						_report_job(job_id, task, "killed", "interrumpido por el Operador")
+					logger.info(f"Job {job_id} reached step boundary while {current.get('status')}; checkpoint saved, leaving step loop.")
 					break
 
 				# Cesión por prioridad en frontera de step: un job de mayor prioridad
@@ -315,6 +375,11 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed after timeout: {abort_err}")
 			_handle_step_timeout(cog_queue, job_id, task, timeout)
+			if int(getattr(timeout, "attempt", 0)) >= 3:
+				try:
+					driver.on_terminal(task["payload"], checkpoint, "failed", f"timeout: {timeout}")
+				except Exception as term_err:
+					logger.warning(f"Job {job_id} on_terminal failed after timeout breaker: {term_err}")
 			logger.error(f"Job {job_id} step timed out: {timeout}")
 		except Exception as e:
 			# Extensión de R3: el operador puede haber abatido el step a propósito
@@ -329,15 +394,24 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed: {abort_err}")
 			if current and current.get("status") in ("PAUSED", "FRUSTRATED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
+				try:
+					driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+				except Exception as term_err:
+					logger.warning(f"Job {job_id} on_terminal failed after operator kill: {term_err}")
+				_report_job(job_id, task, "killed", "interrumpido por el Operador")
 				logger.info(f"Job {job_id} killed by operator; checkpoint preserved, no attempt burned.")
 			else:
 				cog_queue.mark_failed(job_id, str(e))
-				try:
-					driver.on_terminal(task["payload"], checkpoint, "failed", str(e))
-				except Exception as term_err:
-					logger.warning(f"Job {job_id} on_terminal failed: {term_err}")
-				_report_job(job_id, task, "failed", str(e))
-				logger.error(f"Job {job_id} step failed: {e}")
+				after_fail = cog_queue.get_task(job_id)
+				if after_fail and str(after_fail.get("status") or "") == "FRUSTRATED":
+					try:
+						driver.on_terminal(task["payload"], checkpoint, "failed", str(e))
+					except Exception as term_err:
+						logger.warning(f"Job {job_id} on_terminal failed: {term_err}")
+					_report_job(job_id, task, "failed", str(e))
+					logger.error(f"Job {job_id} step failed and the breaker is open: {e}")
+				else:
+					logger.warning(f"Job {job_id} step failed; retry scheduled: {e}")
 		finally:
 			# Teardown en TODAS las salidas, deferral incluido: sin esto, un job que
 			# cede ante el ciclo de sueño dejaría el residente descargado toda la noche.

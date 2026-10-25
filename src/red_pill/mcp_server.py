@@ -725,7 +725,8 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 
 		formatted = f"--- MINION INBOX ({len(reports)} unread reports) ---\n"
 		for r in reports:
-			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
+			alma = f" | Alma: {str(r.get('continuity_id'))[:8]}" if r.get("continuity_id") else ""
+			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}{alma}\nContent: {r['content']}\n\n"
 
 		return [types.TextContent(type="text", text=formatted)]
 	except Exception as e:
@@ -1076,12 +1077,15 @@ async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 			return "[]"
 
 		files = []
-		for item in os.listdir(mem_path):
-			if os.path.isfile(os.path.join(mem_path, item)) and not item.startswith("."):
-				files.append(item)
+		for root, dirs, names in os.walk(mem_path):
+			dirs[:] = [d for d in dirs if not d.startswith(".")]
+			for name in names:
+				if name.startswith("."):
+					continue
+				files.append(str((Path(root) / name).relative_to(mem_path)))
 		import json
 
-		return json.dumps(files)
+		return json.dumps(sorted(files))
 
 	res = await asyncio.to_thread(_list)
 	return [types.TextContent(type="text", text=res)]
@@ -1443,9 +1447,15 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 
 	# ── LOW/MEDIUM MODE: use wake_up_v6.py with matching depth, no hot-reload ──
 	if mode in ("low", "medium"):
-		wake_output = subprocess.run(
-			[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode], capture_output=True, text=True
-		).stdout
+		try:
+			session = await _caller_session({})
+			continuity = str((session or {}).get("continuity_id") or "")
+		except Exception:
+			continuity = ""
+		cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode]
+		if continuity:
+			cmd += ["--continuity-id", continuity]
+		wake_output = subprocess.run(cmd, capture_output=True, text=True).stdout
 		return [types.TextContent(type="text", text=wake_output)]
 
 	# Hot-reload interceptors as part of session refresh
@@ -1515,7 +1525,15 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		)
 		return [types.TextContent(type="text", text=f"{info_msg}\n\n{reload_report}")]
 
-	wake_output = subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout
+	try:
+		session = await _caller_session({})
+		continuity = str((session or {}).get("continuity_id") or "")
+	except Exception:
+		continuity = ""
+	cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")]
+	if continuity:
+		cmd += ["--continuity-id", continuity]
+	wake_output = subprocess.run(cmd, capture_output=True, text=True).stdout
 
 	return [types.TextContent(type="text", text=f"{wake_output}\n\n{reload_report}")]
 
@@ -2683,6 +2701,213 @@ def _queue() -> Any:
 _ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
 
 
+def _has_mission_lease(task_or_source: Any) -> bool:
+	"""S4 solo cablea el lease al DAG (orquestador); otros sources no lo reclaman.
+
+	Un job agéntico/script con alma no tiene heartbeat de lease todavía: adquirirlo
+	en el submit lo dejaría huérfano a los 15 min. Hasta que el runner lo cablee,
+	esos jobs conservan el flujo legacy.
+	"""
+	source = task_or_source.get("source") if isinstance(task_or_source, dict) else task_or_source
+	return str(source or "") == "dag_job"
+
+
+def _job_identity(task: Dict[str, Any]) -> Dict[str, str]:
+	"""Identidad efectiva de un job (columnas S0 + checkpoint legado)."""
+	cp = task.get("checkpoint_data") or {}
+	return {
+		"continuity_id": str(task.get("continuity_id") or cp.get("continuity_id") or ""),
+		"parent_mission_id": str(task.get("parent_mission_id") or cp.get("parent_mission_id") or ""),
+		"originator": str(cp.get("originator") or ""),
+		"role": str(cp.get("role") or ""),
+	}
+
+
+async def _authorize_job_mutation(task: Dict[str, Any], action: str) -> Optional[str]:
+	"""RFC-INTEROP-003 S4.2/D-09: solo el alma dueña o el Operador manda.
+
+	Un job sin alma (D-02/A-06) conserva el comportamiento legado: cualquier
+	llamante de confianza puede operarlo. Los argumentos del modelo no autorizan;
+	el override del Operador es `REDPILL_OPERATOR=1` en el canal de confianza.
+	"""
+	identity = _job_identity(task)
+	owner = identity["continuity_id"]
+	if not owner:
+		return None
+	try:
+		session = await _caller_session({})
+	except Exception:
+		session = {}
+	caller = str((session or {}).get("continuity_id") or "")
+	if caller and caller == owner:
+		return None
+	if os.getenv("REDPILL_OPERATOR") == "1":
+		return None
+	return (
+		f"[ERROR] {action}: el job {str(task.get('id') or '')[:8]} pertenece a otra alma "
+		f"({owner[:8]}); solo su alma dueña o el Operador (REDPILL_OPERATOR=1) puede mandarlo."
+	)
+
+
+def _sanitize_job_checkpoint(task: Dict[str, Any], checkpoint: Dict[str, Any]) -> "tuple[Optional[Dict[str, Any]], Optional[str]]":
+	"""S4: el checkpoint no puede inyectar ni cambiar la identidad del job.
+
+	`continuity_id`/`parent_mission_id`/`originator`/`role` son columnas de la
+	cola o del payload firmado; el main-loop puede avanzar pasos, no apropiarse
+	de otra misión. Un job sin alma no puede convertirse en alma por checkpoint.
+	"""
+	if not isinstance(checkpoint, dict):
+		return None, "[ERROR] checkpoint debe ser un objeto JSON."
+	identity = _job_identity(task)
+	clean = dict(checkpoint)
+	if not identity["continuity_id"] and any(k in clean for k in ("continuity_id", "parent_mission_id", "originator", "role")):
+		return None, "[ERROR] un job sin alma no puede escribir identidad en el checkpoint."
+	expected = {
+		"continuity_id": identity["continuity_id"],
+		"parent_mission_id": identity["parent_mission_id"],
+		"originator": identity["originator"],
+		"role": identity["role"],
+	}
+	for key, wanted in expected.items():
+		if key not in clean:
+			continue
+		given = str(clean.get(key) or "")
+		if not wanted:
+			return None, f"[ERROR] un job sin alma no puede escribir '{key}' en el checkpoint."
+		if given and given != wanted:
+			return None, f"[ERROR] '{key}' del checkpoint no coincide con la identidad del job."
+		clean[key] = wanted
+	return clean, None
+
+
+def _mission_lease_conflict(task: Dict[str, Any], *, allow_takeover: bool = False) -> Optional[str]:
+	"""Comprueba el lease ANTES de mutar; no adquiere ni deja huérfanos."""
+	if not _has_mission_lease(task):
+		return None
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	owner = identity["continuity_id"]
+	if not mission or not owner:
+		return None
+	try:
+		import time
+
+		from red_pill.session.lease import LeaseStore
+
+		row = LeaseStore().active_mission_lease(mission)
+		if not row:
+			return None
+		deadline = min(
+			float(row["last_heartbeat_at"]) + int(row["idle_ttl_s"]),
+			float(row["started_at"]) + int(row["max_wall_s"]),
+		)
+		if time.time() > deadline:
+			return None
+		if str(row.get("continuity_id") or "") != owner and not allow_takeover:
+			return f"[ERROR] misión {mission} en manos de otra alma (split-brain bloqueado)."
+	except Exception as exc:
+		return f"[ERROR] lease de misión {mission}: {exc}"
+	return None
+
+
+def _ensure_job_mission_lease(task: Dict[str, Any], *, allow_takeover: bool = False) -> Optional[str]:
+	"""S4.4: el checkpoint/resume exige el mando de la misión (o lo adquiere)."""
+	if not _has_mission_lease(task):
+		return None
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	owner = identity["continuity_id"]
+	if not mission or not owner:
+		return None
+	try:
+		from red_pill.session.lease import LeaseHeld, LeaseStore
+
+		LeaseStore().begin_mission_lease(
+			mission,
+			continuity_id=owner,
+			holder_originator="",
+			owner_kind="soul",
+			idle_ttl_s=900,
+			max_wall_s=604800,
+			metadata={"job_id": str(task.get("id") or "")},
+			allow_takeover=allow_takeover,
+		)
+	except LeaseHeld:
+		return (
+			f"[ERROR] misión {mission} en manos de otra alma; no se puede escribir el checkpoint "
+			"ni reanudar (split-brain bloqueado)."
+		)
+	except Exception as exc:
+		return f"[ERROR] lease de misión {mission}: {exc}"
+	return None
+
+
+def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador") -> None:
+	"""Cierre de un job matado sin runner en vuelo: result.json + leg muerto."""
+	try:
+		from red_pill.jobs.artifacts import write_job_result
+		from red_pill.session.store import SessionRegistry
+
+		write_job_result(task, status="killed", summary=reason, error=reason)
+		if str(task.get("source") or "") == "dag_job":
+			SessionRegistry().unregister_session(f"dag:{task['id']}")
+	except Exception as exc:
+		logger.warning(f"job_kill: no se pudo cerrar el artefacto/leg de {str(task.get('id'))[:8]}: {exc}")
+
+
+def _has_live_mission_siblings(task: Dict[str, Any]) -> bool:
+	"""No cerrar el mando si otro job de la misma alma+parent sigue vivo."""
+	identity = _job_identity(task)
+	mission, owner = identity["parent_mission_id"], identity["continuity_id"]
+	if not mission or not owner:
+		return False
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		rows = CognitiveQueueManager().list_tasks(
+			statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"],
+			continuity_id=owner,
+			limit=200,
+		)
+		return any(
+			str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "")
+			for r in rows
+		)
+	except Exception:
+		return True
+
+
+def _release_job_mission_lease(task: Dict[str, Any], reason: str = "operator_kill") -> None:
+	"""Cierra el mando al matar el job, solo si el lease pertenece a este job."""
+	if not _has_mission_lease(task):
+		return
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	if not mission or not identity["continuity_id"]:
+		return
+	try:
+		import json as _json
+
+		from red_pill.session.lease import LeaseStore
+
+		leases = LeaseStore()
+		key = f"mission:{mission}"
+		row = leases.get(key)
+		if not row:
+			return
+		try:
+			meta = _json.loads(row.get("metadata_json") or "{}")
+		except (TypeError, ValueError):
+			meta = {}
+		if str(meta.get("job_id") or "") != str(task.get("id") or ""):
+			return
+		if _has_live_mission_siblings(task):
+			return
+		leases.finish(key, state="aborted", reason=reason, continuity_id=identity["continuity_id"] or None)
+	except Exception as exc:
+		logger.warning(f"job_kill: no se pudo cerrar lease de misión {mission}: {exc}")
+
+
 def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	"""Resuelve por id completo o prefijo corto (como el CLI: busca en TODOS los
 	estados, incluido COMPLETED, y rehúsa prefijos ambiguos en vez de quedarse
@@ -2780,6 +3005,10 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 			if trusted_mission and not provided_parent:
 				payload["parent_mission_id"] = trusted_mission
 		driver_cls().validate(payload)
+		# S4.1: el alma reclama la misión al encolar; el job solo observará/latirá.
+		# Sin alma o sin misión el flujo legacy sigue intacto (D-02/A-06).
+		mission_owner = str(payload.get("continuity_id") or "").strip()
+		mission_scope = str(payload.get("parent_mission_id") or "").strip()
 		# RFC_JOB_DAG §4.5: expandir `type: dag` a compounds (job persistido ya
 		# aplanado; el resume no depende de que la receta siga igual en disco).
 		expander = getattr(driver_cls, "expand_manifest", None)
@@ -2822,6 +3051,25 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 
 		qm = _queue()
 		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
+		if source == "dag_job" and mission_owner and mission_scope:
+			try:
+				from red_pill.session.lease import LeaseStore
+
+				LeaseStore().begin_mission_lease(
+					mission_scope,
+					continuity_id=mission_owner,
+					holder_originator="",
+					owner_kind="soul",
+					idle_ttl_s=900,
+					max_wall_s=604800,
+					metadata={"job_id": job_id, "source": source},
+					allow_takeover=operator,
+				)
+			except Exception as exc:
+				# El job ya está en la cola: no dejarlo vivo sin mando ni dejar el
+				# lease huérfano. Se descarta y se informa del conflicto real.
+				qm.kill_task(job_id, discard=True)
+				return [types.TextContent(type="text", text=f"[ERROR] no se pudo reclamar la misión {mission_scope}: {exc}")]
 		note = f"mission={mission_id}" if mission_id else "sin mission_id"
 		return [
 			types.TextContent(
@@ -2928,6 +3176,15 @@ async def handle_job_status(arguments: Dict[str, Any]):
 		task = _resolve_job(_queue(), arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		lease = None
+		parent_mission = str(task.get("parent_mission_id") or (task.get("checkpoint_data") or {}).get("parent_mission_id") or "")
+		if parent_mission:
+			try:
+				from red_pill.session.lease import LeaseStore
+
+				lease = LeaseStore().get(f"mission:{parent_mission}")
+			except Exception:
+				lease = None
 		summary = {
 			"id": task["id"][:8],
 			"source": task["source"],
@@ -2939,7 +3196,7 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"parent_mission_id": task.get("parent_mission_id"),
 			"originator": (task.get("checkpoint_data") or {}).get("originator"),
 			"role": (task.get("checkpoint_data") or {}).get("role"),
-			"lease": (task.get("checkpoint_data") or {}).get("lease"),
+			"lease": lease or (task.get("checkpoint_data") or {}).get("lease"),
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),
@@ -2968,6 +3225,9 @@ async def handle_job_pause(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_pause")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
 		if qm.pause_task(task["id"]):
 			return [types.TextContent(type="text", text=f"[OK] Pausa solicitada para {task['id'][:8]} (se sella en frontera de paso).")]
 		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': pausa no aplicable.")]
@@ -2993,8 +3253,17 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_resume")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		was_pausing = task["status"] == "PAUSING"
 		if qm.resume_task(task["id"]):
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			if was_pausing:
 				return [
 					types.TextContent(
@@ -3025,7 +3294,17 @@ async def handle_job_skip(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_skip")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		allow_takeover = os.getenv("REDPILL_OPERATOR") == "1"
+		lease_error = _mission_lease_conflict(task, allow_takeover=allow_takeover)
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		if qm.skip_next_task(task["id"]):
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=allow_takeover)
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			updated = qm.get_task(task["id"])
 			st = updated["status"] if updated else task["status"]
 			if st == "PENDING":
@@ -3067,8 +3346,13 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_kill")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
 		job_id = task["id"]
-		if not qm.kill_task(job_id, discard=bool(arguments.get("discard"))):
+		killed, previous = qm.kill_task_ex(job_id, discard=bool(arguments.get("discard")))
+		was_running = previous in ("PROCESSING", "PAUSING")
+		if not killed:
 			return [
 				types.TextContent(
 					type="text",
@@ -3081,6 +3365,12 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 			_sp.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=10)
 		except Exception:
 			pass
+		# Un job en vuelo conserva el lease hasta que el runner observe el kill y
+		# llame a abort_step; liberarlo aquí permitiría a otra alma entrar mientras
+		# el proceso aún se está apagando (split-brain real).
+		if not was_running:
+			_release_job_mission_lease(task)
+			_finalize_killed_job(task)
 		return [
 			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido ({'FRUSTRATED' if arguments.get('discard') else 'PAUSED*'}).")
 		]
@@ -3113,8 +3403,20 @@ async def handle_job_checkpoint(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
-		ok = qm.update_checkpoint(task["id"], arguments["checkpoint"], arguments.get("progress"))
+		denied = await _authorize_job_mutation(task, "job_checkpoint")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		checkpoint, cp_error = _sanitize_job_checkpoint(task, arguments["checkpoint"])
+		if cp_error:
+			return [types.TextContent(type="text", text=cp_error)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
+		ok = qm.update_checkpoint(task["id"], checkpoint, arguments.get("progress"))
 		if ok:
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			return [types.TextContent(type="text", text=f"[OK] Checkpoint de {task['id'][:8]} actualizado. Soltar el control con job_resume.")]
 		return [
 			types.TextContent(
@@ -3149,7 +3451,17 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_transfer")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		paused = qm.pause_task(task["id"])
+		if paused:
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 		after = qm.get_task(task["id"])
 		return [
 			types.TextContent(
@@ -3157,6 +3469,7 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 				text=_json.dumps(
 					{
 						"job_id": task["id"][:8],
+						**_job_identity(task),
 						"paused": paused,
 						"status": after["status"] if after else task["status"],
 						"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),

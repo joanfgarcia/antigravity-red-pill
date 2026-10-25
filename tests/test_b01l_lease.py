@@ -46,12 +46,16 @@ def test_same_owner_is_idempotent_other_owner_blocked(leases):
 		leases.begin_work_lease("req-1", continuity_id="alma-2", mission_id="m")
 
 
-def test_expired_lease_is_replaced(leases):
+def test_expired_lease_requires_force_to_change_soul(leases):
 	import time
 
 	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m", idle_ttl_s=1, max_wall_s=10)
 	time.sleep(1.05)
-	row = leases.begin_work_lease("req-1", continuity_id="alma-2", mission_id="m", idle_ttl_s=1, max_wall_s=10)
+	with pytest.raises(LeaseHeld):
+		leases.begin_work_lease("req-1", continuity_id="alma-2", mission_id="m", idle_ttl_s=1, max_wall_s=10)
+	row = leases.begin_work_lease(
+		"req-1", continuity_id="alma-2", mission_id="m", idle_ttl_s=1, max_wall_s=10, allow_takeover=True
+	)
 	assert row["continuity_id"] == "alma-2"
 
 
@@ -112,3 +116,11 @@ def test_unknown_lease_is_explicit(leases):
 		leases.heartbeat("nope")
 	with pytest.raises(LeaseError):
 		leases.finish("nope")
+
+
+def test_active_lease_requires_force_to_change_soul(leases):
+	leases.begin_work_lease("req-1", continuity_id="alma-1", mission_id="m")
+	with pytest.raises(LeaseHeld):
+		leases.begin_work_lease("req-1", continuity_id="alma-2", mission_id="m")
+	row = leases.begin_work_lease("req-1", continuity_id="alma-2", mission_id="m", allow_takeover=True)
+	assert row["continuity_id"] == "alma-2"

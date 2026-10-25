@@ -1,5 +1,17 @@
 ## Unreleased
 
+### 🎛️ RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad
+
+- **[NEW]** El alma reclama `session_leases` `scope=mission` al encolar/transferir/reanudar;
+  el job solo la observa y late si es suya, y ejecuta como spectator si es de otra alma.
+- **[NEW]** `job_pause`/`resume`/`kill`/`skip`/`transfer`/`checkpoint` autorizan por
+  `continuity_id` dueño o `REDPILL_OPERATOR=1`; los jobs sin alma siguen igual.
+- **[NEW]** `job_transfer` devuelve identidad + checkpoint; `job_checkpoint` no acepta
+  identidad inyectada; `kill_task_ex` evita el split-brain al liberar leases.
+- **[NEW]** `result.json` durable (state + workspace-memory) con autoría, y MinionInbox
+  con `continuity_id`. `[JOBS]` en el despertar (solo aviso, sin auto-resume).
+- **[DOCS]** AD-078; RFC-003 S0-S5 implementado. S6/B-01h y D23-SCORE fuera de alcance.
+
 ### 🛰️ RFC-INTEROP-003 S2/S3 — leg, eventos y descubrimiento
 
 - **[NEW]** `dag_job` con alma registra leg `dag:<job_id>` (`role=job`) y lo expira

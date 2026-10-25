@@ -196,7 +196,8 @@ class CognitiveQueueManager:
 		la ordenación determinista los devolvería como top en bucle estéril).
 		"""
 		query = """
-			SELECT id, source, priority, payload, attempts, checkpoint_data
+			SELECT id, source, priority, payload, attempts, checkpoint_data,
+				mission_id, continuity_id, parent_mission_id
 			FROM cognitive_tasks
 			WHERE status = 'PENDING'
 		"""
@@ -248,6 +249,9 @@ class CognitiveQueueManager:
 				"attempts": row["attempts"],
 				"payload": json.loads(row["payload"]),
 				"checkpoint_data": json.loads(checkpoint_raw) if checkpoint_raw else {},
+				"mission_id": row["mission_id"],
+				"continuity_id": row["continuity_id"],
+				"parent_mission_id": row["parent_mission_id"],
 			}
 
 	def _update_curiosity_rating(self, task_id: str, success: bool) -> None:
@@ -354,7 +358,7 @@ class CognitiveQueueManager:
 				"""
 				UPDATE cognitive_tasks
 				SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP
-				WHERE id = ?
+				WHERE id = ? AND status <> 'FRUSTRATED' AND NOT (status = 'PAUSED' AND checkpoint_data LIKE '%"dirty_kill"%')
 				""",
 				(task_id,),
 			)
@@ -674,47 +678,49 @@ class CognitiveQueueManager:
 			)
 
 	def kill_task(self, task_id: str, discard: bool = False) -> bool:
-		"""Interrupción dura: sella el estado ANTES de abatir el proceso.
+		"""Compatibilidad: `True` si el kill se aplicó (ver `kill_task_ex`)."""
+		return self.kill_task_ex(task_id, discard=discard)[0]
 
-		El orden importa — si el runner viera el rc≠0 antes de que la fila diga
-		PAUSED, trataría el kill del operador como un fallo real y le quemaría un
-		intento del disyuntor. Con `discard`, el job no vuelve: queda FRUSTRATED
-		con su motivo, visible en `job list` hasta que la higiene nocturna lo retire
-		(la trazabilidad vale más que borrar la fila en caliente).
+	def kill_task_ex(self, task_id: str, discard: bool = False) -> "tuple[bool, str]":
+		"""Interrupción dura ATÓMICA: sella estado + dirty_kill y devuelve el previo.
 
-		PAUSING se incluye en el filtro: es un estado transitorio entre PROCESSING
-		y PAUSED (R3: operador pausa a mitad de step, runner termina el step
-		actual antes de soltar). Si el operador mata en ese intervalo, la pausa
-		prevalece y debe poder convertirse en PAUSED/FRUSTRATED sin esperar al
-		checkpoint del runner.
-
-		BLOCKED (DAG a la espera del padre) también se puede matar: no hay step en
-		vuelo, así que NO se marca dirty kill (el asterisco mentiría) y, con
-		`discard`, se cancelan en cascada sus hijos BLOCKED (si el padre cae, los
-		hijos esperarían para siempre a un padre que ya no completará).
+		`BEGIN IMMEDIATE` cubre SELECT/UPDATE para que un PENDING→PROCESSING
+		concurrente no devuelva un estado viejo (carrera H2). El UPDATE lleva
+		guarda de estado para no resucitar un job que terminó entre medias.
 		"""
 		with self._get_connection() as conn:
-			row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
-		if not row:
-			return False
-		current = str(row["status"])
-		if current not in ("PENDING", "PROCESSING", "PAUSED", "PAUSING", "BLOCKED"):
-			return False
-		if current != "BLOCKED":
-			# BLOCKED nunca arrancó un step: cancelarlo es limpio. El resto lleva
-			# la marca dirty (un PENDING puede tener checkpoint previo a validar).
-			self.mark_dirty_kill(task_id, {"reason": "operator"})
-		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
-		with self._get_connection() as conn:
+			conn.execute("BEGIN IMMEDIATE")
+			row = conn.execute("SELECT status, checkpoint_data FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				conn.rollback()
+				return False, ""
+			current = str(row["status"])
+			if current not in ("PENDING", "PROCESSING", "PAUSED", "PAUSING", "BLOCKED"):
+				conn.rollback()
+				return False, current
+			if current != "BLOCKED":
+				try:
+					checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
+				except (json.JSONDecodeError, TypeError):
+					checkpoint = {}
+				checkpoint["dirty_kill"] = {"reason": "operator", "at": time.time()}
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+					(json.dumps(checkpoint), task_id),
+				)
+			status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
 			cursor = conn.execute(
-				"UPDATE cognitive_tasks SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-				(status, error_log, task_id),
+				"UPDATE cognitive_tasks SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP "
+				"WHERE id = ? AND status = ?",
+				(status, error_log, task_id, current),
 			)
 			if not (cursor.rowcount > 0):
-				return False
+				conn.rollback()
+				return False, current
 			if discard:
 				self._cancel_blocked_children(conn, task_id)
-			return True
+			conn.commit()
+			return True, current
 
 	def _cancel_blocked_children(self, conn: Any, parent_id: str) -> int:
 		"""Cancela en cascada los hijos BLOCKED de un job descartado (ninguno

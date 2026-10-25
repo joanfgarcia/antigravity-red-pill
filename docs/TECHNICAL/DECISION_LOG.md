@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-078] RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad (P3)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S0-S5; S6 opcional pendiente).
+**Context**: S0-S3 daban identidad y visibilidad al job, pero cualquier alma podía pausar/matar/transferir el job de otra y el cierre no dejaba un resultado con autoría. P3 cierra el contrato de mando y el artefacto durable sin exigir alma a los jobs de sistema.
+**Decision**:
+1. **Lease de misión (S4.1/D-03)**: el alma la reclama en `job_submit`, `job_transfer`, `job_resume` o `job_checkpoint`; el job **no la adquiere**. Si el lease es de su alma, el job lo late (hilo cada 5 min) y lo cierra al terminar; si es de otra alma, ejecuta como spectator y no publica como orquestador (5.7.3).
+2. **Autorización (S4.2/D-09)**: `job_pause`/`resume`/`kill`/`skip`/`transfer`/`checkpoint` exigen el `continuity_id` dueño o `REDPILL_OPERATOR=1`; los argumentos del modelo no autorizan. Un job sin alma conserva el comportamiento legado (D-02/A-06).
+3. **Handoff y split-brain (S4.3/S4.4)**: `job_transfer` devuelve `continuity_id`/`parent_mission_id`/`originator`/`role`; `job_checkpoint`/`resume` comprueban el lease antes de mutar y rechazan una identidad inyectada en el checkpoint. `kill_task_ex` devuelve el estado previo real para no liberar el lease mientras el proceso aún se apaga.
+4. **Cierre (S5)**: `_report_job` escribe `state/jobs/results/<job_id>.json` y, si hay workspace, `<memory>/jobs/<job_id>.{json,md}` con identidad; el MinionInbox gana `continuity_id` y lo muestra. Un job sin alma emite `continuity_id: null`, nunca un UUID inventado.
+5. **Descubrimiento (S3.3)**: `wake_up_v6.py --continuity-id` añade una línea `[JOBS]` con timeout de 250 ms; solo informa, nunca auto-reanuda (D-05). Silencio si no hay alma o jobs.
+6. **Compatibilidad**: el lease de misión se cablea a `dag_job` (el orquestador); `agentic_job`/`script_job`/`element_job` no lo reclaman hasta que exista heartbeat genérico en el runner. La CLI funciona como Operador, consulta el lease antes de reanudar y libera el de jobs no-en-vuelo al matar. Arneses externos (S6/B-01h) y D23-SCORE quedan fuera.
+**Alternatives**: (a) dejar que el job adquiera el lease — viola D-03 y crea dos orquestadores; (b) autorizar por argumento del modelo — spoof; (c) escribir el resultado solo en el inbox — efímero y sin workspace.
+**Rationale / Evidence**: suite **3391 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests S3.3/S4/S5: lease observado/liberado, otra alma no roba, heartbeat, identidad en transfer, checkpoint sin inyección, `kill_task_ex`, result.json con/sin alma, inbox y `[JOBS]`.
+**Consequences**: RFC-003 S0-S5 implementado; S6 (env a opencode/claude/pi) y B-01h (hooks externos) siguen pendientes. El watchdog/janitor de leases de B01L Fase 2-3 no se toca aquí.
+
+---
+
 ## [AD-077] RFC-INTEROP-003 S2/S3 — leg, eventos y descubrimiento del job (P2)
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED (S2/S3 parcial). `[JOBS]` en el handshake, lease de misión y handoff siguen pendientes.

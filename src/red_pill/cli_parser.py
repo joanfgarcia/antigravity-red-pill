@@ -320,6 +320,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 
 	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
 	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+	job_resume.add_argument("--force", action="store_true", help="Operador: reclamar la misión aunque el lease sea de otra alma.")
 
 	job_skip = job_sub.add_parser("skip", help="Saltar el siguiente elemento/step sin reintentarlo (marca skip_next en el checkpoint)")
 	job_skip.add_argument("job_id", help="Id completo o prefijo corto")

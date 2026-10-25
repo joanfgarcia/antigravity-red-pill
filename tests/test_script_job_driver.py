@@ -593,7 +593,7 @@ def test_operator_kill_is_not_a_failure_for_the_runner(queue, clean_registry, mo
 
 	assert task["attempts"] == 0  # Ni un intento quemado
 	assert task["status"] == "PAUSED"
-	assert reports == []  # Ni una alarma falsa
+	assert reports == ["killed"]  # Cierre informativo, nunca "failed" (sin alarma falsa)
 
 
 def test_dirty_resume_validates_state_before_relaunching(tmp_path):
