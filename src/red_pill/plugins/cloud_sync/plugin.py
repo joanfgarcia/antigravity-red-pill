@@ -166,27 +166,23 @@ class CloudSyncPlugin(SovereignPlugin):
 		except Exception:
 			return 0.0
 
-	def _on_soul_created(self, zip_path: str) -> None:
-		"""Uploads the newly created encrypted kit."""
-		if not zip_path:
-			return
-
+	def upload_kit(self, kit_path: str) -> Optional[str]:
+		"""Sube un kit cifrado a la carpeta de Drive. Devuelve el file_id o None."""
+		if not kit_path:
+			return None
 		if not self.enabled or not self.service:
-			return
+			logger.warning("CloudSync: plugin inactivo; no se sube %s", kit_path)
+			return None
+		if not os.path.exists(kit_path):
+			logger.error(f"CloudSync: Kit file does not exist: {kit_path}")
+			self._emit_pain("cloud_sync_error", f"Kit file missing: {kit_path}")
+			return None
 
-		# Race condition guard: verify the kit file actually exists on disk
-		if not os.path.exists(zip_path):
-			logger.error(f"CloudSync: Kit file does not exist: {zip_path}")
-			self._emit_pain("cloud_sync_error", f"Kit file missing: {zip_path}")
-			return
-
-		file_name = os.path.basename(zip_path)
-		file_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-
+		file_name = os.path.basename(kit_path)
+		file_size_mb = os.path.getsize(kit_path) / (1024 * 1024)
 		current_usage = self.get_vault_usage()
 		remaining_mb = self.quota_mb - current_usage
 		buffer_needed_mb = file_size_mb * self.reserve_count
-
 		if remaining_mb < buffer_needed_mb:
 			logger.warning(f"CloudSync Low space! Remaining: {remaining_mb:.1f}MB.")
 			self._emit_pain("cloud_sync_low_space", f"Remaining: {remaining_mb:.1f}MB, needed: {buffer_needed_mb:.1f}MB")
@@ -196,10 +192,55 @@ class CloudSyncPlugin(SovereignPlugin):
 			file_metadata = {"name": file_name}
 			if self.folder_id:
 				file_metadata["parents"] = [self.folder_id]
-
-			media = MediaFileUpload(zip_path, mimetype="application/octet-stream", resumable=True)
-			file = self.service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
-			logger.info(f"CloudSync: Upload successful. File ID: {file.get('id')}")
+			media = MediaFileUpload(kit_path, mimetype="application/octet-stream", resumable=True)
+			file = self.service.files().create(
+				body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+			).execute()
+			file_id = str(file.get("id") or "")
+			logger.info(f"CloudSync: Upload successful. File ID: {file_id}")
+			return file_id or None
 		except Exception as e:
 			logger.error(f"CloudSync Upload failed: {e}")
 			self._emit_pain("cloud_sync_error", str(e))
+			return None
+
+	def _on_soul_created(self, zip_path: str) -> None:
+		self.upload_kit(zip_path)
+
+	def prune_cloud_kits(self, *, prefix: str = "CLOUD_BACKUP_", keep: int = 3) -> int:
+		"""Conserva los `keep` kits más recientes con `prefix` y borra el resto.
+
+		Solo toca ficheros de ese prefijo; los LEAN_SOUL_KIT antiguos no se
+		tocan. Devuelve cuántos ficheros se borraron.
+		"""
+		if not self.enabled or not self.service:
+			return 0
+		keep = max(1, int(keep))
+		query = f"trashed = false and name contains '{prefix}'"
+		if self.folder_id:
+			query += f" and '{self.folder_id}' in parents"
+		try:
+			files = (
+				self.service.files()
+				.list(
+					q=query,
+					spaces="drive",
+					orderBy="modifiedTime desc",
+					fields="files(id,name,modifiedTime)",
+					supportsAllDrives=True,
+					includeItemsFromAllDrives=True,
+					pageSize=1000,
+				)
+				.execute()
+				.get("files", [])
+			)
+			pruned = 0
+			for item in files[keep:]:
+				self.service.files().delete(fileId=item["id"], supportsAllDrives=True).execute()
+				pruned += 1
+			if pruned:
+				logger.info(f"CloudSync: pruned {pruned} old '{prefix}' kits (keep={keep}).")
+			return pruned
+		except Exception as e:
+			logger.warning(f"CloudSync: prune failed: {e}")
+			return 0

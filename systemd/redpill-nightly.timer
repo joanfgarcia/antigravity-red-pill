@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly Cycle (chronicle -> sleep -> cloud backup)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+WakeSystem=false
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
