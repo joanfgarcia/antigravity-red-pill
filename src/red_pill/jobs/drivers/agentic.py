@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
@@ -147,6 +148,15 @@ class AgenticJobDriver(ResumableJobDriver):
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		"""Entorno no disponible (IDE cerrado, SIP caído) → deferral R1, no fallo."""
+		# Un cwd efímero (/tmp) puede desaparecer en un reinicio; un job reanudable
+		# debe fallar claro, no arrancar el hijo en otro workspace. Solo se valida
+		# si el payload lo declara: sin cwd, el bridge usa su default persistente.
+		cwd = str(payload.get("cwd") or "").strip()
+		if cwd and not Path(cwd).is_dir():
+			raise ValueError(
+				f"agentic_job cwd no existe o no es un directorio: {cwd}. "
+				"Para jobs reanudables usa un workspace persistente (no /tmp)."
+			)
 		try:
 			bridge = self._create_bridge(payload)
 			healthy = bridge.health_check()

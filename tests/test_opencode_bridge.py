@@ -203,6 +203,15 @@ class TestRunOpencode:
 			out = bridge._run_opencode(["hi"], timeout=5)
 		assert out["text"] == "ok"
 
+	def test_cwd_sets_session_dir_and_process_cwd(self, bridge, tmp_path):
+		"""`--dir` fija el workspace de la sesión; `cwd=` solo el del proceso."""
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5, cwd=str(tmp_path))
+		cmd = run.call_args.args[0]
+		assert cmd[cmd.index("--dir") + 1] == str(tmp_path)
+		assert run.call_args.kwargs["cwd"] == str(tmp_path)
+
 	def test_nonzero_returncode_raises(self, bridge):
 		fake = MagicMock(returncode=2, stdout="", stderr="bad")
 		with patch("subprocess.run", return_value=fake):

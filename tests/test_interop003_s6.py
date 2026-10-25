@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from red_pill.swarm.bridges.claude import ClaudeBridge
 from red_pill.swarm.bridges.identity_env import identity_env
 from red_pill.swarm.bridges.opencode import OpenCodeBridge
@@ -162,3 +164,24 @@ def test_cascade_propagates_identity(monkeypatch):
 	cascade._build("claude")
 	assert seen["continuity_id"] == CID
 	assert seen["originator"] == "dag:job-1/stage-a"
+
+
+def test_agentic_preflight_rejects_missing_cwd(tmp_path):
+	"""Un cwd efímero (/tmp) puede desaparecer tras un reinicio: fallar claro."""
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+
+	driver = AgenticJobDriver()
+	with pytest.raises(ValueError, match="cwd no existe"):
+		driver.preflight({"backend": "opencode", "prompt": "x", "cwd": str(tmp_path / "no-existe")})
+
+
+def test_agentic_preflight_accepts_existing_cwd(monkeypatch, tmp_path):
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+
+	class FakeBridge:
+		def health_check(self):
+			return True
+
+	driver = AgenticJobDriver()
+	monkeypatch.setattr(driver, "_create_bridge", lambda payload: FakeBridge())
+	driver.preflight({"backend": "opencode", "prompt": "x", "cwd": str(tmp_path)})

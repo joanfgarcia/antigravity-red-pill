@@ -246,6 +246,12 @@ class OpenCodeBridge(AgentBridge):
 		cmd = [self._opencode_path, "run", *args, "--format", "json", "--auto"]
 		major = self._cli_major()
 
+		if cwd:
+			# `cwd=` solo cambia el directorio del proceso; opencode fija el
+			# workspace de la SESIÓN con --dir. Sin esto el agente opera en su
+			# proyecto por defecto (p. ej. $HOME), no en el cwd del job.
+			cmd.extend(["--dir", cwd])
+
 		if self._server_url:
 			# v1: --attach <url>; v2: --server <url> (--attach was removed).
 			cmd.extend(["--server" if major >= 2 else "--attach", self._server_url])

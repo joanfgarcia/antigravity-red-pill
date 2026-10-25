@@ -106,7 +106,7 @@ stages:
         type: agent
         minion: agent
         backend: opencode-go
-        model: opencode-go/deepseek-v4-flash
+        model: opencode-go/deepseek-v4.1-flash
         prompt: <triaje>
       - id: full-cycle
         type: compound
