@@ -23,9 +23,11 @@ def _validate_identity(payload: Dict[str, Any]) -> None:
 	continuity = payload.get("continuity_id")
 	if continuity is not None:
 		try:
-			uuid.UUID(str(continuity))
+			parsed = uuid.UUID(str(continuity))
 		except (ValueError, TypeError) as exc:
-			raise ValueError(f"dag_job continuity_id inválido (UUID esperado): {continuity!r}") from exc
+			raise ValueError(f"dag_job continuity_id inválido (UUIDv7 esperado): {continuity!r}") from exc
+		if parsed.version != 7:
+			raise ValueError(f"dag_job continuity_id debe ser UUIDv7: {continuity!r}")
 	parent_mission = payload.get("parent_mission_id")
 	if parent_mission is not None and not _MISSION_RE.match(str(parent_mission)):
 		raise ValueError(f"dag_job parent_mission_id inválido: {parent_mission!r}")
@@ -100,6 +102,9 @@ def validate_stages(
 			raise ValueError(f"dag_job duplicate stage path '{stage_path}' (los ids son únicos globalmente).")
 		seen.append(stage_path)
 
+		for key in ("continuity_id", "parent_mission_id", "role"):
+			if key in s:
+				_validate_identity({key: s[key]})
 		stype = s.get("type")
 		if stype not in valid:
 			raise ValueError(f"dag_job stage '{stage_path}' type '{stype}' not in {'|'.join(valid)}.")

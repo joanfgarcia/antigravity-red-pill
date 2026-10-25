@@ -108,7 +108,11 @@ class DagScheduleMixin:
 
 	def _identity_fields(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
 		"""RFC-INTEROP-003 S1: identidad opcional que viaja al checkpoint."""
-		continuity = payload.get("continuity_id") or checkpoint_data.get("continuity_id")
+		saved_continuity = checkpoint_data.get("continuity_id")
+		payload_continuity = payload.get("continuity_id")
+		if saved_continuity and payload_continuity and str(saved_continuity) != str(payload_continuity):
+			raise ValueError("dag_job continuity_id cambió a mitad de job (resume inconsistente)")
+		continuity = saved_continuity or payload_continuity
 		if not continuity:
 			return {}
 		identity: Dict[str, Any] = {
@@ -116,7 +120,7 @@ class DagScheduleMixin:
 			"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else str(payload.get("originator") or ""),
 			"role": str(payload.get("role") or checkpoint_data.get("role") or "job"),
 		}
-		parent = payload.get("parent_mission_id") or checkpoint_data.get("parent_mission_id")
+		parent = checkpoint_data.get("parent_mission_id") or payload.get("parent_mission_id")
 		if parent:
 			identity["parent_mission_id"] = str(parent)
 		return identity

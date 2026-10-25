@@ -107,3 +107,65 @@ def test_agent_stage_prompt_gets_identity_block(tmp_path, monkeypatch):
 	driver._run_atomic(payload, stage, "a")
 	assert "<redpill-identity>" in seen["task"]
 	assert f"continuity_id: {CID}" in seen["task"]
+
+
+def test_uuidv4_is_rejected_and_stage_identity_is_validated():
+	import uuid
+
+	with pytest.raises(ValueError):
+		validate_payload(_payload(continuity_id=str(uuid.uuid4())))
+	bad = _payload()
+	bad["manifest"]["stages"][0]["role"] = "root"
+	with pytest.raises(ValueError):
+		validate_payload(bad)
+
+
+def test_checkpoint_continuity_cannot_change_mid_job():
+	driver = DagJobDriver()
+	driver.job_id = "j1"
+	with pytest.raises(ValueError):
+		driver._identity_fields({"continuity_id": CID}, {"continuity_id": "01a1728b-8cc4-7cf8-a9e2-f110b1b5857e"})
+
+
+def test_command_env_has_mission_and_job(tmp_path, monkeypatch):
+	import red_pill.swarm.factory as factory_mod
+
+	seen = {}
+
+	class FakeMinion:
+		async def execute(self, task, **kwargs):
+			seen.update(kwargs)
+			return {"status": "success", "summary": "ok"}
+
+	monkeypatch.setattr(factory_mod.MinionFactory, "create", lambda name: FakeMinion())
+	driver = DagJobDriver()
+	driver.job_id = "job-xyz"
+	driver.step_timeout_s = 60
+	driver._step_started = None
+	payload = _payload(continuity_id=CID, parent_mission_id="repo:next")
+	payload["manifest"]["workdir"] = str(tmp_path)
+	stage = {"id": "a", "type": "command", "minion": "command_runner", "command": "echo hi"}
+	driver._run_atomic(payload, stage, "a")
+	assert seen["mission_id"] == "forge:x"
+	assert seen["job_id"] == "job-xyz"
+	assert seen["env"]["REDPILL_MISSION_ID"] == "forge:x"
+	assert seen["env"]["REDPILL_JOB_ID"] == "job-xyz"
+
+
+def test_stage_params_cannot_override_identity(tmp_path, monkeypatch):
+	import red_pill.swarm.factory as factory_mod
+
+	class FakeMinion:
+		async def execute(self, task, **kwargs):
+			return {"status": "success", "summary": "ok"}
+
+	monkeypatch.setattr(factory_mod.MinionFactory, "create", lambda name: FakeMinion())
+	driver = DagJobDriver()
+	driver.job_id = "j1"
+	driver.step_timeout_s = 60
+	driver._step_started = None
+	payload = _payload(continuity_id=CID)
+	payload["manifest"]["workdir"] = str(tmp_path)
+	stage = {"id": "a", "type": "command", "minion": "command_runner", "command": "echo", "params": {"continuity_id": "evil"}}
+	with pytest.raises(ValueError):
+		driver._run_atomic(payload, stage, "a")

@@ -176,14 +176,16 @@ class DagExecMixin:
 		item = stage.get("_item")
 		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
 		identity: Dict[str, Any] = {}
-		continuity = stage.get("continuity_id") or payload.get("continuity_id")
+		continuity = payload.get("continuity_id")
 		if continuity:
 			identity = {
 				"continuity_id": str(continuity),
+				"mission_id": str(payload.get("mission_id") or ""),
+				"job_id": str(getattr(self, "job_id", "") or ""),
 				"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else "",
-				"role": str(stage.get("role") or payload.get("role") or "job"),
+				"role": str(payload.get("role") or "job"),
 			}
-			parent = stage.get("parent_mission_id") or payload.get("parent_mission_id")
+			parent = payload.get("parent_mission_id")
 			if parent:
 				identity["parent_mission_id"] = str(parent)
 			kwargs.update(identity)

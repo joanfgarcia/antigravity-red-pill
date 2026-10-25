@@ -2743,6 +2743,41 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		driver_cls = get_driver_class(source)
 		if not driver_cls:
 			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
+
+		# RFC-INTEROP-003 §7.1: la identidad sale del canal de confianza, no del
+		# argumento del modelo. Un continuity_id ajeno se rechaza; si el llamante
+		# tiene alma y no se declara, se hereda. El Operador puede override.
+		try:
+			session = await _caller_session({})
+		except Exception:
+			session = {}
+		trusted_continuity = str(session.get("continuity_id") or "").strip()
+		trusted_mission = str(session.get("mission_id") or "").strip()
+		operator = os.getenv("REDPILL_OPERATOR") == "1"
+		provided_continuity = str(payload.get("continuity_id") or "").strip()
+		if provided_continuity and trusted_continuity and provided_continuity != trusted_continuity and not operator:
+			return [
+				types.TextContent(
+					type="text",
+					text="[ERROR] job_submit continuity_id no pertenece al llamante (anti-spoof).",
+				)
+			]
+		if not provided_continuity and trusted_continuity:
+			payload["continuity_id"] = trusted_continuity
+		if payload.get("continuity_id"):
+			payload.pop("originator", None)
+			if not payload.get("role"):
+				payload["role"] = "job"
+			provided_parent = str(payload.get("parent_mission_id") or "").strip()
+			if trusted_mission and provided_parent and provided_parent != trusted_mission and not operator:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ERROR] job_submit parent_mission_id no coincide con la misión del llamante.",
+					)
+				]
+			if trusted_mission and not provided_parent:
+				payload["parent_mission_id"] = trusted_mission
 		driver_cls().validate(payload)
 		# RFC_JOB_DAG §4.5: expandir `type: dag` a compounds (job persistido ya
 		# aplanado; el resume no depende de que la receta siga igual en disco).

@@ -6,7 +6,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ## [AD-076] RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job` (P1)
 **Date**: 2026-10-25
-**Status**: ACCEPTED & IMPLEMENTED (S0/S1). S2-S6 (leg/eventos, descubrimiento, lease de misión, handoff, arneses externos) pendientes.
+**Status**: ACCEPTED & IMPLEMENTED (S0/S1 bajo defaults; D-01…D-12 siguen abiertas). S2-S6 (leg/eventos, descubrimiento, lease de misión, handoff, arneses externos) pendientes.
 **Context**: El RFC-INTEROP-003 verificó que `dag_job` solo conocía `mission_id`: no heredaba `continuity_id`, no lo propagaba a etapas/checkpoint y el alma no podía reconocer el job. P1 implementa el contrato mínimo sin cambiar el motor del DAG.
 **Decision**:
 1. **S0 contrato**: `dag_validate` acepta `continuity_id` (UUID), `parent_mission_id` (`<scope>:<id>`) y `role` (`orchestrator|job|task|spawn`) opcionales; `cognitive_tasks` gana `continuity_id`/`parent_mission_id` + índices, sin romper jobs sin alma.
