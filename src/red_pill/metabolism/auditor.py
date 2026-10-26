@@ -483,7 +483,7 @@ class SentinelAuditor:
 			)
 			return False
 		try:
-			return plugin.heal(config, finding)
+			return bool(plugin.heal(config, finding))
 		except Exception as heal_err:
 			self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
 			return False

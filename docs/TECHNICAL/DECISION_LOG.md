@@ -10,21 +10,21 @@ This document records the architectural and philosophical pivots of the project.
 **Context**: El compactor B-02 tenía código, retry/heartbeat, mapeo Telegram y safety net, pero seguía con flags OFF y sin E2E de producción. El primer E2E reveló dos fallos: el leg viejo de Telegram no se expiraba (callback no llamaba a `mark_for_deletion`) y Samantha devolvía “no hay mensajes” (prompt legacy `samantha_compact_user`).
 **Decision**:
 1. Flags live: `SESSION_COMPACTOR_ENABLED=true`, `TELEGRAM_SOUL_MAPPING_ENABLED=true`, `COMPACTOR_SCOPE=autonomous`, `COMPACTOR_SWEEP_ACTIVE_MIN=15`; `AUTO_HEAL_ENABLED=false`.
-2. Telegram usa el presupuesto del compactor para decidir, Samantha resume con el prompt operativo B-02, y el callback registra `reset(handoff)` + `mark_for_deletion` (leg viejo `expired`).
-3. Safety net `compact-sweep` active-only (timer 15 min, fuente) y hook externo con el mismo scope.
+2. Telegram usa el presupuesto total (`TELEGRAM_COMPACTOR_CONTEXT_CHARS`) y el umbral `max(background, budget-reserve)`; el estimate excluye el turno `source=compactor`, así que un reset no se re-compacta a sí mismo. Samantha resume con el prompt operativo B-02, y el callback registra `reset(handoff)`, cambia el mapping persistente a la sesión nueva y marca el leg viejo para purga. El eco del resumen no se espeja otra vez.
+3. Safety net `compact-sweep` active-only (timer 15 min) y hook externo con el mismo scope; el timer se instala con `scripts/schedule_pulse.py` (no se auto-habilita en una instalación existente). Las superficies Telegram y sweep comparten dedupe por continuity en la cola.
 **Alternatives**: mantener el trigger legacy 16/4000 y el prompt antiguo — reproducía el resumen vacío; descartado.
-**Rationale / Evidence**: E2E real `9457d640` → `54d7ae98` (continuidad `2aab2ac3`), leg viejo `expired`/nuevo `active`, `session_compactions` `5d8693da` completed. Primer E2E `e2e-fase3` expuso los dos fallos; corregidos. Tests **177**; `ruff` limpio.
-**Consequences**: Fase 3 operativa con flags live; el interactivo queda fuera por `COMPACTOR_SCOPE=autonomous`; el timer sweep es fuente (no instalado); los heals siguen manuales (AD-085).
+**Rationale / Evidence**: E2E real `9457d640` → `54d7ae98` (continuidad `2aab2ac3`), leg viejo `expired`/nuevo `active`, `session_compactions` `5d8693da` completed. Primer E2E `e2e-fase3` expuso los dos fallos; corregidos. Suite completa `3491 passed, 15 skipped, 3 xfailed`; `ruff` y `mypy` limpios.
+**Consequences**: Fase 3 operativa con flags live; el interactivo queda fuera por `COMPACTOR_SCOPE=autonomous`; el timer sweep se instala con `scripts/schedule_pulse.py` y no se auto-habilita; el auto-heal global es report-only (AD-085), con heals manuales disponibles.
 ## [AD-085] Auto-Healer del wake en report-only
 **Date**: 2026-10-26
 **Status**: ACCEPTED & IMPLEMENTED.
 **Context**: El wake/SentinelAuditor detectó un error mypy en `local_minion.py`; el `auto_heal_ritual` usó el `HealerMinion` local (EdgeEngine, `qwen2.5-coder-7b-instruct-q4_k_m.gguf`, llama.cpp 8192) para “corregirlo” y dejó un guard incorrecto (`... if mirror is not None else None`) que no resolvía el mypy y podía dejar `turns=None`. El Operador pidió que el wake/auditor solo reporte.
 **Decision**:
-1. `AUTO_HEAL_ENABLED` default **False**: `auto_heal_ritual` regresa sin editar (ruff/HealerMinion); `SyntaxGuardCheck.heal` no restaura desde git.
+1. `AUTO_HEAL_ENABLED` default **False**: `auto_heal_ritual` regresa sin editar (ruff/HealerMinion); `SyntaxGuardCheck.heal` no restaura desde git; el dispatch global de `SentinelAuditor` tampoco llama `plugin.heal()` (cubre servicios, SQLite y duplicados, no solo SyntaxGuard).
 2. Los heals manuales (`heal_tissue`/`run_local_healer`) siguen disponibles como acción explícita del Operador.
-3. El `SentinelAuditor` sigue reportando al MinionInbox/signals; el diagnóstico no se suprime.
+3. El `SentinelAuditor` sigue reportando al MinionInbox/signals; el diagnóstico no se suprime y los findings quedan en el reporte cuando el heal está apagado.
 **Alternatives**: (a) auto-heal con allowlist de ficheros — más complejo; (b) desactivar el healer entero — descartado (manual útil).
-**Rationale / Evidence**: El modelo local `qwen2.5-coder-7b-instruct-q4_k_m.gguf` (EdgeEngine) introdujo el guard incorrecto; mypy seguía fallando; el fix correcto se hizo a mano. Tests de report-only del ritual y del SyntaxGuard; `ruff` limpio.
+**Rationale / Evidence**: El modelo local `qwen2.5-coder-7b-instruct-q4_k_m.gguf` (EdgeEngine) introdujo el guard incorrecto; mypy seguía fallando; el fix correcto se hizo a mano. Tests de report-only del ritual, del SyntaxGuard y del dispatch global del Sentinel; `ruff` limpio.
 **Consequences**: El wake ya no edita código; los signals/reportes quedan para el Operador. El HealerMinion local sigue disponible manualmente; el auto-heal se reactiva con `AUTO_HEAL_ENABLED=true`.
 
 ---

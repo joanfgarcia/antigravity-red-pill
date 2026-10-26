@@ -423,6 +423,7 @@ def test_context_includes_parent_summary_before_latest(mirror):
 	turns = mirror.context_turns("alma-1")
 	assert [t["content"] for t in turns[:2]] == ["viejo", "nuevo"]
 	assert [t["content"] for t in turns[2:]] == []
+	assert "viejo" not in compactor.summarizer.seen[-1]
 
 
 def test_compaction_aborted_by_peer_does_not_raise(mirror):

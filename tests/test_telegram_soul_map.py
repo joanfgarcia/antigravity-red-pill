@@ -91,13 +91,16 @@ def test_telegram_trigger_uses_compactor_estimate(tmp_path, monkeypatch):
 			return 2000
 
 	calls = []
-	monkeypatch.setattr("red_pill.config.get_config", lambda: SimpleNamespace(
-		SESSION_COMPACTOR_ENABLED=True,
-		TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
-		TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
-		TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
-		TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
-	))
+	monkeypatch.setattr(
+		"red_pill.config.get_config",
+		lambda: SimpleNamespace(
+			SESSION_COMPACTOR_ENABLED=True,
+			TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
+			TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
+			TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
+			TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
+		),
+	)
 	monkeypatch.setattr("red_pill.session.compactor.Compactor", FakeCompactor)
 	monkeypatch.setattr("red_pill.inference.samantha_worker.enqueue", lambda **kw: calls.append(kw))
 	assert tsm.trigger_compaction(session["id"]) is None
@@ -152,3 +155,26 @@ def test_telegram_trigger_does_not_recompact_its_own_summary(tmp_path, monkeypat
 	assert tsm.trigger_compaction(session["id"]) is None
 	assert calls and calls[0]["action"] == "compact_session"
 	assert calls[0]["payload"]["continuity_id"] == session["continuity_id"]
+
+
+def test_telegram_trigger_respects_scope_off(tmp_path, monkeypatch):
+	from types import SimpleNamespace
+
+	tsm = _manager(tmp_path, mapping=True)
+	session = tsm.create_session("user-42")
+	tsm.append_message(session["id"], "user", "x" * 4000)
+	monkeypatch.setattr(
+		"red_pill.config.get_config",
+		lambda: SimpleNamespace(
+			SESSION_COMPACTOR_ENABLED=True,
+			COMPACTOR_SCOPE="off",
+			TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
+			TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
+			TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
+			TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
+		),
+	)
+	calls = []
+	monkeypatch.setattr("red_pill.inference.samantha_worker.enqueue", lambda **kw: calls.append(kw))
+	assert tsm.trigger_compaction(session["id"]) is None
+	assert calls == []

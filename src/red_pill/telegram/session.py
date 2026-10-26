@@ -311,6 +311,10 @@ class TelegramSessionManager:
 
 		steps = session.get("steps", [])
 		total_chars = sum(len(s.get("message", {}).get("text", "")) for s in steps)
+		from red_pill.session.scope import compactor_scope_allows
+
+		if not compactor_scope_allows(f"telegram:{session_id}", origin="telegram"):
+			return None
 		compactor_mode = self._mapping_enabled() and self._compactor_enabled()
 		if compactor_mode:
 			try:

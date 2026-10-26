@@ -117,6 +117,20 @@ def handle_mcp(args: argparse.Namespace) -> None:
 	print("uso: red-pill mcp [serve|proxy]")
 
 
+def _compact_heartbeat_loop(lease: Any, lease_key: str, continuity: str, holder: str, stop: Any, logger: Any, *, interval: int = 30) -> None:
+	"""Renew the compact lease until the stop event fires."""
+	while not stop.wait(interval):
+		try:
+			lease.heartbeat(
+				lease_key,
+				source="compactor",
+				continuity_id=continuity,
+				holder_originator=holder,
+			)
+		except Exception as exc:  # noqa: BLE001
+			logger.warning("[COMPACT] lease heartbeat failed: %s", exc)
+
+
 def handle_session(args: argparse.Namespace) -> None:
 	"""Alma y Coro: operaciones sobre el espejo canónico de turnos."""
 	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "sync":
@@ -232,20 +246,12 @@ def handle_session(args: argparse.Namespace) -> None:
 			return
 
 		stop = threading.Event()
-
-		def _heartbeat() -> None:
-			while not stop.wait(30):
-				try:
-					lease.heartbeat(
-						lease_key,
-						source="compactor",
-						continuity_id=args.continuity,
-						holder_originator=holder,
-					)
-				except Exception as exc:  # noqa: BLE001
-					logger.warning("[COMPACT] lease heartbeat failed: %s", exc)
-
-		heartbeat = threading.Thread(target=_heartbeat, name="compact-heartbeat", daemon=True)
+		heartbeat = threading.Thread(
+			target=_compact_heartbeat_loop,
+			args=(lease, lease_key, args.continuity, holder, stop, logger),
+			name="compact-heartbeat",
+			daemon=True,
+		)
 		heartbeat.start()
 		try:
 			if handoff:

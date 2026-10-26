@@ -733,6 +733,54 @@ async def test_compactor_reduces_history_before_provider(monkeypatch):
 	assert SessionMirror().latest_compaction("alma-compact") is not None
 
 
+async def test_local_minion_retries_after_context_length_rejection(monkeypatch):
+	from types import SimpleNamespace
+
+	import red_pill.config as cfg
+	from red_pill.session.mirror import SessionMirror
+
+	mirror = SessionMirror()
+	for i in range(1, 9):
+		mirror.append_turn(
+			continuity_id="alma-length-retry",
+			mission_id="repo:m",
+			role="user" if i % 2 else "assistant",
+			content=f"turno {i}",
+			source_ref=f"lr{i}",
+		)
+	monkeypatch.setattr(
+		cfg,
+		"get_config",
+		lambda: SimpleNamespace(SESSION_COMPACTOR_ENGINE="extractive", SESSION_COMPACTOR_ENABLED=True),
+	)
+
+	class LengthThenAnswerProvider:
+		def __init__(self):
+			self.calls = 0
+			self.sent = []
+
+		def chat(self, messages, **kwargs):
+			self.calls += 1
+			self.sent.append(list(messages))
+			if self.calls == 1:
+				raise RuntimeError("This model's maximum context length is 4096 tokens")
+			return {"role": "assistant", "content": "ok"}
+
+	provider = LengthThenAnswerProvider()
+	_use_provider(monkeypatch, provider)
+	res = await local_minion.run_local_minion(
+		"continúa",
+		continuity_id="alma-length-retry",
+		mission_id="repo:m",
+		use_compactor=True,
+		context_tokens=8000,
+	)
+	assert res["ok"] is True
+	assert provider.calls == 2
+	assert provider.sent[1] != provider.sent[0]
+	assert "Resumen extractivo" in "\n".join(str(m.get("content") or "") for m in provider.sent[1])
+
+
 async def test_mirror_capture_skipped_without_soul(monkeypatch):
 	from red_pill.session.mirror import SessionMirror
 

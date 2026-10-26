@@ -226,7 +226,9 @@ class Compactor:
 		end = _safe_range_end(all_turns, start=start, candidate=candidate)
 		if end < start:
 			return None
-		selected = [t for t in turns if start <= int(t.get("seq") or 0) <= end]
+		selected = [
+			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+		]
 		if not selected:
 			return None
 		if latest:
@@ -264,7 +266,9 @@ class Compactor:
 		end = int(pending["range_end_seq"])
 		mission = str(pending["mission_id"])
 		turns = self.mirror.read_turns(continuity)
-		selected = [t for t in turns if start <= int(t.get("seq") or 0) <= end]
+		selected = [
+			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+		]
 		if not selected:
 			self.mirror.abort_compaction(compaction_id, reason="empty_range")
 			return None
