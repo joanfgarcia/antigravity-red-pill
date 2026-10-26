@@ -362,14 +362,39 @@ def deploy_plugins(plugins_src_dir: str, plugins_dest_dir: str, variables: dict,
 	return deployed
 
 
+def _ensure_esm_package(config_dir: str, backup: bool = True) -> bool:
+	"""V2: mark the plugins dir as ESM (``type: module``) to avoid Node reparsing."""
+	pkg_path = os.path.join(config_dir, "package.json")
+	pkg: dict = {}
+	if os.path.exists(pkg_path):
+		try:
+			with open(pkg_path, encoding="utf-8") as f:
+				pkg = json.load(f)
+		except (OSError, json.JSONDecodeError):
+			logger.warning(f"✗ {pkg_path}: unreadable JSON, not touching it")
+			return False
+		if not isinstance(pkg, dict):
+			return False
+	if pkg.get("type") == "module":
+		return False
+	if backup and os.path.exists(pkg_path):
+		shutil.copy2(pkg_path, pkg_path + ".bak")
+	pkg["type"] = "module"
+	with open(pkg_path, "w", encoding="utf-8") as f:
+		json.dump(pkg, f, indent=2)
+		f.write("\n")
+	logger.info(f"✓ {pkg_path}: type=module (V2 plugin ESM)")
+	return True
+
+
 def ensure_package_json(config_dir: str, backup: bool = True, major: int | None = None) -> bool:
 	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps).
 
-	V2 plugins are plain modules and do not need the V1 ``@opencode-ai/plugin`` pin.
+	V2 plugins are plain modules and do not need the V1 ``@opencode-ai/plugin`` pin;
+	on V2 we mark the package as ESM instead.
 	"""
 	if not needs_v1_plugin_pin(major):
-		logger.info(f"✓ opencode {f'v{major}' if major else 'v2'}: no @opencode-ai/plugin pin needed")
-		return False
+		return _ensure_esm_package(config_dir, backup)
 	pkg_path = os.path.join(config_dir, "package.json")
 	pkg: dict = {}
 	if os.path.exists(pkg_path):

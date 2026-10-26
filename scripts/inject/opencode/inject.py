@@ -220,15 +220,40 @@ def _deploy_agents(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 	return deployed
 
 
+def _ensure_esm_package(config_dir: str, backup: bool, major: int | None) -> bool:
+	"""V2: mark the plugins dir as ESM (``type: module``) to avoid Node reparsing."""
+	pkg_path = os.path.join(config_dir, "package.json")
+	pkg: dict = {}
+	if os.path.exists(pkg_path):
+		try:
+			with open(pkg_path, encoding="utf-8") as f:
+				pkg = json.load(f)
+		except (OSError, json.JSONDecodeError):
+			logger.warning(f"  {pkg_path}: unreadable JSON, not touching it")
+			return False
+		if not isinstance(pkg, dict):
+			return False
+	if pkg.get("type") == "module":
+		return False
+	if backup and os.path.exists(pkg_path):
+		shutil.copy2(pkg_path, pkg_path + ".bak")
+	pkg["type"] = "module"
+	with open(pkg_path, "w", encoding="utf-8") as f:
+		json.dump(pkg, f, indent=2)
+		f.write("\n")
+	logger.info(f"  {pkg_path}: type=module (V2 plugin ESM)")
+	return True
+
+
 def _ensure_package_json(config_dir: str, backup: bool, major: int | None = None) -> bool:
 	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps).
 
 	V1 plugins import ``@opencode-ai/plugin``; V2 plugins are plain modules and do
-	not need it, so on V2 we only leave existing deps untouched.
+	not need it. On V2 we instead mark the package as ESM so Node loads the
+	plugin without reparsing it as CommonJS.
 	"""
 	if not needs_v1_plugin_pin(major):
-		logger.info("  opencode %s: no @opencode-ai/plugin pin needed", f"v{major}" if major else "v2")
-		return False
+		return _ensure_esm_package(config_dir, backup, major)
 	pkg_path = os.path.join(config_dir, "package.json")
 	pkg: dict = {}
 	if os.path.exists(pkg_path):

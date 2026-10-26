@@ -17,6 +17,7 @@ Config por entorno:
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 from typing import Any
@@ -38,7 +39,14 @@ _feedback: list[tuple[str, tuple]] = []
 def _start_feedback() -> None:
 	d = Dispatcher()
 	d.set_default_handler(lambda addr, *args: _feedback.append((addr, args)))
-	srv = ThreadingOSCUDPServer((HOST, FEEDBACK_PORT), d)
+	try:
+		srv = ThreadingOSCUDPServer((HOST, FEEDBACK_PORT), d)
+	except OSError as exc:
+		# V2 lanza un proceso MCP por location; todos comparten el puerto UDP
+		# de feedback, así que solo el primero puede bindearlo. Degradar a
+		# send-only en vez de morir y dejar el MCP caído.
+		print(f"[ardour-mcp] feedback listener disabled ({exc}); send-only mode", file=sys.stderr)
+		return
 	threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 
