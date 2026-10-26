@@ -572,6 +572,9 @@ class RedPillConfig(BaseSettings):
 	# 120s is the *method* default — the pro target is set to 300s via its own
 	# `timeout` in .env to avoid the aggressive-kill regression (guard §2C).
 	TELEGRAM_INLINE_TIMEOUT: int = 120
+	# Mapeo Telegram→alma (B-02/B-03): leg estable + espejo. OFF por defecto
+	# hasta validar la paridad del compactor; no cambia el carril actual.
+	TELEGRAM_SOUL_MAPPING_ENABLED: bool = False
 	# Heartbeat lease (s) for the D21 decoupled heartbeat thread. The thread beats
 	# every ~20s while the process lives, but only while the last activity *touch*
 	# is newer than this lease. A dead main loop stops touching → lease expires →

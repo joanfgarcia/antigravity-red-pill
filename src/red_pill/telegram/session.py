@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 import uuid
 from pathlib import Path
 from typing import List, Optional
@@ -15,11 +16,95 @@ class TelegramSessionManager:
 	Manages local, disk-based conversation history for Telegram.
 	Stores history under XDG data dir to preserve context headlessly.
 	Single-writer: ya NO ingesta a staging (retirado); lo consume Memento.
+
+	Con `TELEGRAM_SOUL_MAPPING_ENABLED` (o `soul_mapping=True`), la sesión se
+	mapea a un alma estable y sus turnos se escriben en `session_mirror`; el
+	compactor puede operar sobre ella sin cambiar aún el carril de resumen.
 	"""
 
-	def __init__(self):
-		self.conv_dir = get_data_dir() / "telegram_conversations"
+	def __init__(
+		self,
+		*,
+		conv_dir: Optional[Path] = None,
+		db_path: Optional[str] = None,
+		soul_mapping: Optional[bool] = None,
+	):
+		self.conv_dir = Path(conv_dir) if conv_dir is not None else get_data_dir() / "telegram_conversations"
 		self.conv_dir.mkdir(parents=True, exist_ok=True)
+		self.db_path = db_path
+		self.soul_mapping = soul_mapping
+
+	def _mapping_enabled(self) -> bool:
+		if self.soul_mapping is not None:
+			return bool(self.soul_mapping)
+		try:
+			import red_pill.config as cfg
+
+			return bool(getattr(cfg.get_config(), "TELEGRAM_SOUL_MAPPING_ENABLED", False))
+		except Exception:
+			return False
+
+	def _soul_continuity(self, channel_user_id: str) -> str:
+		"""Alma estable por usuario de Telegram (sobrevive a la rotación)."""
+		return str(uuid.uuid5(uuid.NAMESPACE_URL, f"red-pill:telegram:{channel_user_id or 'unknown'}"))
+
+	def _ensure_soul(self, session: dict) -> bool:
+		if not self._mapping_enabled():
+			return False
+		changed = False
+		if not session.get("continuity_id"):
+			session["continuity_id"] = self._soul_continuity(str(session.get("channel_user_id") or ""))
+			changed = True
+		if not session.get("mission_id"):
+			session["mission_id"] = "mission:telegram"
+			changed = True
+		return changed
+
+	def _register_leg(self, session: dict) -> None:
+		if not self._mapping_enabled():
+			return
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			SessionRegistry(self.db_path).upsert_session(
+				originator=f"telegram:{session['id']}",
+				continuity_id=str(session["continuity_id"]),
+				mission_id=str(session["mission_id"]),
+				role="task",
+				title=str((session.get("summary") or {}).get("summary") or "Telegram"),
+			)
+		except Exception as e:
+			logger.warning(f"[TelegramSession] soul leg registration failed: {e}")
+
+	def _mirror_turn(self, session: dict, role: str, text: str, index: int) -> None:
+		if not self._mapping_enabled():
+			return
+		try:
+			from red_pill.session.mirror import SessionMirror
+
+			SessionMirror(self.db_path).append_turn(
+				continuity_id=str(session["continuity_id"]),
+				mission_id=str(session["mission_id"]),
+				role=role,
+				content=text,
+				originator=f"telegram:{session['id']}",
+				source="telegram",
+				source_ref=f"telegram:{session['id']}:{index}",
+				ts=time.time(),
+				status="completed",
+			)
+		except Exception as e:
+			logger.warning(f"[TelegramSession] mirror write failed: {e}")
+
+	def _unregister_leg(self, session_id: str) -> None:
+		if not self._mapping_enabled():
+			return
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			SessionRegistry(self.db_path).unregister_session(f"telegram:{session_id}")
+		except Exception as e:
+			logger.warning(f"[TelegramSession] soul leg unregister failed: {e}")
 
 	def _get_path(self, session_id: str) -> Path:
 		return self.conv_dir / f"{session_id}.json"
@@ -47,7 +132,9 @@ class TelegramSessionManager:
 			},
 			"steps": [],
 		}
+		self._ensure_soul(session)
 		self.save_session(session_id, session)
+		self._register_leg(session)
 		return session
 
 	def save_session(self, session_id: str, session: dict) -> None:
@@ -94,7 +181,14 @@ class TelegramSessionManager:
 
 		session["steps"].append({"intent": intent, "message": {"text": text}})
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+		self._ensure_soul(session)
 		self.save_session(session_id, session)
+		self._mirror_turn(
+			session,
+			"user" if intent == "USER" else "assistant",
+			text,
+			len(session["steps"]),
+		)
 		return session
 
 	def get_history_prompt(self, session: dict) -> str:
@@ -114,6 +208,7 @@ class TelegramSessionManager:
 		session["status"] = "pending_purge"
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 		self.save_session(session_id, session)
+		self._unregister_leg(session_id)
 		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge")
 		return True
 
