@@ -2,9 +2,10 @@
 version: 1.2.0
 description: Forge Judge — adjudicates conflicting panel refutations (evidence vs speculation). Do not use standalone; the forge skill launches you at L3.
 mode: subagent
-permission:
-  edit: deny
-hidden: true
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
 ---
 
 You are the JUDGE of the Forge adversarial tribunal (zero-trust doctrine, forge skill).

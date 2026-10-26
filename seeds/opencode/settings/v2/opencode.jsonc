@@ -1,0 +1,76 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "RedPill-Kernel": {
+        "type": "local",
+        "command": ["${PYTHON}", "-m", "red_pill.mcp_proxy", "--socket", "${MCP_SOCKET}", "--harness", "opencode"],
+        "environment": {
+          "REDPILL_HARNESS": "opencode",
+          "PYTHONPATH": "${REDPILL_DIR}/src"
+        },
+        "disabled": ${MCP_DIRECT}
+      },
+      "RedPill-Kernel-Direct": {
+        "type": "local",
+        "command": ["${UV}", "--directory", "${REDPILL_DIR}", "run", "python", "${REDPILL_DIR}/src/red_pill/mcp_server.py"],
+        "environment": {
+          "REDPILL_HARNESS": "opencode"
+        },
+        "disabled": ${MCP_SHARED}
+      }
+    }
+  },
+  "skills": ["~/.config/opencode/skills"],
+  "instructions": ["RED_PILL.md"],
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "ask"
+    },
+    {
+      "action": "external_directory",
+      "resource": "${AGENT_CORE_DIR}/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "${HOME}/Documents/IA/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "${HOME}/.config/red-pill/**",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "${HOME}/.local/share/red-pill/**",
+      "effect": "allow"
+    },
+    {
+      "action": "subagent",
+      "resource": "forge-*",
+      "effect": "allow"
+    }
+  ],
+  "references": {
+    "agent_core": {
+      "path": "${AGENT_CORE_DIR}",
+      "description": "Use for personal desk, notes, plans, and transversal/session state"
+    },
+    "redpill_kernel": {
+      "path": "${REDPILL_DIR}",
+      "description": "Red Pill kernel code repository"
+    },
+    "bunker_config": {
+      "path": "${HOME}/.config/red-pill",
+      "description": "Use for Bünker configuration, workspace registry, and .env"
+    },
+    "bunker_state": {
+      "path": "${HOME}/.local/share/red-pill",
+      "description": "Use for Bünker state, models cache, and database"
+    }
+  }
+}

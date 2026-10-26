@@ -130,6 +130,40 @@ def strip_jsonc_comments(text):
 	return _JSONC_TOKEN.sub(_repl, text)
 
 
+def merge_permissions(base, overlay):
+	"""Merge V2 permission rules preserving last-match-wins semantics.
+
+	Adds missing ``(action, resource)`` rules from ``overlay`` into ``base``.
+	A catch-all (``resource == "*"``) is inserted at the start of its action
+	group so specific rules keep winning (V2 evaluates last match). Existing
+	rules are never removed or reordered, so user/foreign policy is preserved.
+	"""
+	out = list(base or [])
+	if not isinstance(overlay, list):
+		return out
+
+	def _index():
+		return {(r.get("action"), r.get("resource")): i for i, r in enumerate(out) if isinstance(r, dict)}
+
+	seen = _index()
+	for rule in overlay:
+		if not isinstance(rule, dict):
+			continue
+		key = (rule.get("action"), rule.get("resource"))
+		if key in seen:
+			continue
+		if rule.get("resource") == "*":
+			pos = next(
+				(i for i, r in enumerate(out) if isinstance(r, dict) and r.get("action") == rule.get("action")),
+				len(out),
+			)
+			out.insert(pos, rule)
+		else:
+			out.append(rule)
+		seen = _index()
+	return out
+
+
 # ── Agent_Core / transversal vars (red-pill .env, with fallbacks) ─────────────
 def parse_env_file(path):
 	vals: dict[str, str] = {}

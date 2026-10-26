@@ -657,6 +657,29 @@ def migrate(cfg: dict, config_dir: str) -> tuple[dict, list, list]:
 	return cfg, report, warnings
 
 
+def migrate_file(config_path: str, backup: bool = True) -> tuple[bool, list, list]:
+	"""Migrate a config file in place if it still has V1 keys.
+
+	Returns ``(changed, report, warnings)``. Idempotent: returns
+	``(False, [], [])`` when no V1 keys remain. Used by the injector so seeding
+	V2 never leaves V1 keys behind.
+	"""
+	cfg = load_jsonc(config_path)
+	if not _needs_migration(cfg):
+		return False, [], []
+	migrated, report, warnings = migrate(cfg, os.path.dirname(os.path.realpath(config_path)))
+	raw = open(config_path, encoding="utf-8").read()
+	if backup:
+		stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+		shutil.copy2(config_path, f"{config_path}.v1.bak.{stamp}")
+	with open(config_path, "w", encoding="utf-8") as fh:
+		json.dump(migrated, fh, indent=2, ensure_ascii=False)
+		fh.write("\n")
+	if _strip_comments(raw) != raw:
+		warnings.append("JSONC comments were dropped (backup keeps them)")
+	return True, report, warnings
+
+
 def main() -> int:
 	parser = argparse.ArgumentParser(description="Migrate opencode.jsonc from V1 to V2.")
 	parser.add_argument("--config", default=DEFAULT_CONFIG, help=f"Source opencode.jsonc (default {DEFAULT_CONFIG}).")

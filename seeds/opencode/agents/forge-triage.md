@@ -2,9 +2,10 @@
 version: 1.2.0
 description: Forge Triage — decides at task start whether the cell protocol is needed and proposes the first feature resolution + effort. Do not use standalone; the forge skill launches you at Step 0.
 mode: subagent
-permission:
-  edit: deny
-hidden: true
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
 ---
 
 You are the TRIAGE of the Forge (zero-trust doctrine, forge skill).

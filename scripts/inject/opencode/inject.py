@@ -18,7 +18,9 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, merge_permissions, strip_jsonc_comments, subst  # noqa: E402
+from migrate_opencode_v2 import migrate_file  # noqa: E402
+from opencode_version import detect_info, needs_v1_plugin_pin, select_config_seed  # noqa: E402
 
 
 def _detect_config_dir() -> str | None:
@@ -38,6 +40,11 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 				# Comandos MCP: la lista del seed REEMPLAZA, no se concatena. Un
 				# union dejaba el comando directo + el proxy mezclados.
 				base[key] = val
+				continue
+			if key == "permissions":
+				# V2 last-match-wins: no concatenar (dejaría el catch-all al final
+				# pisando las reglas específicas). Insertar solo las que faltan.
+				base[key] = merge_permissions(base[key], val)
 				continue
 			for item in val:
 				if item not in base[key]:
@@ -184,8 +191,44 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 	return deployed
 
 
-def _ensure_package_json(config_dir: str, backup: bool) -> bool:
-	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps)."""
+def _deploy_agents(src_dir: str, dest_dir: str, variables: dict, backup: bool) -> int:
+	"""Deploy opencode subagent definitions (seeds/opencode/agents/*.md).
+
+	Dest: ``<config>/agents/<name>.md`` (V2 discovers ``agents/``). Placeholders
+	are resolved because agents are Markdown.
+	"""
+	if not os.path.isdir(src_dir):
+		return 0
+	os.makedirs(dest_dir, exist_ok=True)
+	deployed = 0
+	for entry in sorted(os.listdir(src_dir)):
+		if not entry.endswith(".md"):
+			continue
+		src = os.path.join(src_dir, entry)
+		dest = os.path.join(dest_dir, entry)
+		resolved = subst(_read_seed(src), variables)
+		if os.path.exists(dest):
+			with open(dest, encoding="utf-8") as f:
+				if f.read() == resolved:
+					continue
+			if backup:
+				shutil.copy2(dest, dest + ".bak")
+		with open(dest, "w", encoding="utf-8") as f:
+			f.write(resolved)
+		deployed += 1
+		logger.info(f"  Agent '{entry}' → {dest_dir}")
+	return deployed
+
+
+def _ensure_package_json(config_dir: str, backup: bool, major: int | None = None) -> bool:
+	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps).
+
+	V1 plugins import ``@opencode-ai/plugin``; V2 plugins are plain modules and do
+	not need it, so on V2 we only leave existing deps untouched.
+	"""
+	if not needs_v1_plugin_pin(major):
+		logger.info("  opencode %s: no @opencode-ai/plugin pin needed", f"v{major}" if major else "v2")
+		return False
 	pkg_path = os.path.join(config_dir, "package.json")
 	pkg: dict = {}
 	if os.path.exists(pkg_path):
@@ -232,12 +275,26 @@ def inject(args: argparse.Namespace) -> int:
 	anchor_seeds = os.path.join(repo_root, "seeds", "anchors")
 	changed = 0
 
-	# 1. Config
-	config_template = os.path.join(opencode_seeds, "settings", "opencode.jsonc")
-	if os.path.exists(config_template):
+	# 0. Detect the installed OpenCode version and pick the matching seed.
+	config_path = os.path.join(config_dir, "opencode.jsonc")
+	info = detect_info(config_path=config_path)
+	major = info.major
+	logger.info(f"  OpenCode detectado: {info} → seed {info.tier}")
+
+	# 1. Config (versioned seed; migrate a V1 file before merging a V2 seed).
+	config_template = select_config_seed(opencode_seeds, major)
+	if config_template:
+		if (major or 1) >= 2 and os.path.exists(config_path):
+			migrated, _, warnings = migrate_file(config_path, backup=backup)
+			if migrated:
+				logger.info("  opencode.jsonc: V1→V2 migrado antes de sembrar")
+				for warning in warnings:
+					logger.warning(f"    {warning}")
 		with open(config_template, encoding="utf-8") as f:
 			resolved = subst(f.read(), variables)
-		_merge_config(os.path.join(config_dir, "opencode.jsonc"), json.loads(resolved), backup)
+		_merge_config(config_path, json.loads(resolved), backup)
+	else:
+		logger.warning("  No config seed found for OpenCode %s", info.tier)
 
 	# 2. Instructions
 	instructions_path = os.path.join(config_dir, "RED_PILL.md")
@@ -258,8 +315,13 @@ def inject(args: argparse.Namespace) -> int:
 			logger.info(f"✓ Skill legacy '{legacy}' removed from {skills_dest}")
 			changed += 1
 
+	# 3.5 Agents (forge-* subagents; V2 discovers <config>/agents/)
+	agents_src = os.path.join(opencode_seeds, "agents")
+	agents_dest = os.path.join(config_dir, "agents")
+	changed += _deploy_agents(agents_src, agents_dest, variables, backup)
+
 	# 4. Package.json
-	_ensure_package_json(config_dir, backup)
+	_ensure_package_json(config_dir, backup, major)
 
 	# 5. Plugins (redpill-scribe.js for scribe relay via hooks)
 	plugins_seed = os.path.join(opencode_seeds, "plugins")

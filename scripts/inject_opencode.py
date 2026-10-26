@@ -28,7 +28,9 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, merge_permissions, strip_jsonc_comments, subst  # noqa: E402
+from migrate_opencode_v2 import migrate_file  # noqa: E402
+from opencode_version import detect_info, needs_v1_plugin_pin, select_config_seed  # noqa: E402
 
 # ── Config directory discovery ────────────────────────────────────────────────
 OPENCODE_CONFIG_DIRS = [
@@ -55,6 +57,10 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 		elif key in base and isinstance(base[key], list) and isinstance(val, list):
 			if key in ("command", "args"):
 				base[key] = val
+				continue
+			if key == "permissions":
+				# V2 last-match-wins: no concatenar (el catch-all quedaría al final).
+				base[key] = merge_permissions(base[key], val)
 				continue
 			existing = base[key]
 			for item in val:
@@ -356,8 +362,14 @@ def deploy_plugins(plugins_src_dir: str, plugins_dest_dir: str, variables: dict,
 	return deployed
 
 
-def ensure_package_json(config_dir: str, backup: bool = True) -> bool:
-	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps)."""
+def ensure_package_json(config_dir: str, backup: bool = True, major: int | None = None) -> bool:
+	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps).
+
+	V2 plugins are plain modules and do not need the V1 ``@opencode-ai/plugin`` pin.
+	"""
+	if not needs_v1_plugin_pin(major):
+		logger.info(f"✓ opencode {f'v{major}' if major else 'v2'}: no @opencode-ai/plugin pin needed")
+		return False
 	pkg_path = os.path.join(config_dir, "package.json")
 	pkg: dict = {}
 	if os.path.exists(pkg_path):
@@ -443,10 +455,16 @@ def main():
 		logger.info("Red Pill removed from opencode.")
 		return
 
+	# ── Version detection (V1 vs V2 seed) ──────────────────────────────────
+	config_path = os.path.join(config_dir, "opencode.jsonc")
+	info = detect_info(config_path=config_path)
+	major = info.major
+	logger.info(f"OpenCode detectado: {info} → seed {info.tier}")
+
 	# ── Print mode ─────────────────────────────────────────────────────────
 	if args.print_only:
-		config_template = os.path.join(opencode_seeds, "settings", "opencode.jsonc")
-		if os.path.exists(config_template):
+		config_template = select_config_seed(opencode_seeds, major)
+		if config_template and os.path.exists(config_template):
 			with open(config_template, encoding="utf-8") as f:
 				raw = f.read()
 			# Resolve ${} placeholders but leave {env:} for opencode
@@ -456,11 +474,18 @@ def main():
 			print(raw)
 		return
 
-	# ── 1. Merge opencode.jsonc ────────────────────────────────────────────
-	config_template_path = os.path.join(opencode_seeds, "settings", "opencode.jsonc")
-	config_dest = os.path.join(config_dir, "opencode.jsonc")
+	# ── 1. Merge opencode.jsonc (versioned seed) ───────────────────────────
+	config_template_path = select_config_seed(opencode_seeds, major)
+	config_dest = config_path
 
-	if os.path.exists(config_template_path):
+	if (major or 1) >= 2 and os.path.exists(config_dest):
+		migrated, _, warnings = migrate_file(config_dest, backup=backup)
+		if migrated:
+			logger.info("✓ opencode.jsonc: V1→V2 migrado antes de sembrar")
+			for warning in warnings:
+				logger.warning(f"  {warning}")
+
+	if config_template_path and os.path.exists(config_template_path):
 		with open(config_template_path, encoding="utf-8") as f:
 			raw_template = f.read()
 		resolved = subst(raw_template, variables)
@@ -491,7 +516,7 @@ def main():
 	deploy_agents(agents_src, agents_dest, variables, backup=backup)
 
 	# ── 4. Ensure package.json ─────────────────────────────────────────────
-	ensure_package_json(config_dir, backup=backup)
+	ensure_package_json(config_dir, backup=backup, major=major)
 
 	# ── 5. Deploy plugins (the scribe that captures every turn) ────────────
 	plugins_src = os.path.join(opencode_seeds, "plugins")
