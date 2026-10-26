@@ -186,7 +186,9 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
 			return
 		for row in rows:
-			print(f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}")
+			print(
+				f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}"
+			)
 			print(str(row.get("content") or ""))
 			print("[RESUME] --- fin del prompt ---")
 		return
@@ -287,31 +289,30 @@ def handle_session(args: argparse.Namespace) -> None:
 				print(
 					f"     review: job={str(row.get('review_job_id'))[:12]} "
 					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+					+ (f" conf={row.get('review_confidence')}" if row.get("review_confidence") else "")
 				)
 			if row.get("suggested_verdict"):
 				reason = " ".join(str(row.get("suggestion_reason") or "").split())[:160]
-				print(
-					f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · {reason}"
-				)
+				print(f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · {reason}")
 		return
 	if getattr(args, "session_cmd", None) == "moderate":
 		import json
 
 		from red_pill.session.store import SessionRegistry
 
+		if os.getenv("REDPILL_OPERATOR") != "1":
+			print("[MODERATE] solo Operador (REDPILL_OPERATOR=1).")
+			return
 		result = SessionRegistry().moderate_note(
 			args.event_id,
 			action=args.action,
 			actor="operator",
-			reason=getattr(args, "reason", ""),
+			reason=args.reason,
 		)
 		if getattr(args, "json", False):
 			print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 			return
-		print(
-			f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); "
-			f"D-obj resueltas={result['resolved_decisions']}"
-		)
+		print(f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}")
 		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 

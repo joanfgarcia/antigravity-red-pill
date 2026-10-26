@@ -203,7 +203,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_moderate = session_sub.add_parser("moderate", help="Operador: flag/hide/retract/restore una nota")
 	session_moderate.add_argument("event_id", help="event_id de la nota")
 	session_moderate.add_argument("--action", required=True, choices=["flag", "hide", "retract", "restore"])
-	session_moderate.add_argument("--reason", default="", help="Motivo (queda auditado)")
+	session_moderate.add_argument("--reason", required=True, help="Motivo (queda auditado)")
 	session_moderate.add_argument("--json", action="store_true", help="Salida JSON")
 
 	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")

@@ -556,7 +556,7 @@ class RedPillConfig(BaseSettings):
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
-	# D23-SCORE v0.1 — auto-revisor de objeciones (RFC_ALMA_Y_CORO / D23).
+	# D23-SCORE v0.1 — auto-revisor de objeciones (DECISION_LOG AD-084 / D23).
 	# off: solo Operador; review: sugiere sin mutar; semi: actúa solo con
 	# confianza alta (si no, escala); auto: decide low/medium (high/retract
 	# siguen siendo del Operador).
