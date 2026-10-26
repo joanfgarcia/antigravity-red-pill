@@ -357,6 +357,9 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 	Auto-Healer Minion.
 	Reads the SQLite Inbox for mutated pain signals and attempts autonomous fixes.
 	"""
+	if not bool(getattr(cfg.get_config(), "AUTO_HEAL_ENABLED", False)):
+		logger.info("[Auto-Healer] report-only (AUTO_HEAL_ENABLED=false); no se modifica código.")
+		return
 	try:
 		inbox = MinionInbox()
 		unread = await asyncio.to_thread(inbox.get_unread, limit=50)

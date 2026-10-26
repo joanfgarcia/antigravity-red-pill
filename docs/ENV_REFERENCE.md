@@ -132,6 +132,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
 | `PULSE_INTERVAL` | `3600` | Interval in seconds between Sovereign Pulses. |
 | `LAZARUS_SYNC_ENABLED` | `True` | Activates constant state-sync to prevent process interruptions from losing RAM context. |
+| `AUTO_HEAL_ENABLED` | `False` | Auto-Healer del wake: `False` = solo reporte (no edita código ni restaura desde git); `heal_tissue`/`run_local_healer` manuales siguen disponibles. |
 | `LAZARUS_SYNC_INTERVAL` | `300` | Interval in seconds (5 min) for the Lazarus checkpoint generator. |
 | `RESONANCE_ENABLED`| `True` | Enables automated "Aha!" moments by checking similarities across previously idle engrams. |
 | `RESONANCE_THRESHOLD`| `0.4` | How close two disparate memories need to be in vector space to trigger forced integration. |
