@@ -15,6 +15,17 @@ This document records the architectural and philosophical pivots of the project.
 **Alternatives**: mantener el trigger legacy 16/4000 y el prompt antiguo — reproducía el resumen vacío; descartado.
 **Rationale / Evidence**: E2E real `9457d640` → `54d7ae98` (continuidad `2aab2ac3`), leg viejo `expired`/nuevo `active`, `session_compactions` `5d8693da` completed. Primer E2E `e2e-fase3` expuso los dos fallos; corregidos. Tests **177**; `ruff` limpio.
 **Consequences**: Fase 3 operativa con flags live; el interactivo queda fuera por `COMPACTOR_SCOPE=autonomous`; el timer sweep es fuente (no instalado); los heals siguen manuales (AD-085).
+## [AD-085] Auto-Healer del wake en report-only
+**Date**: 2026-10-26
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El wake/SentinelAuditor detectó un error mypy en `local_minion.py`; el `auto_heal_ritual` usó el `HealerMinion` local (EdgeEngine, `qwen2.5-coder-7b-instruct-q4_k_m.gguf`, llama.cpp 8192) para “corregirlo” y dejó un guard incorrecto (`... if mirror is not None else None`) que no resolvía el mypy y podía dejar `turns=None`. El Operador pidió que el wake/auditor solo reporte.
+**Decision**:
+1. `AUTO_HEAL_ENABLED` default **False**: `auto_heal_ritual` regresa sin editar (ruff/HealerMinion); `SyntaxGuardCheck.heal` no restaura desde git.
+2. Los heals manuales (`heal_tissue`/`run_local_healer`) siguen disponibles como acción explícita del Operador.
+3. El `SentinelAuditor` sigue reportando al MinionInbox/signals; el diagnóstico no se suprime.
+**Alternatives**: (a) auto-heal con allowlist de ficheros — más complejo; (b) desactivar el healer entero — descartado (manual útil).
+**Rationale / Evidence**: El modelo local `qwen2.5-coder-7b-instruct-q4_k_m.gguf` (EdgeEngine) introdujo el guard incorrecto; mypy seguía fallando; el fix correcto se hizo a mano. Tests de report-only del ritual y del SyntaxGuard; `ruff` limpio.
+**Consequences**: El wake ya no edita código; los signals/reportes quedan para el Operador. El HealerMinion local sigue disponible manualmente; el auto-heal se reactiva con `AUTO_HEAL_ENABLED=true`.
 
 ---
 

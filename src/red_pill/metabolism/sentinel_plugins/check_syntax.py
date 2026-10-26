@@ -155,6 +155,9 @@ class SyntaxGuardCheck(SentinelPlugin):
 
 	def heal(self, cfg: Any, finding: AuditFinding) -> bool:
 		"""Auto-heal: restore the broken file from git HEAD."""
+		if not bool(getattr(cfg, "AUTO_HEAL_ENABLED", False)):
+			logger.info("[SyntaxGuard] report-only (AUTO_HEAL_ENABLED=false); no se restaura código.")
+			return False
 		abs_path = finding.metadata.get("file", "")
 		rel_path = finding.metadata.get("rel_path", "")
 		app_root = getattr(cfg, "APP_ROOT", "")

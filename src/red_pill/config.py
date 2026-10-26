@@ -977,6 +977,10 @@ class RedPillConfig(BaseSettings):
 	# LAZARUS SYNC & HEALER
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
+	# Auto-Healer autónomo del wake: OFF = solo reporte (no edita código ni
+	# restaura desde git). Los heals manuales (`heal_tissue`/`run_local_healer`)
+	# siguen disponibles para el Operador.
+	AUTO_HEAL_ENABLED: bool = False
 	LAZARUS_SYNC_INTERVAL: int = 300
 	LAZARUS_STATE_FILE: str = str(get_state_dir() / "lazarus_state.json")
 	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
