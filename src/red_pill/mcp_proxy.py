@@ -22,12 +22,13 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
+from red_pill.core.paths import get_state_dir
+
 BACKEND_URL = "http://localhost/mcp/"
 
 
 def state_dir() -> Path:
-	data = os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-	return Path(data) / "red-pill" / "state"
+	return get_state_dir()
 
 
 def default_socket() -> str:

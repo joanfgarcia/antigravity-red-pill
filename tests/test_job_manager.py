@@ -303,7 +303,7 @@ class _FakeBridge:
 		return _R()
 
 
-def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monkeypatch):
+def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monkeypatch, tmp_path):
 	"""D1: payload policy (backend/model/effort/cwd) reaches the bridge untouched."""
 	from red_pill.jobs.drivers.agentic import AgenticJobDriver
 
@@ -317,14 +317,20 @@ def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monke
 	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", fake_create)
 
 	driver = AgenticJobDriver()
-	payload = {"prompt": "audit the repo", "backend": "claude", "model": "opus", "effort": "high", "cwd": "/tmp/ws"}
+	payload = {
+		"prompt": "audit the repo",
+		"backend": "claude",
+		"model": "opus",
+		"effort": "high",
+		"cwd": str(tmp_path),
+	}
 	driver.preflight(payload)
 	outcome = driver.step(payload, {})
 
 	assert captured["backend"] == "claude"
 	text, kwargs = fake.prompt_calls[-1]
 	assert text == "audit the repo"
-	assert kwargs == {"timeout": 600, "model": "opus", "effort": "high", "cwd": "/tmp/ws"}
+	assert kwargs == {"timeout": 600, "model": "opus", "effort": "high", "cwd": str(tmp_path)}
 	assert outcome.completed
 	assert outcome.new_checkpoint["conversation_id"] == "conv-1"
 

@@ -2,14 +2,14 @@
 """Backup completo del Bünker y subida al Cloud (AD-018 / job nocturno).
 
 `create`:
-  Qdrant snapshots (todas las colecciones) + manifest + Memento on-disk +
-  SQLite (bunker_queue, minion_inbox, neon-link) + `.env` → tar → MLS.
-  Escribe `state/cloud_backup/last_kit.json` (path, sha256, tamaño).
+Qdrant snapshots (todas las colecciones) + manifest + Memento on-disk +
+SQLite (bunker_queue, minion_inbox, neon-link) + `.env` → tar → MLS.
+Escribe `state/cloud_backup/last_kit.json` (path, sha256, tamaño).
 
 `upload`:
-  Lee `last_kit.json`, verifica el sha, autentica `CloudSyncPlugin` con el
-  token vivo y sube el kit. Conserva los `CLOUD_BACKUP_KEEP` (default 3) kits
-  más recientes del prefijo `CLOUD_BACKUP_`; no toca los `LEAN_SOUL_KIT_`.
+Lee `last_kit.json`, verifica el sha, autentica `CloudSyncPlugin` con el
+token vivo y sube el kit. Conserva los `CLOUD_BACKUP_KEEP` (default 3) kits
+más recientes del prefijo `CLOUD_BACKUP_`; no toca los `LEAN_SOUL_KIT_`.
 """
 from __future__ import annotations
 

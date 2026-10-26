@@ -7,7 +7,7 @@ verdad. Política conservadora:
 
 - Nunca toca `external_turns/current` (turno en vuelo).
 - Un `result` de un job no terminal (PENDING/PROCESSING/PAUSED/FRUSTRATED…)
-  se conserva: puede reanudarse.
+se conserva: puede reanudarse.
 - Conserva los N `result` más recientes por misión (default 1).
 """
 
