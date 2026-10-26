@@ -43,18 +43,25 @@
  * parts existed → empty responses (bug fixed 2026-09-24).
  *
  * ── HOOK LIFECYCLE (v2 — setup(ctx)) ─────────────────────────────────────
- *   ctx.session.hook("prompt")   → capture user prompt
- *   session.step.started         → capture model (providerID/id)
- *   session.text.delta           → accumulate assistant response text
- *   session.execution.succeeded  → FLUSH to DB (also on .failed)
- *   cleanup (returned)           → abort event stream + flush + close
+ *   ctx.session.hook("prompt")      → capture user prompt
+ *   session.step.started            → capture model (providerID/id)
+ *   session.text.delta              → accumulate assistant response text
+ *   session.execution.succeeded     → FLUSH to DB (also .failed/.interrupted)
+ *   session.idle / status idle      → liveness only (never flush: can truncate)
+ *   cleanup (returned)              → abort event stream + await flush + close
+ *
+ *   v2 context: workspace = `ctx.location.directory` (NOT `ctx.directory`);
+ *   event fields live on `data` (data.sessionID/parentID/location.directory),
+ *   with a `data.info` fallback for v1-style serializers.
+ *   The entrypoint stays a plain object `{ id, setup }`; V2 accepts id+setup
+ *   without importing @opencode/plugin, so the same file still loads on v1.
  *
  * v1 calls server(); v2 calls setup(). Both share the queue writer and the
- * per-session buffer. setup() is defensive on purpose: v1 ALSO calls it with
- * a v1 context (no session.hook / event.subscribe), where it must no-op so
- * the v1 server() hooks stay the single capture path. The entrypoint is a
- * plain object (no @opencode/plugin import): the same file loads on both
- * runtimes without npm dependencies.
+ * per-session buffer. setup() guards on the v2 context (session.hook +
+ * event.subscribe): if either is absent it no-ops, so the v1 server() hooks
+ * remain the single capture path. The entrypoint is a plain object (no
+ * @opencode/plugin import): the same file loads on both runtimes without npm
+ * dependencies.
  *
  * ── WHY NOT CALL PYTHON DIRECTLY? ───────────────────────────────────────
  * Bun.spawn per turn adds ~50-100ms overhead. The plugin is intentionally
@@ -137,6 +144,8 @@ function readJson(path) {
 
 function beginExternalTurn(sessionId, prompt, cwd) {
   if (TURN_JOURNAL_DISABLED || !sessionId || !prompt || !String(prompt).trim()) return;
+  // Seed sin sustituir (deploy roto): no escribir bajo una ruta literal ${...}.
+  if (String(TURN_ROOT).includes("${")) return;
   try {
     const current = turnCurrent(sessionId);
     const previous = readJson(current);
@@ -196,11 +205,11 @@ function touchLiveness(sessionId, phase) {
 // pasa originator → `opencode:<session_id>` real + rama del workspace.
 const BRIDGE_PATH = `${STATE_DIR}/opencode_session.json`;
 
-// Directorio del workspace de la instancia que sirve la sesión (PluginInput.
-// directory en v1 / ctx.directory en v2). Viaja en una closure por instancia,
-// NO en un global: la app de escritorio arranca varias instancias (`/`,
-// `~/Documents/IA`, cada workspace) en el mismo proceso y la última pisaba el
-// cwd de todas (bug destapado por B01H-CWD-CHECK).
+// Directorio del workspace de la instancia que sirve la sesión (v1
+// PluginInput.directory / v2 ctx.location.directory). Viaja en una closure por
+// instancia, NO en un global: la app de escritorio arranca varias instancias
+// (`/`, `~/Documents/IA`, cada workspace) en el mismo proceso y la última pisaba
+// el cwd de todas (bug destapado por B01H-CWD-CHECK).
 function writeBridge(sessionId, cwdHint) {
   if (!sessionId || childSessions.has(sessionId) || !STATE_DIR || STATE_DIR.includes("${")) return;
   try {
@@ -217,13 +226,15 @@ function writeBridge(sessionId, cwdHint) {
 }
 
 // v2 no expone `cwd` en los eventos de prompt/chat. Prioridad: payload del
-// hook → `directory` de la sesión (session.created/updated) → `directory` de
-// la instancia que sirve la sesión.
+// hook → `ctx.location.directory` (v2) → `directory` (v1) de la sesión/instancia.
+// IMPORTANTE: el contrato de plugins v2 expone el workspace en
+// `ctx.location.directory`, NO en `ctx.directory` (ver migración V1→V2).
 function dirOf(arg) {
   const v =
     arg?.cwd ||
     arg?.workspaceDirectory ||
     arg?.workspace ||
+    arg?.location?.directory ||
     arg?.directory ||
     arg?.worktree ||
     arg?.app?.path?.cwd;
@@ -305,6 +316,8 @@ function writeInteraction(db, prompt, response, model, sessionId, cols) {
 let storePromise = null;
 
 async function initStore() {
+  // Seed sin sustituir (deploy roto): no crear un fichero llamado "${QUEUE_DB}".
+  if (String(QUEUE_DB).includes("${")) return null;
   try {
     const { Database } = await import("bun:sqlite");
     const db = new Database(QUEUE_DB);
@@ -344,6 +357,7 @@ const sessions = new Map();
 async function flushSession(sessionId, status = "completed", reason = "") {
   const state = sessions.get(sessionId);
   if (!state) return;
+  if (state.idleTimer) clearTimeout(state.idleTimer);
   sessions.delete(sessionId);
   if (state.prompt) finishExternalTurn(sessionId, state.response, status, reason, state.modelID);
   if (!state.prompt && !state.response) return;
@@ -361,18 +375,60 @@ async function handleV2Event(event) {
   const data = event?.data;
   if (!type) return;
 
-  // `directory` de la sesión en eventos session.* (aunque no traigan sessionID).
-  const info = data?.info;
-  if (info?.id && typeof info.directory === "string" && info.directory) sessionDirs.set(info.id, info.directory);
+  // Ciclo de vida de sesión. En v2 los campos van directamente en `data`
+  // (sessionID, parentID, location.directory); algunas versiones/serializadores
+  // los anidan bajo `data.info` (forma v1). Aceptamos ambas. Las sub-sesiones
+  // (tool `task`, paneles de subagentes) no laten: su turno vive dentro del
+  // turno del padre (paridad con trackSessionInfo del path v1).
+  const info = data?.info || data || {};
+  const sessionId = data?.sessionID || info?.sessionID;
+  const sessionDir =
+    info?.location?.directory || info?.directory || event?.location?.directory;
+  const infoId = info?.id || sessionId;
+  if (infoId && typeof sessionDir === "string" && sessionDir) sessionDirs.set(infoId, sessionDir);
+  if (infoId && info?.parentID) childSessions.add(infoId);
+  if (type === "session.deleted") {
+    const deadId = info?.id || sessionId;
+    if (deadId) {
+      childSessions.delete(deadId);
+      sessionDirs.delete(deadId);
+      sessions.delete(deadId);
+    }
+  }
 
-  const sessionId = data?.sessionID;
   if (!sessionId) return;
 
-  // Fin de turno: el latido va antes del estado de captura (sin captura no hay
-  // state, pero la sesión sí ha terminado su turno). flushSession sin state = no-op.
-  if (type === "session.execution.succeeded" || type === "session.execution.failed") {
+  // Fin de turno. V2 publica `session.execution.{succeeded,failed,interrupted}`
+  // como eventos terminales. NO cerramos con `session.idle`: puede llegar antes
+  // que los últimos deltas y truncar la respuesta (hallazgo de la auditoría
+  // adversarial ronda 1). El latido sí se marca en idle/status idle.
+  if (
+    type === "session.execution.succeeded" ||
+    type === "session.execution.failed" ||
+    type === "session.execution.interrupted"
+  ) {
     touchLiveness(sessionId, "end");
-    await flushSession(sessionId, type.endsWith("failed") ? "aborted" : "completed", type.endsWith("failed") ? "execution_failed" : "");
+    const completed = type === "session.execution.succeeded";
+    const reason =
+      type === "session.execution.failed" ? "execution_failed"
+      : type === "session.execution.interrupted" ? "interrupted" : "";
+    await flushSession(sessionId, completed ? "completed" : "aborted", reason);
+    return;
+  }
+  if (type === "session.idle" || (type === "session.status" && data?.status?.type === "idle")) {
+    touchLiveness(sessionId, "end");
+    // Fallback de contrato: la doc V2 muestra `session.idle` como fin de turno,
+    // mientras que el paquete publica `session.execution.*`. Flush con debounce
+    // (no en el acto) para que los últimos deltas lleguen; si execution.* llega,
+    // lo cancela y hace el flush inmediato. Así funcionan ambos contratos sin
+    // truncar respuestas.
+    const state = sessions.get(sessionId);
+    if (state) {
+      if (state.idleTimer) clearTimeout(state.idleTimer);
+      state.idleTimer = setTimeout(() => {
+        void flushSession(sessionId, "completed", "idle");
+      }, 750);
+    }
     return;
   }
 
@@ -380,13 +436,14 @@ async function handleV2Event(event) {
   if (!state) return;
 
   if (type === "session.step.started") {
-    const model = data.model;
+    const model = data?.model || info?.model;
     if (model?.id) state.modelID = model.providerID ? `${model.providerID}/${model.id}` : model.id;
     return;
   }
 
   if (type === "session.text.delta") {
-    if (typeof data.delta === "string" && data.delta) state.response += data.delta;
+    const delta = data?.delta ?? info?.delta;
+    if (typeof delta === "string" && delta) state.response += delta;
   }
 }
 
@@ -402,14 +459,16 @@ export default {
     if (typeof ctx?.session?.hook !== "function" || typeof ctx?.event?.subscribe !== "function") return;
 
     await ctx.session.hook("prompt", (event) => {
-      const sessionId = event?.sessionID;
-      const text = event?.prompt?.text;
+      const sessionId = event?.sessionID || event?.data?.sessionID;
+      const text = event?.prompt?.text ?? event?.data?.prompt?.text;
       if (sessionId) {
         touchLiveness(sessionId, "start");
         writeBridge(sessionId, resolveCwd(sessionId, instanceCwd, event, event?.data));
       }
       if (sessionId && text && !CAPTURE_DISABLED) {
         beginExternalTurn(sessionId, text, resolveCwd(sessionId, instanceCwd, event, event?.data));
+        const prev = sessions.get(sessionId);
+        if (prev?.idleTimer) clearTimeout(prev.idleTimer);
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
     });
@@ -429,9 +488,11 @@ export default {
       }
     })();
 
-    return () => {
+    return async () => {
       controller.abort();
-      for (const sessionId of Array.from(sessions.keys())) void flushSession(sessionId);
+      // Esperar los flush ANTES de cerrar la DB (hallazgo adversarial ronda 1:
+      // el cierre podía adelantarse a la escritura async).
+      await Promise.all(Array.from(sessions.keys()).map((id) => flushSession(id)));
       closeStore();
     };
   },
