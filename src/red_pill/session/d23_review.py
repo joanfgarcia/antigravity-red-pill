@@ -79,14 +79,16 @@ def build_prompt(decision: Dict[str, Any], note: Dict[str, Any], mode: str) -> s
 		)
 	elif mode == "semi":
 		tool_rule = (
-			"Si tu confianza es high, llama a `review_decision` con uphold o dismiss. "
-			"Si no estás seguro, llama a `review_decision` con escalate. NO modifiques la nota."
+			"Si la D-obj requiere Operador (high/retract) o ya está escalated, llama a "
+			"`review_decision` con escalate y reason. Si tu confianza es high, llama a "
+			"`review_decision` con uphold o dismiss y reason. Si no estás seguro, llama a "
+			"`review_decision` con escalate y reason. NO modifiques la nota."
 		)
 	else:
 		tool_rule = (
-			"Llama a `review_decision` SIEMPRE. En low/medium decide uphold o dismiss. "
-			"Si la D-obj requiere Operador (high/retract) o ya está escalated, usa escalate. "
-			"NO modifiques la nota."
+			"Llama a `review_decision` SIEMPRE con reason. En low/medium decide uphold o "
+			"dismiss. Si la D-obj requiere Operador (high/retract) o ya está escalated, "
+			"usa escalate. NO modifiques la nota."
 		)
 
 	return (

@@ -46,11 +46,22 @@ def test_build_prompt_por_modo():
 	semi = d23_review.build_prompt(decision, note, "semi")
 	auto = d23_review.build_prompt(decision, note, "auto")
 	assert "suggest_review" in review and "Operador" in review
-	assert "review_decision" in semi and "escalate" in semi
-	assert "review_decision" in auto and "SIEMPRE" in auto and "escalate" in auto
+	assert "review_decision" in semi and "escalate" in semi and "high/retract" in semi
+	assert "review_decision" in auto and "SIEMPRE" in auto and "escalate" in auto and "high/retract" in auto
 	for text in (review, semi, auto):
 		assert "d1" in text and "el dato no cuadra" in text
 		assert "alma-obj" in text and "alma-author" in text
+		assert "reason" in text
+
+
+async def test_mcp_review_decision_exige_reason():
+	out = await _call("review_decision", {"decision_id": "d1", "action": "dismiss"})
+	assert "reason" in out and "obligatorio" in out
+
+
+async def test_mcp_suggest_review_exige_reason():
+	out = await _call("suggest_review", {"decision_id": "d1", "verdict": "dismiss", "confidence": "high"})
+	assert "reason" in out and "obligatorio" in out
 
 
 def test_suggest_review_no_muta_y_aparece_en_bandeja(tmp_path):

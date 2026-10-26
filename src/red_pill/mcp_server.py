@@ -2550,13 +2550,16 @@ def _fmt_decision_age(seconds: float) -> str:
 			"action": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
 			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
 		},
-		"required": ["decision_id", "action"],
+		"required": ["decision_id", "action", "reason"],
 	},
 )
 async def handle_review_decision(arguments: Dict[str, Any]):
 	try:
 		from red_pill.session.store import SessionRegistry
 
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[DECISION] `reason` es obligatorio (evidencia breve).")]
 		session = await _caller_session(arguments)
 		continuity = str(session.get("continuity_id") or "").strip()
 		if not continuity:
@@ -2565,7 +2568,7 @@ async def handle_review_decision(arguments: Dict[str, Any]):
 			str(arguments.get("decision_id") or ""),
 			reviewer_continuity_id=continuity,
 			action=str(arguments.get("action") or ""),
-			reason=str(arguments.get("reason") or ""),
+			reason=reason,
 		)
 		op = " [Operador]" if decision.get("requires_operator") else ""
 		return [
