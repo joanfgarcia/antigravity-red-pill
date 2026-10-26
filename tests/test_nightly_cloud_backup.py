@@ -25,6 +25,6 @@ def test_wrapper_encola_backup_con_parent(tmp_path):
 	lines = calls.read_text(encoding="utf-8").splitlines()
 	assert len(lines) == 2
 	assert "configs/jobs/nightly.yaml" in lines[0]
-	assert "--recipe .red-pill/jobs/cloud_backup.yaml" in lines[1]
+	assert "--recipe cloud_backup" in lines[1]
 	assert "--parent 12345678" in lines[1]
 	assert "--singleton" in lines[1]

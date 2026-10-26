@@ -18,4 +18,4 @@ if [ -z "$SLEEP_ID" ]; then
 	exit 1
 fi
 
-"$RP" job submit --recipe .red-pill/jobs/cloud_backup.yaml --parent "$SLEEP_ID" --singleton
+"$RP" job submit --recipe cloud_backup --parent "$SLEEP_ID" --singleton
