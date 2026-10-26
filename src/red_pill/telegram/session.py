@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -145,6 +146,47 @@ class TelegramSessionManager:
 		except Exception as e:
 			logger.error(f"[TelegramSession] Failed to save session {session_id}: {e}")
 
+	def activate_session(
+		self,
+		channel_user_id: str,
+		session_id: str,
+		*,
+		db_path: Optional[str] = None,
+	) -> bool:
+		"""Point the persistent Telegram mapping at a newly rotated session.
+
+		The compaction callback runs asynchronously after the old leg is marked
+		for purge. Without this switch, the next Telegram message reads the old
+		id, sees `pending_purge`, and creates a third empty session that discards
+		the summary. Keep model/backend columns intact when the row exists.
+		"""
+		if not channel_user_id or not session_id:
+			return False
+		import sqlite3
+
+		from red_pill.core.paths import get_neon_link_db_path
+
+		path = Path(db_path) if db_path else Path(os.environ.get("NEON_LINK_DB_PATH") or get_neon_link_db_path())
+		try:
+			conn = sqlite3.connect(str(path), timeout=10.0)
+			try:
+				cur = conn.execute(
+					"UPDATE telegram_sessions SET cascade_id = ?, cascade_type = 'local_session' WHERE channel_user_id = ?",
+					(session_id, channel_user_id),
+				)
+				if cur.rowcount == 0:
+					conn.execute(
+						"INSERT INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+						(channel_user_id, session_id),
+					)
+				conn.commit()
+			finally:
+				conn.close()
+			return True
+		except Exception as e:
+			logger.error(f"[TelegramSession] Failed to activate session {session_id} for {channel_user_id}: {e}")
+			return False
+
 	def list_sessions(self, channel_user_id: str) -> List[dict]:
 		"""List all active (not pending purge) sessions for a user, sorted by lastUpdatedAt desc."""
 		sessions = []
@@ -159,7 +201,7 @@ class TelegramSessionManager:
 		sessions.sort(key=lambda s: s.get("summary", {}).get("lastUpdatedAt", ""), reverse=True)
 		return sessions
 
-	def append_message(self, session_id: str, role: str, text: str) -> Optional[dict]:
+	def append_message(self, session_id: str, role: str, text: str, mirror: bool = True) -> Optional[dict]:
 		session = self.get_session(session_id)
 		if not session:
 			return None
@@ -183,12 +225,13 @@ class TelegramSessionManager:
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 		self._ensure_soul(session)
 		self.save_session(session_id, session)
-		self._mirror_turn(
-			session,
-			"user" if intent == "USER" else "assistant",
-			text,
-			len(session["steps"]),
-		)
+		if mirror:
+			self._mirror_turn(
+				session,
+				"user" if intent == "USER" else "assistant",
+				text,
+				len(session["steps"]),
+			)
 		return session
 
 	def get_history_prompt(self, session: dict) -> str:

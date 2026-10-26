@@ -1,8 +1,32 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from red_pill.metabolism.auditor import SentinelAuditor
+from red_pill.metabolism.auditor import AuditFinding, SentinelAuditor
+
+
+class _FakeHealPlugin:
+	name = "fake"
+
+	def __init__(self):
+		self.calls = 0
+
+	def heal(self, cfg, finding):
+		self.calls += 1
+		return True
+
+
+def test_heal_finding_respects_auto_heal_flag(auditor):
+	"""AUTO_HEAL_ENABLED=false must keep every plugin report-only."""
+	plugin = _FakeHealPlugin()
+	finding = AuditFinding(type="service_down", severity=7.0, message="down")
+
+	assert auditor._heal_finding(plugin, SimpleNamespace(AUTO_HEAL_ENABLED=False), finding) is False
+	assert plugin.calls == 0
+
+	assert auditor._heal_finding(plugin, SimpleNamespace(AUTO_HEAL_ENABLED=True), finding) is True
+	assert plugin.calls == 1
 
 
 @pytest.fixture

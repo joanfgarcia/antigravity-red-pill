@@ -469,6 +469,25 @@ class SentinelAuditor:
 
 		return report
 
+	def _heal_finding(self, plugin: Any, config: Any, finding: AuditFinding) -> bool:
+		"""Apply a plugin heal only when the operator enabled auto-heal.
+
+		The Sentinel is the global dispatch point: gating here keeps every
+		service/sqlite/duplicate plugin report-only when AUTO_HEAL_ENABLED=false,
+		without having to duplicate the check in each plugin.
+		"""
+		if not bool(getattr(config, "AUTO_HEAL_ENABLED", False)):
+			self.logger.info(
+				"Sentinel Auditor: report-only (AUTO_HEAL_ENABLED=false); no se ejecuta heal de '%s'.",
+				finding.type,
+			)
+			return False
+		try:
+			return plugin.heal(config, finding)
+		except Exception as heal_err:
+			self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
+			return False
+
 	def audit_vitals(self) -> AuditReport:
 		"""Run dynamic runtime checks on System Vitals (Memory, VRAM, Net)."""
 		report = AuditReport(status="green")
@@ -498,18 +517,15 @@ class SentinelAuditor:
 								if plugin_findings:
 									for finding in plugin_findings:
 										self.logger.warning(f"Sentinel Auditor: Detected issue '{finding.type}': {finding.message}")
-										healed = False
-										try:
-											healed = plugin.heal(config, finding)
-										except Exception as heal_err:
-											self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
+										healed = self._heal_finding(plugin, config, finding)
 
 										if healed:
 											self.logger.info(
 												f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}"
 											)
 										else:
-											self.logger.warning(f"Sentinel Auditor: Auto-heal failed/not supported for '{finding.type}'")
+											if bool(getattr(config, "AUTO_HEAL_ENABLED", False)):
+												self.logger.warning(f"Sentinel Auditor: Auto-heal failed/not supported for '{finding.type}'")
 											report.findings.append(finding)
 						except Exception as e:
 							self.logger.error(f"Plugin {plugin.name} failed during audit: {e}")

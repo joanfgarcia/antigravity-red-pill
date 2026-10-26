@@ -63,6 +63,16 @@ def test_telegram_mapping_off_is_unchanged(tmp_path):
 	mirror = SessionMirror(str(tmp_path / "session.db"))
 	assert mirror.read_turns(tsm._soul_continuity("user-42")) == []
 
+
+def test_append_message_can_skip_mirror(tmp_path):
+	tsm = _manager(tmp_path, mapping=True)
+	session = tsm.create_session("user-42")
+	tsm.append_message(session["id"], "user", "[Resumen] no duplicar", mirror=False)
+	assert [s["message"]["text"] for s in tsm.get_session(session["id"])["steps"]] == ["[Resumen] no duplicar"]
+	mirror = SessionMirror(str(tmp_path / "session.db"))
+	assert mirror.read_turns(session["continuity_id"]) == []
+
+
 def test_telegram_trigger_uses_compactor_estimate(tmp_path, monkeypatch):
 	from types import SimpleNamespace
 

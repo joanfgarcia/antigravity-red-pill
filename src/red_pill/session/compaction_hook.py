@@ -1,9 +1,7 @@
 """Hook post-turno y safety net del compactor (B-02).
 
-- `maybe_start_after_turn`: se llama tras importar un turno externo al espejo;
-  chequeo barato + `maybe_start` durable, con `COMPACTOR_SCOPE`.
-- `sweep_active_compactions`: red de seguridad de baja frecuencia; solo
-  continuidades **activas** (leg activo y latido reciente), nunca históricas.
+- `maybe_start_after_turn`: se llama tras importar un turno externo al espejo; chequeo barato + `maybe_start` durable, con `COMPACTOR_SCOPE`.
+- `sweep_active_compactions`: red de seguridad de baja frecuencia; solo continuidades **activas** (leg activo y latido reciente), nunca históricas.
 """
 
 from __future__ import annotations
