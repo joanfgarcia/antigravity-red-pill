@@ -212,54 +212,48 @@ class TelegramSessionManager:
 		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge")
 		return True
 
-	def _maybe_start_mirror_compaction(self, session: dict) -> None:
-		"""Chequeo event-driven del espejo (tras un turno, no un poll).
-
-		Con el mapeo y el compactor habilitados, estima el contexto en SQL
-		(`estimate_context_tokens`) y encola el job durable si cruza el umbral
-		del carril Telegram. No bloquea el turno ni lee/replaya el historial.
-		"""
-		if not self._mapping_enabled():
-			return
+	def _compactor_enabled(self) -> bool:
 		try:
 			import red_pill.config as cfg
 
-			conf = cfg.get_config()
-			if not bool(getattr(conf, "SESSION_COMPACTOR_ENABLED", False)):
-				return
+			return bool(getattr(cfg.get_config(), "SESSION_COMPACTOR_ENABLED", False))
+		except Exception:
+			return False
+
+	def reset_continuity(self, session: dict, summary: str) -> Optional[dict]:
+		"""Registra el resumen como `reset(handoff)` de la continuidad.
+
+		El resumen ya lo produjo Samantha; aquí no se llama a ningún LLM: solo se
+		crea la compactación total (`range 0..last`) y el contexto de continuidad
+		pasa a ser la nota. El callback rota la sesión Telegram con ese resumen.
+		"""
+		if not self._mapping_enabled() or not self._compactor_enabled():
+			return None
+		continuity = str(session.get("continuity_id") or "").strip()
+		text = str(summary or "").strip()
+		if not continuity or not text:
+			return None
+		try:
 			from red_pill.session.compactor import Compactor
 			from red_pill.session.mirror import SessionMirror
 
-			context_chars = max(400, int(getattr(conf, "TELEGRAM_COMPACTOR_CONTEXT_CHARS", 4000)))
-			background_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_BACKGROUND_CHARS", 800)))
-			reserve_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_RESERVE_CHARS", 400)))
-			protect = max(0, int(getattr(conf, "TELEGRAM_COMPACTOR_PROTECT_LAST_N", 8)))
-			compactor = Compactor(
-				SessionMirror(self.db_path),
-				background_tokens=max(1, int(background_chars / 3.2)),
-				reserve_tokens=max(1, int(reserve_chars / 3.2)),
-				protect_last_n=protect,
-			)
-			estimate = compactor.estimate_context_tokens(session["continuity_id"])
-			budget = max(1, int(context_chars / 3.2))
-			compactor.maybe_start(
-				session["continuity_id"],
+			compactor = Compactor(SessionMirror(self.db_path))
+			return compactor.reset(
+				continuity,
+				summary=text,
 				mission_id=str(session.get("mission_id") or "mission:telegram"),
-				protect_last_n=protect,
-				estimated_tokens=estimate,
-				budget_tokens=budget,
-				reserve_tokens=compactor.reserve_tokens,
-				originator=f"telegram:{session['id']}",
 			)
 		except Exception as e:
-			logger.warning(f"[TelegramSession] mirror compaction check failed: {e}")
+			logger.warning(f"[TelegramSession] reset_continuity failed: {e}")
+			return None
 
 	def trigger_compaction(self, session_id: str, bridge=None) -> Optional[str]:
-		"""Compacts history if too long (steps > 16) or too heavy (chars > 4000).
+		"""Compacts history if the Telegram budget crosses the background threshold.
 
-		Enqueues summarization to the Samantha Queue (local LLM, zero Flash cost).
-		The actual summarization + session rotation happens asynchronously via
-		the queue's post-processing callback.
+		Con mapeo + compactor habilitados, la decisión usa la estimación barata del
+		espejo (budget Telegram); el resumen y la rotación siguen en la cola
+		Samantha, y el callback registra `reset(handoff)` en `session_compactions`.
+		Sin ellos, mantiene el umbral legacy (16 pasos / 4000 chars).
 
 		The `bridge` parameter is ignored (kept for backward compatibility).
 		"""
@@ -269,12 +263,37 @@ class TelegramSessionManager:
 		session = self.get_session(session_id)
 		if not session:
 			return None
-		self._maybe_start_mirror_compaction(session)
+		if self._ensure_soul(session):
+			self.save_session(session_id, session)
 
 		steps = session.get("steps", [])
 		total_chars = sum(len(s.get("message", {}).get("text", "")) for s in steps)
+		compactor_mode = self._mapping_enabled() and self._compactor_enabled()
+		if compactor_mode:
+			try:
+				import red_pill.config as cfg
 
-		if len(steps) < MAX_STEPS and total_chars < MAX_CHARS:
+				conf = cfg.get_config()
+				from red_pill.session.compactor import Compactor
+				from red_pill.session.mirror import SessionMirror
+
+				background_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_BACKGROUND_CHARS", 800)))
+				reserve_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_RESERVE_CHARS", 400)))
+				protect = max(0, int(getattr(conf, "TELEGRAM_COMPACTOR_PROTECT_LAST_N", 8)))
+				compactor = Compactor(
+					SessionMirror(self.db_path),
+					background_tokens=max(1, int(background_chars / 3.2)),
+					reserve_tokens=max(1, int(reserve_chars / 3.2)),
+					protect_last_n=protect,
+				)
+				estimate = compactor.estimate_context_tokens(session["continuity_id"])
+				if estimate < max(1, int(background_chars / 3.2)):
+					return None
+			except Exception as e:
+				logger.warning(f"[TelegramSession] compactor threshold failed; fallback legacy: {e}")
+				compactor_mode = False
+
+		if not compactor_mode and len(steps) < MAX_STEPS and total_chars < MAX_CHARS:
 			return None
 
 		# Dedup: una compactación ya encolada/en vuelo para esta sesión rotará la

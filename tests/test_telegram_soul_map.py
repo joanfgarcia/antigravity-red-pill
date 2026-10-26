@@ -63,10 +63,8 @@ def test_telegram_mapping_off_is_unchanged(tmp_path):
 	mirror = SessionMirror(str(tmp_path / "session.db"))
 	assert mirror.read_turns(tsm._soul_continuity("user-42")) == []
 
-
-def test_telegram_trigger_starts_mirror_compaction(tmp_path, monkeypatch):
+def test_telegram_trigger_uses_compactor_estimate(tmp_path, monkeypatch):
 	from types import SimpleNamespace
-
 
 	tsm = _manager(tmp_path, mapping=True)
 	session = tsm.create_session("user-42")
@@ -76,29 +74,39 @@ def test_telegram_trigger_starts_mirror_compaction(tmp_path, monkeypatch):
 		instances = []
 
 		def __init__(self, mirror, **kwargs):
-			self.reserve_tokens = kwargs.get("reserve_tokens", 1)
-			self.calls = []
+			self.kwargs = kwargs
 			FakeCompactor.instances.append(self)
 
 		def estimate_context_tokens(self, continuity_id):
 			return 999
 
-		def maybe_start(self, continuity_id, **kwargs):
-			self.calls.append((continuity_id, kwargs))
-			return "job-1"
-
+	calls = []
 	monkeypatch.setattr("red_pill.config.get_config", lambda: SimpleNamespace(
 		SESSION_COMPACTOR_ENABLED=True,
-		TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
 		TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
 		TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
 		TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
 	))
 	monkeypatch.setattr("red_pill.session.compactor.Compactor", FakeCompactor)
+	monkeypatch.setattr("red_pill.inference.samantha_worker.enqueue", lambda **kw: calls.append(kw))
 	assert tsm.trigger_compaction(session["id"]) is None
 	assert FakeCompactor.instances
-	_, kwargs = FakeCompactor.instances[0].calls[0]
-	assert kwargs["estimated_tokens"] == 999
-	assert kwargs["mission_id"] == "mission:telegram"
-	assert kwargs["protect_last_n"] == 8
-	assert kwargs["originator"] == f"telegram:{session['id']}"
+	assert calls and calls[0]["action"] == "compact_session"
+	assert calls[0]["payload"]["session_id"] == session["id"]
+
+
+def test_telegram_reset_continuity_records_compaction(tmp_path, monkeypatch):
+	from types import SimpleNamespace
+
+	tsm = _manager(tmp_path, mapping=True)
+	session = tsm.create_session("user-42")
+	tsm.append_message(session["id"], "user", "hola")
+	monkeypatch.setattr("red_pill.config.get_config", lambda: SimpleNamespace(SESSION_COMPACTOR_ENABLED=True))
+	done = tsm.reset_continuity(session, "## Handoff\nseguimos")
+	assert done is not None
+	mirror = SessionMirror(str(tmp_path / "session.db"))
+	latest = mirror.latest_compaction(session["continuity_id"])
+	assert latest["summary"] == "## Handoff\nseguimos"
+	turns = mirror.context_turns(session["continuity_id"])
+	assert turns and turns[0]["content"] == "## Handoff\nseguimos"
+	assert len(mirror.compactions(session["continuity_id"])) == 1

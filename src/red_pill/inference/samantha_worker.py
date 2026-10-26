@@ -386,10 +386,13 @@ class SamanthaWorker(threading.Thread):
 					from red_pill.telegram.session import TelegramSessionManager
 
 					tsm = TelegramSessionManager()
+					old_session = tsm.get_session(session_id)
 					new_session = tsm.create_session(
 						channel_user_id=channel_user_id,
 						title=f"Compacted conversation (from {session_id[:8]})",
 					)
+					if old_session:
+						tsm.reset_continuity(old_session, summary)
 					new_id = new_session["id"]
 					tsm.append_message(new_id, "user", f"[Resumen de la sesión anterior]: {summary}")
 					tsm.append_message(
@@ -397,7 +400,6 @@ class SamanthaWorker(threading.Thread):
 					)
 
 					# Mark old session for purge
-					old_session = tsm.get_session(session_id)
 					if old_session:
 						old_session["status"] = "pending_purge"
 						tsm.save_session(session_id, old_session)
