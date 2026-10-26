@@ -310,7 +310,11 @@ p._purge_leaked_duplicates()
 
 	# Refresh IDE injection via the plugin dispatcher (auto-detects all present IDEs)
 	echo -e "${BLUE}Refrescando configuración de IDEs detectados...${NC}"
-	uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT" || true
+	if ! uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT"; then
+		echo -e "${RED}✗ Inyección IDE fallida. Red Pill requiere OpenCode v2.${NC}" >&2
+		echo -e "${YELLOW}  Actualiza: curl -fsSL https://opencode.ai/v2/install | bash${NC}" >&2
+		exit 1
+	fi
 
 	# MCP compartido (AD-018): un backend UDS para todos los clientes; los IDEs
 	# usan el proxy ligero. Si falla, el reseed directo sigue disponible con

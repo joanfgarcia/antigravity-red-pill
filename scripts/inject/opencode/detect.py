@@ -21,3 +21,16 @@ def info(workspace: str | None = None):
 	"""Return the structured OpenCode detection (installed, version, major, source)."""
 	config_path = os.path.expanduser("~/.config/opencode/opencode.jsonc")
 	return detect_info(config_path=config_path)
+
+
+def precheck(workspace: str | None = None) -> tuple[bool, str]:
+	"""Hard gate: Red Pill now requires OpenCode v2."""
+	inf = info(workspace)
+	if not inf.installed:
+		return True, ""
+	if (inf.major or 0) < 2:
+		return False, (
+			f"OpenCode {inf} detectado. Red Pill ya NO es compatible con OpenCode v1. "
+			"Actualiza a v2: curl -fsSL https://opencode.ai/v2/install | bash"
+		)
+	return True, ""

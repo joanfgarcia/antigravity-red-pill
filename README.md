@@ -185,6 +185,16 @@ The Red Pill Protocol is designed to be **Water**. It scales based on your silic
 
 *Consult the [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 
+> [!IMPORTANT]
+> ### 🧩 OpenCode: v2 required / OpenCode: v2 obligatorio
+> Red Pill **no longer supports OpenCode v1** for installation or updates. The IDE injector detects the installed version and **aborts** on v1 with a clear message.
+> / *Red Pill ya **no soporta OpenCode v1** en instalación ni actualización. El inyector detecta la versión y **aborta** en v1 con un mensaje claro.*
+>
+> ```bash
+> curl -fsSL https://opencode.ai/v2/install | bash
+> ```
+> Remove the V1 desktop package before installing the V2 desktop. / *Desinstala el paquete desktop V1 antes de instalar el desktop V2.*
+
 ### 🏅 Sovereignty Evidence (v6.1.0a1)
 The Red Pill Protocol is verified to utilize all available silicon tiers simultaneously (**Cannibal Protocol**). In this session, we have successfully orchestrated NVIDIA RTX 5070 (CUDA) + AMD Radeon 880M (ROCm) + Ryzen AI NPU (OpenVINO) in parallel execution for memory embeddings. Use `red-pill status` for real-time occupancy data.
 

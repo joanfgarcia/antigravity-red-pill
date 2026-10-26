@@ -752,7 +752,11 @@ done
 # IDE injection (plugin architecture: auto-detects all present IDEs)
 if [ -f "$SCRIPT_DIR/inject_cli.py" ] && command -v uv &> /dev/null; then
 	echo -e "${BLUE}--- Fase: Inyección IDE ---${NC}"
-	(cd "$REPO_ROOT" && uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT" || true)
+	if ! (cd "$REPO_ROOT" && uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT"); then
+		echo -e "${RED}✗ Inyección IDE fallida. Red Pill requiere OpenCode v2.${NC}" >&2
+		echo -e "${YELLOW}  Actualiza: curl -fsSL https://opencode.ai/v2/install | bash${NC}" >&2
+		exit 1
+	fi
 	echo -e "${GREEN}✓ Inyección completada para todos los IDEs detectados.${NC}"
 	# Consent gate: in interactive installs, let the operator grant access to project workspaces.
 	if [ "$AUTO_MODE" = "false" ] && [ -f "$SCRIPT_DIR/manage_workspaces.py" ]; then

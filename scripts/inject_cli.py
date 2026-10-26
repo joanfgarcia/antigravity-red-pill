@@ -23,7 +23,7 @@ logger = logging.getLogger("inject_cli")
 
 # Ensure the inject package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inject._registry import detect_present, discover_adapters, inject_all  # noqa: E402
+from inject._registry import detect_present, discover_adapters, inject_all, precheck_all  # noqa: E402
 
 
 def main():
@@ -60,6 +60,16 @@ def main():
 	if not adapters:
 		logger.info("No present IDEs detected. Nothing to inject.")
 		return
+
+	# Hard gate: an adapter may require a minimum runtime (OpenCode v2). Run
+	# before any write so an install/update on a legacy IDE fails loudly.
+	if not args.remove:
+		failures = precheck_all(adapters, args.workspace)
+		if failures:
+			for name, message in failures:
+				logger.error(f"{name}: {message}")
+			logger.error("Aborting: this Red Pill release requires the supported runtime (OpenCode v2).")
+			sys.exit(3)
 
 	logger.info(f"Targeting: {', '.join(a.name for a in adapters)}")
 	total = inject_all(args, adapters)

@@ -100,8 +100,8 @@ def test_inject_idempotente(adapter, tmp_path) -> None:
 	assert open(redpill, encoding="utf-8").read() == original
 
 
-def test_package_json_pin_fresco(adapter, tmp_path) -> None:
-	"""Instalación limpia: package.json con el pin compartido PLUGIN_PIN."""
+def test_package_json_v2_type_module(adapter, tmp_path) -> None:
+	"""Instalación limpia en V2: package.json ESM, sin pin V1."""
 	import argparse
 	import json
 	import os
@@ -114,11 +114,12 @@ def test_package_json_pin_fresco(adapter, tmp_path) -> None:
 	pkg_path = os.path.join(tmp, "package.json")
 	assert os.path.exists(pkg_path), "package.json no creado"
 	pkg = json.load(open(pkg_path, encoding="utf-8"))
-	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+	assert pkg.get("type") == "module"
+	assert "@opencode-ai/plugin" not in pkg.get("dependencies", {})
 
 
-def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
-	"""Instalación existente: sube el pin viejo sin tocar deps ajenas (merge + .bak)."""
+def test_package_json_v2_limpia_pin_y_preserva_deps(adapter, tmp_path) -> None:
+	"""Instalación existente V1: quita el pin V1, preserva deps ajenas y marca ESM."""
 	import argparse
 	import json
 	import os
@@ -133,8 +134,9 @@ def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
 	adapter.inject(args)
 
 	pkg = json.load(open(pkg_path, encoding="utf-8"))
-	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+	assert "@opencode-ai/plugin" not in pkg.get("dependencies", {})
 	assert pkg["dependencies"]["better-sqlite3"] == "^12.11.1", "dep ajena perdida"
+	assert pkg.get("type") == "module"
 	assert os.path.exists(pkg_path + ".bak"), "backup no creado"
 
 	before = open(pkg_path, encoding="utf-8").read()

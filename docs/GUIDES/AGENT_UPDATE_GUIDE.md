@@ -10,6 +10,16 @@
 > 
 > **MANDATORY ACTION**: 
 > Your system will automatically attempt to heal the vault by regenerating the group state. However, your OLD encrypted backups (`.mls`) from previous versions are now unreadable. Ensure you have a RAW (unencrypted) backup before proceeding if you need to preserve data from much older versions.
+>
+> ### 🧩 OpenCode v2 required (install/update gate)
+> The IDE injector (`scripts/inject_cli.py`) **detects the installed OpenCode version and aborts** (exit code 3) on OpenCode v1. V1 is no longer supported for OpenCode: upgrade before installing or updating.
+>
+> ```bash
+> curl -fsSL https://opencode.ai/v2/install | bash   # CLI
+> # desktop: remove the V1 .deb, then install the V2 .deb
+> ```
+>
+> `red-pill bunker update`, `scripts/install_neo.sh` and `scripts/upgrade.sh` propagate this failure instead of continuing with a half-seeded V1 setup.
 
 
 

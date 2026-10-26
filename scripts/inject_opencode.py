@@ -490,6 +490,12 @@ def main():
 	# ── Version detection (V1 vs V2 seed) ──────────────────────────────────
 	config_path = os.path.join(config_dir, "opencode.jsonc")
 	info = detect_info(config_path=config_path)
+	if info.installed and (info.major or 0) < 2:
+		logger.error(
+			f"OpenCode {info} detectado. Red Pill ya NO soporta OpenCode v1. "
+			"Actualiza a v2: curl -fsSL https://opencode.ai/v2/install | bash"
+		)
+		sys.exit(3)
 	major = info.major
 	logger.info(f"OpenCode detectado: {info} → seed {info.tier}")
 

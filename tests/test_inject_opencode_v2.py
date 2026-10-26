@@ -84,16 +84,26 @@ def test_v2_seed_migrates_v1_config(inject_mod, monkeypatch, tmp_path) -> None:
 	assert "permissions:" in agent.read_text() and "effect: deny" in agent.read_text()
 
 
-def test_v1_seed_preserved(inject_mod, monkeypatch, tmp_path) -> None:
-	out = _run(inject_mod, monkeypatch, tmp_path, 1, {"model": "x/y"})
+def test_v1_is_rejected(inject_mod, monkeypatch, tmp_path) -> None:
+	with pytest.raises(RuntimeError, match="soporta OpenCode v1"):
+		_run(inject_mod, monkeypatch, tmp_path, 1, {"model": "x/y"})
 
-	assert "plugin" in out
-	assert "RedPill-Kernel" in out["mcp"] and "servers" not in out["mcp"]
-	assert "permission" in out
-	assert isinstance(out.get("skills"), dict) and "paths" in out["skills"]
 
-	pkg = json.loads((tmp_path / "oc" / "package.json").read_text())
-	assert "@opencode-ai/plugin" in pkg["dependencies"]
+def test_precheck_requires_v2(monkeypatch) -> None:
+	detect = _load("opencode_detect_under_test", os.path.join(REPO_ROOT, "scripts", "inject", "opencode", "detect.py"))
+
+	class _Info:
+		installed = True
+		major = 1
+		version_str = "1.19.4"
+		source = "env"
+
+		def __str__(self):
+			return "v1 (1.19.4, via env)"
+
+	monkeypatch.setattr(detect, "info", lambda workspace=None: _Info())
+	ok, message = detect.precheck()
+	assert ok is False and "Actualiza a v2" in message
 
 
 def test_seed_agents_are_v2_native() -> None:

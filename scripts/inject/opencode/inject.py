@@ -310,6 +310,11 @@ def inject(args: argparse.Namespace) -> int:
 	# 0. Detect the installed OpenCode version and pick the matching seed.
 	config_path = os.path.join(config_dir, "opencode.jsonc")
 	info = detect_info(config_path=config_path)
+	if info.installed and (info.major or 0) < 2:
+		raise RuntimeError(
+			f"OpenCode {info} detectado. Red Pill ya NO soporta OpenCode v1. "
+			"Actualiza a v2: curl -fsSL https://opencode.ai/v2/install | bash"
+		)
 	major = info.major
 	logger.info(f"  OpenCode detectado: {info} → seed {info.tier}")
 
