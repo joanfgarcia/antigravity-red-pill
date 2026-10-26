@@ -29,6 +29,43 @@ def test_heal_finding_respects_auto_heal_flag(auditor):
 	assert plugin.calls == 1
 
 
+def test_audit_vitals_dispatch_is_report_only(monkeypatch, auditor):
+	"""The audit loop itself must not call heal when the flag is off."""
+	import types
+
+	from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
+
+	class FakePlugin(SentinelPlugin):
+		healed = 0
+
+		@property
+		def name(self):
+			return "fake"
+
+		def is_enabled(self, cfg):
+			return True
+
+		def audit(self, cfg):
+			return [AuditFinding(type="fake", severity=1.0, message="find me")]
+
+		def heal(self, cfg, finding):
+			type(self).healed += 1
+			return True
+
+	module = types.ModuleType("red_pill.metabolism.sentinel_plugins.fake")
+	module.FakePlugin = FakePlugin
+	monkeypatch.setattr("red_pill.config.get_config", lambda: SimpleNamespace(AUTO_HEAL_ENABLED=False))
+	monkeypatch.setattr("pkgutil.iter_modules", lambda path: [("fake", None, None)])
+	monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=""))
+	monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: MagicMock())
+	monkeypatch.setattr("pathlib.Path.exists", lambda self: False)
+	monkeypatch.setattr("importlib.import_module", lambda name: module)
+
+	report = auditor.audit_vitals()
+	assert FakePlugin.healed == 0
+	assert any(f.type == "fake" for f in report.findings)
+
+
 @pytest.fixture
 def auditor():
 	return SentinelAuditor(force=True)

@@ -144,6 +144,7 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 		type="oneshot",
 		nice=10,
 		memory_max="10G",
+		timeout_start_sec=120,
 	)
 	_write_systemd_timer(COMPACT_SWEEP_TIMER, "15m", "Timer for Red Pill compact sweep (B-02)")
 
@@ -168,11 +169,21 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 		print("[WARN] systemd is not available or user D-Bus is unreachable. Timers written to disk but not activated.")
 
 
-def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None, memory_max: str | None = None):
+def _write_systemd_unit(
+	name,
+	command,
+	desc,
+	type="oneshot",
+	nice: int | None = None,
+	memory_max: str | None = None,
+	timeout_start_sec: int | None = None,
+):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
 	nice_line = f"\nNice={nice}" if nice is not None else ""
 	if memory_max:
 		nice_line += f"\nMemoryMax={memory_max}"
+	if timeout_start_sec is not None:
+		nice_line += f"\nTimeoutStartSec={int(timeout_start_sec)}"
 	# Minimal, stable PATH — do NOT freeze the installer session's PATH, which can carry
 	# ephemeral per-session dirs (e.g. Claude local-agent-mode plugin bins) ahead of the venv.
 	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.dirname(get_uv_bin())}:/usr/local/bin:/usr/bin:/bin"
