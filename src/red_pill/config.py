@@ -526,6 +526,11 @@ class RedPillConfig(BaseSettings):
 	SESSION_COMPACTOR_RESERVE_TOKENS: int = 2000
 	SESSION_COMPACTOR_MAX_INPUT_CHARS: int = 120000
 	SESSION_COMPACTOR_JOB_PRIORITY: int = 4
+	# Alcance del compactor en background: `autonomous` (default) solo compacta
+	# continuidades de misión/job, Telegram, awakenings y locales; las sesiones
+	# interactivas opencode quedan fuera salvo `all` (opt-in explícito) u `off`.
+	COMPACTOR_SCOPE: str = "autonomous"
+	COMPACTOR_SCOPE_PREFIXES: str = "job:,telegram:,local:,mini:,forge:,loom:,d23-review:,awakening:"
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912

@@ -635,6 +635,7 @@ async def run_local_minion(
 									extra_tokens=extra_tokens,
 									budget_tokens=budget,
 									reserve_tokens=compactor.reserve_tokens,
+									originator=origin or "local:minion",
 								),
 							)
 						except Exception as exc:

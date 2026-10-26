@@ -251,6 +251,7 @@ class MiniSession:
 						extra_tokens=extra_tokens,
 						budget_tokens=budget,
 						reserve_tokens=self.compactor.reserve_tokens,
+						originator=self.current_originator or "",
 					)
 				except Exception as exc:
 					logger.warning("[MiniSession] background compaction enqueue failed: %s", exc)

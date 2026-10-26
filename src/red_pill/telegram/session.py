@@ -249,6 +249,7 @@ class TelegramSessionManager:
 				estimated_tokens=estimate,
 				budget_tokens=budget,
 				reserve_tokens=compactor.reserve_tokens,
+				originator=f"telegram:{session['id']}",
 			)
 		except Exception as e:
 			logger.warning(f"[TelegramSession] mirror compaction check failed: {e}")

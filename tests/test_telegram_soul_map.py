@@ -101,3 +101,4 @@ def test_telegram_trigger_starts_mirror_compaction(tmp_path, monkeypatch):
 	assert kwargs["estimated_tokens"] == 999
 	assert kwargs["mission_id"] == "mission:telegram"
 	assert kwargs["protect_last_n"] == 8
+	assert kwargs["originator"] == f"telegram:{session['id']}"

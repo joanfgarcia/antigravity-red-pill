@@ -394,6 +394,8 @@ class Compactor:
 		budget_tokens: Optional[int] = None,
 		reserve_tokens: Optional[int] = None,
 		estimated_tokens: Optional[int] = None,
+		originator: Optional[str] = None,
+		origin: Optional[str] = None,
 	) -> Optional[str]:
 		"""Encola un `script_job` durable que ejecuta `session compact`.
 
@@ -402,11 +404,18 @@ class Compactor:
 		hay un job PENDING/PROCESSING, devuelve su id.
 
 		`estimated_tokens` evita releer/estimar el historial completo cuando el
-		caller ya tiene una métrica barata (`estimate_context_tokens`).
+		caller ya tiene una métrica barata (`estimate_context_tokens`). El
+		alcance (`COMPACTOR_SCOPE`) se aplica aquí: las sesiones interactivas de
+		opencode quedan fuera en `autonomous`; solo entran con `all`.
 		"""
 		continuity = str(continuity_id or "").strip()
 		if not continuity:
 			raise ValueError("continuity_id requerido")
+		from red_pill.session.scope import compactor_scope_allows
+
+		effective_originator = originator if originator is not None else self.mirror.last_originator(continuity)
+		if not compactor_scope_allows(effective_originator, origin):
+			return None
 		if estimated_tokens is None:
 			messages = self.mirror.context_messages(continuity)
 			if not self.should_start_background(

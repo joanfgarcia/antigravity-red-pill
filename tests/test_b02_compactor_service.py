@@ -475,9 +475,9 @@ def test_maybe_start_enqueues_one_durable_script_job(mirror):
 	qm = CognitiveQueueManager(str(mirror.db_path + ".queue"))
 	_seed(mirror, 8)
 	compactor = Compactor(mirror, summarizer=FakeSummarizer(), background_tokens=1, queue_manager=qm)
-	job_id = compactor.maybe_start("alma-1", mission_id="repo:next")
+	job_id = compactor.maybe_start("alma-1", mission_id="repo:next", originator="job:test")
 	assert job_id
-	again = compactor.maybe_start("alma-1", mission_id="repo:next")
+	again = compactor.maybe_start("alma-1", mission_id="repo:next", originator="job:test")
 	assert again == job_id
 	task = qm.get_task(job_id)
 	assert task is not None
@@ -555,5 +555,5 @@ def test_maybe_start_estimate_skips_context_read(mirror, monkeypatch):
 		raise AssertionError("context_messages no debe leerse con estimated_tokens")
 
 	monkeypatch.setattr(mirror, "context_messages", _boom)
-	job = compactor.maybe_start("alma-1", mission_id="repo:next", estimated_tokens=999)
+	job = compactor.maybe_start("alma-1", mission_id="repo:next", estimated_tokens=999, originator="job:test")
 	assert job

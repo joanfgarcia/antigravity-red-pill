@@ -519,6 +519,16 @@ class SessionMirror:
 			).fetchone()
 		return int(row["m"]) if row else 0
 
+	def last_originator(self, continuity_id: str) -> str:
+		"""Cuerpo del último turno completado (para el alcance del compactor)."""
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(
+				"SELECT originator FROM session_mirror WHERE continuity_id = ? AND status = 'completed' "
+				"ORDER BY seq DESC LIMIT 1",
+				(str(continuity_id or "").strip(),),
+			).fetchone()
+		return str(row["originator"] or "") if row else ""
+
 	# ── Compactación de contexto (B-02, schema v6) ─────────────────────────
 	def start_compaction(
 		self,
