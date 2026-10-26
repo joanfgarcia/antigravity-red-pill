@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from red_pill.session.compactor import CompactionError, Compactor, estimate_messages_tokens
+from red_pill.session.compactor import (
+	CompactionError,
+	Compactor,
+	estimate_messages_tokens,
+	is_context_length_error,
+)
 from red_pill.session.mirror import SessionMirror
 from red_pill.session.summarizer import ExtractiveSummarizer
 
@@ -483,3 +488,47 @@ def test_maybe_start_enqueues_one_durable_script_job(mirror):
 	assert "--continuity" in cmd and "alma-1" in cmd
 	assert "--mission" in cmd and "repo:next" in cmd
 	assert "--db-path" in cmd and payload["control"] == {"max_step_minutes": 15}
+
+
+def test_is_context_length_error_matches_provider_rejections():
+	assert is_context_length_error(RuntimeError("This model's maximum context length is 4096 tokens"))
+	assert is_context_length_error(RuntimeError("context_length_exceeded"))
+	assert is_context_length_error(RuntimeError("prompt is too long: reduce the length"))
+	assert not is_context_length_error(RuntimeError("rate limit exceeded"))
+
+
+def test_mini_session_retries_after_context_length_rejection(tmp_path):
+	from red_pill.mini.session import MiniConfig, MiniSession
+
+	class Provider:
+		def __init__(self):
+			self.calls = []
+
+		def chat(self, messages, **kwargs):
+			self.calls.append([dict(m) for m in messages])
+			if len(self.calls) == 1:
+				raise RuntimeError("This model's maximum context length is 4096 tokens")
+			return {"role": "assistant", "content": "ok"}
+
+	mirror = SessionMirror(str(tmp_path / "session.db"))
+	_seed(mirror, 8)
+	provider = Provider()
+	compactor = Compactor(mirror, summarizer=FakeSummarizer(), protect_last_n=1)
+	cfg = MiniConfig(
+		workspace=str(tmp_path),
+		continuity_id="alma-1",
+		mission_id="repo:next",
+		db_path=str(tmp_path / "session.db"),
+		context_tokens=8000,
+	)
+	session = MiniSession(cfg, {"forge": provider}, compactor=compactor)
+	out = session.run("forge", system_prompt="You are Forge.", task="continúa", tools=None)
+
+	assert out["text"] == "ok"
+	assert len(provider.calls) == 2
+	first = provider.calls[0]
+	second = provider.calls[1]
+	assert any(str(m.get("content")) == "turno 1" for m in first)
+	assert not any(str(m.get("content")) == "turno 1" for m in second)
+	assert any("resumen" in str(m.get("content")) for m in second)
+	assert mirror.latest_compaction("alma-1") is not None

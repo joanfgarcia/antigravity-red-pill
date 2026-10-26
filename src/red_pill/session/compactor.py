@@ -55,6 +55,36 @@ def estimate_messages_tokens(messages: List[dict]) -> int:
 	return total
 
 
+_LENGTH_ERROR_MARKERS = (
+	"maximum context length",
+	"context length",
+	"context_length_exceeded",
+	"context window",
+	"maximum number of tokens",
+	"too many tokens",
+	"prompt is too long",
+	"input is too long",
+	"reduce the length",
+	"request too large",
+	"exceeds the maximum",
+)
+
+
+def is_context_length_error(exc: BaseException) -> bool:
+	"""¿El provider rechazó la petición por longitud de contexto?
+
+	Los bridges no comparten una excepción tipada; se reconoce por mensaje y,
+	si existe, por status HTTP 400/413 con una pista de contexto/tokens.
+	"""
+	text = str(exc or "").lower()
+	if any(marker in text for marker in _LENGTH_ERROR_MARKERS):
+		return True
+	status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+	if status in (400, 413) and any(hint in text for hint in ("context", "token", "length", "prompt", "input")):
+		return True
+	return False
+
+
 def _config_int(name: str, default: int) -> int:
 	try:
 		import red_pill.config as cfg
