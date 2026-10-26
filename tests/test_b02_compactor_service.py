@@ -532,3 +532,28 @@ def test_mini_session_retries_after_context_length_rejection(tmp_path):
 	assert not any(str(m.get("content")) == "turno 1" for m in second)
 	assert any("resumen" in str(m.get("content")) for m in second)
 	assert mirror.latest_compaction("alma-1") is not None
+
+
+def test_context_estimate_is_cheap_and_shrinks_after_compaction(mirror):
+	_seed(mirror, 8)
+	compactor = Compactor(mirror, summarizer=FakeSummarizer(), protect_last_n=1)
+	before = compactor.estimate_context_tokens("alma-1")
+	assert before > 0
+	compactor.compact_now("alma-1")
+	after = compactor.estimate_context_tokens("alma-1")
+	assert after < before
+
+
+def test_maybe_start_estimate_skips_context_read(mirror, monkeypatch):
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	qm = CognitiveQueueManager(str(mirror.db_path + ".queue"))
+	_seed(mirror, 8)
+	compactor = Compactor(mirror, summarizer=FakeSummarizer(), background_tokens=1, queue_manager=qm)
+
+	def _boom(*args, **kwargs):
+		raise AssertionError("context_messages no debe leerse con estimated_tokens")
+
+	monkeypatch.setattr(mirror, "context_messages", _boom)
+	job = compactor.maybe_start("alma-1", mission_id="repo:next", estimated_tokens=999)
+	assert job

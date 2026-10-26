@@ -575,6 +575,12 @@ class RedPillConfig(BaseSettings):
 	# Mapeo Telegram→alma (B-02/B-03): leg estable + espejo. OFF por defecto
 	# hasta validar la paridad del compactor; no cambia el carril actual.
 	TELEGRAM_SOUL_MAPPING_ENABLED: bool = False
+	# Presupuesto del compactor para el carril Telegram (chars; el adaptador
+	# traduce a tokens con chars/3.2). 4000/800/400/8 = tabla B-02.
+	TELEGRAM_COMPACTOR_CONTEXT_CHARS: int = 4000
+	TELEGRAM_COMPACTOR_BACKGROUND_CHARS: int = 800
+	TELEGRAM_COMPACTOR_RESERVE_CHARS: int = 400
+	TELEGRAM_COMPACTOR_PROTECT_LAST_N: int = 8
 	# Heartbeat lease (s) for the D21 decoupled heartbeat thread. The thread beats
 	# every ~20s while the process lives, but only while the last activity *touch*
 	# is newer than this lease. A dead main loop stops touching → lease expires →

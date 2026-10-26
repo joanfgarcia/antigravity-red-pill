@@ -212,6 +212,47 @@ class TelegramSessionManager:
 		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge")
 		return True
 
+	def _maybe_start_mirror_compaction(self, session: dict) -> None:
+		"""Chequeo event-driven del espejo (tras un turno, no un poll).
+
+		Con el mapeo y el compactor habilitados, estima el contexto en SQL
+		(`estimate_context_tokens`) y encola el job durable si cruza el umbral
+		del carril Telegram. No bloquea el turno ni lee/replaya el historial.
+		"""
+		if not self._mapping_enabled():
+			return
+		try:
+			import red_pill.config as cfg
+
+			conf = cfg.get_config()
+			if not bool(getattr(conf, "SESSION_COMPACTOR_ENABLED", False)):
+				return
+			from red_pill.session.compactor import Compactor
+			from red_pill.session.mirror import SessionMirror
+
+			context_chars = max(400, int(getattr(conf, "TELEGRAM_COMPACTOR_CONTEXT_CHARS", 4000)))
+			background_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_BACKGROUND_CHARS", 800)))
+			reserve_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_RESERVE_CHARS", 400)))
+			protect = max(0, int(getattr(conf, "TELEGRAM_COMPACTOR_PROTECT_LAST_N", 8)))
+			compactor = Compactor(
+				SessionMirror(self.db_path),
+				background_tokens=max(1, int(background_chars / 3.2)),
+				reserve_tokens=max(1, int(reserve_chars / 3.2)),
+				protect_last_n=protect,
+			)
+			estimate = compactor.estimate_context_tokens(session["continuity_id"])
+			budget = max(1, int(context_chars / 3.2))
+			compactor.maybe_start(
+				session["continuity_id"],
+				mission_id=str(session.get("mission_id") or "mission:telegram"),
+				protect_last_n=protect,
+				estimated_tokens=estimate,
+				budget_tokens=budget,
+				reserve_tokens=compactor.reserve_tokens,
+			)
+		except Exception as e:
+			logger.warning(f"[TelegramSession] mirror compaction check failed: {e}")
+
 	def trigger_compaction(self, session_id: str, bridge=None) -> Optional[str]:
 		"""Compacts history if too long (steps > 16) or too heavy (chars > 4000).
 
@@ -227,6 +268,7 @@ class TelegramSessionManager:
 		session = self.get_session(session_id)
 		if not session:
 			return None
+		self._maybe_start_mirror_compaction(session)
 
 		steps = session.get("steps", [])
 		total_chars = sum(len(s.get("message", {}).get("text", "")) for s in steps)

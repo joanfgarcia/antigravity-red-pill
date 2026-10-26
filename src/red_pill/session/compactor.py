@@ -369,6 +369,21 @@ class Compactor:
 			threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
 		return estimate_messages_tokens(messages) + max(0, int(extra_tokens)) >= threshold
 
+	def estimate_context_tokens(self, continuity_id: str) -> int:
+		"""Estimación barata (chars/3.2) del contexto desde la última compactación.
+
+		No lee ni replaya los turnos completos: `context_chars_since` suma en SQL.
+		Sirve para el chequeo por turno (Telegram/externos) sin cargar 27M de
+		historial en el proceso del turno.
+		"""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return 0
+		latest = self.mirror.latest_compaction(continuity)
+		since = int(latest["range_end_seq"]) if latest else 0
+		chars = self.mirror.context_chars_since(continuity, since_seq=since)
+		return max(1, int(chars / 3.2))
+
 	def maybe_start(
 		self,
 		continuity_id: str,
@@ -378,24 +393,36 @@ class Compactor:
 		extra_tokens: int = 0,
 		budget_tokens: Optional[int] = None,
 		reserve_tokens: Optional[int] = None,
+		estimated_tokens: Optional[int] = None,
 	) -> Optional[str]:
 		"""Encola un `script_job` durable que ejecuta `session compact`.
 
 		No compacta en el proceso actual: el Job Manager lo recoge con su OOM
 		shield y el CLI usa este mismo `Compactor`. Dedupe por continuity: si ya
 		hay un job PENDING/PROCESSING, devuelve su id.
+
+		`estimated_tokens` evita releer/estimar el historial completo cuando el
+		caller ya tiene una métrica barata (`estimate_context_tokens`).
 		"""
 		continuity = str(continuity_id or "").strip()
 		if not continuity:
 			raise ValueError("continuity_id requerido")
-		messages = self.mirror.context_messages(continuity)
-		if not self.should_start_background(
-			messages,
-			extra_tokens=extra_tokens,
-			budget_tokens=budget_tokens,
-			reserve_tokens=reserve_tokens,
-		):
-			return None
+		if estimated_tokens is None:
+			messages = self.mirror.context_messages(continuity)
+			if not self.should_start_background(
+				messages,
+				extra_tokens=extra_tokens,
+				budget_tokens=budget_tokens,
+				reserve_tokens=reserve_tokens,
+			):
+				return None
+		else:
+			threshold = self.background_tokens
+			if budget_tokens is not None:
+				reserve = self.reserve_tokens if reserve_tokens is None else max(0, int(reserve_tokens))
+				threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
+			if int(estimated_tokens) + max(0, int(extra_tokens)) < threshold:
+				return None
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		qm = self.queue_manager or CognitiveQueueManager()
