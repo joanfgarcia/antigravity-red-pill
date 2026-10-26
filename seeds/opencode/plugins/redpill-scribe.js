@@ -315,12 +315,55 @@ function writeInteraction(db, prompt, response, model, sessionId, cols) {
 
 let storePromise = null;
 
+// ── SQLITE BACKEND (runtime-agnostic) ───────────────────────────────────────
+// Bun CLI: `bun:sqlite`. Desktop (Electron/Node): the default ESM loader
+// rejects the `bun:` protocol, so the old single-backend import left desktop
+// turns journaled but never queued. Fallback chain: node:sqlite (built-in),
+// then better-sqlite3. All three expose prepare/exec/close; we add `query`
+// (Bun style) so the rest of the writer stays unchanged.
+function compatDb(raw) {
+  return {
+    query(sql) {
+      const stmt = raw.prepare(sql);
+      return {
+        get: (...args) => stmt.get(...args),
+        all: (...args) => stmt.all(...args),
+        run: (...args) => stmt.run(...args),
+      };
+    },
+    prepare: (sql) => raw.prepare(sql),
+    exec: (sql) => raw.exec(sql),
+    close: () => raw.close(),
+  };
+}
+
+async function openDatabase() {
+  try {
+    const { Database } = await import("bun:sqlite");
+    return compatDb(new Database(QUEUE_DB));
+  } catch (_) {}
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    return compatDb(new DatabaseSync(QUEUE_DB));
+  } catch (_) {}
+  try {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const Database = require("better-sqlite3");
+    return compatDb(new Database(QUEUE_DB));
+  } catch (_) {}
+  return null;
+}
+
 async function initStore() {
   // Seed sin sustituir (deploy roto): no crear un fichero llamado "${QUEUE_DB}".
   if (String(QUEUE_DB).includes("${")) return null;
   try {
-    const { Database } = await import("bun:sqlite");
-    const db = new Database(QUEUE_DB);
+    const db = await openDatabase();
+    if (!db) {
+      console.error("[RedPillScribe] No SQLite backend (bun:sqlite/node:sqlite/better-sqlite3). Capture disabled.");
+      return null;
+    }
     db.exec("PRAGMA journal_mode=WAL");
     db.exec("PRAGMA busy_timeout=5000");
     if (!hasQueue(db)) {
