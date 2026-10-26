@@ -215,8 +215,22 @@ class TestRunOpencode:
 	def test_nonzero_returncode_raises(self, bridge):
 		fake = MagicMock(returncode=2, stdout="", stderr="bad")
 		with patch("subprocess.run", return_value=fake):
-			with pytest.raises(RuntimeError):
+			with pytest.raises(RuntimeError, match="bad"):
 				bridge._run_opencode(["hi"], timeout=5)
+
+	def test_nonzero_returncode_falls_back_to_stdout(self, bridge):
+		"""opencode reporta errores fatales por stdout: sin fallback el error_log
+		quedaba en `... (rc=1): `, imposible de diagnosticar."""
+		fake = MagicMock(returncode=1, stdout="Error: model not found\n", stderr="")
+		with patch("subprocess.run", return_value=fake):
+			with pytest.raises(RuntimeError, match="model not found"):
+				bridge._run_opencode(["hi"], timeout=5)
+
+	def test_failure_detail_prefers_stderr_and_truncates(self, bridge):
+		assert bridge._failure_detail("boom", "ignored") == "boom"
+		assert bridge._failure_detail("", "tail") == "tail"
+		assert bridge._failure_detail("", "") == "<sin salida en stderr ni stdout>"
+		assert bridge._failure_detail("", "x" * 500, limit=10) == "x" * 10
 
 	def test_disables_plugin_when_relay_captures(self, bridge):
 		fake = MagicMock(returncode=0, stdout="", stderr="")

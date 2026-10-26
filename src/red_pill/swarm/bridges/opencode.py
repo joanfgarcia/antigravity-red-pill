@@ -288,11 +288,26 @@ class OpenCodeBridge(AgentBridge):
 			raise RuntimeError(f"opencode timed out after {timeout}s") from e
 
 		if result.returncode != 0:
-			stderr = (result.stderr or "").strip()
-			logger.error(f"[OpenCodeBridge] opencode failed (rc={result.returncode}): {stderr[:500]}")
-			raise RuntimeError(f"opencode failed (rc={result.returncode}): {stderr[:300]}")
+			detail = self._failure_detail(result.stderr, result.stdout)
+			logger.error(f"[OpenCodeBridge] opencode failed (rc={result.returncode}): {detail}")
+			raise RuntimeError(f"opencode failed (rc={result.returncode}): {detail}")
 
 		return self._parse_json_stream(result.stdout or "")
+
+	@staticmethod
+	def _failure_detail(stderr: Optional[str], stdout: Optional[str], limit: int = 300) -> str:
+		"""Diagnóstico de un fallo del CLI.
+
+		opencode imprime sus errores fatales por **stdout** y sale con rc≠0, así que
+		mirar solo `stderr` dejaba el `error_log` del job en `... (rc=1): ` — sin
+		nada que diagnosticar. Se usa el final del canal que sí traiga texto
+		(el error va al final del stream).
+		"""
+		for text in (stderr, stdout):
+			tail = (text or "").strip()
+			if tail:
+				return tail[-limit:]
+		return "<sin salida en stderr ni stdout>"
 
 	@staticmethod
 	def _parse_json_stream(stdout: str) -> dict:
