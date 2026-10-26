@@ -225,20 +225,71 @@ class TestCompactionCallback(unittest.TestCase):
 		mock_tsm.create_session.return_value = {"id": "new-session-id"}
 		mock_tsm.get_session.return_value = {"id": "old-session", "status": "active"}
 
+		result = {"summary": "Test summary of previous conversation"}
 		with patch("red_pill.telegram.session.TelegramSessionManager", return_value=mock_tsm):
 			sw._run_callback(
 				action="compact_session",
 				payload={"session_id": "old-session", "channel_user_id": "user123"},
-				result={"summary": "Test summary of previous conversation"},
+				result=result,
 			)
+
+		# Verify the handoff reset, session switch and purge are wired end-to-end.
+		mock_tsm.reset_continuity.assert_called_once()
+		mock_tsm.activate_session.assert_called_once_with("user123", "new-session-id")
+		mock_tsm.mark_for_deletion.assert_called_once_with("old-session")
+		self.assertEqual(result["new_session_id"], "new-session-id")
 
 		# Verify new session was created
 		mock_tsm.create_session.assert_called_once()
 		create_kwargs = mock_tsm.create_session.call_args
 		self.assertIn("user123", str(create_kwargs))
 
-		# Verify messages were appended to the new session
+		# Verify messages were appended to the new session (summary echo not mirrored)
 		self.assertEqual(mock_tsm.append_message.call_count, 2)
+		mock_tsm.append_message.assert_any_call("new-session-id", "user", "[Resumen de la sesión anterior]: Test summary of previous conversation", mirror=False)
+
+	def test_compact_callback_aborts_when_reset_fails(self):
+		"""A failed handoff reset must leave the old leg active and not rotate."""
+		from red_pill.inference.samantha_worker import SamanthaWorker
+
+		sw = SamanthaWorker()
+		mock_tsm = MagicMock()
+		mock_tsm.get_session.return_value = {"id": "old-session", "status": "active"}
+		mock_tsm.reset_continuity.return_value = None
+
+		result = {"summary": "Test summary"}
+		with patch("red_pill.telegram.session.TelegramSessionManager", return_value=mock_tsm):
+			sw._run_callback(
+				action="compact_session",
+				payload={"session_id": "old-session", "channel_user_id": "user123"},
+				result=result,
+			)
+
+		mock_tsm.create_session.assert_not_called()
+		mock_tsm.activate_session.assert_not_called()
+		mock_tsm.mark_for_deletion.assert_not_called()
+		self.assertNotIn("new_session_id", result)
+
+	def test_compact_callback_aborts_when_mapping_switch_fails(self):
+		"""If the persistent mapping cannot switch, do not purge the old leg."""
+		from red_pill.inference.samantha_worker import SamanthaWorker
+
+		sw = SamanthaWorker()
+		mock_tsm = MagicMock()
+		mock_tsm.get_session.return_value = {"id": "old-session", "status": "active"}
+		mock_tsm.create_session.return_value = {"id": "new-session-id"}
+		mock_tsm.activate_session.return_value = False
+
+		result = {"summary": "Test summary"}
+		with patch("red_pill.telegram.session.TelegramSessionManager", return_value=mock_tsm):
+			sw._run_callback(
+				action="compact_session",
+				payload={"session_id": "old-session", "channel_user_id": "user123"},
+				result=result,
+			)
+
+		mock_tsm.mark_for_deletion.assert_called_once_with("new-session-id")
+		self.assertNotIn("new_session_id", result)
 
 	def test_compact_callback_skipped_without_required_fields(self):
 		"""Callback does nothing if session_id, summary, or channel_user_id is missing."""

@@ -75,6 +75,13 @@ services:
     category: core
     required: false
 
+  redpill-compact-sweep:
+    unit: redpill-compact-sweep.service
+    type: oneshot
+    max_runtime_s: 120
+    category: core
+    required: false
+
   redpill-wake:
     unit: redpill-wake.service
     type: oneshot

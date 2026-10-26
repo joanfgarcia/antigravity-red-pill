@@ -1,0 +1,12 @@
+[Unit]
+Description=Red Pill compact sweep (active continuities, B-02)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/joan/Documents/IA/sharing
+Environment=PYTHONPATH=/home/joan/Documents/IA/sharing/src
+ExecStart=/home/joan/Documents/IA/sharing/.venv/bin/red-pill session compact-sweep
+Nice=10
+MemoryMax=10G
+TimeoutStartSec=120

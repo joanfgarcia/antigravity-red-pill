@@ -104,6 +104,30 @@ def test_create_session(mock_telegram_env):
 	assert saved["id"] == session["id"]
 
 
+def test_activate_session_switches_persistent_mapping(mock_telegram_env):
+	tmp_path, db_path = mock_telegram_env
+	tsm = TelegramSessionManager()
+	conn = sqlite3.connect(str(db_path))
+	conn.execute(
+		"INSERT INTO telegram_sessions (channel_user_id, cascade_id, cascade_type, accumulated_len) VALUES ('user123', 'old', 'local_session', 42)"
+	)
+	conn.commit()
+	conn.close()
+
+	assert tsm.activate_session("user123", "new-session", db_path=str(db_path)) is True
+
+	conn = sqlite3.connect(str(db_path))
+	row = conn.execute("SELECT cascade_id, cascade_type, accumulated_len FROM telegram_sessions WHERE channel_user_id = 'user123'").fetchone()
+	conn.close()
+	assert row == ("new-session", "local_session", 42)
+
+	assert tsm.activate_session("user456", "fresh-session", db_path=str(db_path)) is True
+	conn = sqlite3.connect(str(db_path))
+	row = conn.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = 'user456'").fetchone()
+	conn.close()
+	assert row == ("fresh-session",)
+
+
 def test_append_message_and_prompt(mock_telegram_env):
 	mock_telegram_env
 	tsm = TelegramSessionManager()

@@ -586,6 +586,7 @@ async def run_local_minion(
 	origin, cid, mission = _resolve_minion_identity(originator=originator, continuity_id=continuity_id, mission_id=mission_id)
 	request_id = run_ref or f"local:{secrets.token_hex(6)}"
 	mirror = None
+	compactor = None
 	history: List[Dict[str, Any]] = []
 	if cid:
 		try:
@@ -634,6 +635,7 @@ async def run_local_minion(
 									extra_tokens=extra_tokens,
 									budget_tokens=budget,
 									reserve_tokens=compactor.reserve_tokens,
+									originator=origin or "local:minion",
 								),
 							)
 						except Exception as exc:
@@ -670,6 +672,7 @@ async def run_local_minion(
 	tool_calls_made = 0
 	tool_calls_ok = 0  # results that are not ERROR: only these ground the answer
 	tool_results: List[str] = []
+	length_retry_done = False
 
 	def _capture() -> None:
 		if mirror is None or not cid or not mission:
@@ -723,6 +726,38 @@ async def run_local_minion(
 				mirror.abort_turn(continuity_id=cid, request_id=request_id, reason="cancelled", mission_id=mission)
 			raise
 		except Exception as e:
+			# Rechazo por longitud: compactar una vez y reintentar con el mismo
+			# request_id; el espejo conserva el histórico y el turno no se pierde.
+			if compactor is not None and not length_retry_done and cid and mission:
+				from red_pill.session.compactor import is_context_length_error
+
+				if is_context_length_error(e):
+					length_retry_done = True
+					try:
+						done = await loop.run_in_executor(
+							None,
+							lambda: compactor.compact_now(cid, mission_id=mission, reason="length_retry"),
+						)
+					except Exception as exc:
+						logger.warning(f"[local-minion] length-retry compaction failed: {exc}")
+						done = None
+					if done is not None:
+						from red_pill.session.switch import replay_messages, trim_history_chars, trim_history_window
+
+						if mirror is None:
+							raise RuntimeError("mirror no inicializado en retry de longitud")
+						turns = mirror.context_turns(cid)
+						if history_turns > 0:
+							turns = trim_history_window(turns, history_turns)
+						turns = trim_history_chars(turns, history_max_chars)
+						turns = trim_history_window(turns, len(turns))
+						history = replay_messages(turns)
+						messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+						messages.extend(history)
+						messages.append({"role": "user", "content": task})
+						initial_len = len(messages)
+						logger.info("[local-minion] context-length rejection; retrying with compacted context")
+						continue
 			if mirror is not None and cid and mission:
 				mirror.abort_turn(continuity_id=cid, request_id=request_id, reason=f"provider_error: {e}", mission_id=mission)
 			raise

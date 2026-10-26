@@ -1,0 +1,11 @@
+[Unit]
+Description=Run compact sweep every 15 min (active continuities only)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=redpill-compact-sweep.service
+
+[Install]
+WantedBy=timers.target

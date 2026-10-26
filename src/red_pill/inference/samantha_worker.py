@@ -58,8 +58,17 @@ def _handle_compact_session(payload: Dict[str, Any], samantha_fn: Callable) -> D
 	if not history_text:
 		return {"status": "skipped", "reason": "empty history"}
 
-	prompt, system_prompt = _prompt("samantha_compact_user", history=history_text)
-	summary = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=300)
+	# Mismo prompt operativo que el compactor B-02 (decisiones, refs, pendientes,
+	# blockers, próximo paso). El prompt legacy `samantha_compact_user` no metía
+	# el historial de forma fiable y Samantha devolvía "no hay mensajes".
+	from red_pill.session.summarizer import compaction_system_prompt, render_compaction_prompt
+
+	prompt = render_compaction_prompt(
+		history_text,
+		"Compactación de una conversación de Telegram. Resume decisiones, refs, pendientes, blockers y próximo paso.",
+	)
+	system_prompt = compaction_system_prompt()
+	summary = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=500)
 
 	if not summary:
 		return {"status": "error", "reason": "Samantha returned empty"}
@@ -386,21 +395,39 @@ class SamanthaWorker(threading.Thread):
 					from red_pill.telegram.session import TelegramSessionManager
 
 					tsm = TelegramSessionManager()
+					old_session = tsm.get_session(session_id)
+					if not old_session:
+						logger.error(f"[SamanthaWorker] Compaction callback: old session {session_id[:8]} missing; aborting rotation")
+						return
+
+					# The reset must land before we rotate. If it cannot record the
+					# handoff, keep the old leg active rather than pointing Telegram
+					# at a summary-less session.
+					reset = tsm.reset_continuity(old_session, summary)
+					if reset is None:
+						logger.error(f"[SamanthaWorker] Compaction callback: reset_continuity failed for {session_id[:8]}; aborting rotation")
+						return
+
 					new_session = tsm.create_session(
 						channel_user_id=channel_user_id,
 						title=f"Compacted conversation (from {session_id[:8]})",
 					)
 					new_id = new_session["id"]
-					tsm.append_message(new_id, "user", f"[Resumen de la sesión anterior]: {summary}")
+					# The reset already wrote the handoff into session_mirror; do not
+					# mirror the Telegram echo again (it would appear twice in context).
+					tsm.append_message(new_id, "user", f"[Resumen de la sesión anterior]: {summary}", mirror=False)
 					tsm.append_message(
 						new_id, "assistant", "Entendido. He archivado el historial en el Bünker y consolidado el contexto. Continuemos."
 					)
 
-					# Mark old session for purge
-					old_session = tsm.get_session(session_id)
-					if old_session:
-						old_session["status"] = "pending_purge"
-						tsm.save_session(session_id, old_session)
+					# Switch the persistent mapping before the old leg is purged.
+					if not tsm.activate_session(channel_user_id, new_id):
+						logger.error(f"[SamanthaWorker] Compaction callback: could not activate {new_id[:8]}; keeping old session")
+						tsm.mark_for_deletion(new_id)
+						return
+
+					# Mark old session for purge (also expires its soul leg).
+					tsm.mark_for_deletion(session_id)
 
 					result["new_session_id"] = new_id
 					logger.info(f"[SamanthaWorker] Compaction callback: {session_id[:8]} → {new_id}")

@@ -55,6 +55,36 @@ def estimate_messages_tokens(messages: List[dict]) -> int:
 	return total
 
 
+_LENGTH_ERROR_MARKERS = (
+	"maximum context length",
+	"context length",
+	"context_length_exceeded",
+	"context window",
+	"maximum number of tokens",
+	"too many tokens",
+	"prompt is too long",
+	"input is too long",
+	"reduce the length",
+	"request too large",
+	"exceeds the maximum",
+)
+
+
+def is_context_length_error(exc: BaseException) -> bool:
+	"""¿El provider rechazó la petición por longitud de contexto?
+
+	Los bridges no comparten una excepción tipada; se reconoce por mensaje y,
+	si existe, por status HTTP 400/413 con una pista de contexto/tokens.
+	"""
+	text = str(exc or "").lower()
+	if any(marker in text for marker in _LENGTH_ERROR_MARKERS):
+		return True
+	status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+	if status in (400, 413) and any(hint in text for hint in ("context", "token", "length", "prompt", "input")):
+		return True
+	return False
+
+
 def _config_int(name: str, default: int) -> int:
 	try:
 		import red_pill.config as cfg
@@ -196,7 +226,9 @@ class Compactor:
 		end = _safe_range_end(all_turns, start=start, candidate=candidate)
 		if end < start:
 			return None
-		selected = [t for t in turns if start <= int(t.get("seq") or 0) <= end]
+		selected = [
+			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+		]
 		if not selected:
 			return None
 		if latest:
@@ -234,7 +266,9 @@ class Compactor:
 		end = int(pending["range_end_seq"])
 		mission = str(pending["mission_id"])
 		turns = self.mirror.read_turns(continuity)
-		selected = [t for t in turns if start <= int(t.get("seq") or 0) <= end]
+		selected = [
+			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+		]
 		if not selected:
 			self.mirror.abort_compaction(compaction_id, reason="empty_range")
 			return None
@@ -339,6 +373,21 @@ class Compactor:
 			threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
 		return estimate_messages_tokens(messages) + max(0, int(extra_tokens)) >= threshold
 
+	def estimate_context_tokens(self, continuity_id: str) -> int:
+		"""Estimación barata (chars/3.2) del contexto desde la última compactación.
+
+		No lee ni replaya los turnos completos: `context_chars_since` suma en SQL.
+		Sirve para el chequeo por turno (Telegram/externos) sin cargar 27M de
+		historial en el proceso del turno.
+		"""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return 0
+		latest = self.mirror.latest_compaction(continuity)
+		since = int(latest["range_end_seq"]) if latest else 0
+		chars = self.mirror.context_chars_since(continuity, since_seq=since, exclude_source="compactor")
+		return max(1, int(chars / 3.2))
+
 	def maybe_start(
 		self,
 		continuity_id: str,
@@ -348,35 +397,58 @@ class Compactor:
 		extra_tokens: int = 0,
 		budget_tokens: Optional[int] = None,
 		reserve_tokens: Optional[int] = None,
+		estimated_tokens: Optional[int] = None,
+		originator: Optional[str] = None,
+		origin: Optional[str] = None,
 	) -> Optional[str]:
 		"""Encola un `script_job` durable que ejecuta `session compact`.
 
 		No compacta en el proceso actual: el Job Manager lo recoge con su OOM
 		shield y el CLI usa este mismo `Compactor`. Dedupe por continuity: si ya
 		hay un job PENDING/PROCESSING, devuelve su id.
+
+		`estimated_tokens` evita releer/estimar el historial completo cuando el
+		caller ya tiene una métrica barata (`estimate_context_tokens`). El
+		alcance (`COMPACTOR_SCOPE`) se aplica aquí: las sesiones interactivas de
+		opencode quedan fuera en `autonomous`; solo entran con `all`.
 		"""
 		continuity = str(continuity_id or "").strip()
 		if not continuity:
 			raise ValueError("continuity_id requerido")
-		messages = self.mirror.context_messages(continuity)
-		if not self.should_start_background(
-			messages,
-			extra_tokens=extra_tokens,
-			budget_tokens=budget_tokens,
-			reserve_tokens=reserve_tokens,
-		):
+		from red_pill.session.scope import compactor_scope_allows
+
+		effective_originator = originator if originator is not None else self.mirror.last_originator(continuity)
+		if not compactor_scope_allows(effective_originator, origin):
 			return None
+		if estimated_tokens is None:
+			messages = self.mirror.context_messages(continuity)
+			if not self.should_start_background(
+				messages,
+				extra_tokens=extra_tokens,
+				budget_tokens=budget_tokens,
+				reserve_tokens=reserve_tokens,
+			):
+				return None
+		else:
+			threshold = self.background_tokens
+			if budget_tokens is not None:
+				reserve = self.reserve_tokens if reserve_tokens is None else max(0, int(reserve_tokens))
+				threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
+			if int(estimated_tokens) + max(0, int(extra_tokens)) < threshold:
+				return None
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		qm = self.queue_manager or CognitiveQueueManager()
-		try:
-			existing = qm.find_task_by_payload_key(
-				source="script_job", key="continuity_id", value=continuity, limit=None
-			)
-		except Exception:
-			existing = None
-		if existing:
-			return str(existing["id"])
+		existing = None
+		for source in ("script_job", "samantha"):
+			try:
+				existing = qm.find_task_by_payload_key(
+					source=source, key="continuity_id", value=continuity, limit=None
+				)
+			except Exception:
+				existing = None
+			if existing:
+				return str(existing["id"])
 		mission = str(mission_id or "").strip()
 		if not mission:
 			turns = self.mirror.read_turns(continuity)

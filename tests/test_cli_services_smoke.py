@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from unittest.mock import MagicMock
 
 import red_pill.cli_services as svc
 
@@ -77,3 +78,36 @@ def test_p2p_unknown_usage(capsys):
 def test_memory_unknown_usage(capsys):
 	svc.handle_memory(argparse.Namespace(mem_cmd="bogus"))
 	assert "Usage: red-pill memory" in capsys.readouterr().out
+
+
+# ── session compact-sweep ────────────────────────────────────────────────────
+def test_session_compact_sweep_json(monkeypatch, capsys):
+	captured = {}
+
+	def fake_sweep(**kwargs):
+		captured.update(kwargs)
+		return {"enabled": True, "active_min": 15, "scanned": 2, "enqueued": 1}
+
+	monkeypatch.setattr("red_pill.session.compaction_hook.sweep_active_compactions", fake_sweep)
+	svc.handle_session(
+		argparse.Namespace(session_cmd="compact-sweep", active_min=15, limit=50, db_path="/tmp/session.db", json=True)
+	)
+	payload = json.loads(capsys.readouterr().out)
+	assert payload == {"enabled": True, "active_min": 15, "scanned": 2, "enqueued": 1}
+	assert captured == {"active_min": 15, "limit": 50, "db_path": "/tmp/session.db"}
+
+
+def test_compact_heartbeat_loop_renews_lease():
+	class StopAfterOne:
+		def __init__(self):
+			self.calls = 0
+
+		def wait(self, interval):
+			self.calls += 1
+			return self.calls > 1
+
+	lease = MagicMock()
+	svc._compact_heartbeat_loop(lease, "compact:alma", "alma", "holder", StopAfterOne(), MagicMock())
+	lease.heartbeat.assert_called_once_with(
+		"compact:alma", source="compactor", continuity_id="alma", holder_originator="holder"
+	)

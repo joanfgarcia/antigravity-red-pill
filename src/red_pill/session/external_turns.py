@@ -154,6 +154,7 @@ def import_external_turns(
 	mirror: Any = None,
 	registry: Any = None,
 	root: Optional[Path] = None,
+	queue_manager: Any = None,
 ) -> Dict[str, int]:
 	"""Importa journals al espejo SOLO si el originator ya tiene alma registrada.
 
@@ -209,6 +210,15 @@ def import_external_turns(
 					)
 				mirror.complete_turn(continuity_id=continuity, request_id=request)
 				counts["completed"] += 1
+				from red_pill.session.compaction_hook import maybe_start_after_turn
+
+				maybe_start_after_turn(
+					mirror,
+					continuity,
+					mission_id=mission,
+					originator=originator,
+					queue_manager=queue_manager,
+				)
 			elif status == "aborted":
 				mirror.abort_turn(
 					continuity_id=continuity,

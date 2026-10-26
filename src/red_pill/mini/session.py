@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from red_pill.core.affinity import canonize_affinity
 from red_pill.mini.contracts import AgentProfile, Toolbox
-from red_pill.session.compactor import Compactor, estimate_tokens
+from red_pill.session.compactor import Compactor, estimate_tokens, is_context_length_error
 from red_pill.session.identity import new_continuity_id
 from red_pill.session.mirror import SessionMirror
 from red_pill.session.store import SessionRegistry
@@ -251,6 +251,7 @@ class MiniSession:
 						extra_tokens=extra_tokens,
 						budget_tokens=budget,
 						reserve_tokens=self.compactor.reserve_tokens,
+						originator=self.current_originator or "",
 					)
 				except Exception as exc:
 					logger.warning("[MiniSession] background compaction enqueue failed: %s", exc)
@@ -279,6 +280,7 @@ class MiniSession:
 		tool_calls_made = 0
 		last_text = ""
 		transcript: List[Dict[str, Any]] = []
+		length_retry_done = False
 		for step in range(max(steps, 1)):
 			try:
 				assistant = provider.chat(
@@ -289,6 +291,30 @@ class MiniSession:
 					**( {"timeout": timeout} if timeout is not None else {} ),
 				)
 			except Exception as e:
+				# Un rechazo por longitud no debe tumbar el turno: se compacta
+				# una vez y se reintenta con el contexto reducido. El espejo y
+				# el request_id no se tocan; el turno sigue siendo el mismo.
+				if not length_retry_done and self.compactor is not None and is_context_length_error(e):
+					length_retry_done = True
+					try:
+						done = self.compactor.compact_now(
+							self.continuity_id,
+							mission_id=self.config.mission_id,
+							reason="length_retry",
+						)
+					except Exception as exc:
+						logger.warning("[MiniSession] length-retry compaction failed: %s", exc)
+						done = None
+					if done is not None:
+						turns = self.mirror.context_turns(self.continuity_id)
+						if limit > 0:
+							turns = trim_history_window(turns, limit)
+						turns = trim_history_chars(turns, self.config.history_max_chars)
+						turns = trim_history_window(turns, len(turns))
+						messages = [{"role": "system", "content": system_prompt}]
+						messages.extend(replay_messages(turns, current_prompt=task))
+						logger.info("[MiniSession] context-length rejection; retrying with compacted context")
+						continue
 				self.mirror.abort_turn(
 					continuity_id=self.continuity_id,
 					request_id=request_id,

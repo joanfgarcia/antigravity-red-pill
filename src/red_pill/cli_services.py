@@ -117,6 +117,20 @@ def handle_mcp(args: argparse.Namespace) -> None:
 	print("uso: red-pill mcp [serve|proxy]")
 
 
+def _compact_heartbeat_loop(lease: Any, lease_key: str, continuity: str, holder: str, stop: Any, logger: Any, *, interval: int = 30) -> None:
+	"""Renew the compact lease until the stop event fires."""
+	while not stop.wait(interval):
+		try:
+			lease.heartbeat(
+				lease_key,
+				source="compactor",
+				continuity_id=continuity,
+				holder_originator=holder,
+			)
+		except Exception as exc:  # noqa: BLE001
+			logger.warning("[COMPACT] lease heartbeat failed: %s", exc)
+
+
 def handle_session(args: argparse.Namespace) -> None:
 	"""Alma y Coro: operaciones sobre el espejo canónico de turnos."""
 	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "sync":
@@ -194,10 +208,14 @@ def handle_session(args: argparse.Namespace) -> None:
 		return
 	if getattr(args, "session_cmd", None) == "compact":
 		import json
+		import logging
+		import threading
 
 		from red_pill.session.compactor import Compactor
+		from red_pill.session.lease import LeaseHeld, LeaseStore
 		from red_pill.session.mirror import SessionMirror
 
+		logger = logging.getLogger(__name__)
 		mirror = SessionMirror(getattr(args, "db_path", None))
 		compactor = Compactor(
 			mirror,
@@ -205,33 +223,74 @@ def handle_session(args: argparse.Namespace) -> None:
 			protect_last_n=getattr(args, "protect_last_n", None),
 		)
 		handoff = getattr(args, "handoff", None)
-		done: Optional[dict]
-		if handoff:
-			from pathlib import Path as _Path
+		action = "handoff" if handoff else "compact"
+		done: Optional[dict] = None
+		lease_key = f"compact:{args.continuity}"
+		holder = f"compactor:{os.getpid()}"
+		lease = LeaseStore(mirror.db_path)
+		try:
+			lease.begin_work_lease(
+				lease_key,
+				continuity_id=args.continuity,
+				mission_id=getattr(args, "mission", None),
+				holder_originator=holder,
+				idle_ttl_s=120,
+				max_wall_s=900,
+				metadata={"action": action},
+			)
+		except LeaseHeld:
+			print(f"[COMPACT] {args.continuity}: compactación ya en vuelo; se omite")
+			return
+		except Exception as exc:
+			print(f"[COMPACT] no se pudo tomar el lease: {exc}")
+			return
 
+		stop = threading.Event()
+		heartbeat = threading.Thread(
+			target=_compact_heartbeat_loop,
+			args=(lease, lease_key, args.continuity, holder, stop, logger),
+			name="compact-heartbeat",
+			daemon=True,
+		)
+		heartbeat.start()
+		try:
+			if handoff:
+				from pathlib import Path as _Path
+
+				try:
+					summary = _Path(handoff).read_text(encoding="utf-8")
+				except OSError as exc:
+					print(f"[COMPACT] no se pudo leer el handoff {handoff!r}: {exc}")
+					raise SystemExit(1) from exc
+				if not summary.strip():
+					print(f"[COMPACT] el handoff {handoff!r} está vacío")
+					raise SystemExit(1)
+				mission = args.mission
+				if not mission:
+					latest = mirror.latest_compaction(args.continuity)
+					mission = str((latest or {}).get("mission_id") or "")
+				if not mission:
+					turns = mirror.read_turns(args.continuity)
+					mission = str((turns[0].get("mission_id") if turns else "") or "")
+				if not mission:
+					print("[COMPACT] --mission es obligatorio si el alma no tiene turnos previos")
+					raise SystemExit(1)
+				done = compactor.reset(args.continuity, summary=summary, mission_id=mission)
+			else:
+				done = compactor.compact_now(args.continuity, mission_id=args.mission)
+		finally:
+			stop.set()
+			heartbeat.join(timeout=5)
 			try:
-				summary = _Path(handoff).read_text(encoding="utf-8")
-			except OSError as exc:
-				print(f"[COMPACT] no se pudo leer el handoff {handoff!r}: {exc}")
-				raise SystemExit(1) from exc
-			if not summary.strip():
-				print(f"[COMPACT] el handoff {handoff!r} está vacío")
-				raise SystemExit(1)
-			mission = args.mission
-			if not mission:
-				latest = mirror.latest_compaction(args.continuity)
-				mission = str((latest or {}).get("mission_id") or "")
-			if not mission:
-				turns = mirror.read_turns(args.continuity)
-				mission = str((turns[0].get("mission_id") if turns else "") or "")
-			if not mission:
-				print("[COMPACT] --mission es obligatorio si el alma no tiene turnos previos")
-				raise SystemExit(1)
-			done = compactor.reset(args.continuity, summary=summary, mission_id=mission)
-			action = "handoff"
-		else:
-			done = compactor.compact_now(args.continuity, mission_id=args.mission)
-			action = "compact"
+				lease.finish(
+					lease_key,
+					state="completed" if done is not None else "aborted",
+					reason=action,
+					continuity_id=args.continuity,
+					holder_originator=holder,
+				)
+			except Exception as exc:  # noqa: BLE001
+				logger.warning("[COMPACT] lease finish failed: %s", exc)
 		if getattr(args, "json", False):
 			print(json.dumps(done, ensure_ascii=False, indent=2, default=str))
 		elif done is None:
@@ -253,6 +312,26 @@ def handle_session(args: argparse.Namespace) -> None:
 				kind=getattr(args, "kind", "opencode") or "opencode",
 			)
 		)
+		return
+	if getattr(args, "session_cmd", None) == "compact-sweep":
+		import json
+
+		from red_pill.session.compaction_hook import sweep_active_compactions
+
+		result = sweep_active_compactions(
+			active_min=getattr(args, "active_min", None),
+			limit=int(getattr(args, "limit", 500) or 500),
+			db_path=getattr(args, "db_path", None),
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+		else:
+			print(
+				f"[SWEEP] activas={result.get('scanned', 0)} "
+				f"encoladas={result.get('enqueued', 0)} "
+				f"ventana={result.get('active_min', '-')}m"
+				+ ("" if result.get("enabled") else " (compactor OFF)")
+			)
 		return
 	if getattr(args, "session_cmd", None) == "decisions":
 		import json

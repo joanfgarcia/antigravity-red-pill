@@ -526,6 +526,14 @@ class RedPillConfig(BaseSettings):
 	SESSION_COMPACTOR_RESERVE_TOKENS: int = 2000
 	SESSION_COMPACTOR_MAX_INPUT_CHARS: int = 120000
 	SESSION_COMPACTOR_JOB_PRIORITY: int = 4
+	# Alcance del compactor en background: `autonomous` (default) solo compacta
+	# continuidades de misión/job, Telegram, awakenings y locales; las sesiones
+	# interactivas opencode quedan fuera salvo `all` (opt-in explícito) u `off`.
+	COMPACTOR_SCOPE: str = "autonomous"
+	COMPACTOR_SCOPE_PREFIXES: str = "job:,telegram:,local:,mini:,forge:,loom:,d23-review:,awakening:"
+	# Safety net de baja frecuencia: solo continuidades activas (leg activo y
+	# último latido dentro de esta ventana); nunca barrido histórico.
+	COMPACTOR_SWEEP_ACTIVE_MIN: int = 15
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912
@@ -572,6 +580,15 @@ class RedPillConfig(BaseSettings):
 	# 120s is the *method* default — the pro target is set to 300s via its own
 	# `timeout` in .env to avoid the aggressive-kill regression (guard §2C).
 	TELEGRAM_INLINE_TIMEOUT: int = 120
+	# Mapeo Telegram→alma (B-02/B-03): leg estable + espejo. OFF por defecto
+	# hasta validar la paridad del compactor; no cambia el carril actual.
+	TELEGRAM_SOUL_MAPPING_ENABLED: bool = False
+	# Presupuesto del compactor para el carril Telegram (chars; el adaptador
+	# traduce a tokens con chars/3.2). 4000/800/400/8 = tabla B-02.
+	TELEGRAM_COMPACTOR_CONTEXT_CHARS: int = 4000
+	TELEGRAM_COMPACTOR_BACKGROUND_CHARS: int = 800
+	TELEGRAM_COMPACTOR_RESERVE_CHARS: int = 400
+	TELEGRAM_COMPACTOR_PROTECT_LAST_N: int = 8
 	# Heartbeat lease (s) for the D21 decoupled heartbeat thread. The thread beats
 	# every ~20s while the process lives, but only while the last activity *touch*
 	# is newer than this lease. A dead main loop stops touching → lease expires →
@@ -960,6 +977,10 @@ class RedPillConfig(BaseSettings):
 	# LAZARUS SYNC & HEALER
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
+	# Auto-Healer autónomo del wake: OFF = solo reporte (no edita código ni
+	# restaura desde git). Los heals manuales (`heal_tissue`/`run_local_healer`)
+	# siguen disponibles para el Operador.
+	AUTO_HEAL_ENABLED: bool = False
 	LAZARUS_SYNC_INTERVAL: int = 300
 	LAZARUS_STATE_FILE: str = str(get_state_dir() / "lazarus_state.json")
 	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).

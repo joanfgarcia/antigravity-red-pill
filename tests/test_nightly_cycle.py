@@ -43,6 +43,8 @@ def test_schedule_pulse_installs_nightly_not_individuals():
 	assert "NIGHTLY_RECIPE" in src
 	assert "redpill-nightly.timer" in src
 	assert "redpill-nightly.service" in src
+	assert "COMPACT_SWEEP_TIMER" in src
+	assert "timeout_start_sec=120" in src
 	# no reinstala los pulsos individuales como unidades de calendario nuevas
 	assert "_write_calendar_timer(SLEEP_TIMER" not in src
 	assert "_write_calendar_timer(CHRONICLE_TIMER" not in src
