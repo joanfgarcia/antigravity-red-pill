@@ -2593,13 +2593,16 @@ async def handle_review_decision(arguments: Dict[str, Any]):
 			"confidence": {"type": "string", "enum": ["low", "medium", "high"]},
 			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
 		},
-		"required": ["decision_id", "verdict", "confidence"],
+		"required": ["decision_id", "verdict", "confidence", "reason"],
 	},
 )
 async def handle_suggest_review(arguments: Dict[str, Any]):
 	try:
 		from red_pill.session.store import SessionRegistry
 
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[SUGGEST] `reason` es obligatorio (evidencia breve).")]
 		session = await _caller_session(arguments)
 		continuity = str(session.get("continuity_id") or "").strip()
 		if not continuity:
@@ -2609,7 +2612,7 @@ async def handle_suggest_review(arguments: Dict[str, Any]):
 			reviewer_continuity_id=continuity,
 			verdict=str(arguments.get("verdict") or ""),
 			confidence=str(arguments.get("confidence") or ""),
-			reason=str(arguments.get("reason") or ""),
+			reason=reason,
 		)
 		return [
 			types.TextContent(

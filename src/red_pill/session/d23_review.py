@@ -136,15 +136,19 @@ def enqueue_review(
 		return None
 
 	reviewer = reviewer_continuity()
+	originator = f"d23-review:{decision_id}"
+	mission_id = str(decision.get("mission_id") or _REVIEW_MISSION)
+	title = f"D23 review {decision_id[:8]}"
+	campaign_id = str(decision.get("campaign_id") or note.get("campaign_id") or "").strip() or None
 	payload = dict(payload)
 	payload.update(
 		{
 			"prompt": build_prompt(decision, note, mode_value),
 			"continuity_id": reviewer,
-			"parent_mission_id": str(decision.get("mission_id") or ""),
-			"originator": f"d23-review:{decision_id}",
+			"parent_mission_id": mission_id,
+			"originator": originator,
 			"role": "reviewer",
-			"title": f"D23 review {decision_id[:8]}",
+			"title": title,
 		}
 	)
 	payload.setdefault("cwd", str(_repo_root()))
@@ -154,6 +158,24 @@ def enqueue_review(
 			driver_cls().validate(payload)
 	except Exception as e:
 		logger.warning("[D23 review] payload inválido: %s", e)
+		return None
+
+	registry = SessionRegistry()
+	# El job corre headless: sin un leg en el registro, `_caller_session` no
+	# resuelve el alma y `suggest_review`/`review_decision` rechazan la llamada.
+	# El leg es la identidad de confianza del revisor (env del job + fila).
+	try:
+		registry.upsert_session(
+			originator=originator,
+			continuity_id=reviewer,
+			mission_id=mission_id,
+			campaign_id=campaign_id,
+			role="reviewer",
+			title=title,
+			intent="Revisar objeción D23-SCORE",
+		)
+	except Exception as e:
+		logger.error("[D23 review] no se pudo registrar el leg del revisor: %s", e)
 		return None
 
 	try:
@@ -169,7 +191,7 @@ def enqueue_review(
 		return None
 
 	try:
-		SessionRegistry().register_review_job(
+		registry.register_review_job(
 			decision_id,
 			job_id=job_id,
 			reviewer_continuity_id=reviewer,

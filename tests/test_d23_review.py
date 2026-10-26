@@ -156,6 +156,10 @@ def test_enqueue_review_payload_y_receta(monkeypatch):
 		def __init__(self):
 			self.args = ()
 			self.kwargs = {}
+			self.session_kwargs = {}
+
+		def upsert_session(self, **kwargs):
+			self.session_kwargs = kwargs
 
 		def register_review_job(self, *args, **kwargs):
 			self.args = args
@@ -180,3 +184,7 @@ def test_enqueue_review_payload_y_receta(monkeypatch):
 	assert payload["cascade"]
 	assert queue.kwargs["mission_id"] == "mission:d23-review"
 	assert registry.kwargs["mode"] == "review"
+	assert registry.session_kwargs["originator"] == payload["originator"]
+	assert registry.session_kwargs["continuity_id"] == payload["continuity_id"]
+	assert registry.session_kwargs["mission_id"] == "repo:x"
+	assert registry.session_kwargs["role"] == "reviewer"

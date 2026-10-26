@@ -218,6 +218,31 @@ class TestFactory:
 			bridge = create_cascade_bridge(targets)
 		assert isinstance(bridge, CascadeBridge)
 
+	def test_create_cascade_bridge_forwards_identity(self):
+		from red_pill.config import BridgeTarget
+		from red_pill.swarm.bridges import create_cascade_bridge
+		from red_pill.swarm.bridges.cascade import CascadeBridge
+
+		targets = [BridgeTarget(backend="opencode", model="openrouter/~z-ai/glm-latest", effort="low")]
+		bridge = create_cascade_bridge(
+			targets,
+			continuity_id="81a05c25-f7d7-5a21-8c1f-3bdcd0cfbe7b",
+			mission_id="repo:next",
+			parent_mission_id="repo:next",
+			originator="d23-review:test",
+			role="reviewer",
+			job_id="job-1",
+		)
+		assert isinstance(bridge, CascadeBridge)
+		assert bridge._identity == {
+			"continuity_id": "81a05c25-f7d7-5a21-8c1f-3bdcd0cfbe7b",
+			"mission_id": "repo:next",
+			"parent_mission_id": "repo:next",
+			"originator": "d23-review:test",
+			"role": "reviewer",
+			"job_id": "job-1",
+		}
+
 	def test_preflight_ready_with_agy(self):
 		from red_pill.swarm.bridges import preflight_check
 
