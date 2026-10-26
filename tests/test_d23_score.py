@@ -5,6 +5,7 @@ puede uphold (flag) / dismiss / escalate; el Operador decide hide/retract/
 restore. Nada se borra; `hidden/retracted` se filtra del tablón salvo para su
 autor o el Operador.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -64,9 +65,7 @@ def test_revisor_independiente_aplica_flag_y_no_puede_auto_revisarse(reg):
 
 def test_alta_severidad_no_la_cierra_un_agente(reg):
 	note = _note(reg)
-	d = reg.open_decision(
-		subject_event_id=note["event_id"], claim="retirar", created_by="alma-obj", severity="high"
-	)
+	d = reg.open_decision(subject_event_id=note["event_id"], claim="retirar", created_by="alma-obj", severity="high")
 	with pytest.raises(ValueError, match="Operador"):
 		reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-rev", action="dismiss")
 	escalated = reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-rev", action="escalate")
@@ -88,6 +87,7 @@ def test_operador_oculta_y_restaura(reg):
 	hidden = reg.moderate_note(note["event_id"], action="hide", actor="operator", reason="spam")
 	assert hidden["status"] == "hidden"
 	assert hidden["resolved_decisions"] == 1
+	assert reg.list_decisions() == []
 
 	assert reg.fetch_events("repo:x", viewer_continuity_id="alma-otro") == []
 	assert len(reg.fetch_events("repo:x", viewer_continuity_id="alma-author")) == 1
@@ -137,18 +137,19 @@ async def test_mcp_objection_abre_dobj_y_fetch_la_marca(tmp_path):
 	bridge = _bridge("opencode:d23a", str(tmp_path))
 	with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 		with patch("red_pill.mcp_server._current_git_branch", return_value="feat/d23"):
-			announced = await _call("announce_intent", {"summary": "nota a revisar", "type": "intent_updated"})
-			event_id = announced.split("event=")[1].split()[0].strip()
-			out = await _call(
-				"announce_intent",
-				{
-					"summary": "el dato no cuadra",
-					"type": "objection",
-					"target_event_id": event_id,
-					"severity": "low",
-					"proposed_action": "flag",
-				},
-			)
+			with patch("red_pill.session.d23_review.review_mode", return_value="off"):
+				announced = await _call("announce_intent", {"summary": "nota a revisar", "type": "intent_updated"})
+				event_id = announced.split("event=")[1].split()[0].strip()
+				out = await _call(
+					"announce_intent",
+					{
+						"summary": "el dato no cuadra",
+						"type": "objection",
+						"target_event_id": event_id,
+						"severity": "low",
+						"proposed_action": "flag",
+					},
+				)
 			fetched = await _call("fetch_events", {})
 	assert "OBJECTION" in out and "state=open" in out
 	assert "[disputed:1]" in fetched
@@ -162,18 +163,21 @@ async def test_mcp_objection_abre_dobj_y_fetch_la_marca(tmp_path):
 		return {"continuity_id": "alma-rev", "originator": "opencode:rev", "mission_id": "repo:feat/d23"}
 
 	with patch("red_pill.mcp_server._caller_session", new=fake_session):
-		review = await _call("review_decision", {"decision_id": out.split("decision=")[1].split()[0].strip(), "action": "dismiss", "reason": "no procede"})
+		review = await _call(
+			"review_decision",
+			{"decision_id": out.split("decision=")[1].split()[0].strip(), "action": "dismiss", "reason": "no procede", "confidence": "high"},
+		)
 	assert "→ dismissed" in review
 
 
 async def test_mcp_moderate_requiere_operador(tmp_path, monkeypatch):
-	note = SessionRegistry().add_event(
-		event_type="intent_updated", mission_id="repo:feat/d23", summary="nota", continuity_id="alma-x"
-	)
+	note = SessionRegistry().add_event(event_type="intent_updated", mission_id="repo:feat/d23", summary="nota", continuity_id="alma-x")
 	denied = await _call("moderate_note", {"event_id": note["event_id"], "action": "hide"})
 	assert "solo Operador" in denied
 
 	monkeypatch.setenv("REDPILL_OPERATOR", "1")
+	denied_reason = await _call("moderate_note", {"event_id": note["event_id"], "action": "hide"})
+	assert "reason" in denied_reason
 	ok = await _call("moderate_note", {"event_id": note["event_id"], "action": "hide", "reason": "test"})
 	assert "→ hidden" in ok
 

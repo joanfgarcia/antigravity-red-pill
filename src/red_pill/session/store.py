@@ -214,6 +214,7 @@ job_id TEXT PRIMARY KEY,
 decision_id TEXT NOT NULL,
 reviewer_continuity_id TEXT NOT NULL,
 mode TEXT NOT NULL,
+confidence TEXT,
 created_at REAL NOT NULL
 );
 
@@ -341,9 +342,7 @@ class SessionRegistry:
 			# Migración del esquema PRE-RELEASE del slice (commit 9a48e1e): la tabla
 			# vieja no tiene `event_seq` y dejaba al lector en "no such column".
 			# Nunca se desplegó; se recrea. A partir de aquí manda `user_version`.
-			has_table = conn.execute(
-				"SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_events'"
-			).fetchone()
+			has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_events'").fetchone()
 			if has_table:
 				cols = {row[1] for row in conn.execute("PRAGMA table_info(mission_events)").fetchall()}
 				if "event_seq" not in cols:
@@ -356,12 +355,8 @@ class SessionRegistry:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN request_id TEXT")
 			if "status_reason" not in mirror_cols:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN status_reason TEXT")
-			conn.execute(
-				"CREATE INDEX IF NOT EXISTS idx_mirror_request ON session_mirror(continuity_id, request_id)"
-			)
-			conn.execute(
-				"CREATE INDEX IF NOT EXISTS idx_mirror_status ON session_mirror(continuity_id, status)"
-			)
+			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_request ON session_mirror(continuity_id, request_id)")
+			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_status ON session_mirror(continuity_id, status)")
 			registry_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_registry)").fetchall()}
 			if "last_seen_event_seq" not in registry_cols:
 				# v3: cursor de eventos para el digest (BD creada antes de v3).
@@ -370,6 +365,20 @@ class SessionRegistry:
 					conn.execute("ALTER TABLE session_registry ADD COLUMN last_seen_event_seq INTEGER NOT NULL DEFAULT 0")
 				except sqlite3.OperationalError:
 					pass
+			# D23-SCORE v0.1: confianza del revisor en jobs semi/auto.
+			review_cols = {row[1] for row in conn.execute("PRAGMA table_info(decision_reviews)").fetchall()}
+			if review_cols and "confidence" not in review_cols:
+				try:
+					conn.execute("ALTER TABLE decision_reviews ADD COLUMN confidence TEXT")
+				except sqlite3.OperationalError:
+					pass
+			# Una sugerencia por (D-obj, revisor): sin spam de filas; la última
+			# reemplaza a la anterior y el evento solo se emite si cambia.
+			conn.execute(
+				"DELETE FROM decision_suggestions WHERE id NOT IN ("
+				"SELECT MAX(id) FROM decision_suggestions GROUP BY decision_id, reviewer_continuity_id)"
+			)
+			conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_reviewer ON decision_suggestions(decision_id, reviewer_continuity_id)")
 			current = conn.execute("PRAGMA user_version").fetchone()[0]
 			if current < 2:
 				# v2: el trigger `no_replace` también cubre `event_seq`. En BD ya
@@ -508,11 +517,11 @@ class SessionRegistry:
 		last_seen_event_seq: int = 0,
 	) -> None:
 		"""UPSERT por `originator` (el leg). Política UNIFICADA "primer enlace gana por
-		cuerpo" (F5): el `continuity_id` YA atado se conserva SIEMPRE — este es el
-		único escritor con la invariante atómica (el hook del arnés usa la MISMA
-		cláusula `ON CONFLICT ... SET continuity_id=session_registry.continuity_id`).
-		`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe).
-	Un leg vuelto a ver tras `unregister_session` se reactiva (`ttl_state=active`)."""
+			cuerpo" (F5): el `continuity_id` YA atado se conserva SIEMPRE — este es el
+			único escritor con la invariante atómica (el hook del arnés usa la MISMA
+			cláusula `ON CONFLICT ... SET continuity_id=session_registry.continuity_id`).
+			`mission_id`/`updated_at`/afinidad sí se refrescan (el alma no se reescribe).
+		Un leg vuelto a ver tras `unregister_session` se reactiva (`ttl_state=active`)."""
 		with self._connect() as conn:
 			self._upsert_session_conn(
 				conn,
@@ -561,8 +570,7 @@ class SessionRegistry:
 			conn.execute("BEGIN IMMEDIATE")
 			if lineage_id is None:
 				row = conn.execute(
-					"SELECT lineage_id FROM session_registry WHERE continuity_id=? AND lineage_id IS NOT NULL "
-					"ORDER BY updated_at DESC LIMIT 1",
+					"SELECT lineage_id FROM session_registry WHERE continuity_id=? AND lineage_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
 					(continuity_id,),
 				).fetchone()
 				if row and row["lineage_id"]:
@@ -616,9 +624,7 @@ class SessionRegistry:
 	def active_continuities(self) -> List[str]:
 		"""Almas con al menos un leg NO expirado (para retención del espejo)."""
 		with self._connect() as conn:
-			rows = conn.execute(
-				"SELECT DISTINCT continuity_id FROM session_registry WHERE ttl_state != 'expired'"
-			).fetchall()
+			rows = conn.execute("SELECT DISTINCT continuity_id FROM session_registry WHERE ttl_state != 'expired'").fetchall()
 		return [str(row["continuity_id"]) for row in rows if row["continuity_id"]]
 
 	def divergent_turns(
@@ -649,10 +655,7 @@ class SessionRegistry:
 		if not allow_all:
 			if mine:
 				marks = ",".join("?" * len(mine))
-				where.append(
-					"(g.originator = ? OR EXISTS (SELECT 1 FROM json_each(g.affinity_json) je "
-					f"WHERE lower(trim(je.value)) IN ({marks})))"
-				)
+				where.append(f"(g.originator = ? OR EXISTS (SELECT 1 FROM json_each(g.affinity_json) je WHERE lower(trim(je.value)) IN ({marks})))")
 				params.append(viewer_originator)
 				params.extend(mine)
 			else:
@@ -860,9 +863,7 @@ class SessionRegistry:
 			if ids:
 				counts = conn.execute(
 					"SELECT subject_event_id, COUNT(*) AS n FROM dynamic_decisions "
-					"WHERE state IN ('open', 'escalated') AND subject_event_id IN ("
-					+ ",".join("?" * len(ids))
-					+ ") GROUP BY subject_event_id",
+					"WHERE state IN ('open', 'escalated') AND subject_event_id IN (" + ",".join("?" * len(ids)) + ") GROUP BY subject_event_id",
 					tuple(ids),
 				).fetchall()
 				by_id = {str(row["subject_event_id"]): int(row["n"]) for row in counts}
@@ -895,11 +896,7 @@ class SessionRegistry:
 		if not mission:
 			return 0
 		params: list = [mission]
-		sql = (
-			"SELECT COUNT(*) AS n FROM mission_events e "
-			"LEFT JOIN note_status ns ON ns.event_id = e.event_id "
-			"WHERE e.mission_id = ?"
-		)
+		sql = "SELECT COUNT(*) AS n FROM mission_events e LEFT JOIN note_status ns ON ns.event_id = e.event_id WHERE e.mission_id = ?"
 		since = int(since_seq or 0)
 		if since > 0:
 			sql += " AND e.event_seq > ?"
@@ -1050,25 +1047,35 @@ class SessionRegistry:
 			row = conn.execute("SELECT * FROM dynamic_decisions WHERE decision_id = ?", (str(decision_id or ""),)).fetchone()
 		return self._decision_dict(row) if row else None
 
-	def review_decision(self, decision_id: str, *, reviewer_continuity_id: str, action: str, reason: str = "") -> dict:
-		"""Revisor independiente: uphold (flag), dismiss o escalate. Nunca hide."""
+	def review_decision(
+		self,
+		decision_id: str,
+		*,
+		reviewer_continuity_id: str,
+		action: str,
+		reason: str = "",
+		confidence: Optional[str] = None,
+	) -> dict:
+		"""Revisor independiente: uphold (flag), dismiss o escalate. Nunca hide.
+
+		Si la D-obj tiene review job, solo el revisor asignado puede actuar y el
+		modo manda: `review` usa `suggest_review`; `semi` exige `confidence=high`
+		para mutar. El Operador resuelve escalated/high/retract con `moderate_note`.
+		"""
 		reviewer = _clean_key(reviewer_continuity_id)
 		if not reviewer:
 			raise ValueError("reviewer_continuity_id requerido")
 		act = str(action or "").strip().lower()
 		if act not in {"uphold", "dismiss", "escalate"}:
 			raise ValueError(f"acción inválida: {action!r}")
+		conf = str(confidence or "").strip().lower()
+		if conf and conf not in {"low", "medium", "high"}:
+			raise ValueError(f"confidence inválida: {confidence!r}")
 		with self._connect() as conn:
 			row = conn.execute("SELECT * FROM dynamic_decisions WHERE decision_id = ?", (str(decision_id or ""),)).fetchone()
 			if not row:
 				raise ValueError("la decisión no existe")
 			decision = dict(row)
-			if decision["state"] == "escalated":
-				if act == "escalate":
-					return self._decision_dict(row)
-				raise ValueError("decisión escalada: solo el Operador puede resolverla")
-			if decision["state"] != "open":
-				raise ValueError(f"decisión ya cerrada: {decision['state']}")
 			subject = conn.execute(
 				"SELECT continuity_id FROM mission_events WHERE event_id = ?",
 				(decision["subject_event_id"],),
@@ -1077,6 +1084,32 @@ class SessionRegistry:
 				raise ValueError("el objetor no puede revisar su propia objeción")
 			if subject and reviewer == subject["continuity_id"]:
 				raise ValueError("el autor de la nota no puede revisarla")
+			review_row = conn.execute(
+				"SELECT job_id, mode, reviewer_continuity_id FROM decision_reviews WHERE decision_id = ? ORDER BY created_at DESC LIMIT 1",
+				(decision["decision_id"],),
+			).fetchone()
+			if review_row:
+				if reviewer != _clean_key(review_row["reviewer_continuity_id"]):
+					raise ValueError("el revisor asignado a esta D-obj es otro")
+				mode = str(review_row["mode"])
+				if mode == "review":
+					raise ValueError("modo review: usa suggest_review")
+				if not conf:
+					raise ValueError("confidence obligatoria para un review job")
+				if mode == "semi" and act != "escalate" and conf != "high":
+					raise ValueError("modo semi: requiere confidence=high; usa escalate")
+			if decision["state"] == "escalated":
+				if act != "escalate":
+					raise ValueError("decisión escalada: solo el Operador puede resolverla")
+				if review_row and conf:
+					conn.execute(
+						"UPDATE decision_reviews SET confidence = ? WHERE job_id = ?",
+						(conf, review_row["job_id"]),
+					)
+					conn.commit()
+				return self._decision_dict(row)
+			if decision["state"] != "open":
+				raise ValueError(f"decisión ya cerrada: {decision['state']}")
 			if bool(decision["requires_operator"]) and act != "escalate":
 				raise ValueError("alta severidad/retract: solo el Operador puede resolverla")
 			now = time.time()
@@ -1086,6 +1119,11 @@ class SessionRegistry:
 				"UPDATE dynamic_decisions SET state = ?, owner = ?, resolved_at = ?, resolution_reason = ? WHERE decision_id = ?",
 				(new_state, owner, None if act == "escalate" else now, _clean_text(reason, _EVENT_SUMMARY_MAX) or None, decision["decision_id"]),
 			)
+			if review_row and conf:
+				conn.execute(
+					"UPDATE decision_reviews SET confidence = ? WHERE job_id = ?",
+					(conf, review_row["job_id"]),
+				)
 			conn.commit()
 		if act == "uphold":
 			current = self.get_note_status(decision["subject_event_id"])
@@ -1142,38 +1180,55 @@ class SessionRegistry:
 				raise ValueError("el objetor no puede revisar su propia objeción")
 			if subject and reviewer == subject["continuity_id"]:
 				raise ValueError("el autor de la nota no puede revisarla")
+			review_row = conn.execute(
+				"SELECT mode, reviewer_continuity_id FROM decision_reviews WHERE decision_id = ? ORDER BY created_at DESC LIMIT 1",
+				(decision["decision_id"],),
+			).fetchone()
+			if review_row:
+				if reviewer != _clean_key(review_row["reviewer_continuity_id"]):
+					raise ValueError("el revisor asignado a esta D-obj es otro")
+				if str(review_row["mode"]) != "review":
+					raise ValueError(f"modo {review_row['mode']}: usa review_decision")
+			existing = conn.execute(
+				"SELECT id, verdict, confidence, reason FROM decision_suggestions WHERE decision_id = ? AND reviewer_continuity_id = ?",
+				(decision["decision_id"], reviewer),
+			).fetchone()
 			now = time.time()
-			cur = conn.execute(
-				"INSERT INTO decision_suggestions (decision_id, reviewer_continuity_id, verdict, confidence, reason, created_at) "
-				"VALUES (?, ?, ?, ?, ?, ?)",
-				(
-					decision["decision_id"],
-					reviewer,
-					act,
-					conf,
-					_clean_text(reason, _EVENT_SUMMARY_MAX) or None,
-					now,
-				),
-			)
+			reason_clean = _clean_text(reason, _EVENT_SUMMARY_MAX) or None
+			changed = True
+			if existing:
+				suggestion_id = int(existing["id"])
+				changed = str(existing["verdict"]) != act or str(existing["confidence"]) != conf or (existing["reason"] or None) != reason_clean
+				conn.execute(
+					"UPDATE decision_suggestions SET verdict = ?, confidence = ?, reason = ?, created_at = ? WHERE id = ?",
+					(act, conf, reason_clean, now, suggestion_id),
+				)
+			else:
+				cur = conn.execute(
+					"INSERT INTO decision_suggestions (decision_id, reviewer_continuity_id, verdict, confidence, reason, created_at) "
+					"VALUES (?, ?, ?, ?, ?, ?)",
+					(decision["decision_id"], reviewer, act, conf, reason_clean, now),
+				)
+				suggestion_id = int(cur.lastrowid or 0)
 			conn.commit()
-			suggestion_id = int(cur.lastrowid or 0)
-		try:
-			self.add_event(
-				event_type="decision_suggested",
-				mission_id=decision["mission_id"],
-				summary=f"{decision['decision_id'][:8]} suggest {act}/{conf}: {reason or ''}",
-				continuity_id=reviewer,
-				ref=decision["decision_id"],
-			)
-		except Exception as e:
-			logger.warning(f"[D-obj] audit event failed for suggestion {decision['decision_id']}: {e}")
+		if changed:
+			try:
+				self.add_event(
+					event_type="decision_suggested",
+					mission_id=decision["mission_id"],
+					summary=f"{decision['decision_id'][:8]} suggest {act}/{conf}: {reason or ''}",
+					continuity_id=reviewer,
+					ref=decision["decision_id"],
+				)
+			except Exception as e:
+				logger.warning(f"[D-obj] audit event failed for suggestion {decision['decision_id']}: {e}")
 		return {
 			"suggestion_id": suggestion_id,
 			"decision_id": decision["decision_id"],
 			"reviewer_continuity_id": reviewer,
 			"verdict": act,
 			"confidence": conf,
-			"reason": _clean_text(reason, _EVENT_SUMMARY_MAX) or None,
+			"reason": reason_clean,
 			"created_at": now,
 		}
 
@@ -1181,8 +1236,7 @@ class SessionRegistry:
 		"""Enlaza una D-obj con el job revisor que la está analizando."""
 		with self._connect() as conn:
 			conn.execute(
-				"INSERT OR REPLACE INTO decision_reviews (job_id, decision_id, reviewer_continuity_id, mode, created_at) "
-				"VALUES (?, ?, ?, ?, ?)",
+				"INSERT OR REPLACE INTO decision_reviews (job_id, decision_id, reviewer_continuity_id, mode, created_at) VALUES (?, ?, ?, ?, ?)",
 				(
 					str(job_id),
 					str(decision_id),
@@ -1194,7 +1248,12 @@ class SessionRegistry:
 			conn.commit()
 
 	def moderate_note(self, event_id: str, *, action: str, actor: str = "operator", reason: str = "") -> dict:
-		"""Operador: flag/hide/retract/restore. Resuelve D-objs abiertas de la nota."""
+		"""Operador: flag/hide/retract/restore.
+
+		`hide`/`retract` resuelven las D-obj open/escalated de la nota como
+		`upheld`; `restore` como `dismissed`. `flag` solo marca la nota y deja la
+		D-obj abierta (la resolverá el revisor o el TTL).
+		"""
 		act = str(action or "").strip().lower()
 		status = {"flag": "flagged", "hide": "hidden", "retract": "retracted", "restore": "visible"}.get(act)
 		if not status:
@@ -1265,8 +1324,7 @@ class SessionRegistry:
 		now_ts = float(now if now is not None else time.time())
 		with self._connect() as conn:
 			rows = conn.execute(
-				"SELECT decision_id, mission_id FROM dynamic_decisions "
-				"WHERE state = 'open' AND expires_at IS NOT NULL AND expires_at < ?",
+				"SELECT decision_id, mission_id FROM dynamic_decisions WHERE state = 'open' AND expires_at IS NOT NULL AND expires_at < ?",
 				(now_ts,),
 			).fetchall()
 			if not rows:
@@ -1297,7 +1355,12 @@ class SessionRegistry:
 		pending_only: bool = True,
 		escalate_expired: bool = True,
 	) -> List[dict]:
-		"""Bandeja de D-obj. Por defecto solo `open`/`escalated` (pendientes)."""
+		"""Bandeja de D-obj. Por defecto solo `open`/`escalated` (pendientes).
+
+		La lista es lectura, pero con `escalate_expired=True` materializa el TTL
+		perezoso (puede escribir `decision_escalated`). Filtra notas sealed y las
+		ocultas/retiradas: no se re-expone su resumen por la bandeja.
+		"""
 		if escalate_expired:
 			self.escalate_expired_decisions()
 		mission = _clean_key(mission_id) if mission_id else None
@@ -1307,16 +1370,19 @@ class SessionRegistry:
 			"SELECT d.*, e.summary AS note_summary, e.ref AS note_ref, e.type AS note_type, "
 			"e.continuity_id AS note_author, e.created_at AS note_created_at, "
 			"dr.job_id AS review_job_id, dr.mode AS review_mode, dr.reviewer_continuity_id AS reviewer, "
+			"dr.confidence AS review_confidence, "
 			"ds.verdict AS suggested_verdict, ds.confidence AS suggestion_confidence, "
 			"ds.reason AS suggestion_reason, ds.created_at AS suggested_at "
 			"FROM dynamic_decisions d LEFT JOIN mission_events e ON e.event_id = d.subject_event_id "
-			"LEFT JOIN (SELECT decision_id, job_id, mode, reviewer_continuity_id, created_at, "
+			"LEFT JOIN note_status ns ON ns.event_id = e.event_id "
+			"LEFT JOIN (SELECT decision_id, job_id, mode, reviewer_continuity_id, confidence, created_at, "
 			"ROW_NUMBER() OVER (PARTITION BY decision_id ORDER BY created_at DESC) AS rn "
 			"FROM decision_reviews) dr ON dr.decision_id = d.decision_id AND dr.rn = 1 "
 			"LEFT JOIN (SELECT decision_id, verdict, confidence, reason, created_at, "
 			"ROW_NUMBER() OVER (PARTITION BY decision_id ORDER BY created_at DESC) AS rn "
 			"FROM decision_suggestions) ds ON ds.decision_id = d.decision_id AND ds.rn = 1 "
-			"WHERE 1=1"
+			"WHERE COALESCE(e.sealed, 0) = 0 "
+			"AND COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted')"
 		)
 		if mission:
 			sql += " AND d.mission_id = ?"
@@ -1376,8 +1442,7 @@ class SessionRegistry:
 		cutoff = time.time() - max(0.0, minutes) * 60.0
 		with self._connect() as conn:
 			cur = conn.execute(
-				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ? "
-				"WHERE ttl_state = 'active' AND updated_at < ?",
+				"UPDATE session_registry SET ttl_state = 'expired', ttl_checked_at = ? WHERE ttl_state = 'active' AND updated_at < ?",
 				(time.time(), cutoff),
 			)
 			conn.commit()

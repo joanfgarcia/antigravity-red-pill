@@ -2063,9 +2063,7 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	registry_obj = SessionRegistry()
 	since = int(identity.get("previous_event_seq") or 0)
 	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
-	awaiting = registry_obj.count_events(
-		mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator
-	)
+	awaiting = registry_obj.count_events(mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator)
 	try:
 		from red_pill.core.session_index import _active_seconds, list_sessions
 
@@ -2076,7 +2074,9 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	global_missions = 0
 	if digest_mode == "global":
 		try:
-			global_missions = len({r.get("mission_id") for r in registry_obj.list_sessions() if r.get("ttl_state") != "expired" and r.get("mission_id")})
+			global_missions = len(
+				{r.get("mission_id") for r in registry_obj.list_sessions() if r.get("ttl_state") != "expired" and r.get("mission_id")}
+			)
 		except Exception:
 			global_missions = 0
 	if not novelties and not awaiting and not parallel and not global_missions:
@@ -2139,7 +2139,10 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 				"type": "string",
 				"description": "Compatibilidad: NO autoritativo. La misión sale de REDPILL_MISSION_ID (env) → repo:<rama> → adhoc; el argumento del modelo no la declara.",
 			},
-			"campaign_id": {"type": "string", "description": "Compatibilidad: NO autoritativo. La campaña sale de REDPILL_CAMPAIGN_ID (env) o del leg ya registrado."},
+			"campaign_id": {
+				"type": "string",
+				"description": "Compatibilidad: NO autoritativo. La campaña sale de REDPILL_CAMPAIGN_ID (env) o del leg ya registrado.",
+			},
 			"lineage_id": {
 				"type": "string",
 				"description": "Etiqueta de linaje (opcional; la asigna quien engendra, no tiene por qué ser el `continuity_id` del padre).",
@@ -2377,8 +2380,10 @@ async def handle_announce_intent(arguments: Dict[str, Any]):
 						text="[ANNOUNCE] objeción cross-misión no soportada en v0 (misma misión que la nota).",
 					)
 				]
-			if subject.get("sealed") and subject.get("originator") != originator:
-				return [types.TextContent(type="text", text="[ANNOUNCE] la nota objetivo es sealed y no la ves.")]
+			if subject.get("sealed"):
+				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota sealed (v0).")]
+			if registry_obj.get_note_status(target) in {"hidden", "retracted"}:
+				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota hidden/retracted.")]
 			decision = registry_obj.open_decision(
 				subject_event_id=target,
 				claim=str(arguments.get("summary") or ""),
@@ -2392,10 +2397,7 @@ async def handle_announce_intent(arguments: Dict[str, Any]):
 				return [
 					types.TextContent(
 						type="text",
-						text=(
-							f"[OBJECTION] ya existe D-obj {decision['decision_id'][:12]} "
-							f"state={decision['state']} note={target[:12]}"
-						),
+						text=(f"[OBJECTION] ya existe D-obj {decision['decision_id'][:12]} state={decision['state']} note={target[:12]}"),
 					)
 				]
 			event = registry_obj.add_event(
@@ -2540,8 +2542,8 @@ def _fmt_decision_age(seconds: float) -> str:
 	name="review_decision",
 	description=(
 		"[OFFICIAL] Revisor independiente de una D-obj (D23-SCORE): uphold (aplica flag), "
-		"dismiss o escalate. No puede revisar el objetor ni el autor de la nota; "
-		"severidad high/retract solo la resuelve el Operador."
+		"dismiss o escalate. Si hay review job, solo el revisor asignado; high/retract "
+		"solo escalan y el Operador resuelve vía moderate_note."
 	),
 	schema={
 		"type": "object",
@@ -2549,8 +2551,13 @@ def _fmt_decision_age(seconds: float) -> str:
 			"decision_id": {"type": "string", "description": "decision_id de la D-obj."},
 			"action": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
 			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
+			"confidence": {
+				"type": "string",
+				"enum": ["low", "medium", "high"],
+				"description": "Confianza; obligatoria (high) para mutar en semi.",
+			},
 		},
-		"required": ["decision_id", "action", "reason"],
+		"required": ["decision_id", "action", "reason", "confidence"],
 	},
 )
 async def handle_review_decision(arguments: Dict[str, Any]):
@@ -2560,6 +2567,9 @@ async def handle_review_decision(arguments: Dict[str, Any]):
 		reason = str(arguments.get("reason") or "").strip()
 		if not reason:
 			return [types.TextContent(type="text", text="[DECISION] `reason` es obligatorio (evidencia breve).")]
+		confidence = str(arguments.get("confidence") or "").strip()
+		if confidence not in {"low", "medium", "high"}:
+			return [types.TextContent(type="text", text="[DECISION] `confidence` es obligatorio (low|medium|high).")]
 		session = await _caller_session(arguments)
 		continuity = str(session.get("continuity_id") or "").strip()
 		if not continuity:
@@ -2569,6 +2579,7 @@ async def handle_review_decision(arguments: Dict[str, Any]):
 			reviewer_continuity_id=continuity,
 			action=str(arguments.get("action") or ""),
 			reason=reason,
+			confidence=confidence,
 		)
 		op = " [Operador]" if decision.get("requires_operator") else ""
 		return [
@@ -2621,8 +2632,7 @@ async def handle_suggest_review(arguments: Dict[str, Any]):
 			types.TextContent(
 				type="text",
 				text=(
-					f"[SUGGEST] {suggestion['decision_id'][:12]} → {suggestion['verdict']}/"
-					f"{suggestion['confidence']} (sin mutar; el Operador decide)"
+					f"[SUGGEST] {suggestion['decision_id'][:12]} → {suggestion['verdict']}/{suggestion['confidence']} (sin mutar; el Operador decide)"
 				),
 			)
 		]
@@ -2635,7 +2645,7 @@ async def handle_suggest_review(arguments: Dict[str, Any]):
 	description=(
 		"[OFFICIAL] Bandeja de D-obj (D23-SCORE): decisiones pendientes de moderación. "
 		"Por defecto solo open/escalated, con las que requieren Operador primero. "
-		"Solo lectura."
+		"Lectura; materializa el TTL perezoso (puede escalar D-obj expiradas)."
 	),
 	schema={
 		"type": "object",
@@ -2682,6 +2692,7 @@ async def handle_list_decisions(arguments: Dict[str, Any]):
 				lines.append(
 					f"     review: job={str(row.get('review_job_id'))[:12]} "
 					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+					+ (f" conf={row.get('review_confidence')}" if row.get("review_confidence") else "")
 				)
 			if row.get("suggested_verdict"):
 				lines.append(
@@ -2697,7 +2708,8 @@ async def handle_list_decisions(arguments: Dict[str, Any]):
 	name="moderate_note",
 	description=(
 		"[OFFICIAL] Operador: flag/hide/retract/restore una nota del tablón (D23-SCORE). "
-		"Requiere REDPILL_OPERATOR=1; en su defecto usa `red-pill session moderate`."
+		"Requiere REDPILL_OPERATOR=1 (MCP y CLI `red-pill session moderate`). "
+		"`hide`/`retract` resuelven las D-obj como upheld; `restore` como dismissed."
 	),
 	schema={
 		"type": "object",
@@ -2706,7 +2718,7 @@ async def handle_list_decisions(arguments: Dict[str, Any]):
 			"action": {"type": "string", "enum": ["flag", "hide", "retract", "restore"]},
 			"reason": {"type": "string", "description": "Motivo (queda auditado)."},
 		},
-		"required": ["event_id", "action"],
+		"required": ["event_id", "action", "reason"],
 	},
 )
 async def handle_moderate_note(arguments: Dict[str, Any]):
@@ -2714,24 +2726,26 @@ async def handle_moderate_note(arguments: Dict[str, Any]):
 		return [
 			types.TextContent(
 				type="text",
-				text="[MODERATE] solo Operador (REDPILL_OPERATOR=1 o `red-pill session moderate`).",
+				text="[MODERATE] solo Operador (REDPILL_OPERATOR=1).",
 			)
 		]
 	try:
 		from red_pill.session.store import SessionRegistry
 
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[MODERATE] `reason` es obligatorio.")]
 		result = SessionRegistry().moderate_note(
 			str(arguments.get("event_id") or ""),
 			action=str(arguments.get("action") or ""),
 			actor="operator",
-			reason=str(arguments.get("reason") or ""),
+			reason=reason,
 		)
 		return [
 			types.TextContent(
 				type="text",
 				text=(
-					f"[MODERATE] {result['event_id'][:12]} → {result['status']} "
-					f"({result['action']}); D-obj resueltas={result['resolved_decisions']}"
+					f"[MODERATE] {result['event_id'][:12]} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}"
 				),
 			)
 		]
@@ -3183,10 +3197,7 @@ def _ensure_job_mission_lease(task: Dict[str, Any], *, allow_takeover: bool = Fa
 			allow_takeover=allow_takeover,
 		)
 	except LeaseHeld:
-		return (
-			f"[ERROR] misión {mission} en manos de otra alma; no se puede escribir el checkpoint "
-			"ni reanudar (split-brain bloqueado)."
-		)
+		return f"[ERROR] misión {mission} en manos de otra alma; no se puede escribir el checkpoint ni reanudar (split-brain bloqueado)."
 	except Exception as exc:
 		return f"[ERROR] lease de misión {mission}: {exc}"
 	return None
@@ -3219,10 +3230,7 @@ def _has_live_mission_siblings(task: Dict[str, Any]) -> bool:
 			continuity_id=owner,
 			limit=200,
 		)
-		return any(
-			str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "")
-			for r in rows
-		)
+		return any(str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "") for r in rows)
 	except Exception:
 		return True
 

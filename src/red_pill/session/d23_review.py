@@ -11,6 +11,7 @@ que analiza la D-obj y usa las tools del MCP compartido:
 El job se encola como `agentic_job` con una cascade de modelos (OpenRouter por
 defecto) y hereda la identidad del revisor por env de confianza.
 """
+
 from __future__ import annotations
 
 import logging
@@ -81,14 +82,14 @@ def build_prompt(decision: Dict[str, Any], note: Dict[str, Any], mode: str) -> s
 		tool_rule = (
 			"Si la D-obj requiere Operador (high/retract) o ya está escalated, llama a "
 			"`review_decision` con escalate y reason. Si tu confianza es high, llama a "
-			"`review_decision` con uphold o dismiss y reason. Si no estás seguro, llama a "
-			"`review_decision` con escalate y reason. NO modifiques la nota."
+			"`review_decision` con uphold o dismiss, reason y confidence=high. Si no estás "
+			"seguro, llama a `review_decision` con escalate. NO modifiques la nota."
 		)
 	else:
 		tool_rule = (
-			"Llama a `review_decision` SIEMPRE con reason. En low/medium decide uphold o "
-			"dismiss. Si la D-obj requiere Operador (high/retract) o ya está escalated, "
-			"usa escalate. NO modifiques la nota."
+			"Llama a `review_decision` SIEMPRE con reason y confidence. En low/medium "
+			"decide uphold o dismiss. Si la D-obj requiere Operador (high/retract) o ya "
+			"está escalated, usa escalate. NO modifiques la nota."
 		)
 
 	return (
@@ -163,6 +164,17 @@ def enqueue_review(
 		return None
 
 	registry = SessionRegistry()
+	note_event_id = str(note.get("event_id") or "").strip()
+	if note.get("sealed"):
+		logger.info("[D23 review] nota sealed; no se encola revisor cloud")
+		return None
+	if note_event_id:
+		try:
+			if registry.get_note_status(note_event_id) in {"hidden", "retracted"}:
+				logger.info("[D23 review] nota %s oculta/retirada; no se encola", note_event_id[:12])
+				return None
+		except Exception as e:
+			logger.warning("[D23 review] no se pudo comprobar note_status: %s", e)
 	# El job corre headless: sin un leg en el registro, `_caller_session` no
 	# resuelve el alma y `suggest_review`/`review_decision` rechazan la llamada.
 	# El leg es la identidad de confianza del revisor (env del job + fila).
@@ -190,6 +202,10 @@ def enqueue_review(
 		)
 	except Exception as e:
 		logger.error("[D23 review] no se pudo encolar: %s", e)
+		try:
+			registry.unregister_session(originator)
+		except Exception:
+			pass
 		return None
 
 	try:

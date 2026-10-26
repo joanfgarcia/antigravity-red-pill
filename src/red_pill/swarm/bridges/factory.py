@@ -69,7 +69,9 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	if backend in ("local-tools", "local_tools"):
 		from .local import LocalToolBridge
 
-		allowed = {key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens") if key in kwargs}
+		allowed = {
+			key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens") if key in kwargs
+		}
 		return LocalToolBridge(**allowed)
 	if backend == "local":
 		from .local import LocalBridge
@@ -99,9 +101,7 @@ def create_cascade_bridge(
 	autonomous-awakening headless runs.
 	"""
 	allowed = {
-		key: identity[key]
-		for key in ("continuity_id", "mission_id", "parent_mission_id", "originator", "role", "job_id")
-		if identity.get(key)
+		key: identity[key] for key in ("continuity_id", "mission_id", "parent_mission_id", "originator", "role", "job_id") if identity.get(key)
 	}
 	if cascade:
 		from .cascade import CascadeBridge

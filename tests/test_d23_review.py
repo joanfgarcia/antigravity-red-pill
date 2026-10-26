@@ -1,4 +1,5 @@
 """D23-SCORE v0.1 — auto-revisor: modos, prompt, enqueue y MCP."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -52,6 +53,7 @@ def test_build_prompt_por_modo():
 		assert "d1" in text and "el dato no cuadra" in text
 		assert "alma-obj" in text and "alma-author" in text
 		assert "reason" in text
+	assert "confidence" in semi and "confidence" in auto
 
 
 async def test_mcp_review_decision_exige_reason():
@@ -168,6 +170,7 @@ def test_enqueue_review_payload_y_receta(monkeypatch):
 			self.args = ()
 			self.kwargs = {}
 			self.session_kwargs = {}
+			self.unregistered = []
 
 		def upsert_session(self, **kwargs):
 			self.session_kwargs = kwargs
@@ -175,6 +178,10 @@ def test_enqueue_review_payload_y_receta(monkeypatch):
 		def register_review_job(self, *args, **kwargs):
 			self.args = args
 			self.kwargs = kwargs
+
+		def unregister_session(self, originator):
+			self.unregistered.append(originator)
+			return True
 
 	queue = FakeQueue()
 	registry = FakeRegistry()
@@ -199,3 +206,167 @@ def test_enqueue_review_payload_y_receta(monkeypatch):
 	assert registry.session_kwargs["continuity_id"] == payload["continuity_id"]
 	assert registry.session_kwargs["mission_id"] == "repo:x"
 	assert registry.session_kwargs["role"] == "reviewer"
+
+
+def test_revisor_asignado_y_confianza_semi(tmp_path):
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	note = _note(reg)
+	d = reg.open_decision(subject_event_id=note["event_id"], claim="duda", created_by="alma-obj")
+	reg.register_review_job(d["decision_id"], job_id="job-1", reviewer_continuity_id="alma-rev", mode="semi")
+
+	with pytest.raises(ValueError, match="asignado"):
+		reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-otro", action="dismiss", reason="x", confidence="high")
+	with pytest.raises(ValueError, match="high"):
+		reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-rev", action="dismiss", reason="x", confidence="medium")
+	done = reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-rev", action="dismiss", reason="ok", confidence="high")
+	assert done["state"] == "dismissed"
+	rows = reg.list_decisions(states=["dismissed"])
+	assert rows and rows[0]["review_confidence"] == "high"
+
+
+def test_modo_review_no_muta_y_semi_no_sugiere(tmp_path):
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	note = _note(reg)
+	d = reg.open_decision(subject_event_id=note["event_id"], claim="duda", created_by="alma-obj")
+	reg.register_review_job(d["decision_id"], job_id="job-r", reviewer_continuity_id="alma-rev", mode="review")
+	with pytest.raises(ValueError, match="suggest_review"):
+		reg.review_decision(d["decision_id"], reviewer_continuity_id="alma-rev", action="dismiss", reason="x")
+	reg.suggest_review(d["decision_id"], reviewer_continuity_id="alma-rev", verdict="dismiss", confidence="high", reason="x")
+
+	reg.register_review_job(d["decision_id"], job_id="job-s", reviewer_continuity_id="alma-rev", mode="semi")
+	with pytest.raises(ValueError, match="review_decision"):
+		reg.suggest_review(d["decision_id"], reviewer_continuity_id="alma-rev", verdict="dismiss", confidence="high", reason="y")
+
+
+def test_suggest_review_reemplaza_por_revisor(tmp_path):
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	note = _note(reg)
+	d = reg.open_decision(subject_event_id=note["event_id"], claim="duda", created_by="alma-obj")
+	reg.suggest_review(d["decision_id"], reviewer_continuity_id="alma-rev", verdict="uphold", confidence="medium", reason="a")
+	reg.suggest_review(d["decision_id"], reviewer_continuity_id="alma-rev", verdict="dismiss", confidence="high", reason="b")
+	rows = reg.list_decisions()
+	assert rows[0]["suggested_verdict"] == "dismiss"
+	assert rows[0]["suggestion_confidence"] == "high"
+
+
+def test_bandeja_filtra_sealed_y_ocultas(tmp_path):
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	sealed = reg.add_event(event_type="intent_updated", mission_id="repo:x", summary="secreto", continuity_id="alma-x", sealed=True)
+	reg.open_decision(subject_event_id=sealed["event_id"], claim="x", created_by="alma-obj")
+	assert reg.list_decisions() == []
+
+	visible = _note(reg)
+	reg.open_decision(subject_event_id=visible["event_id"], claim="y", created_by="alma-obj")
+	reg._set_note_status(visible["event_id"], "repo:x", "hidden", "operator", "spam")
+	assert reg.list_decisions() == []
+
+
+async def test_announce_intent_rechaza_objection_sealed(tmp_path):
+	reg = SessionRegistry()
+	reg.upsert_session(originator="opencode:d23a", continuity_id="alma-d23a", mission_id="repo:feat/d23")
+	bridge = {"originator": "opencode:d23a", "workdir": str(tmp_path)}
+	with (
+		patch("red_pill.mcp_server._harness_bridge", return_value=bridge),
+		patch("red_pill.mcp_server._current_git_branch", return_value="feat/d23"),
+	):
+		sealed = await _call("announce_intent", {"summary": "secreto", "type": "intent_updated", "sealed": True})
+		event_id = sealed.split("event=")[1].split()[0].strip()
+		out = await _call("announce_intent", {"summary": "obj", "type": "objection", "target_event_id": event_id})
+	assert "sealed" in out
+
+
+def test_cli_moderate_requiere_operador(monkeypatch, capsys):
+	from argparse import Namespace
+
+	from red_pill.cli_services import handle_session
+
+	reg = SessionRegistry()
+	note = reg.add_event(event_type="intent_updated", mission_id="repo:x", summary="cli", continuity_id="alma-x")
+	args = Namespace(session_cmd="moderate", event_id=note["event_id"], action="hide", reason="test", json=False)
+	monkeypatch.delenv("REDPILL_OPERATOR", raising=False)
+	handle_session(args)
+	assert "solo Operador" in capsys.readouterr().out
+	monkeypatch.setenv("REDPILL_OPERATOR", "1")
+	handle_session(args)
+	out = capsys.readouterr().out
+	assert "[MODERATE]" in out and "hidden" in out
+
+
+def test_enqueue_review_skip_sealed(monkeypatch):
+	class FakeQueue:
+		def __init__(self):
+			self.kwargs = None
+
+		def enqueue_task(self, **kwargs):
+			self.kwargs = kwargs
+			return "x"
+
+	class FakeRegistry:
+		def upsert_session(self, **kwargs):
+			return None
+
+		def register_review_job(self, *args, **kwargs):
+			return None
+
+		def unregister_session(self, originator):
+			return True
+
+	queue = FakeQueue()
+	registry = FakeRegistry()
+	monkeypatch.setattr(d23_review, "CognitiveQueueManager", lambda: queue)
+	monkeypatch.setattr(d23_review, "SessionRegistry", lambda: registry)
+	assert d23_review.enqueue_review(_decision(), {"summary": "sealed", "sealed": True}, "auto") is None
+	assert queue.kwargs is None
+
+
+def test_enqueue_review_skip_hidden(monkeypatch):
+	class FakeQueue:
+		def __init__(self):
+			self.kwargs = None
+
+		def enqueue_task(self, **kwargs):
+			self.kwargs = kwargs
+			return "x"
+
+	class FakeRegistry:
+		def upsert_session(self, **kwargs):
+			return None
+
+		def register_review_job(self, *args, **kwargs):
+			return None
+
+		def get_note_status(self, event_id):
+			return "hidden"
+
+	queue = FakeQueue()
+	registry = FakeRegistry()
+	monkeypatch.setattr(d23_review, "CognitiveQueueManager", lambda: queue)
+	monkeypatch.setattr(d23_review, "SessionRegistry", lambda: registry)
+	assert d23_review.enqueue_review(_decision(), {"summary": "h", "event_id": "n1"}, "auto") is None
+	assert queue.kwargs is None
+
+
+def test_enqueue_review_orphan_leg_cleanup(monkeypatch):
+	class FakeQueue:
+		def enqueue_task(self, **kwargs):
+			raise RuntimeError("queue down")
+
+	class FakeRegistry:
+		def __init__(self):
+			self.unregistered = []
+
+		def upsert_session(self, **kwargs):
+			return None
+
+		def register_review_job(self, *args, **kwargs):
+			return None
+
+		def unregister_session(self, originator):
+			self.unregistered.append(originator)
+			return True
+
+	registry = FakeRegistry()
+	monkeypatch.setattr(d23_review, "CognitiveQueueManager", lambda: FakeQueue())
+	monkeypatch.setattr(d23_review, "SessionRegistry", lambda: registry)
+	assert d23_review.enqueue_review(_decision(), {"summary": "x"}, "auto") is None
+	assert registry.unregistered == ["d23-review:d1"]
