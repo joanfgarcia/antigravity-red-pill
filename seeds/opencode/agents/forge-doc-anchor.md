@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge Documentation Anchor — extracts every plan point P-nn from the anchor plan. Do not use standalone; the forge skill launches you at assembly.
 mode: subagent
 permissions:

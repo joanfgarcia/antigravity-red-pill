@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge Implementor — implements ONE phase with real commands and evidence. Do not use standalone; the forge skill launches you.
 mode: subagent
 ---

@@ -1,5 +1,4 @@
 ---
-version: 1.0.0
 description: Scout Analyst — analyzes a target (plan, code, docs, Forge state) under ONE lens and produces satellite shards (.cell/shards.json). Launched by the scout skill or standalone for self-discovery. Do not use alone; the scout skill orchestrates you.
 mode: subagent
 ---

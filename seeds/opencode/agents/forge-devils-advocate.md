@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge Devil's Advocate — adversarial refuter with ONE lens. Do not use standalone; the forge skill launches you (one instance per lens).
 mode: subagent
 permissions:

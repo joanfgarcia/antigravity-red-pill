@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge QA — final quality audit across the whole task before the gate. Do not use standalone; the forge skill launches you at the end.
 mode: subagent
 permissions:

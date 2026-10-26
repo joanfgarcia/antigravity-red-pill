@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge Judge — adjudicates conflicting panel refutations (evidence vs speculation). Do not use standalone; the forge skill launches you at L3.
 mode: subagent
 permissions:

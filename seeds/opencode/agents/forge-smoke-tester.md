@@ -1,5 +1,4 @@
 ---
-version: 1.2.0
 description: Forge Smoke Tester — runs REAL end-to-end user flows before closing. Do not use standalone; the forge skill launches you.
 mode: subagent
 permissions:

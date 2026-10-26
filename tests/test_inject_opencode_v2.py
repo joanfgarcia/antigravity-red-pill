@@ -105,6 +105,8 @@ def test_seed_agents_are_v2_native() -> None:
 		text = open(path, encoding="utf-8").read()
 		front = text.split("---", 2)[1] if text.startswith("---") else ""
 		assert "\npermission:" not in front, f"{path}: V1 'permission:' key must be gone"
+		# Native V2: `version:` is not an agent field (V2 warns "unsupported").
+		assert "\nversion:" not in front, f"{path}: unsupported 'version:' field in V2 agent"
 		# V2: hidden agents are excluded from the subagent catalog, so FORGE
 		# could not spawn them. Forge agents must stay visible.
 		assert "\nhidden: true" not in front, f"{path}: forge agents must not be hidden in V2"
