@@ -22,7 +22,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ## [AD-083] D23-SCORE v0 — objeciones, D-obj y moderación del tablón
 **Date**: 2026-10-25
-**Status**: ACCEPTED & IMPLEMENTED (v0; votos/score y auto-reviewer job diferidos).
+**Status**: ACCEPTED & IMPLEMENTED (v0; votos/score diferidos). El auto-reviewer/job `d23_review` se implementó en v0.1 (AD-084).
 **Context**: `mission_events` era append-only pero solo tenía `objection` como señal advisory: no había estado de disputa, revisión ni retirada. D23-SCORE seguía abierta con el default “no retirada automática; objeción → D-obj; revisor independiente; Operador decide”.
 **Decision**:
 1. **D-obj** (`dynamic_decisions`): `decision_id`, nota objetivo, claim/evidence, `severity` (low|medium|high), `proposed_action` (flag|hide|retract), `state` (open|upheld|dismissed|escalated), `requires_operator`, TTL. Eventos `decision_*` append-only en `mission_events` como auditoría (no se renderizan en el tablón).
@@ -32,7 +32,7 @@ This document records the architectural and philosophical pivots of the project.
 5. **Bandeja**: tool `list_decisions` (pendientes, primero las que requieren Operador) + CLI `red-pill session decisions`; tool `review_decision`; `fetch_events` añade `note_status`/`open_decisions` (`[flagged]`, `[disputed:N]`) y filtra `hidden/retracted` salvo autor/Operador. La nota y su historial nunca se borran.
 **Alternatives**: (a) votos + retirada automática — Sybil y un downvote coordinado pueden borrar una nota correcta (descartado en v0); (b) ocultar en el `uphold` del agente — demasiado poder sin Operador; (c) tabla mutable sin eventos — pierde auditoría.
 **Rationale / Evidence**: `tests/test_d23_score.py` (10) + `test_mission_events`/`test_mcp_server` → **126 passed**; `ruff` limpio. CLI validada (`session decisions --json` → `[]`; `session moderate --help`). El MCP en marcha necesita reinicio para exponer los 3 tools nuevos; la CLI ya funciona.
-**Consequences**: D23-SCORE v0 cerrada. Diferido a v0.1: auto-enqueue de un job `d23_review` (revisor autónomo), votos/score, objeciones cross-misión y paneles. El Operador conserva la última palabra y la bandeja evita que el seguimiento dependa de memoria manual.
+**Consequences**: D23-SCORE v0 cerrada. Diferido a v0.1: votos/score, objeciones cross-misión y paneles. El auto-enqueue del job `d23_review` (revisor autónomo) se implementó en v0.1 (AD-084). El Operador conserva la última palabra y la bandeja evita que el seguimiento dependa de memoria manual.
 
 ---
 
