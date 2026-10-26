@@ -39,6 +39,7 @@ class DagScheduleMixin:
 	if TYPE_CHECKING:
 		# Members provided by the sibling mixins / ResumableJobDriver at runtime.
 		short_id: str
+		job_id: str
 		_step_started: Optional[float]
 		_sleep_cutoff_ts: float
 
@@ -105,9 +106,89 @@ class DagScheduleMixin:
 		except OSError as e:
 			logger.warning(f"[DagJob] telemetría no escrita: {e}")
 
+	def _identity_fields(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> Dict[str, Any]:
+		"""RFC-INTEROP-003 S1: identidad opcional que viaja al checkpoint."""
+		saved_continuity = checkpoint_data.get("continuity_id")
+		payload_continuity = payload.get("continuity_id")
+		if saved_continuity and payload_continuity and str(saved_continuity) != str(payload_continuity):
+			raise ValueError("dag_job continuity_id cambió a mitad de job (resume inconsistente)")
+		continuity = saved_continuity or payload_continuity
+		if not continuity:
+			return {}
+		identity: Dict[str, Any] = {
+			"continuity_id": str(continuity),
+			"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else str(payload.get("originator") or ""),
+			"role": str(payload.get("role") or checkpoint_data.get("role") or "job"),
+		}
+		parent_saved = checkpoint_data.get("parent_mission_id")
+		parent_payload = payload.get("parent_mission_id")
+		if parent_saved and parent_payload and str(parent_saved) != str(parent_payload):
+			raise ValueError("dag_job parent_mission_id cambió a mitad de job (resume inconsistente)")
+		parent = parent_payload or parent_saved
+		if parent:
+			identity["parent_mission_id"] = str(parent)
+		return identity
+
+	def _publish_stage_events(
+		self,
+		payload: Dict[str, Any],
+		identity: Dict[str, Any],
+		before: set[str],
+		after: list[str],
+		*,
+		done: bool,
+		blocked: Optional[list[str]] = None,
+	) -> None:
+		"""RFC-INTEROP-003 S2: phase_done/mission_closed al coro (best-effort)."""
+		if not identity or not getattr(self, "job_id", None):
+			return
+		mission = str(identity.get("parent_mission_id") or "")
+		if not mission:
+			return
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			registry = SessionRegistry()
+			for path in [p for p in after if p not in before]:
+				summary = f"stage {path} done"
+				if not registry.event_exists(mission_id=mission, event_type="phase_done", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="phase_done",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
+			for path in blocked or []:
+				summary = f"stage {path} blocked"
+				if not registry.event_exists(mission_id=mission, event_type="blocked", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="blocked",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
+			if done:
+				summary = f"job {str(self.job_id)[:8]} completed"
+				if not registry.event_exists(mission_id=mission, event_type="mission_closed", ref=str(self.job_id), summary=summary):
+					registry.add_event(
+						event_type="mission_closed",
+						mission_id=mission,
+						summary=summary,
+						continuity_id=str(identity.get("continuity_id") or ""),
+						originator=str(identity.get("originator") or ""),
+						ref=str(self.job_id),
+					)
+		except Exception as exc:
+			logger.warning(f"[DagJob] no se pudieron publicar eventos: {exc}")
+
 	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		self._step_started = time.monotonic()
+		identity = self._identity_fields(payload, checkpoint_data)
 		stages = self._stages(payload)
 		completed = list(checkpoint_data.get("completed_stage_ids", []))
 		results = dict(checkpoint_data.get("results", {}))
@@ -120,6 +201,7 @@ class DagScheduleMixin:
 		stages, fanout_items, _skip_empty = self._expand_fanout(stages, completed, fanout_items, _id_path_map(stages), self._workdir(payload))
 		completed = list(completed) + _skip_empty
 		total_leaves = _count_leaves(stages)
+		before_completed = set(completed)
 
 		# Drain cutoff del ciclo de sueño: anclado en el PRIMER step del job y
 		# persistido en el checkpoint — un pause/resume no desliza la ventana y
@@ -175,6 +257,7 @@ class DagScheduleMixin:
 					f"dag sin frente ejecutable: {leaves_done}/{total_leaves} hojas completas "
 					f"y ninguna dependencia satisfecha (deps imposibles o checkpoint corrupto)"
 				)
+			self._publish_stage_events(payload, identity, before_completed, list(completed), done=True)
 			return StepOutcome(
 				completed=True,
 				# el árbol ya no incluye las plantillas skipped (lista vacía):
@@ -182,6 +265,7 @@ class DagScheduleMixin:
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint={
 					**checkpoint_data,
+					**identity,
 					"completed_stage_ids": list(completed),
 					"fanout_items": fanout_items,
 				},
@@ -367,6 +451,7 @@ class DagScheduleMixin:
 			payload,
 			{
 				"mission_id": payload.get("mission_id"),
+				**identity,
 				"completed": leaves_done,
 				"total": total_leaves,
 				"status": "running" if leaves_done < total_leaves else "completed",
@@ -376,6 +461,7 @@ class DagScheduleMixin:
 
 		done = leaves_done >= total_leaves
 		checkpoint = {
+			**identity,
 			"completed_stage_ids": new_completed,
 			"results": new_results,
 			"stage_flags": new_flags,
@@ -387,6 +473,17 @@ class DagScheduleMixin:
 				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
 				f"{leaves_done}/{total_leaves} hojas completas preservadas en el checkpoint."
 			)
+		leaf_paths = {lp for lp, _ in _iter_leaves(stages)}
+		new_leaves = [p for p in new_completed if p in leaf_paths]
+		failed_paths = [path for path, _summary, failed in all_tasks if failed]
+		self._publish_stage_events(
+			payload,
+			identity,
+			before_completed,
+			new_leaves,
+			done=done and not paused,
+			blocked=failed_paths,
+		)
 		return StepOutcome(
 			completed=done and not paused,
 			new_checkpoint=checkpoint,

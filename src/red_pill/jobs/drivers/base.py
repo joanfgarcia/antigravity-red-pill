@@ -348,6 +348,14 @@ class ResumableJobDriver(ABC):
 		"""
 		return checkpoint_data
 
+	def on_terminal(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any], status: str, reason: str = "") -> None:
+		"""Hook opcional al cerrar el job (completed/failed/killed).
+
+		Default no-op. Los drivers que registran un leg/lease lo limpian aquí;
+		un pause/deferral NO es terminal y no lo llama.
+		"""
+		return None
+
 	def abort_step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any], reason: str) -> Dict[str, Any]:
 		"""Hook opcional al fallar/timeout: marca el step abortado en el checkpoint.
 

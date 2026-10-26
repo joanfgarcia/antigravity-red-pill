@@ -53,6 +53,9 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 		if key in base and isinstance(base[key], dict) and isinstance(val, dict):
 			_deep_merge(base[key], val)
 		elif key in base and isinstance(base[key], list) and isinstance(val, list):
+			if key in ("command", "args"):
+				base[key] = val
+				continue
 			existing = base[key]
 			for item in val:
 				if item not in existing:

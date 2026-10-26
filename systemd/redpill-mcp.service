@@ -1,0 +1,22 @@
+[Unit]
+Description=Red Pill MCP shared backend (AD-018, UDS)
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+# Renderizado por scripts/install_mcp_service.sh (@REPO_ROOT@/@PYTHON@/@MCP_SOCKET@).
+Type=simple
+WorkingDirectory=@REPO_ROOT@
+Environment=PYTHONPATH=@REPO_ROOT@/src
+ExecStart=@PYTHON@ -m red_pill.mcp_backend --socket @MCP_SOCKET@
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=4G
+MemorySwapMax=0
+
+[Install]
+WantedBy=default.target

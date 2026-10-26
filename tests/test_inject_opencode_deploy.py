@@ -34,6 +34,16 @@ def adapter():
 	return _load_adapter()
 
 
+def test_deep_merge_reemplaza_command_mcp(adapter) -> None:
+	"""Un command MCP se reemplaza; concatenarlo rompía el proxy con el directo."""
+	base = {"mcp": {"RedPill-Kernel": {"command": ["direct", "old"], "environment": {"A": "1"}}}}
+	overlay = {"mcp": {"RedPill-Kernel": {"command": ["proxy", "new"], "environment": {"B": "2"}}}}
+	out = adapter._deep_merge(base, overlay)
+	assert out["mcp"]["RedPill-Kernel"]["command"] == ["proxy", "new"]
+	assert out["mcp"]["RedPill-Kernel"]["environment"] == {"A": "1", "B": "2"}
+	assert adapter._deep_merge({"plugin": ["a"]}, {"plugin": ["a", "b"]})["plugin"] == ["a", "b"]
+
+
 def test_repo_root_apunta_a_la_raiz_del_repo(adapter) -> None:
 	# El adapter deriva repo_root en inject(); verificamos que la ruta resuelve a
 	# la RAÍZ del repo (no a scripts/) — el nombre del directorio cambia según el
@@ -66,6 +76,9 @@ def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
 	for skill in ("job-manager", "dag", "forge", "scout"):
 		path = os.path.join(tmp, "skills", skill, "SKILL.md")
 		assert os.path.exists(path), f"skill '{skill}' no desplegado en instalación limpia"
+	# Skill multi-fichero: los companions (no solo SKILL.md) también viajan.
+	ledger = os.path.join(tmp, "skills", "context-distiller", "snapshot_read.py")
+	assert os.path.exists(ledger), "companion de skill multi-fichero no desplegado"
 	assert n > 0
 
 

@@ -295,12 +295,67 @@ def read_recent_activity() -> str:
 	return ""
 
 
+def _jobs_block(continuity_id: str, queue: Any = None) -> str:
+	"""RFC-INTEROP-003 S3.3/D-05: avisa de jobs del alma; NUNCA auto-reanuda.
+
+	Silencio cuando no hay alma o no hay jobs: el handshake no paga una línea
+	extra en el caso normal.
+	"""
+	cid = str(continuity_id or "").strip()
+	if not cid:
+		return ""
+
+	def _clean(value: Any, limit: int = 48) -> str:
+		text = " ".join(str(value or "").replace("\r", " ").replace("\n", " ").replace("<", "‹").replace(">", "›").split())
+		return text[:limit]
+
+	tasks: List[Dict[str, Any]] = []
+	error: List[BaseException] = []
+
+	def _query() -> None:
+		try:
+			q = queue
+			if q is None:
+				from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+				q = CognitiveQueueManager()
+			tasks.extend(q.list_tasks(continuity_id=cid, limit=6))
+		except BaseException as exc:
+			error.append(exc)
+
+	# A-05: el despertar no espera 5 s a una DB bloqueada; si no responde, silencio.
+	import threading
+
+	worker = threading.Thread(target=_query, name="wake-jobs-block", daemon=True)
+	worker.start()
+	worker.join(0.25)
+	if worker.is_alive() or error or not tasks:
+		return ""
+	parts = []
+	for task in tasks[:5]:
+		mission = task.get("parent_mission_id") or task.get("mission_id") or "-"
+		parts.append(f"{_clean(task.get('id'))[:8]} {_clean(task.get('source'), 16)} {_clean(task.get('status'), 12)} ({_clean(mission)})")
+	more = " +más" if len(tasks) > 5 else ""
+	return f"[JOBS] {len(tasks)} job(s) de esta alma: " + "; ".join(parts) + more + ". Reanudar es explícito (job_resume), no automático."
+
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument(
 		"--mode", choices=["full", "medium", "low"], default="full", help="Identity loading depth: full (IDE), medium (Telegram), or low (AWAKENINGs)"
 	)
+	parser.add_argument(
+		"--continuity-id", default=os.getenv("REDPILL_CONTINUITY_ID", ""), help="Alma para descubrir jobs (RFC-INTEROP-003 S3.3)"
+	)
 	args = parser.parse_args()
+
+	# B-01h: importar journals de turnos externos (best-effort; no bloquea el despertar).
+	try:
+		from red_pill.session.external_turns import import_external_turns
+
+		import_external_turns()
+	except Exception:
+		pass
 
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
 		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
@@ -352,6 +407,9 @@ def main():
 			rule_upper = rule.upper()
 			if any(k.upper() in rule_upper for k in HEADLESS_INCLUDE):
 				print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+		jobs_line = _jobs_block(args.continuity_id)
+		if jobs_line:
+			print(jobs_line)
 		print("</bunker_directives>")
 		print("</BUNKER_CONTEXT>")
 		return
@@ -396,6 +454,9 @@ def main():
 					continue
 			print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
 
+		jobs_line = _jobs_block(args.continuity_id)
+		if jobs_line:
+			print(jobs_line)
 		print("</bunker_directives>")
 		print("</BUNKER_CONTEXT>")
 		return
@@ -498,6 +559,10 @@ def main():
 				continue
 
 		print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+
+	jobs_line = _jobs_block(args.continuity_id)
+	if jobs_line:
+		print(jobs_line)
 
 	print("\nSILENT_SCRIBE_RELAY:")
 	print("- inject(previous_turn={prompt, response}) -> avoid_amnesia=true")

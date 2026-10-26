@@ -96,6 +96,27 @@ def handle_mini(args: argparse.Namespace) -> int:
 	return 0 if run_mini_cli(bridge, once=args.once) else 1
 
 
+def handle_mcp(args: argparse.Namespace) -> None:
+	"""MCP compartido: backend UDS (serve) y proxy stdio (proxy)."""
+	if getattr(args, "mcp_cmd", None) == "serve":
+		from red_pill.mcp_backend import serve
+
+		serve(
+			socket_path=getattr(args, "socket", None),
+			json_response=bool(getattr(args, "json_response", False)),
+		)
+		return
+	if getattr(args, "mcp_cmd", None) == "proxy":
+		from red_pill.mcp_proxy import run_proxy
+
+		run_proxy(
+			socket_path=getattr(args, "socket", None),
+			harness=getattr(args, "harness", None),
+		)
+		return
+	print("uso: red-pill mcp [serve|proxy]")
+
+
 def handle_session(args: argparse.Namespace) -> None:
 	"""Alma y Coro: operaciones sobre el espejo canónico de turnos."""
 	if getattr(args, "session_cmd", None) == "mirror" and getattr(args, "mirror_cmd", None) == "sync":
@@ -124,8 +145,13 @@ def handle_session(args: argparse.Namespace) -> None:
 		import time
 
 		import red_pill.config as cfg
+		from red_pill.session.external_turns import import_external_turns
 		from red_pill.session.mirror import SessionMirror
 
+		try:
+			import_external_turns()
+		except Exception:
+			pass
 		mirror = SessionMirror()
 		if getattr(args, "expire", False):
 			minutes = getattr(args, "max_age_min", None)
@@ -160,7 +186,9 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
 			return
 		for row in rows:
-			print(f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}")
+			print(
+				f"[RESUME] request_id={row.get('request_id')} status={row.get('status')} alma={row.get('continuity_id')} mission={row.get('mission_id')}"
+			)
 			print(str(row.get("content") or ""))
 			print("[RESUME] --- fin del prompt ---")
 		return
@@ -170,7 +198,7 @@ def handle_session(args: argparse.Namespace) -> None:
 		from red_pill.session.compactor import Compactor
 		from red_pill.session.mirror import SessionMirror
 
-		mirror = SessionMirror()
+		mirror = SessionMirror(getattr(args, "db_path", None))
 		compactor = Compactor(
 			mirror,
 			engine=getattr(args, "engine", None),
@@ -225,6 +253,66 @@ def handle_session(args: argparse.Namespace) -> None:
 				kind=getattr(args, "kind", "opencode") or "opencode",
 			)
 		)
+		return
+	if getattr(args, "session_cmd", None) == "decisions":
+		import json
+
+		from red_pill.session.store import SessionRegistry
+
+		rows = SessionRegistry().list_decisions(
+			mission_id=getattr(args, "mission", None),
+			states=getattr(args, "state", None),
+			limit=int(getattr(args, "limit", 100) or 100),
+			pending_only=not getattr(args, "include_resolved", False),
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+			return
+		if not rows:
+			print("[DECISIONS] sin decisiones pendientes.")
+			return
+		ops = sum(1 for row in rows if row.get("requires_operator"))
+		print(f"--- DECISIONES ({len(rows)}; {ops} requieren Operador) ---")
+		for row in rows:
+			tag = "OP" if row.get("requires_operator") else "AG"
+			age = max(0, int(row.get("age_s") or 0))
+			print(
+				f"[{tag}] {row.get('decision_id')} · sev={row.get('severity')} · "
+				f"{row.get('proposed_action')} · state={row.get('state')} · "
+				f"by={str(row.get('created_by'))[:8]} · age={age // 60}m · mission={row.get('mission_id')}"
+			)
+			if row.get("note_summary"):
+				ref = f" · {row.get('note_ref')}" if row.get("note_ref") else ""
+				note = " ".join(str(row.get("note_summary") or "").split())[:160]
+				print(f"     nota: {note}{ref}")
+			if row.get("review_job_id"):
+				print(
+					f"     review: job={str(row.get('review_job_id'))[:12]} "
+					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+					+ (f" conf={row.get('review_confidence')}" if row.get("review_confidence") else "")
+				)
+			if row.get("suggested_verdict"):
+				reason = " ".join(str(row.get("suggestion_reason") or "").split())[:160]
+				print(f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · {reason}")
+		return
+	if getattr(args, "session_cmd", None) == "moderate":
+		import json
+
+		from red_pill.session.store import SessionRegistry
+
+		if os.getenv("REDPILL_OPERATOR") != "1":
+			print("[MODERATE] solo Operador (REDPILL_OPERATOR=1).")
+			return
+		result = SessionRegistry().moderate_note(
+			args.event_id,
+			action=args.action,
+			actor="operator",
+			reason=args.reason,
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+			return
+		print(f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}")
 		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 

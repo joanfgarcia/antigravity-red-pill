@@ -312,6 +312,18 @@ p._purge_leaked_duplicates()
 	echo -e "${BLUE}Refrescando configuración de IDEs detectados...${NC}"
 	uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT" || true
 
+	# MCP compartido (AD-018): un backend UDS para todos los clientes; los IDEs
+	# usan el proxy ligero. Si falla, el reseed directo sigue disponible con
+	# REDPILL_MCP_SHARED=0.
+	if [ -x "$REPO_ROOT/scripts/install_mcp_service.sh" ] && command -v systemctl &>/dev/null; then
+		echo -e "${BLUE}Instalando MCP compartido (AD-018)...${NC}"
+		if bash "$REPO_ROOT/scripts/install_mcp_service.sh"; then
+			echo -e "${GREEN}✓ MCP compartido activo.${NC}"
+		else
+			echo -e "${YELLOW}⚠ MCP compartido no activo; fallback directo: REDPILL_MCP_SHARED=0 + reseed.${NC}"
+		fi
+	fi
+
 	# Workspace access: re-sync from the registry; if interactive (tty), offer to add more.
 	if [ -t 0 ] && command -v claude &> /dev/null && [ -f "$REPO_ROOT/scripts/manage_workspaces.py" ]; then
 		uv run python scripts/manage_workspaces.py enable || true

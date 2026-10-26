@@ -761,6 +761,16 @@ if [ -f "$SCRIPT_DIR/inject_cli.py" ] && command -v uv &> /dev/null; then
 	fi
 fi
 
+# MCP compartido (AD-018): backend UDS único; el IDE lanza el proxy ligero.
+if [ -x "$SCRIPT_DIR/install_mcp_service.sh" ] && command -v systemctl &> /dev/null; then
+	echo -e "${BLUE}Instalando MCP compartido (AD-018)...${NC}"
+	if bash "$SCRIPT_DIR/install_mcp_service.sh"; then
+		echo -e "${GREEN}✓ MCP compartido activo.${NC}"
+	else
+		echo -e "${YELLOW}⚠ MCP compartido no activo; fallback directo: REDPILL_MCP_SHARED=0 + reseed.${NC}"
+	fi
+fi
+
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
 if [ -f "$SCRIPT_DIR/setup_background_model.sh" ]; then
 	bash "$SCRIPT_DIR/setup_background_model.sh" || echo -e "${RED}[WARN] Fallo al iniciar el task LLM secundario.${NC}"

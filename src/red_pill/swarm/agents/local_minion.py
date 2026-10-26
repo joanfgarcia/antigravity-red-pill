@@ -607,16 +607,37 @@ async def run_local_minion(
 					from red_pill.session.compactor import Compactor, estimate_tokens
 
 					compactor = Compactor(mirror)
+					extra_tokens = estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(task)
 					ctx = await loop.run_in_executor(
 						None,
 						lambda: compactor.ensure_context(
 							cid,
 							budget_tokens=context_tokens or _resolve_context_tokens(model),
-							extra_tokens=estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(task),
+							extra_tokens=extra_tokens,
 							mission_id=mission,
 						),
 					)
 					turns = ctx.turns
+					budget = context_tokens or _resolve_context_tokens(model)
+					if not ctx.compacted and compactor.should_start_background(
+						ctx.messages,
+						extra_tokens=extra_tokens,
+						budget_tokens=budget,
+						reserve_tokens=compactor.reserve_tokens,
+					):
+						try:
+							await loop.run_in_executor(
+								None,
+								lambda: compactor.maybe_start(
+									cid,
+									mission_id=mission,
+									extra_tokens=extra_tokens,
+									budget_tokens=budget,
+									reserve_tokens=compactor.reserve_tokens,
+								),
+							)
+						except Exception as exc:
+							logger.warning(f"[local-minion] background compaction enqueue failed: {exc}")
 				except Exception as e:
 					logger.warning(f"[local-minion] compaction failed: {e}")
 			if history_turns > 0:

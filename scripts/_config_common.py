@@ -64,6 +64,11 @@ def build_vars(args):
 	# (`red-pill` vive en <repo>/.venv/bin/), así que se invoca con uv apuntando
 	# al checkout. Los skills usan ${RED_PILL_CMD}; los injectors lo resuelven.
 	red_pill_cmd = f"{uv_bin} run --no-sync --project {redpill_dir} red-pill" if redpill_dir else ""
+	# MCP compartido (AD-018): el proxy ligero lo lanza el IDE; el backend es el
+	# servicio `redpill-mcp.service`. `REDPILL_MCP_SHARED=0` vuelve al stdio directo.
+	venv_python = os.path.join(redpill_dir, ".venv", "bin", "python") if redpill_dir else ""
+	mcp_socket = os.environ.get("REDPILL_MCP_SOCKET") or os.path.join(state_dir, "mcp.sock")
+	mcp_shared = str(os.environ.get("REDPILL_MCP_SHARED", "1")).strip().lower() not in {"0", "false", "no", "off"}
 	return {
 		"HOME": home,
 		"UV": uv_bin,
@@ -79,6 +84,10 @@ def build_vars(args):
 		"QUEUE_DB": queue_db,
 		"SESSION_DB": session_db,
 		"STATE_DIR": state_dir,
+		"PYTHON": venv_python,
+		"MCP_SOCKET": mcp_socket,
+		"MCP_SHARED": "true" if mcp_shared else "false",
+		"MCP_DIRECT": "false" if mcp_shared else "true",
 		# Forges media (default documentado; override por env/.env). Los placeholders de
 		# las skills (`${IMAGE_FORGE_HOME}`…) se resuelven aquí al sembrar.
 		"IMAGE_FORGE_HOME": os.path.expanduser(os.environ.get("IMAGE_FORGE_HOME") or "~/opt/image-forge"),

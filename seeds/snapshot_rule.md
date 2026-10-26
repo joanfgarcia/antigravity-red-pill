@@ -8,8 +8,13 @@ snapshot of the **workspace** state so a new session resumes without loss.
 
 1. **Snapshot generation**: at the end of a session, on "guarda el contexto /
    snapshot / handoff", or when context gets heavy, invoke the `context-distiller`
-   skill. Output: **one** file at `<workspace>/.red-pill/memory/session_snapshot.md`
-   (workspace-memory). **Never** write to `.agent/` or to project source trees.
+   skill. Output: **one** snapshot at
+   `<workspace>/.red-pill/memory/session_snapshot.md` (workspace-memory), plus an
+   **append-only read ledger** at
+   `<workspace>/.red-pill/memory/session_snapshot.reads.jsonl` managed by the
+   skill's `snapshot_read.py` (cheap "already read?" check by `originator` +
+   `snapshot_sha`; fail open if absent). **Never** write to `.agent/` or to
+   project source trees.
 2. **No obfuscation.** Identity is **config of the instance** (see
    `docs/CORE/IDENTITY_AND_INSTANCE.md`): the snapshot is technical and honest and
    never sanitizes, hides, or rewrites the agent/operator identity or lore terms.
@@ -22,5 +27,8 @@ snapshot of the **workspace** state so a new session resumes without loss.
    relational / personal data lives in the RAG (Bünker), never in project files.
 
 ## Verification
-On resuming, read `session_snapshot.md` to reconstitute state; the kernel **OPEN
-LOOPS** digest covers the pending decisions/jobs/notes counts.
+On resuming, run the skill's read check before loading the snapshot. A
+`SKIP_CANDIDATE` is advisory (same `originator`, same `snapshot_sha`): read after
+compaction or model switch. Then read `session_snapshot.md` to reconstitute
+state; the kernel **OPEN LOOPS** digest covers the pending decisions/jobs/notes
+counts.

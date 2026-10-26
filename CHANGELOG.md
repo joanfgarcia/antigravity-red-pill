@@ -1,5 +1,65 @@
 ## Unreleased
 
+### 🪝 B-01h — write-ahead en arneses externos
+
+- **[NEW]** Journal JSON atómico por turno antes del modelo en Claude/opencode/Pi;
+  al cerrar archiva `completed`/`aborted` con respuesta parcial y motivo.
+- **[NEW]** `import_external_turns()` en el despertar y `session pending`; sin
+  `continuity_id` registrado no se inventa identidad.
+- **[FIX]** Los hijos de bridges desactivan el journal (`REDPILL_TURN_JOURNAL_DISABLE`)
+  para no duplicar el write-ahead del Job Manager.
+- **[DOCS]** AD-080; B-01h implementado. S6.2 real pendiente.
+
+### 🧬 RFC-INTEROP-003 S6 — identidad de alma en arneses externos
+
+- **[NEW]** `opencode`, `claude` y `pi` reciben `REDPILL_*` por env de confianza;
+  el hijo hereda `continuity_id`, misión del alma, originator, rol y job.
+- **[NEW]** `AgentMinion`, `AgenticJobDriver` y `CascadeBridge` propagan la identidad;
+  los jobs sin alma no reciben variables inventadas.
+- **[DOCS]** AD-079; S6.1/S6.3 implementados. S6.2 (E2E real) y B-01h pendientes.
+
+### 🎛️ RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad
+
+- **[NEW]** El alma reclama `session_leases` `scope=mission` al encolar/transferir/reanudar;
+  el job solo la observa y late si es suya, y ejecuta como spectator si es de otra alma.
+- **[NEW]** `job_pause`/`resume`/`kill`/`skip`/`transfer`/`checkpoint` autorizan por
+  `continuity_id` dueño o `REDPILL_OPERATOR=1`; los jobs sin alma siguen igual.
+- **[NEW]** `job_transfer` devuelve identidad + checkpoint; `job_checkpoint` no acepta
+  identidad inyectada; `kill_task_ex` evita el split-brain al liberar leases.
+- **[NEW]** `result.json` durable (state + workspace-memory) con autoría, y MinionInbox
+  con `continuity_id`. `[JOBS]` en el despertar (solo aviso, sin auto-resume).
+- **[DOCS]** AD-078; RFC-003 S0-S5 implementado. S6/B-01h y D23-SCORE fuera de alcance.
+
+### 🛰️ RFC-INTEROP-003 S2/S3 — leg, eventos y descubrimiento
+
+- **[NEW]** `dag_job` con alma registra leg `dag:<job_id>` (`role=job`) y lo expira
+  al terminar.
+- **[NEW]** Eventos automáticos `phase_done` y `mission_closed` con `ref=job_id`.
+- **[NEW]** `job_list --continuity` y `job_status` muestran la identidad del job;
+  `list_tasks` filtra por alma. `[JOBS]` en wake-up y handoff quedan para S3/S4.
+
+### 🧭 RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job`
+
+- **[NEW]** `dag_job` acepta `continuity_id`/`parent_mission_id`/`role` opcionales;
+  `cognitive_tasks` persiste la identidad (columnas + índices).
+- **[NEW]** El checkpoint/status del DAG lleva `continuity_id`, `originator=dag:<job_id>`
+  y `role=job`; resume los conserva.
+- **[NEW]** Etapas command reciben `REDPILL_*`; etapas agénticas reciben un bloque
+  `<redpill-identity>` (solo IDs); local-mini/local-tools heredan el alma.
+- **[DOCS]** AD-076; RFC-003 S0/S1. S2-S6 (leg, eventos, descubrimiento, lease
+  de misión y handoff) pendientes.
+
+### 🧷 B-01L P0 — leases v7 y worker durable de compactación
+
+- **[NEW]** `session_leases` v7 con `scope=work|mission` y `LeaseStore`
+  (heartbeat, extensión acotada, finish, sweep compare-and-set).
+- **[NEW]** `Compactor.maybe_start` encola un `script_job` durable con
+  `session compact --db-path`, dedupe por continuity y `control.max_step_minutes`.
+- **[FIX]** El worker apunta a la DB del mirror, no a la default; el umbral de
+  fondo respeta `extra_tokens` y `budget-reserve`; `extend_lease` sin techo ya no
+  es un no-op; heartbeat/finish validan dueño; purga de leases.
+- **[DOCS]** AD-075; B01L P0. Watchdog/heartbeat de runners y Telegram pendientes.
+
 ### 🗂️ Desk — scaffold con dos dueños y grafo de enlaces
 
 - **[FEATURE]** `scripts/scaffold_desk.sh` + `seeds/desk/.germ`: el contenido del

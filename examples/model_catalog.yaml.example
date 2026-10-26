@@ -37,7 +37,7 @@ catalog:
             share_alike: false
             source: "https://huggingface.co/deepseek-ai"
           timeout: 300
-        - id: "opencode/deepseek-v4-flash-free"
+        - id: "opencode/deepseek-v4.1-flash-free"
           backend: "opencode"
           tier: "free"
           priority: 2
@@ -158,12 +158,12 @@ roles:
     - "opencode/big-pickle"
   planning:
     - "opencode-go/deepseek-v4-pro"
-    - "opencode/deepseek-v4-flash-free"
+    - "opencode/deepseek-v4.1-flash-free"
   coder:
     - "opencode-go/deepseek-v4-pro"
-    - "opencode/deepseek-v4-flash-free"
+    - "opencode/deepseek-v4.1-flash-free"
   conversational:
     - "opencode-go/deepseek-v4-pro"
-    - "opencode/deepseek-v4-flash-free"
+    - "opencode/deepseek-v4.1-flash-free"
     - "local/granite-4.2-8b"
     - "local/granite-8b"

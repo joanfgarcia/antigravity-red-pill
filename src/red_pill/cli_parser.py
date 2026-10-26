@@ -187,7 +187,33 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_compact.add_argument("--engine", default=None, help="Motor: samantha | memento | extractive (default: config)")
 	session_compact.add_argument("--protect-last-n", type=int, default=None, help="Turnos recientes que nunca se compactan")
 	session_compact.add_argument("--handoff", default=None, help="Fichero con una nota de handoff: reset del contexto")
+	session_compact.add_argument("--db-path", default=None, help="session.db alternativa (jobs de test/worktree)")
 	session_compact.add_argument("--json", action="store_true", help="Salida JSON")
+	session_decisions = session_sub.add_parser("decisions", help="Bandeja de D-obj pendientes (D23-SCORE)")
+	session_decisions.add_argument("--mission", default=None, help="Filtra por misión")
+	session_decisions.add_argument(
+		"--state",
+		action="append",
+		choices=["open", "escalated", "upheld", "dismissed"],
+		help="Estado a listar (repetible; default open/escalated)",
+	)
+	session_decisions.add_argument("--include-resolved", action="store_true", help="Incluye upheld/dismissed")
+	session_decisions.add_argument("--limit", type=int, default=100, help="Máximo (default 100)")
+	session_decisions.add_argument("--json", action="store_true", help="Salida JSON")
+	session_moderate = session_sub.add_parser("moderate", help="Operador: flag/hide/retract/restore una nota")
+	session_moderate.add_argument("event_id", help="event_id de la nota")
+	session_moderate.add_argument("--action", required=True, choices=["flag", "hide", "retract", "restore"])
+	session_moderate.add_argument("--reason", required=True, help="Motivo (queda auditado)")
+	session_moderate.add_argument("--json", action="store_true", help="Salida JSON")
+
+	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
+	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")
+	mcp_serve = mcp_sub.add_parser("serve", help="Backend MCP compartido sobre UDS")
+	mcp_serve.add_argument("--socket", default=None, help="UDS (default: $XDG_RUNTIME_DIR/red-pill/mcp.sock)")
+	mcp_serve.add_argument("--json-response", action="store_true", help="Responder JSON en vez de SSE")
+	mcp_proxy = mcp_sub.add_parser("proxy", help="Proxy stdio ↔ backend UDS")
+	mcp_proxy.add_argument("--socket", default=None, help="UDS del backend")
+	mcp_proxy.add_argument("--harness", default=None, help="opencode | claude_code | pi (default: REDPILL_HARNESS)")
 
 	mini_parser = subparsers.add_parser("mini", help="Mini arnés local Forge/Loom (REPL o --once)")
 	mini_parser.add_argument("--profile", default="forge", help="Perfil del cuerpo (forge | loom | loom-tools)")
@@ -304,6 +330,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
 	job_list.add_argument("--mission", help="Solo jobs de esa misión (aislamiento entre forges)")
+	job_list.add_argument("--continuity", help="Solo jobs de esa alma (continuity_id)")
 	job_list.add_argument(
 		"--json",
 		action="store_true",
@@ -318,6 +345,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 
 	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
 	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+	job_resume.add_argument("--force", action="store_true", help="Operador: reclamar la misión aunque el lease sea de otra alma.")
 
 	job_skip = job_sub.add_parser("skip", help="Saltar el siguiente elemento/step sin reintentarlo (marca skip_next en el checkpoint)")
 	job_skip.add_argument("job_id", help="Id completo o prefijo corto")

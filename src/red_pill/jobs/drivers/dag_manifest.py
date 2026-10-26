@@ -29,7 +29,11 @@ _SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `stage.params` is a legitimate per-stage override channel, but it must NOT carry
 # the runner's policy/path keys: an unfiltered `params` could widen MemoryMax to
 # `infinity` or divert `job_id` (re-orphaning what `job kill` reaps) — SHARD-PSEC-01.
-_PROTECTED_STAGE_PARAMS = frozenset({"job_id", "memory_max", "env", "cwd", "command", "timeout", "pause_probe", "sleep_cutoff_ts", "item"})
+_PROTECTED_STAGE_PARAMS = frozenset({
+	"job_id", "memory_max", "env", "cwd", "command", "timeout", "pause_probe",
+	"sleep_cutoff_ts", "item", "continuity_id", "parent_mission_id", "originator", "role",
+	"mission_id",
+})
 
 
 def _resolve_minion_kind(minion_id: str) -> Optional[str]:

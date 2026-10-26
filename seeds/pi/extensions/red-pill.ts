@@ -18,7 +18,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -49,6 +49,84 @@ function touchLiveness(sessionId: string, phase: "start" | "end") {
 		writeFileSync(join(LIVE_DIR, `pi__${safe}.${phase}`), "");
 	} catch {
 		/* best-effort: a failed heartbeat never breaks the turn */
+	}
+}
+
+// ── WRITE-AHEAD (B-01h) ──────────────────────────────────────────────────
+// Mismo journal JSON que Claude/opencode; el kernel lo importa al espejo.
+const TURN_JOURNAL_DISABLED = process.env.REDPILL_TURN_JOURNAL_DISABLE === "1";
+const TURN_ROOT = join(XDG_DATA, "red-pill", "state", "external_turns");
+
+function safeTurn(token: string): string {
+	return String(token ?? "").replace(/[/:]/g, "_").replace(/__/g, "_");
+}
+
+function turnCurrent(sessionId: string): string {
+	return join(TURN_ROOT, "current", `pi__${safeTurn(sessionId)}.json`);
+}
+
+function turnArchive(sessionId: string, requestId: string): string {
+	return join(TURN_ROOT, "archive", `pi__${safeTurn(sessionId)}__${safeTurn(requestId)}.json`);
+}
+
+function writeTurnJson(path: string, data: any): void {
+	const tmp = `${path}.tmp`;
+	mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+	writeFileSync(tmp, JSON.stringify(data));
+	renameSync(tmp, path);
+}
+
+function readTurnJson(path: string): any | null {
+	try {
+		return JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		return null;
+	}
+}
+
+function beginExternalTurn(sessionId: string, prompt: string, cwd: string): void {
+	if (TURN_JOURNAL_DISABLED || !sessionId || !prompt.trim()) return;
+	try {
+		const current = turnCurrent(sessionId);
+		const previous = readTurnJson(current);
+		if (previous?.status === "pending") {
+			if (previous.prompt === prompt) return;
+			previous.status = "aborted";
+			previous.reason = "superseded";
+			previous.ended_at = Date.now() / 1000;
+			writeTurnJson(turnArchive(sessionId, previous.request_id || "unknown"), previous);
+		}
+		writeTurnJson(current, {
+			provider: "pi",
+			session_id: sessionId,
+			originator: `pi:${sessionId}`,
+			request_id: `pi:${sessionId}:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`,
+			prompt,
+			cwd,
+			model: null,
+			started_at: Date.now() / 1000,
+			status: "pending",
+		});
+	} catch {
+		/* best-effort */
+	}
+}
+
+function finishExternalTurn(sessionId: string, response: string, status: "completed" | "aborted", reason = "", model = ""): void {
+	if (TURN_JOURNAL_DISABLED || !sessionId) return;
+	try {
+		const current = turnCurrent(sessionId);
+		const data = readTurnJson(current);
+		if (!data) return;
+		data.status = status;
+		data.response = response || "";
+		data.reason = reason || null;
+		data.model = model || data.model || null;
+		data.ended_at = Date.now() / 1000;
+		writeTurnJson(turnArchive(sessionId, data.request_id || "unknown"), data);
+		unlinkSync(current);
+	} catch {
+		/* best-effort */
 	}
 }
 
@@ -302,6 +380,7 @@ export default function (pi: ExtensionAPI) {
 		if (prompt.trim().length < 3) return;
 		const sessionId = sessionIdOf(ctx);
 		touchLiveness(sessionId, "start");
+		beginExternalTurn(sessionId, prompt, process.cwd());
 		prevPrompt = prompt;
 		turnResponse = "";
 		boundarySeen = false;
@@ -353,17 +432,24 @@ export default function (pi: ExtensionAPI) {
 	// reintentos/compactación) y dispara una vez por settle.
 	pi.on("agent_before_settle", async (event, ctx) => {
 		boundarySeen = true;
-		touchLiveness(sessionIdOf(ctx), "end");
-		if (event.outcome !== "completed") return;
-		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
+		const sessionId = sessionIdOf(ctx);
+		touchLiveness(sessionId, "end");
+		if (event.outcome !== "completed") {
+			finishExternalTurn(sessionId, turnResponse, "aborted", String(event.outcome || "aborted"), lastModel);
+			return;
+		}
+		finishExternalTurn(sessionId, turnResponse, "completed", "", lastModel);
+		relay(prevPrompt, turnResponse, lastModel, sessionId);
 	});
 
 	// Fallback para Pi <0.87 (sin `agent_before_settle`): `agent_settled` es el
 	// hook final y garantiza UNA ejecución cuando Pi ya no va a seguir solo.
 	pi.on("agent_settled", async (_event, ctx) => {
-		touchLiveness(sessionIdOf(ctx), "end");
+		const sessionId = sessionIdOf(ctx);
+		touchLiveness(sessionId, "end");
 		if (boundarySeen) return;
-		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
+		finishExternalTurn(sessionId, turnResponse, "completed", "", lastModel);
+		relay(prevPrompt, turnResponse, lastModel, sessionId);
 	});
 
 	// Búsqueda manual bajo demanda

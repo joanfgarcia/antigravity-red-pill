@@ -53,6 +53,7 @@ from red_pill.core.origins import PROVIDER_OPENCODE, get_origins_path, read_orig
 from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
+from .identity_env import identity_env
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,13 @@ class OpenCodeBridge(AgentBridge):
 		server_url: Optional[str] = None,
 		identity_depth: str = "medium",
 		origin: str = "user",
+		*,
+		continuity_id: Optional[str] = None,
+		mission_id: Optional[str] = None,
+		parent_mission_id: Optional[str] = None,
+		originator: Optional[str] = None,
+		role: Optional[str] = None,
+		job_id: Optional[str] = None,
 	):
 		self._opencode_path = opencode_path or _resolve_opencode_bin()
 		if not self._opencode_path:
@@ -125,6 +133,14 @@ class OpenCodeBridge(AgentBridge):
 		# Origin tags the session for the autonomous cron's idle heuristic:
 		# "awakening" runs must not be mistaken for real operator activity.
 		self._origin = origin
+		self._identity = identity_env(
+			continuity_id=continuity_id,
+			mission_id=mission_id,
+			parent_mission_id=parent_mission_id,
+			originator=originator,
+			role=role,
+			job_id=job_id,
+		)
 		# When the opencode session runs under the redpill-scribe plugin, the
 		# plugin already captures the turn. Skipping here is the cheap guard; the
 		# hash check in enqueue_memory is the one that actually guarantees it.
@@ -230,6 +246,12 @@ class OpenCodeBridge(AgentBridge):
 		cmd = [self._opencode_path, "run", *args, "--format", "json", "--auto"]
 		major = self._cli_major()
 
+		if cwd:
+			# `cwd=` solo cambia el directorio del proceso; opencode fija el
+			# workspace de la SESIÓN con --dir. Sin esto el agente opera en su
+			# proyecto por defecto (p. ej. $HOME), no en el cwd del job.
+			cmd.extend(["--dir", cwd])
+
 		if self._server_url:
 			# v1: --attach <url>; v2: --server <url> (--attach was removed).
 			cmd.extend(["--server" if major >= 2 else "--attach", self._server_url])
@@ -246,12 +268,13 @@ class OpenCodeBridge(AgentBridge):
 		)
 
 		try:
-			env = None
+			extra = {**self._identity, "REDPILL_TURN_JOURNAL_DISABLE": "1"}
 			# El canal Telegram tiene relay autoritativo en el worker (session_id =
 			# uuid de Telegram): el plugin del hijo no debe capturar el prompt
 			# envuelto sin respuesta. En el resto, el flag decide quién captura.
 			if not self._scribe_plugin or self._origin == "telegram":
-				env = {**os.environ, "REDPILL_SCRIBE_DISABLE": "1"}
+				extra["REDPILL_SCRIBE_DISABLE"] = "1"
+			env = {**os.environ, **extra} if extra else None
 			result = subprocess.run(
 				cmd,
 				capture_output=True,

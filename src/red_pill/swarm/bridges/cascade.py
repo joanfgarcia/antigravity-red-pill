@@ -55,12 +55,36 @@ class AllModelsExhausted(CascadeError):
 class CascadeBridge(AgentBridge):
 	"""AgentBridge that tries an ordered list of targets, first-with-quota wins."""
 
-	def __init__(self, targets: "List[BridgeTarget]", name: str = "cascade", origin: Optional[str] = None):
+	def __init__(
+		self,
+		targets: "List[BridgeTarget]",
+		name: str = "cascade",
+		origin: Optional[str] = None,
+		*,
+		continuity_id: Optional[str] = None,
+		mission_id: Optional[str] = None,
+		parent_mission_id: Optional[str] = None,
+		originator: Optional[str] = None,
+		role: Optional[str] = None,
+		job_id: Optional[str] = None,
+	):
 		self._targets: "List[BridgeTarget]" = list(targets or [])
 		self._name = name
 		# Origin propagates to each built target so headless runs can be tagged
 		# (e.g. "awakening") for the autonomous cron's idle heuristic.
 		self._origin = origin
+		self._identity = {
+			key: value
+			for key, value in {
+				"continuity_id": continuity_id,
+				"mission_id": mission_id,
+				"parent_mission_id": parent_mission_id,
+				"originator": originator,
+				"role": role,
+				"job_id": job_id,
+			}.items()
+			if value
+		}
 
 	def _build(self, backend: str, **kwargs) -> AgentBridge:
 		# Lazy import to avoid a factory ↔ cascade import cycle.
@@ -68,6 +92,7 @@ class CascadeBridge(AgentBridge):
 
 		if self._origin:
 			kwargs.setdefault("origin", self._origin)
+		kwargs.update(self._identity)
 		return create_bridge(backend, **kwargs)
 
 	def _primary_bridge(self) -> Optional[AgentBridge]:

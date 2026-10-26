@@ -137,6 +137,14 @@ This document provides a comprehensive list of all parameters available in the `
 | `RESONANCE_THRESHOLD`| `0.4` | How close two disparate memories need to be in vector space to trigger forced integration. |
 
 
+### D23-SCORE Reviewer (AD-084)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `D23_REVIEW_MODE` | `off` | `off` solo Operador; `review` sugiere sin mutar; `semi` muta solo con `confidence=high`; `auto` decide low/medium y escala high/retract. |
+| `D23_REVIEWER_CONTINUITY_ID` | `""` | Alma estable del revisor. Vacío = UUIDv5 de `red-pill:d23-reviewer`. |
+| `D23_REVIEW_RECIPE` | `configs/jobs/d23-review.yaml` | Receta `agentic_job` (cascade OpenRouter, `opencode`, `effort=low`) que ejecuta el revisor. |
+
+
 ### 🏎️ Emotional Ferrari Protocol (v6.3.0)
 
 Plugins 05–10. Each is independently toggleable.

@@ -1,0 +1,17 @@
+# D23-SCORE v0.1 — job revisor independiente.
+# El prompt se inyecta dinámicamente por `red_pill.session.d23_review`; aquí
+# solo vive la política (cascade de modelos OpenRouter, effort, timeout).
+source: agentic_job
+priority: 4
+title: D23 review
+cascade:
+  - backend: opencode
+    model: openrouter/~z-ai/glm-latest
+    effort: low
+  - backend: opencode
+    model: openrouter/~deepseek/deepseek-pro-latest
+    effort: low
+  - backend: opencode
+    model: openrouter/~z-ai/glm-flash-latest
+    effort: low
+timeout: 240

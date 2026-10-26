@@ -13,6 +13,7 @@ que el runner dependa de un hilo efímero.
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
@@ -112,15 +113,17 @@ class Compactor:
 		background_tokens: Optional[int] = None,
 		reserve_tokens: Optional[int] = None,
 		max_input_chars: Optional[int] = None,
+		queue_manager: Optional[Any] = None,
 	):
 		self.mirror = mirror
+		self.queue_manager = queue_manager
 		self.engine = (engine or _config_str("SESSION_COMPACTOR_ENGINE", "samantha")).strip().lower()
 		self.protect_last_n = max(
 			0,
 			int(protect_last_n if protect_last_n is not None else _config_int("SESSION_COMPACTOR_PROTECT_LAST_N", 4)),
 		)
 		self.background_tokens = max(
-			256,
+			1,
 			int(background_tokens if background_tokens is not None else _config_int("SESSION_COMPACTOR_BACKGROUND_TOKENS", 8000)),
 		)
 		self.reserve_tokens = max(
@@ -315,6 +318,97 @@ class Compactor:
 			tokens_before=before,
 			tokens_after=after.tokens_after,
 		)
+
+	def should_start_background(
+		self,
+		messages: List[dict],
+		*,
+		extra_tokens: int = 0,
+		budget_tokens: Optional[int] = None,
+		reserve_tokens: Optional[int] = None,
+	) -> bool:
+		"""True si el contexto supera el umbral de compactación en fondo.
+
+		El umbral se recorta al hueco real (`budget - reserve`) para que el
+		background pueda dispararse antes de que `ensure_context` compacte inline.
+		Sin presupuesto explícito manda `background_tokens`.
+		"""
+		threshold = self.background_tokens
+		if budget_tokens is not None:
+			reserve = self.reserve_tokens if reserve_tokens is None else max(0, int(reserve_tokens))
+			threshold = min(threshold, max(1, int(budget_tokens) - reserve - 1))
+		return estimate_messages_tokens(messages) + max(0, int(extra_tokens)) >= threshold
+
+	def maybe_start(
+		self,
+		continuity_id: str,
+		*,
+		mission_id: Optional[str] = None,
+		protect_last_n: Optional[int] = None,
+		extra_tokens: int = 0,
+		budget_tokens: Optional[int] = None,
+		reserve_tokens: Optional[int] = None,
+	) -> Optional[str]:
+		"""Encola un `script_job` durable que ejecuta `session compact`.
+
+		No compacta en el proceso actual: el Job Manager lo recoge con su OOM
+		shield y el CLI usa este mismo `Compactor`. Dedupe por continuity: si ya
+		hay un job PENDING/PROCESSING, devuelve su id.
+		"""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			raise ValueError("continuity_id requerido")
+		messages = self.mirror.context_messages(continuity)
+		if not self.should_start_background(
+			messages,
+			extra_tokens=extra_tokens,
+			budget_tokens=budget_tokens,
+			reserve_tokens=reserve_tokens,
+		):
+			return None
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		qm = self.queue_manager or CognitiveQueueManager()
+		try:
+			existing = qm.find_task_by_payload_key(
+				source="script_job", key="continuity_id", value=continuity, limit=None
+			)
+		except Exception:
+			existing = None
+		if existing:
+			return str(existing["id"])
+		mission = str(mission_id or "").strip()
+		if not mission:
+			turns = self.mirror.read_turns(continuity)
+			mission = str((turns[-1].get("mission_id") if turns else "") or "").strip()
+		if not mission:
+			raise ValueError("mission_id requerido para compactar en fondo")
+		protect = self.protect_last_n if protect_last_n is None else max(0, int(protect_last_n))
+		command = [
+			sys.executable,
+			"-m",
+			"red_pill.cli",
+			"session",
+			"compact",
+			"--continuity",
+			continuity,
+			"--mission",
+			mission,
+			"--protect-last-n",
+			str(protect),
+			"--db-path",
+			self.mirror.db_path,
+		]
+		payload = {
+			"continuity_id": continuity,
+			"mission_id": mission,
+			"title": f"compact:{continuity[:8]}",
+			"step_command": command,
+			"progress": {"mode": "single"},
+			"control": {"max_step_minutes": 15},
+		}
+		priority = _config_int("SESSION_COMPACTOR_JOB_PRIORITY", 4)
+		return str(qm.enqueue_task(source="script_job", payload=payload, priority=priority, mission_id=mission))
 
 	def maybe_compact(self, continuity_id: str, messages: List[dict], *, threshold: int) -> List[dict]:
 		"""Contrato `Compactor`: compacta si el prompt supera `threshold`."""

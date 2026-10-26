@@ -1,0 +1,9 @@
+[Unit]
+Description=Red Pill Nightly Cycle (chronicle -> sleep, enqueue + cloud backup child)
+
+[Service]
+# Plantilla: %h = HOME; ajusta la ruta si el repo no vive en ~/Documents/IA/sharing.
+Type=oneshot
+WorkingDirectory=%h/Documents/IA/sharing
+Environment="PATH=%h/Documents/IA/sharing/.venv/bin:/home/joan/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/bin/bash %h/Documents/IA/sharing/scripts/nightly_cloud_backup.sh

@@ -4,11 +4,20 @@
   "mcp": {
     "RedPill-Kernel": {
       "type": "local",
+      "command": ["${PYTHON}", "-m", "red_pill.mcp_proxy", "--socket", "${MCP_SOCKET}", "--harness", "opencode"],
+      "environment": {
+        "REDPILL_HARNESS": "opencode",
+        "PYTHONPATH": "${REDPILL_DIR}/src"
+      },
+      "enabled": ${MCP_SHARED}
+    },
+    "RedPill-Kernel-Direct": {
+      "type": "local",
       "command": ["${UV}", "--directory", "${REDPILL_DIR}", "run", "python", "${REDPILL_DIR}/src/red_pill/mcp_server.py"],
       "environment": {
         "REDPILL_HARNESS": "opencode"
       },
-      "enabled": true
+      "enabled": ${MCP_DIRECT}
     }
   },
   "skills": {

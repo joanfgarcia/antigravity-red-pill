@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -32,6 +33,12 @@ from red_pill.utils.mystique import mystique_engine
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# Identidad de confianza inyectada por el proxy del MCP compartido (AD-018).
+# El backend es un único proceso para N clientes; el proxy de cada instancia
+# adjunta la identidad del arnés (no del modelo) en cada petición HTTP. El
+# middleware de `mcp_shared` la publica en este contextvar.
+_shared_identity_var: ContextVar[Optional[dict]] = ContextVar("redpill_shared_identity", default=None)
 
 
 def _safe_create_task(coro, *, name: str = "background"):
@@ -725,7 +732,8 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 
 		formatted = f"--- MINION INBOX ({len(reports)} unread reports) ---\n"
 		for r in reports:
-			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
+			alma = f" | Alma: {str(r.get('continuity_id'))[:8]}" if r.get("continuity_id") else ""
+			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}{alma}\nContent: {r['content']}\n\n"
 
 		return [types.TextContent(type="text", text=formatted)]
 	except Exception as e:
@@ -1076,12 +1084,15 @@ async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 			return "[]"
 
 		files = []
-		for item in os.listdir(mem_path):
-			if os.path.isfile(os.path.join(mem_path, item)) and not item.startswith("."):
-				files.append(item)
+		for root, dirs, names in os.walk(mem_path):
+			dirs[:] = [d for d in dirs if not d.startswith(".")]
+			for name in names:
+				if name.startswith("."):
+					continue
+				files.append(str((Path(root) / name).relative_to(mem_path)))
 		import json
 
-		return json.dumps(files)
+		return json.dumps(sorted(files))
 
 	res = await asyncio.to_thread(_list)
 	return [types.TextContent(type="text", text=res)]
@@ -1438,14 +1449,26 @@ async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	is_compaction = arguments.get("is_compaction", False)
+	try:
+		from red_pill.session.external_turns import import_external_turns
+
+		import_external_turns()
+	except Exception:
+		pass
 	force_inject = arguments.get("force_inject", False)
 	mode = arguments.get("mode", "full")
 
 	# ── LOW/MEDIUM MODE: use wake_up_v6.py with matching depth, no hot-reload ──
 	if mode in ("low", "medium"):
-		wake_output = subprocess.run(
-			[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode], capture_output=True, text=True
-		).stdout
+		try:
+			session = await _caller_session({})
+			continuity = str((session or {}).get("continuity_id") or "")
+		except Exception:
+			continuity = ""
+		cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode]
+		if continuity:
+			cmd += ["--continuity-id", continuity]
+		wake_output = subprocess.run(cmd, capture_output=True, text=True).stdout
 		return [types.TextContent(type="text", text=wake_output)]
 
 	# Hot-reload interceptors as part of session refresh
@@ -1515,7 +1538,15 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		)
 		return [types.TextContent(type="text", text=f"{info_msg}\n\n{reload_report}")]
 
-	wake_output = subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout
+	try:
+		session = await _caller_session({})
+		continuity = str((session or {}).get("continuity_id") or "")
+	except Exception:
+		continuity = ""
+	cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")]
+	if continuity:
+		cmd += ["--continuity-id", continuity]
+	wake_output = subprocess.run(cmd, capture_output=True, text=True).stdout
 
 	return [types.TextContent(type="text", text=f"{wake_output}\n\n{reload_report}")]
 
@@ -1852,9 +1883,19 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# así el bridge NO se confunde entre IDEs simultáneos (dos servidores MCP
 	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
 	# aunque el originator venga explícito.
+	shared = _shared_identity_var.get()
 	explicit_originator = str(arguments.get("originator") or "").strip() or None
 	env_originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
 	harness_env = os.getenv("REDPILL_HARNESS") or None
+	if shared:
+		# Canal de confianza del proxy (AD-018): sustituye env/bridge del backend
+		# compartido, que es común a todas las instancias.
+		shared_originator = str(shared.get("originator") or "").strip() or None
+		if shared_originator:
+			explicit_originator = shared_originator
+			env_originator = shared_originator
+		if str(shared.get("harness") or "").strip():
+			harness_env = str(shared["harness"]).strip()
 	harness = harness_env or (explicit_originator.split(":", 1)[0] if explicit_originator else None)
 	bridge = _harness_bridge(harness)
 	bridge_originator = bridge["originator"] or None
@@ -1867,8 +1908,12 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		originator = env_originator or bridge_originator or explicit_originator
 	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
 	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
+	if shared and str(shared.get("workdir") or "").strip():
+		workspace = str(shared["workdir"]).strip()
 	# El alma NO se acepta del modelo: env de confianza (job/relay) → registro.
 	continuity_id = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip() or None
+	if shared and str(shared.get("continuity_id") or "").strip():
+		continuity_id = str(shared["continuity_id"]).strip()
 	# El registro (tablón) sólo se escribe con un CUERPO COMPUESTO (`provider:id`):
 	# un originator desnudo (p.ej. `antigravity` sin id nativo) colapsaría todas las
 	# sesiones en una sola alma. Sin cuerpo compuesto, el alma es efímera.
@@ -1883,6 +1928,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 			existing = registry_obj.get_by_originator(originator)
 		except Exception as e:
 			logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
+	if shared and existing and existing.get("continuity_id"):
+		# Primer enlace gana: el registro manda sobre el hint del proxy.
+		continuity_id = existing["continuity_id"]
 	# Campaña: env (canal de confianza) → la ya atada al leg. Sin valor, no se infiere.
 	campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or (existing or {}).get("campaign_id")
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
@@ -1904,7 +1952,11 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# La misión sale del manifiesto (env de confianza) → repo:rama → adhoc. El
 	# argumento del modelo NO la declara (evita spoofing y params innecesarios).
 	mission_id = resolve_default_mission(os.getenv("REDPILL_MISSION_ID") or None, branch=branch)
+	if shared and str(shared.get("mission_id") or "").strip():
+		mission_id = str(shared["mission_id"]).strip()
 	role = str(os.getenv("REDPILL_ROLE") or (existing or {}).get("role") or "task").strip() or "task"
+	if shared and str(shared.get("role") or "").strip():
+		role = str(shared["role"]).strip()
 
 	# La afinidad explícita es del OPERADOR (env AFFINITY), no del modelo: si el
 	# modelo pudiera añadirla, se auto-otorgaría lectura en `fetch_divergent_turns`.
@@ -2011,9 +2063,7 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	registry_obj = SessionRegistry()
 	since = int(identity.get("previous_event_seq") or 0)
 	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
-	awaiting = registry_obj.count_events(
-		mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator
-	)
+	awaiting = registry_obj.count_events(mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator)
 	try:
 		from red_pill.core.session_index import _active_seconds, list_sessions
 
@@ -2024,7 +2074,9 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	global_missions = 0
 	if digest_mode == "global":
 		try:
-			global_missions = len({r.get("mission_id") for r in registry_obj.list_sessions() if r.get("ttl_state") != "expired" and r.get("mission_id")})
+			global_missions = len(
+				{r.get("mission_id") for r in registry_obj.list_sessions() if r.get("ttl_state") != "expired" and r.get("mission_id")}
+			)
 		except Exception:
 			global_missions = 0
 	if not novelties and not awaiting and not parallel and not global_missions:
@@ -2087,7 +2139,10 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 				"type": "string",
 				"description": "Compatibilidad: NO autoritativo. La misión sale de REDPILL_MISSION_ID (env) → repo:<rama> → adhoc; el argumento del modelo no la declara.",
 			},
-			"campaign_id": {"type": "string", "description": "Compatibilidad: NO autoritativo. La campaña sale de REDPILL_CAMPAIGN_ID (env) o del leg ya registrado."},
+			"campaign_id": {
+				"type": "string",
+				"description": "Compatibilidad: NO autoritativo. La campaña sale de REDPILL_CAMPAIGN_ID (env) o del leg ya registrado.",
+			},
 			"lineage_id": {
 				"type": "string",
 				"description": "Etiqueta de linaje (opcional; la asigna quien engendra, no tiene por qué ser el `continuity_id` del padre).",
@@ -2249,6 +2304,21 @@ _EVENT_TYPES_SCHEMA = [
 			"sealed": {"type": "boolean", "description": "Si true, el evento solo lo ve su propia misión."},
 			"mission_id": {"type": "string", "description": "Debe coincidir con la misión de tu sesión (anti-spoof)."},
 			"campaign_id": {"type": "string", "description": "Debe coincidir con la campaña de tu sesión (si difiere, se rechaza)."},
+			"target_event_id": {
+				"type": "string",
+				"description": "Solo objection: event_id de la nota objetada (misma misión).",
+			},
+			"severity": {
+				"type": "string",
+				"enum": ["low", "medium", "high"],
+				"description": "Solo objection: severidad (default low). high → Operador.",
+			},
+			"proposed_action": {
+				"type": "string",
+				"enum": ["flag", "hide", "retract"],
+				"description": "Solo objection: acción propuesta (default flag). retract → Operador.",
+			},
+			"evidence": {"type": "string", "description": "Solo objection: evidencia breve (sin secretos)."},
 		},
 		"required": ["summary"],
 	},
@@ -2290,8 +2360,89 @@ async def handle_announce_intent(arguments: Dict[str, Any]):
 		if not isinstance(sealed_raw, bool):
 			return [types.TextContent(type="text", text="[ANNOUNCE] `sealed` debe ser boolean (true/false).")]
 		registry_obj = SessionRegistry()
+		event_type = str(arguments.get("type") or "intent_updated")
+		target = str(arguments.get("target_event_id") or "").strip()
+		if event_type == "objection":
+			if not target:
+				return [types.TextContent(type="text", text="[ANNOUNCE] objection requiere `target_event_id`.")]
+			if sealed_raw:
+				return [types.TextContent(type="text", text="[ANNOUNCE] una objection no puede ser sealed (v0).")]
+			continuity = str(session.get("continuity_id") or "").strip()
+			if not continuity:
+				return [types.TextContent(type="text", text="[ANNOUNCE] sin alma resuelta; no se publica la objeción.")]
+			subject = registry_obj.get_event(target)
+			if not subject:
+				return [types.TextContent(type="text", text="[ANNOUNCE] la nota objetivo no existe.")]
+			if subject["mission_id"] != mission:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ANNOUNCE] objeción cross-misión no soportada en v0 (misma misión que la nota).",
+					)
+				]
+			if subject.get("sealed"):
+				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota sealed (v0).")]
+			if registry_obj.get_note_status(target) in {"hidden", "retracted"}:
+				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota hidden/retracted.")]
+			decision = registry_obj.open_decision(
+				subject_event_id=target,
+				claim=str(arguments.get("summary") or ""),
+				created_by=continuity,
+				mission_id=mission,
+				evidence=str(arguments.get("evidence") or ""),
+				severity=str(arguments.get("severity") or "low"),
+				proposed_action=str(arguments.get("proposed_action") or "flag"),
+			)
+			if not decision.get("created"):
+				return [
+					types.TextContent(
+						type="text",
+						text=(f"[OBJECTION] ya existe D-obj {decision['decision_id'][:12]} state={decision['state']} note={target[:12]}"),
+					)
+				]
+			event = registry_obj.add_event(
+				event_type="objection",
+				mission_id=mission,
+				campaign_id=campaign,
+				continuity_id=continuity,
+				originator=originator,
+				global_turn=registry_obj.get_max_global_turn(),
+				summary=str(arguments.get("summary") or ""),
+				ref=decision["decision_id"],
+				sealed=False,
+			)
+			op = " [requiere Operador]" if decision.get("requires_operator") else ""
+			review_job = None
+			mode = "off"
+			try:
+				from red_pill.session.d23_review import enqueue_review, review_mode
+
+				mode = review_mode()
+				if mode != "off":
+					review_job = enqueue_review(decision, subject, mode)
+			except Exception as e:
+				logger.warning(f"[OBJECTION] review enqueue failed: {e}")
+			review_note = f" · review_job={review_job}" if review_job else ""
+			mode_note = f" · mode={mode}" if mode != "off" else ""
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						f"[OBJECTION] decision={decision['decision_id']} · state={decision['state']}{op} · "
+						f"note={target} · event={event['event_id']} · seq={event['event_seq']}"
+						f"{review_note}{mode_note}"
+					),
+				)
+			]
+		if target or arguments.get("severity") or arguments.get("proposed_action") or arguments.get("evidence"):
+			return [
+				types.TextContent(
+					type="text",
+					text="[ANNOUNCE] target_event_id/severity/proposed_action/evidence solo valen con type=objection.",
+				)
+			]
 		event = registry_obj.add_event(
-			event_type=str(arguments.get("type") or "intent_updated"),
+			event_type=event_type,
 			mission_id=mission,
 			campaign_id=campaign,
 			continuity_id=session.get("continuity_id"),
@@ -2357,6 +2508,8 @@ async def handle_fetch_events(arguments: Dict[str, Any]):
 			types=arguments.get("types"),
 			limit=int(arguments.get("limit") or 50),
 			viewer_originator=session.get("originator"),
+			viewer_continuity_id=session.get("continuity_id"),
+			include_hidden=os.getenv("REDPILL_OPERATOR") == "1",
 		)
 		safe_target = sanitize_inline(target)
 		if not events:
@@ -2365,10 +2518,239 @@ async def handle_fetch_events(arguments: Dict[str, Any]):
 		for event in events:
 			ref = f" · {event['ref']}" if event.get("ref") else ""
 			seal = " [sealed]" if event.get("sealed") else ""
-			lines.append(f"[{event.get('event_seq', 0)}] {event['type']}: {event['summary']}{ref}{seal}")
+			status = str(event.get("note_status") or "visible")
+			tag = f" [{status}]" if status in {"flagged", "hidden", "retracted"} else ""
+			open_decisions = int(event.get("open_decisions") or 0)
+			if open_decisions > 0:
+				tag += f" [disputed:{open_decisions}]"
+			lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}")
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[EVENTS] error: {e}")]
+
+
+def _fmt_decision_age(seconds: float) -> str:
+	age = max(0, int(seconds or 0))
+	if age < 3600:
+		return f"{age // 60}m"
+	if age < 86400:
+		return f"{age / 3600:.1f}h"
+	return f"{age / 86400:.1f}d"
+
+
+@registry.register(
+	name="review_decision",
+	description=(
+		"[OFFICIAL] Revisor independiente de una D-obj (D23-SCORE): uphold (aplica flag), "
+		"dismiss o escalate. Si hay review job, solo el revisor asignado; high/retract "
+		"solo escalan y el Operador resuelve vía moderate_note."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"decision_id": {"type": "string", "description": "decision_id de la D-obj."},
+			"action": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
+			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
+			"confidence": {
+				"type": "string",
+				"enum": ["low", "medium", "high"],
+				"description": "Confianza; obligatoria (high) para mutar en semi.",
+			},
+		},
+		"required": ["decision_id", "action", "reason", "confidence"],
+	},
+)
+async def handle_review_decision(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[DECISION] `reason` es obligatorio (evidencia breve).")]
+		confidence = str(arguments.get("confidence") or "").strip()
+		if confidence not in {"low", "medium", "high"}:
+			return [types.TextContent(type="text", text="[DECISION] `confidence` es obligatorio (low|medium|high).")]
+		session = await _caller_session(arguments)
+		continuity = str(session.get("continuity_id") or "").strip()
+		if not continuity:
+			return [types.TextContent(type="text", text="[DECISION] sin alma resuelta; no puedes revisar.")]
+		decision = SessionRegistry().review_decision(
+			str(arguments.get("decision_id") or ""),
+			reviewer_continuity_id=continuity,
+			action=str(arguments.get("action") or ""),
+			reason=reason,
+			confidence=confidence,
+		)
+		op = " [Operador]" if decision.get("requires_operator") else ""
+		return [
+			types.TextContent(
+				type="text",
+				text=f"[DECISION] {decision['decision_id'][:12]} → {decision['state']}{op} · note={decision['subject_event_id'][:12]}",
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[DECISION] error: {e}")]
+
+
+@registry.register(
+	name="suggest_review",
+	description=(
+		"[OFFICIAL] Revisor D23-SCORE (modo review): registra una sugerencia "
+		"(uphold/dismiss/escalate + confianza) sin cambiar el estado de la D-obj. "
+		"El Operador decide."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"decision_id": {"type": "string", "description": "decision_id de la D-obj."},
+			"verdict": {"type": "string", "enum": ["uphold", "dismiss", "escalate"]},
+			"confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+			"reason": {"type": "string", "description": "Motivo/evidencia breve (sin secretos)."},
+		},
+		"required": ["decision_id", "verdict", "confidence", "reason"],
+	},
+)
+async def handle_suggest_review(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[SUGGEST] `reason` es obligatorio (evidencia breve).")]
+		session = await _caller_session(arguments)
+		continuity = str(session.get("continuity_id") or "").strip()
+		if not continuity:
+			return [types.TextContent(type="text", text="[SUGGEST] sin alma resuelta; no puedes revisar.")]
+		suggestion = SessionRegistry().suggest_review(
+			str(arguments.get("decision_id") or ""),
+			reviewer_continuity_id=continuity,
+			verdict=str(arguments.get("verdict") or ""),
+			confidence=str(arguments.get("confidence") or ""),
+			reason=reason,
+		)
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[SUGGEST] {suggestion['decision_id'][:12]} → {suggestion['verdict']}/{suggestion['confidence']} (sin mutar; el Operador decide)"
+				),
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[SUGGEST] error: {e}")]
+
+
+@registry.register(
+	name="list_decisions",
+	description=(
+		"[OFFICIAL] Bandeja de D-obj (D23-SCORE): decisiones pendientes de moderación. "
+		"Por defecto solo open/escalated, con las que requieren Operador primero. "
+		"Lectura; materializa el TTL perezoso (puede escalar D-obj expiradas)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"mission_id": {"type": "string", "description": "Filtra por misión (default: todas)."},
+			"states": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "Estados a listar (default open/escalated).",
+			},
+			"include_resolved": {"type": "boolean", "description": "Incluye upheld/dismissed."},
+			"limit": {"type": "integer", "description": "Máximo (default 100, tope 500)."},
+		},
+	},
+)
+async def handle_list_decisions(arguments: Dict[str, Any]):
+	try:
+		from red_pill.session.store import SessionRegistry, sanitize_inline
+
+		include_resolved = bool(arguments.get("include_resolved"))
+		states = arguments.get("states")
+		rows = SessionRegistry().list_decisions(
+			mission_id=arguments.get("mission_id"),
+			states=states if isinstance(states, list) else None,
+			limit=int(arguments.get("limit") or 100),
+			pending_only=not include_resolved,
+		)
+		if not rows:
+			return [types.TextContent(type="text", text="[DECISIONS] sin decisiones pendientes.")]
+		ops = sum(1 for row in rows if row.get("requires_operator"))
+		lines = [f"--- DECISIONES ({len(rows)}; {ops} requieren Operador) ---"]
+		for row in rows:
+			tag = "OP" if row.get("requires_operator") else "AG"
+			lines.append(
+				f"[{tag}] {row.get('decision_id')} · sev={row.get('severity')} · "
+				f"{row.get('proposed_action')} · state={row.get('state')} · "
+				f"by={str(row.get('created_by'))[:8]} · age={_fmt_decision_age(float(row.get('age_s') or 0))} · "
+				f"mission={sanitize_inline(row.get('mission_id'), 60)}"
+			)
+			if row.get("note_summary"):
+				note_ref = f" · {sanitize_inline(row.get('note_ref'), 80)}" if row.get("note_ref") else ""
+				lines.append(f"     nota: {sanitize_inline(row.get('note_summary'), 160)}{note_ref}")
+			if row.get("review_job_id"):
+				lines.append(
+					f"     review: job={str(row.get('review_job_id'))[:12]} "
+					f"mode={row.get('review_mode')} reviewer={str(row.get('reviewer'))[:8]}"
+					+ (f" conf={row.get('review_confidence')}" if row.get("review_confidence") else "")
+				)
+			if row.get("suggested_verdict"):
+				lines.append(
+					f"     sugerencia: {row.get('suggested_verdict')}/{row.get('suggestion_confidence')} · "
+					f"{sanitize_inline(row.get('suggestion_reason'), 160)}"
+				)
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[DECISIONS] error: {e}")]
+
+
+@registry.register(
+	name="moderate_note",
+	description=(
+		"[OFFICIAL] Operador: flag/hide/retract/restore una nota del tablón (D23-SCORE). "
+		"Requiere REDPILL_OPERATOR=1 (MCP y CLI `red-pill session moderate`). "
+		"`hide`/`retract` resuelven las D-obj como upheld; `restore` como dismissed."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"event_id": {"type": "string", "description": "event_id de la nota."},
+			"action": {"type": "string", "enum": ["flag", "hide", "retract", "restore"]},
+			"reason": {"type": "string", "description": "Motivo (queda auditado)."},
+		},
+		"required": ["event_id", "action", "reason"],
+	},
+)
+async def handle_moderate_note(arguments: Dict[str, Any]):
+	if os.getenv("REDPILL_OPERATOR") != "1":
+		return [
+			types.TextContent(
+				type="text",
+				text="[MODERATE] solo Operador (REDPILL_OPERATOR=1).",
+			)
+		]
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		reason = str(arguments.get("reason") or "").strip()
+		if not reason:
+			return [types.TextContent(type="text", text="[MODERATE] `reason` es obligatorio.")]
+		result = SessionRegistry().moderate_note(
+			str(arguments.get("event_id") or ""),
+			action=str(arguments.get("action") or ""),
+			actor="operator",
+			reason=reason,
+		)
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[MODERATE] {result['event_id'][:12]} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}"
+				),
+			)
+		]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[MODERATE] error: {e}")]
 
 
 @registry.register(
@@ -2683,6 +3065,207 @@ def _queue() -> Any:
 _ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
 
 
+def _has_mission_lease(task_or_source: Any) -> bool:
+	"""S4 solo cablea el lease al DAG (orquestador); otros sources no lo reclaman.
+
+	Un job agéntico/script con alma no tiene heartbeat de lease todavía: adquirirlo
+	en el submit lo dejaría huérfano a los 15 min. Hasta que el runner lo cablee,
+	esos jobs conservan el flujo legacy.
+	"""
+	source = task_or_source.get("source") if isinstance(task_or_source, dict) else task_or_source
+	return str(source or "") == "dag_job"
+
+
+def _job_identity(task: Dict[str, Any]) -> Dict[str, str]:
+	"""Identidad efectiva de un job (columnas S0 + checkpoint legado)."""
+	cp = task.get("checkpoint_data") or {}
+	return {
+		"continuity_id": str(task.get("continuity_id") or cp.get("continuity_id") or ""),
+		"parent_mission_id": str(task.get("parent_mission_id") or cp.get("parent_mission_id") or ""),
+		"originator": str(cp.get("originator") or ""),
+		"role": str(cp.get("role") or ""),
+	}
+
+
+async def _authorize_job_mutation(task: Dict[str, Any], action: str) -> Optional[str]:
+	"""RFC-INTEROP-003 S4.2/D-09: solo el alma dueña o el Operador manda.
+
+	Un job sin alma (D-02/A-06) conserva el comportamiento legado: cualquier
+	llamante de confianza puede operarlo. Los argumentos del modelo no autorizan;
+	el override del Operador es `REDPILL_OPERATOR=1` en el canal de confianza.
+	"""
+	identity = _job_identity(task)
+	owner = identity["continuity_id"]
+	if not owner:
+		return None
+	try:
+		session = await _caller_session({})
+	except Exception:
+		session = {}
+	caller = str((session or {}).get("continuity_id") or "")
+	if caller and caller == owner:
+		return None
+	if os.getenv("REDPILL_OPERATOR") == "1":
+		return None
+	return (
+		f"[ERROR] {action}: el job {str(task.get('id') or '')[:8]} pertenece a otra alma "
+		f"({owner[:8]}); solo su alma dueña o el Operador (REDPILL_OPERATOR=1) puede mandarlo."
+	)
+
+
+def _sanitize_job_checkpoint(task: Dict[str, Any], checkpoint: Dict[str, Any]) -> "tuple[Optional[Dict[str, Any]], Optional[str]]":
+	"""S4: el checkpoint no puede inyectar ni cambiar la identidad del job.
+
+	`continuity_id`/`parent_mission_id`/`originator`/`role` son columnas de la
+	cola o del payload firmado; el main-loop puede avanzar pasos, no apropiarse
+	de otra misión. Un job sin alma no puede convertirse en alma por checkpoint.
+	"""
+	if not isinstance(checkpoint, dict):
+		return None, "[ERROR] checkpoint debe ser un objeto JSON."
+	identity = _job_identity(task)
+	clean = dict(checkpoint)
+	if not identity["continuity_id"] and any(k in clean for k in ("continuity_id", "parent_mission_id", "originator", "role")):
+		return None, "[ERROR] un job sin alma no puede escribir identidad en el checkpoint."
+	expected = {
+		"continuity_id": identity["continuity_id"],
+		"parent_mission_id": identity["parent_mission_id"],
+		"originator": identity["originator"],
+		"role": identity["role"],
+	}
+	for key, wanted in expected.items():
+		if key not in clean:
+			continue
+		given = str(clean.get(key) or "")
+		if not wanted:
+			return None, f"[ERROR] un job sin alma no puede escribir '{key}' en el checkpoint."
+		if given and given != wanted:
+			return None, f"[ERROR] '{key}' del checkpoint no coincide con la identidad del job."
+		clean[key] = wanted
+	return clean, None
+
+
+def _mission_lease_conflict(task: Dict[str, Any], *, allow_takeover: bool = False) -> Optional[str]:
+	"""Comprueba el lease ANTES de mutar; no adquiere ni deja huérfanos."""
+	if not _has_mission_lease(task):
+		return None
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	owner = identity["continuity_id"]
+	if not mission or not owner:
+		return None
+	try:
+		import time
+
+		from red_pill.session.lease import LeaseStore
+
+		row = LeaseStore().active_mission_lease(mission)
+		if not row:
+			return None
+		deadline = min(
+			float(row["last_heartbeat_at"]) + int(row["idle_ttl_s"]),
+			float(row["started_at"]) + int(row["max_wall_s"]),
+		)
+		if time.time() > deadline:
+			return None
+		if str(row.get("continuity_id") or "") != owner and not allow_takeover:
+			return f"[ERROR] misión {mission} en manos de otra alma (split-brain bloqueado)."
+	except Exception as exc:
+		return f"[ERROR] lease de misión {mission}: {exc}"
+	return None
+
+
+def _ensure_job_mission_lease(task: Dict[str, Any], *, allow_takeover: bool = False) -> Optional[str]:
+	"""S4.4: el checkpoint/resume exige el mando de la misión (o lo adquiere)."""
+	if not _has_mission_lease(task):
+		return None
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	owner = identity["continuity_id"]
+	if not mission or not owner:
+		return None
+	try:
+		from red_pill.session.lease import LeaseHeld, LeaseStore
+
+		LeaseStore().begin_mission_lease(
+			mission,
+			continuity_id=owner,
+			holder_originator="",
+			owner_kind="soul",
+			idle_ttl_s=900,
+			max_wall_s=604800,
+			metadata={"job_id": str(task.get("id") or "")},
+			allow_takeover=allow_takeover,
+		)
+	except LeaseHeld:
+		return f"[ERROR] misión {mission} en manos de otra alma; no se puede escribir el checkpoint ni reanudar (split-brain bloqueado)."
+	except Exception as exc:
+		return f"[ERROR] lease de misión {mission}: {exc}"
+	return None
+
+
+def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador") -> None:
+	"""Cierre de un job matado sin runner en vuelo: result.json + leg muerto."""
+	try:
+		from red_pill.jobs.artifacts import write_job_result
+		from red_pill.session.store import SessionRegistry
+
+		write_job_result(task, status="killed", summary=reason, error=reason)
+		if str(task.get("source") or "") == "dag_job":
+			SessionRegistry().unregister_session(f"dag:{task['id']}")
+	except Exception as exc:
+		logger.warning(f"job_kill: no se pudo cerrar el artefacto/leg de {str(task.get('id'))[:8]}: {exc}")
+
+
+def _has_live_mission_siblings(task: Dict[str, Any]) -> bool:
+	"""No cerrar el mando si otro job de la misma alma+parent sigue vivo."""
+	identity = _job_identity(task)
+	mission, owner = identity["parent_mission_id"], identity["continuity_id"]
+	if not mission or not owner:
+		return False
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		rows = CognitiveQueueManager().list_tasks(
+			statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"],
+			continuity_id=owner,
+			limit=200,
+		)
+		return any(str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "") for r in rows)
+	except Exception:
+		return True
+
+
+def _release_job_mission_lease(task: Dict[str, Any], reason: str = "operator_kill") -> None:
+	"""Cierra el mando al matar el job, solo si el lease pertenece a este job."""
+	if not _has_mission_lease(task):
+		return
+	identity = _job_identity(task)
+	mission = identity["parent_mission_id"]
+	if not mission or not identity["continuity_id"]:
+		return
+	try:
+		import json as _json
+
+		from red_pill.session.lease import LeaseStore
+
+		leases = LeaseStore()
+		key = f"mission:{mission}"
+		row = leases.get(key)
+		if not row:
+			return
+		try:
+			meta = _json.loads(row.get("metadata_json") or "{}")
+		except (TypeError, ValueError):
+			meta = {}
+		if str(meta.get("job_id") or "") != str(task.get("id") or ""):
+			return
+		if _has_live_mission_siblings(task):
+			return
+		leases.finish(key, state="aborted", reason=reason, continuity_id=identity["continuity_id"] or None)
+	except Exception as exc:
+		logger.warning(f"job_kill: no se pudo cerrar lease de misión {mission}: {exc}")
+
+
 def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	"""Resuelve por id completo o prefijo corto (como el CLI: busca en TODOS los
 	estados, incluido COMPLETED, y rehúsa prefijos ambiguos en vez de quedarse
@@ -2743,7 +3326,47 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		driver_cls = get_driver_class(source)
 		if not driver_cls:
 			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
+
+		# RFC-INTEROP-003 §7.1: la identidad sale del canal de confianza, no del
+		# argumento del modelo. Un continuity_id ajeno se rechaza; si el llamante
+		# tiene alma y no se declara, se hereda. El Operador puede override.
+		try:
+			session = await _caller_session({})
+		except Exception:
+			session = {}
+		trusted_continuity = str(session.get("continuity_id") or "").strip()
+		trusted_mission = str(session.get("mission_id") or "").strip()
+		operator = os.getenv("REDPILL_OPERATOR") == "1"
+		provided_continuity = str(payload.get("continuity_id") or "").strip()
+		if provided_continuity and not operator:
+			if not trusted_continuity or provided_continuity != trusted_continuity:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ERROR] job_submit continuity_id no pertenece al llamante (anti-spoof).",
+					)
+				]
+		if not provided_continuity and trusted_continuity:
+			payload["continuity_id"] = trusted_continuity
+		if payload.get("continuity_id"):
+			payload.pop("originator", None)
+			if not payload.get("role"):
+				payload["role"] = "job"
+			provided_parent = str(payload.get("parent_mission_id") or "").strip()
+			if trusted_mission and provided_parent and provided_parent != trusted_mission and not operator:
+				return [
+					types.TextContent(
+						type="text",
+						text="[ERROR] job_submit parent_mission_id no coincide con la misión del llamante.",
+					)
+				]
+			if trusted_mission and not provided_parent:
+				payload["parent_mission_id"] = trusted_mission
 		driver_cls().validate(payload)
+		# S4.1: el alma reclama la misión al encolar; el job solo observará/latirá.
+		# Sin alma o sin misión el flujo legacy sigue intacto (D-02/A-06).
+		mission_owner = str(payload.get("continuity_id") or "").strip()
+		mission_scope = str(payload.get("parent_mission_id") or "").strip()
 		# RFC_JOB_DAG §4.5: expandir `type: dag` a compounds (job persistido ya
 		# aplanado; el resume no depende de que la receta siga igual en disco).
 		expander = getattr(driver_cls, "expand_manifest", None)
@@ -2786,6 +3409,25 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 
 		qm = _queue()
 		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
+		if source == "dag_job" and mission_owner and mission_scope:
+			try:
+				from red_pill.session.lease import LeaseStore
+
+				LeaseStore().begin_mission_lease(
+					mission_scope,
+					continuity_id=mission_owner,
+					holder_originator="",
+					owner_kind="soul",
+					idle_ttl_s=900,
+					max_wall_s=604800,
+					metadata={"job_id": job_id, "source": source},
+					allow_takeover=operator,
+				)
+			except Exception as exc:
+				# El job ya está en la cola: no dejarlo vivo sin mando ni dejar el
+				# lease huérfano. Se descarta y se informa del conflicto real.
+				qm.kill_task(job_id, discard=True)
+				return [types.TextContent(type="text", text=f"[ERROR] no se pudo reclamar la misión {mission_scope}: {exc}")]
 		note = f"mission={mission_id}" if mission_id else "sin mission_id"
 		return [
 			types.TextContent(
@@ -2805,6 +3447,7 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		"type": "object",
 		"properties": {
 			"mission_id": {"type": "string", "description": "Solo jobs de esa misión (aislamiento entre forges)."},
+			"continuity_id": {"type": "string", "description": "Solo jobs de esa alma (RFC-INTEROP-003 S3)."},
 			"all": {"type": "boolean", "description": "Incluir COMPLETED (default: solo activos)."},
 		},
 	},
@@ -2816,7 +3459,11 @@ async def handle_job_list(arguments: Dict[str, Any]):
 		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
 		# la lista completa explícita o el flag es un no-op.
 		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
-		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
+		tasks = _queue().list_tasks(
+			statuses=statuses,
+			mission_id=arguments.get("mission_id"),
+			continuity_id=arguments.get("continuity_id"),
+		)
 		if arguments.get("json") or arguments.get("format") == "json":
 			# JOB-001: salida estructurada para parseo agéntico (agente/IDE/Telegram)
 			return [
@@ -2830,6 +3477,8 @@ async def handle_job_list(arguments: Dict[str, Any]):
 								"status": t["status"],
 								"priority": t["priority"],
 								"mission_id": t.get("mission_id"),
+								"continuity_id": t.get("continuity_id"),
+								"parent_mission_id": t.get("parent_mission_id"),
 								"parent_task_id": t.get("parent_task_id"),
 								"title": t.get("title"),
 								"progress": t.get("progress"),
@@ -2885,6 +3534,15 @@ async def handle_job_status(arguments: Dict[str, Any]):
 		task = _resolve_job(_queue(), arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		lease = None
+		parent_mission = str(task.get("parent_mission_id") or (task.get("checkpoint_data") or {}).get("parent_mission_id") or "")
+		if parent_mission:
+			try:
+				from red_pill.session.lease import LeaseStore
+
+				lease = LeaseStore().get(f"mission:{parent_mission}")
+			except Exception:
+				lease = None
 		summary = {
 			"id": task["id"][:8],
 			"source": task["source"],
@@ -2892,6 +3550,11 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"priority": task["priority"],
 			"attempts": task["attempts"],
 			"mission_id": task.get("mission_id"),
+			"continuity_id": task.get("continuity_id"),
+			"parent_mission_id": task.get("parent_mission_id"),
+			"originator": (task.get("checkpoint_data") or {}).get("originator"),
+			"role": (task.get("checkpoint_data") or {}).get("role"),
+			"lease": lease or (task.get("checkpoint_data") or {}).get("lease"),
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),
@@ -2920,6 +3583,9 @@ async def handle_job_pause(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_pause")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
 		if qm.pause_task(task["id"]):
 			return [types.TextContent(type="text", text=f"[OK] Pausa solicitada para {task['id'][:8]} (se sella en frontera de paso).")]
 		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': pausa no aplicable.")]
@@ -2945,8 +3611,17 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_resume")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		was_pausing = task["status"] == "PAUSING"
 		if qm.resume_task(task["id"]):
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			if was_pausing:
 				return [
 					types.TextContent(
@@ -2977,7 +3652,17 @@ async def handle_job_skip(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_skip")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		allow_takeover = os.getenv("REDPILL_OPERATOR") == "1"
+		lease_error = _mission_lease_conflict(task, allow_takeover=allow_takeover)
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		if qm.skip_next_task(task["id"]):
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=allow_takeover)
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			updated = qm.get_task(task["id"])
 			st = updated["status"] if updated else task["status"]
 			if st == "PENDING":
@@ -3019,8 +3704,13 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_kill")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
 		job_id = task["id"]
-		if not qm.kill_task(job_id, discard=bool(arguments.get("discard"))):
+		killed, previous = qm.kill_task_ex(job_id, discard=bool(arguments.get("discard")))
+		was_running = previous in ("PROCESSING", "PAUSING")
+		if not killed:
 			return [
 				types.TextContent(
 					type="text",
@@ -3033,6 +3723,12 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 			_sp.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=10)
 		except Exception:
 			pass
+		# Un job en vuelo conserva el lease hasta que el runner observe el kill y
+		# llame a abort_step; liberarlo aquí permitiría a otra alma entrar mientras
+		# el proceso aún se está apagando (split-brain real).
+		if not was_running:
+			_release_job_mission_lease(task)
+			_finalize_killed_job(task)
 		return [
 			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido ({'FRUSTRATED' if arguments.get('discard') else 'PAUSED*'}).")
 		]
@@ -3065,8 +3761,20 @@ async def handle_job_checkpoint(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
-		ok = qm.update_checkpoint(task["id"], arguments["checkpoint"], arguments.get("progress"))
+		denied = await _authorize_job_mutation(task, "job_checkpoint")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		checkpoint, cp_error = _sanitize_job_checkpoint(task, arguments["checkpoint"])
+		if cp_error:
+			return [types.TextContent(type="text", text=cp_error)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
+		ok = qm.update_checkpoint(task["id"], checkpoint, arguments.get("progress"))
 		if ok:
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 			return [types.TextContent(type="text", text=f"[OK] Checkpoint de {task['id'][:8]} actualizado. Soltar el control con job_resume.")]
 		return [
 			types.TextContent(
@@ -3101,7 +3809,17 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_transfer")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		lease_error = _mission_lease_conflict(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+		if lease_error:
+			return [types.TextContent(type="text", text=lease_error)]
 		paused = qm.pause_task(task["id"])
+		if paused:
+			lease_error = _ensure_job_mission_lease(task, allow_takeover=os.getenv("REDPILL_OPERATOR") == "1")
+			if lease_error:
+				return [types.TextContent(type="text", text=lease_error)]
 		after = qm.get_task(task["id"])
 		return [
 			types.TextContent(
@@ -3109,6 +3827,7 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 				text=_json.dumps(
 					{
 						"job_id": task["id"][:8],
+						**_job_identity(task),
 						"paused": paused,
 						"status": after["status"] if after else task["status"],
 						"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),

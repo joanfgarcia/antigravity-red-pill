@@ -175,6 +175,20 @@ class DagExecMixin:
 		# en prompt/command; el minion lo recibe además como kwargs["item"].
 		item = stage.get("_item")
 		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
+		identity: Dict[str, Any] = {}
+		continuity = payload.get("continuity_id")
+		if continuity:
+			identity = {
+				"continuity_id": str(continuity),
+				"mission_id": str(payload.get("mission_id") or ""),
+				"job_id": str(getattr(self, "job_id", "") or ""),
+				"originator": f"dag:{self.job_id}" if getattr(self, "job_id", None) else "",
+				"role": str(payload.get("role") or "job"),
+			}
+			parent = payload.get("parent_mission_id")
+			if parent:
+				identity["parent_mission_id"] = str(parent)
+			kwargs.update(identity)
 		if item is not None:
 			task = _render_item(task, item)
 			kwargs["item"] = item
@@ -192,6 +206,13 @@ class DagExecMixin:
 			if protected:
 				raise ValueError(f"dag_job stage '{stage_path}' params no puede fijar claves de política: {sorted(protected)}")
 			kwargs.update({k: _render_item(v, item) if item is not None else v for k, v in stage["params"].items()})
+		if identity and stage.get("type") == _TYPE_AGENT:
+			task = (
+				task
+				+ "\n\n<redpill-identity>\n"
+				+ "\n".join(f"{key}: {value}" for key, value in identity.items())
+				+ "\n</redpill-identity>"
+			)
 		# AD-030 (v3): el bloque `llm:` POR ETAPA en el manifest del
 		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
 		# fan-out futuro declara su modelo/modo). Los minions command lo reciben
@@ -212,6 +233,10 @@ class DagExecMixin:
 		# mitad de fase (solo si la etapa es `pausable`) y el cutoff que ancla el
 		# drenaje al momento en que ARRANCÓ el job (persistido en el checkpoint,
 		# inmune a pause/resume).
+		if identity:
+			env = dict(kwargs.get("env") or os.environ)
+			env.update({f"REDPILL_{key.upper()}": str(value) for key, value in identity.items()})
+			kwargs["env"] = env
 		kwargs.setdefault(
 			"pause_probe",
 			build_pause_probe(self.job_id, gate=gate) if stage.get("pausable", True) else None,

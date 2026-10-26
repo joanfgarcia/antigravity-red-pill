@@ -4,6 +4,166 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-084] D23-SCORE v0.1 — auto-revisor con modos off/review/semi/auto
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: D23 v0 (AD-083) dejó la revisión en el Operador (`review_decision`/`moderate_note` + bandeja), sin revisor autónomo. El Operador pidió un revisor con modos y un filtro para no revisar todo a mano, manteniendo la última palabra en high/retract.
+**Decision**:
+1. **Modos** (`D23_REVIEW_MODE`, default `off`): `off` solo Operador; `review` el revisor sugiere (`suggest_review`, sin mutar); `semi` solo muta con `confidence=high` (el servidor lo exige; si no, `escalate`); `auto` decide low/medium y escala high/retract (siempre Operador). Las notas `sealed` y las `hidden/retracted` no son objetables y no se re-exponen en la bandeja.
+2. **Job revisor** `d23_review` (`agentic_job`): se encola al crear la objeción si el modo no es `off`, con alma dedicada estable (`D23_REVIEWER_CONTINUITY_ID`), `parent_mission_id` de la D-obj, `originator=d23-review:<decision>` y `role=reviewer`; el prompt incluye nota/claim/evidence/severidad/estado/modo y las tools `suggest_review`/`review_decision`. El job registra un **leg** del revisor (`d23-review:<decision>`) en `session_registry` (se limpia si falla el encolado). Si hay review job, **solo el revisor asignado** puede sugerir/decidir, y el modo manda: `review` → `suggest_review`, `semi/auto` → `review_decision`.
+3. **Modelo**: cascade OpenRouter `openrouter/~z-ai/glm-latest` → `openrouter/~deepseek/deepseek-pro-latest` → `openrouter/~z-ai/glm-flash-latest`; backend `opencode`, `effort: low`, `timeout: 240` en `configs/jobs/d23-review.yaml`. Los tres IDs se verificaron con `opencode run -m ... --pure` (rc=0), aunque `opencode models` no lista `openrouter`. La cascade propaga la identidad del job (`continuity_id`/`mission_id`/`originator`/`role`) al bridge.
+4. **Persistencia y autoridad**: `decision_suggestions` (verdict/confidence/reason; una por revisor/D-obj), `decision_reviews` (job/mode/reviewer/confidence), evento interno `decision_suggested`; `list_decisions`/CLI muestran sugerencia, confianza, job y modo. `suggest_review` y `review_decision` exigen `reason`; `review_decision` exige `confidence`. El Operador resuelve escalated/high/retract con `moderate_note` (`hide`/`retract`→upheld, `restore`→dismissed; `flag` solo marca); `review_decision` no resuelve escalated. `moderate_note` exige `REDPILL_OPERATOR=1` en MCP **y** CLI.
+5. **Límites aceptados (A-01)**: teatro local mono-operador/mono-UID; los agentes son de confianza operativa, no una frontera de seguridad. El job revisor conserva el toolbox MCP completo (las reglas del prompt no son allowlist); `suggest_review` no tiene rate-limit más allá de una fila por revisor/D-obj. Endurecerlo queda como trabajo futuro, no como garantía de v0.1.
+**Alternatives**: (a) auto con high/retract incluidos — daría rango de Operador de facto al revisor; descartado; (b) usar `opencode`/`opencode-go` — más caro/cuota Go; descartado frente a OpenRouter; (c) un solo modelo sin cascade — pierde fallback barato.
+**Rationale / Evidence**: `tests/test_d23_review.py` (18) + `test_d23_score`/`test_mission_events`/`test_mcp_server` → **144 passed**; más `test_swarm_bridges` (30) y `test_job_manager` (46) → **220** en la suite relevante; `ruff check` limpio. El tool `suggest_review` eleva el inventario MCP a 14. Validación live: `review` job `e9b84818` → `dismiss/high` con reason, D-obj **open** (sin mutar); `semi` job `5a31e653` → `uphold/high`, D-obj **upheld** y nota flaggeada; `auto` low job `276058e0` → `uphold/high` con `review_confidence=high` y reason; `auto` high job `07911fb7` → **escalate**. Los test notes quedaron retiradas, sin D-obj open/escalated; las filas de auditoría append-only permanecen.
+**Consequences**: D23-SCORE v0.1 cerrada; `review`, `semi` y `auto` validados; live final en `auto` (high/retract siempre Operador). `D23_REVIEW_MODE` default `off`: el Operador lo activa en `.env` y reinicia `redpill-mcp`. La receta y los modos quedan versionados; los jobs revisores aparecen en la cola con su leg propio y la bandeja muestra su sugerencia/estado/job/confianza. El CLI `session moderate` exige `REDPILL_OPERATOR=1` y `--reason`. Los artefactos de test están resueltos (filas de auditoría/reportes de job permanecen; sin open/escalated).
+
+---
+
+## [AD-083] D23-SCORE v0 — objeciones, D-obj y moderación del tablón
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (v0; votos/score diferidos). El auto-reviewer/job `d23_review` se implementó en v0.1 (AD-084).
+**Context**: `mission_events` era append-only pero solo tenía `objection` como señal advisory: no había estado de disputa, revisión ni retirada. D23-SCORE seguía abierta con el default “no retirada automática; objeción → D-obj; revisor independiente; Operador decide”.
+**Decision**:
+1. **D-obj** (`dynamic_decisions`): `decision_id`, nota objetivo, claim/evidence, `severity` (low|medium|high), `proposed_action` (flag|hide|retract), `state` (open|upheld|dismissed|escalated), `requires_operator`, TTL. Eventos `decision_*` append-only en `mission_events` como auditoría (no se renderizan en el tablón).
+2. **Objeción**: `announce_intent(type=objection, target_event_id, severity, proposed_action, evidence)`; misma misión en v0; una por `(nota, objetor)`. `high` o `retract` nacen `escalated` (solo Operador); el resto `open` con TTL 24h.
+3. **Revisor independiente**: `review_decision(decision_id, uphold|dismiss|escalate)`; rechaza al objetor y al autor de la nota. `uphold` = **flag** (nunca hide); `hide/retract/restore` solo Operador. `escalated` solo la resuelve el Operador; sin revisor en TTL → `escalated` (lazy al listar), nunca auto-oculta.
+4. **Operador**: `moderate_note(event_id, flag|hide|retract|restore)` vía CLI `red-pill session moderate` (canal local) o MCP con `REDPILL_OPERATOR=1`. `hide/retract` resuelven las D-obj abiertas; `restore` las descarta.
+5. **Bandeja**: tool `list_decisions` (pendientes, primero las que requieren Operador) + CLI `red-pill session decisions`; tool `review_decision`; `fetch_events` añade `note_status`/`open_decisions` (`[flagged]`, `[disputed:N]`) y filtra `hidden/retracted` salvo autor/Operador. La nota y su historial nunca se borran.
+**Alternatives**: (a) votos + retirada automática — Sybil y un downvote coordinado pueden borrar una nota correcta (descartado en v0); (b) ocultar en el `uphold` del agente — demasiado poder sin Operador; (c) tabla mutable sin eventos — pierde auditoría.
+**Rationale / Evidence**: `tests/test_d23_score.py` (10) + `test_mission_events`/`test_mcp_server` → **126 passed**; `ruff` limpio. CLI validada (`session decisions --json` → `[]`; `session moderate --help`). El MCP en marcha necesita reinicio para exponer los 3 tools nuevos; la CLI ya funciona.
+**Consequences**: D23-SCORE v0 cerrada. Diferido a v0.1: votos/score, objeciones cross-misión y paneles. El auto-enqueue del job `d23_review` (revisor autónomo) se implementó en v0.1 (AD-084). El Operador conserva la última palabra y la bandeja evita que el seguimiento dependa de memoria manual.
+
+---
+
+## [AD-082] Janitor — retención de artefactos de estado y scratch de arneses
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: B-01h (journal externo) y S5 (results de jobs) escriben un fichero por turno/job sin retención; el Janitor no los cubría. Además, el scratch de los arneses (`/tmp/opencode`) queda fuera de `${RP_TMP_DIR}` y solo lo limpiaba el reinicio. Con automatización, ambos crecen lineales.
+**Decision**:
+1. **`state_artifacts_purge`** (30d): purga `state/external_turns/archive` y `state/jobs/results`. Nunca toca `external_turns/current` (turno en vuelo); solo considera `results` de jobs `COMPLETED` (los no terminales pueden reanudarse) y conserva el último result por misión (`jobs_results_keep_per_mission: 1`).
+2. **`harness_scratch_purge`** (14d, opt-in): purga hijos de `paths` con mtime antiguo; nunca el directorio configurado, no sigue symlinks y rechaza `/` y `$HOME`. El seed deja `paths: []`; la instalación añade `/tmp/opencode`.
+3. Config en `seeds/settings/janitor.yaml` y `${CONFIG_DIR}/janitor.yaml`; descubrimiento automático por `janitor_plugins/` (sin tocar el orquestador).
+**Alternatives**: (a) borrar el journal tras importarlo — pierde auditoría si el import falla; (b) purgar por edad sin mirar el estado del job — puede borrar un result reanudable; (c) limpiar `/tmp` entero — mata scratch ajeno y no es competencia del kernel.
+**Rationale / Evidence**: `tests/test_janitor_state_artifacts.py` (5 tests) + suite Janitor **34 passed**; `ruff` limpio. Ejecución real con la config viva: `state_artifacts_purge` 0 purgados (nada >30d), `harness_scratch_purge` 27 entradas escaneadas y 0 purgadas (nada >14d).
+**Consequences**: deuda de disco cerrada para los artefactos nuevos. Los results de jobs fallidos/FRUSTRATED se conservan como evidencia (si acumulan, revisar política). `/tmp/opencode` sigue en ~498MB (`GVS5H` 483MB, de hoy): el plugin no lo tocará hasta los 14 días; se puede borrar a mano si no se necesita.
+
+---
+
+## [AD-081] RFC-INTEROP-003 S6.2 — E2E real: el hijo opencode hereda el alma
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S6.2 validado en campo; S6.1/S6.3 ya estaban).
+**Context**: S6.1 inyectaba `REDPILL_*` en los bridges externos, pero nunca se había ejecutado una etapa opencode real que demostrara que el **handshake del hijo** veía el alma del padre. Faltaba el E2E, no el cableado.
+**Decision / Evidence**:
+1. `agentic_job` `b0120626-e96f-45f8-9aba-50b86b7b48fe` (backend opencode, modelo `opencode-go/deepseek-v4.1-flash`) heredó del llamante `continuity_id=01a17389-8cf5-75d6-9220-6922ff654c20` y `parent_mission_id=repo:next` (canal de confianza, sin declararlo el modelo).
+2. El hijo respondió: `S62 CONTINUITY=01a17389-… LEG=job:b0120626-… MISSION=repo:next`. El `LEG` es `job:<job_id>`, no el `opencode:<session>` del padre: el handshake del hijo ve el alma heredada.
+3. El coro registró el leg `[job] b0120626` con `alma=01a17389`, `rol=job`, `misión=repo:next`; `MinionInbox`/`state/jobs/results/` guardan el resultado con identidad.
+4. **Hallazgo colateral (modelo)**: el catálogo vivo (`model_catalog.yaml`) y las cascadas `.env` anunciaban `opencode-go/deepseek-v4-flash`, id que el proveedor ya no sirve (el primer intento, `09192498`, falló con `Model not found; did you mean: deepseek-v4.1-flash?`). Corregido a `opencode-go/deepseek-v4.1-flash` en catálogo, `.env`, recipes Forge (scout/triage/doc-anchor), ejemplo de catálogo y skill `dag`. El fallo queda documentado, no oculto.
+5. **Hallazgo colateral (workspace)**: `cwd=` solo cambiaba el directorio del proceso; opencode creaba la sesión hija en su proyecto por defecto (`/home/joan`) y el agente habría operado fuera del workspace del job. Añadido `--dir <cwd>` en `OpenCodeBridge._run_opencode` + test unitario. Re-E2E `e3872ccf`: misma continuidad y sesión hija confirmada en `/tmp/opencode/s62-e2e` (cwd efímero intencional para la validación; el job ya completó). Además, `AgenticJobDriver.preflight` valida que un `cwd` declarado exista: si un job reanudable apunta a un directorio efímero ya limpiado, falla claro en vez de arrancar en otro workspace.
+**Alternatives**: (a) validar solo con el fake de `test_interop003_s6.py` — no prueba el canal real (env→CLI→MCP→handshake); (b) usar `local-mini` — no cubre opencode; (c) confiar en el log del bridge — no prueba que el hijo lo *vea*.
+**Consequences**: S6.2 cerrado. Test durable `tests/test_interop003_s6_e2e.py` (marcado `integration`, gated por `REDPILL_E2E_OPENCODE=1`; restaura el bridge al terminar). Deuda viva: E2E opcional de Claude/Pi (Claude no se resiembra por política de cuenta), y el bridge `opencode_session.json` sigue siendo un único fichero global (multi-sesión: gana el último turno; candidato a tocar en mensajería).
+
+---
+
+## [AD-080] B-01h — write-ahead en hooks externos (journal + import al espejo)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (B-01h; E2E real/S6.2 pendiente).
+**Context**: B-01j/B-01s persistían la intención en los caminos RedPill, pero Claude/opencode/Pi escribían el turno solo al cerrar. Un corte del proceso dejaba el prompt fuera del espejo y sin evidencia de turno pendiente.
+**Decision**:
+1. **Journal JSON atómico** por turno (`state/external_turns/current/<provider>__<session>.json`), escrito ANTES de invocar al modelo. Al cerrar se archiva con `completed`/`aborted`, respuesta (parcial) y motivo.
+2. **Hooks**: Claude (`UserPromptSubmit`/`Stop`/`StopFailure`/`SessionEnd`), opencode (`chat.message`/`session.idle|execution.*`) y Pi (`before_agent_start`/`agent_before_settle|agent_settled`). `request_id` compartido entre inicio y cierre.
+3. **Import**: `import_external_turns()` al despertar (`wake_up_v6`/`refresh_session_context`) y en `session pending`; resuelve `originator → continuity_id/misión` desde `session_registry`. Sin fila registrada, el journal se queda (no se inventa alma).
+4. **Idempotencia**: `begin_turn`/`complete_turn`/`abort_turn` por `request_id`; un turno nuevo sin Stop archiva el anterior como `aborted/superseded`.
+5. **Aislamiento**: los hijos lanzados por bridges ponen `REDPILL_TURN_JOURNAL_DISABLE=1` (el Job Manager ya persiste su intención); el journal es para sesiones externas del Operador.
+6. **Límite**: no exactly-once de efectos cloud (B-04); una respuesta perdida queda `aborted`, no se resucita.
+**Alternatives**: (a) SQL directo en cada lenguaje — schema duplicado y frágil; (b) exigir import de Python en los hooks — path/entorno roto; (c) mirror solo al Stop — pierde la intención si muere el proceso.
+**Rationale / Evidence**: suite **3403 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: journal roundtrip/supersede, import completed/aborted, originator sin alma, hooks Claude, y env de journal desactivado en bridges.
+**Consequences**: B-01h cierra el write-ahead externo sin acoplar los hooks al repo. Queda S6.2 (misión real multi-proveedor) como validación E2E.
+
+---
+
+## [AD-079] RFC-INTEROP-003 S6 — identidad de alma en arneses externos
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S6.1/S6.3; S6.2 real E2E pendiente).
+**Context**: S0-S5 propagaban la identidad a local-mini/local-tools y a las etapas command, pero opencode/claude/pi nacían sin `REDPILL_*`: el hijo no heredaba el alma y el handshake podía resolver otro cuerpo.
+**Decision**:
+1. **Env de confianza**: `identity_env` exporta solo IDs (`REDPILL_CONTINUITY_ID`, `REDPILL_MISSION_ID`, `REDPILL_PARENT_MISSION_ID`, `REDPILL_ORIGINATOR`, `REDPILL_ROLE`, `REDPILL_JOB_ID`). `REDPILL_MISSION_ID` es la misión del alma (`parent_mission_id`), nunca la de aislamiento del forge.
+2. **Bridges**: `ClaudeBridge`, `OpenCodeBridge` y `PiBridge` aceptan la identidad en el constructor y la inyectan en el `env` del subproceso. OpenCode conserva `REDPILL_SCRIBE_DISABLE` para Telegram/captura.
+3. **Callers**: `AgentMinion` y `AgenticJobDriver` pasan la identidad a bridges externos y cascadas (`CascadeBridge` la propaga a cada target).
+4. **Sin alma**: no se exporta ningún `REDPILL_*` inventado; los jobs/callers legacy siguen igual (D-02/A-06).
+5. **Límite**: S6.2 (E2E real con opencode) no se ejecutó en este corte; B-01h (write-ahead en hooks externos) sigue fuera.
+**Alternatives**: (a) inyectar identidad en el prompt — spoof; (b) pasar env al MCP en vez del CLI — no cubre al hijo; (c) solo local-mini — deja el gap de S6.
+**Rationale / Evidence**: suite **3398 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: env por bridge, `AgentMinion`, `AgenticJobDriver`, cascada y no-soul.
+**Consequences**: el hijo opencode/claude/pi hereda el alma por canal de confianza. Quedan S6.2 (E2E real) y B-01h (hooks externos con `request_id` compartido).
+
+---
+
+## [AD-078] RFC-INTEROP-003 S4/S5 — mando, lease de misión y cierre con identidad (P3)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S0-S5; S6 opcional pendiente).
+**Context**: S0-S3 daban identidad y visibilidad al job, pero cualquier alma podía pausar/matar/transferir el job de otra y el cierre no dejaba un resultado con autoría. P3 cierra el contrato de mando y el artefacto durable sin exigir alma a los jobs de sistema.
+**Decision**:
+1. **Lease de misión (S4.1/D-03)**: el alma la reclama en `job_submit`, `job_transfer`, `job_resume` o `job_checkpoint`; el job **no la adquiere**. Si el lease es de su alma, el job lo late (hilo cada 5 min) y lo cierra al terminar; si es de otra alma, ejecuta como spectator y no publica como orquestador (5.7.3).
+2. **Autorización (S4.2/D-09)**: `job_pause`/`resume`/`kill`/`skip`/`transfer`/`checkpoint` exigen el `continuity_id` dueño o `REDPILL_OPERATOR=1`; los argumentos del modelo no autorizan. Un job sin alma conserva el comportamiento legado (D-02/A-06).
+3. **Handoff y split-brain (S4.3/S4.4)**: `job_transfer` devuelve `continuity_id`/`parent_mission_id`/`originator`/`role`; `job_checkpoint`/`resume` comprueban el lease antes de mutar y rechazan una identidad inyectada en el checkpoint. `kill_task_ex` devuelve el estado previo real para no liberar el lease mientras el proceso aún se apaga.
+4. **Cierre (S5)**: `_report_job` escribe `state/jobs/results/<job_id>.json` y, si hay workspace, `<memory>/jobs/<job_id>.{json,md}` con identidad; el MinionInbox gana `continuity_id` y lo muestra. Un job sin alma emite `continuity_id: null`, nunca un UUID inventado.
+5. **Descubrimiento (S3.3)**: `wake_up_v6.py --continuity-id` añade una línea `[JOBS]` con timeout de 250 ms; solo informa, nunca auto-reanuda (D-05). Silencio si no hay alma o jobs.
+6. **Compatibilidad**: el lease de misión se cablea a `dag_job` (el orquestador); `agentic_job`/`script_job`/`element_job` no lo reclaman hasta que exista heartbeat genérico en el runner. La CLI funciona como Operador, consulta el lease antes de reanudar y libera el de jobs no-en-vuelo al matar. Arneses externos (S6/B-01h) y D23-SCORE quedan fuera.
+**Alternatives**: (a) dejar que el job adquiera el lease — viola D-03 y crea dos orquestadores; (b) autorizar por argumento del modelo — spoof; (c) escribir el resultado solo en el inbox — efímero y sin workspace.
+**Rationale / Evidence**: suite **3391 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests S3.3/S4/S5: lease observado/liberado, otra alma no roba, heartbeat, identidad en transfer, checkpoint sin inyección, `kill_task_ex`, result.json con/sin alma, inbox y `[JOBS]`.
+**Consequences**: RFC-003 S0-S5 implementado; S6 (env a opencode/claude/pi) y B-01h (hooks externos) siguen pendientes. El watchdog/janitor de leases de B01L Fase 2-3 no se toca aquí.
+
+---
+
+## [AD-077] RFC-INTEROP-003 S2/S3 — leg, eventos y descubrimiento del job (P2)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S2/S3 parcial). `[JOBS]` en el handshake, lease de misión y handoff siguen pendientes.
+**Context**: S0/S1 daban identidad al payload/etapas, pero el coro no veía el job como leg ni el alma podía descubrirlo. P2 materializa el ciclo S2/S3 sin tocar el motor del DAG.
+**Decision**:
+1. **Leg `dag:<job_id>`** en `DagJobDriver.begin_step` cuando hay `continuity_id`: `mission_id = parent_mission_id` (misión del alma), `role=job`, linaje/afinidad; se expira en `on_terminal` (completed/failed/timeout).
+2. **Eventos**: `phase_done` por hoja nueva, `blocked` por etapa fallida y `mission_closed` al completar; idempotentes por `(mission,type,ref,summary)` y solo con `parent_mission_id` (nunca la misión de aislamiento del forge).
+3. **Descubrimiento**: `CognitiveQueueManager.list_tasks(continuity_id=...)`, `job_list`/CLI `job list --continuity` y `job_status` con `continuity_id`/`parent_mission_id`/`originator`/`role`/`lease`.
+4. **Rol `job`**: política de hidratación compacta equivalente a `task`, registrada para que el tablón/digest no la degrade.
+5. **Anti-spoof**: `job_submit` exige que el `continuity_id` declarado coincida con el canal de confianza (salvo Operador); `DagJobDriver` valida `REDPILL_CONTINUITY_ID`.
+6. **Límite**: `[JOBS]` en wake-up, lease de misión y handoff no se tocan en P2; sin auto-reanudación.
+**Alternatives**: (a) leg por etapa — multiplica el tablón; (b) eventos desde MCP — exige sesión y no cubre jobs headless; (c) auto-resume al descubrir — riesgo de duplicar efectos.
+**Rationale / Evidence**: suite **3370 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: leg activo/rol job, phase_done, mission_closed, expiración y filtro por continuidad.
+**Consequences**: un job con alma ya se ve en el coro y se puede descubrir por `continuity_id`; faltan wake-up `[JOBS]`, lease de misión, handoff y env a arneses externos.
+
+---
+
+## [AD-076] RFC-INTEROP-003 S0/S1 — identidad de alma en `dag_job` (P1)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (S0/S1 bajo defaults; D-01…D-12 siguen abiertas). S2-S6 (leg/eventos, descubrimiento, lease de misión, handoff, arneses externos) pendientes.
+**Context**: El RFC-INTEROP-003 verificó que `dag_job` solo conocía `mission_id`: no heredaba `continuity_id`, no lo propagaba a etapas/checkpoint y el alma no podía reconocer el job. P1 implementa el contrato mínimo sin cambiar el motor del DAG.
+**Decision**:
+1. **S0 contrato**: `dag_validate` acepta `continuity_id` (UUID), `parent_mission_id` (`<scope>:<id>`) y `role` (`orchestrator|job|task|spawn`) opcionales; `cognitive_tasks` gana `continuity_id`/`parent_mission_id` + índices, sin romper jobs sin alma.
+2. **S1 checkpoint**: `DagScheduleMixin.step` deriva `originator=dag:<job_id>`, `role=job` y copia identidad al checkpoint/status; se conserva en resume.
+3. **S1 etapas**: `dag_exec` pasa identidad a minions, inyecta `REDPILL_*` en command/script y añade `<redpill-identity>` (solo IDs) al prompt de etapas agénticas.
+4. **Local-mini/local-tools** heredan `continuity_id`/`mission_id`/`originator`; los arneses externos (opencode/claude/pi) se difieren a S6.
+5. **Compatibilidad**: jobs de sistema sin `continuity_id` no crean leg, no reciben env y siguen igual; migración de cola aditiva.
+**Alternatives**: (a) derivar el alma de `mission_id` — dos almas comparten rama; (b) inyectar identidad por prompt — spoof; (c) crear un bus nuevo — RFC-001 sigue sin implementación.
+**Rationale / Evidence**: suite **3364 passed**, 13 skipped, 3 xfailed; `ruff`/`mypy` limpios. Tests: validación de UUID/misión/role, columnas de cola, checkpoint con linaje, env `REDPILL_*` en command y bloque de identidad en agente.
+**Consequences**: un dag_job puede declarar su alma y las etapas la reciben; todavía no hay leg `dag:`, `[JOBS]`, eventos ni handoff (S2-S6). La lease de misión reutiliza `session_leases` de B01L.
+
+---
+
+## [AD-075] B-01L Fase 1 — leases v7 y worker durable de compactación (P0)
+**Date**: 2026-10-25
+**Status**: ACCEPTED & IMPLEMENTED (P0). Watchdog/heartbeat de runners y Telegram quedan pendientes.
+**Context**: B-01L separó el TTL de huérfanos del lease de trabajo vivo, pero no existía implementación; B-02 tampoco tenía disparo en fondo. P0 materializa el sustrato común: `session_leases` v7 con scopes work/mission y un worker durable para compactar sin bloquear el turno.
+**Decision**:
+1. **Schema v7 aditivo**: `session_leases` con `lease_key`, `scope=work|mission`, `subject_id`, `continuity_id`, `mission_id`, `holder_originator`, `owner_kind`, `state`, heartbeat, `idle_ttl_s`, `max_wall_s`, `extended_by`, `reason`; índices por heartbeat/scope/alma.
+2. **`LeaseStore`**: begin idempotente por dueño, `LeaseHeld` para otro cuerpo, heartbeat, `extend_lease` acotado por techo, `finish` con transiciones válidas, `sweep` con compare-and-set para no perder un heartbeat concurrente. Work y mission comparten tabla; RFC-INTEROP-003 no crea `mission_leases`.
+3. **B02 worker durable**: `Compactor.maybe_start` encola un `script_job` con `session compact --db-path <mirror>` y dedupe por continuity; `control.max_step_minutes=15`. `MiniSession`/`run_local_minion` lo disparan solo cuando el contexto cruza el umbral de fondo sin necesitar compactación inline.
+4. **Correcciones del adversarial P0**: targeting de `session.db` (no la DB por defecto del worker), `extra_tokens` coherente entre caller y worker, timeout real vía `control`, extensión sin techo ya no es no-op, owner en heartbeat/finish, purga de leases con el alma, y `sweep` no marca `stalled` si el heartbeat cambió.
+5. **Compatibilidad**: `SESSION_COMPACTOR_ENABLED` sigue OFF; sin flag no se encola nada. Jobs sin alma no cambian.
+**Alternatives**: (a) worker Python in-process — no durable; (b) Samantha queue — no devuelve el resumen salvo callback Telegram; (c) dos tablas de lease — duplica schema y rompe RFC-003; (d) `timeout` en payload — el driver no lo lee, se usa `control.max_step_minutes`.
+**Rationale / Evidence**: suite completa verde; tests nuevos de schema v7, work/mission, idempotencia, owner, max_wall, extensión, sweep, worker/dedupe y targeting. Adversarial P0 corrigió 3 BLOCKER/HIGH de ejecución.
+**Consequences**: B01L Fase 1 y B02 worker están en el sustrato. Deuda: cablear heartbeat a MiniSession/local-minion/job runner, janitor que consulte leases activos, watchdog, paridad Telegram y retry por longitud. El lease aún no protege del TTL hasta la fase 2.
+
+---
+
 ## [AD-074] B-02 — servicio de compactación y cableado local (slice 3)
 **Date**: 2026-10-24
 **Status**: ACCEPTED & IMPLEMENTED (slice 3). Telegram y el disparo en fondo siguen pendientes; flags OFF por defecto.
@@ -1074,10 +1234,10 @@ Separation of responsibilities by layer (extraction / selection / serving / main
 
 ---
 
-## [AD-018] Daemon-Hosted MCPs over the Network *(PROPOSED)*
+## [AD-018] Daemon-Hosted MCPs over the Network *(ACCEPTED — spike validated)*
 **Date**: 2026-06-18  
 **Context**: v7.3.0 — MCP serving / coordination  
-**Status**: PROPOSED (pending client-support + security review)  
+**Status**: ACCEPTED — slice A + instalador preparados 2026-10-25 (proxy por defecto en opencode, fallback directo, unit systemd); pendiente el reseed/restart de validación.
 
 ### 1. The Problem
 MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = duplicated processes and no shared, central state — so cross-agent coordination has no common substrate, and per-client process sprawl grows.
@@ -1092,6 +1252,41 @@ Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a 
 
 ### 4. Open Questions
 Network-MCP support in Antigravity / Claude Desktop (Claude Code is fine); **security** — the RedPill-Kernel MCP runs subprocess/heal effectors, so it must NOT be exposed on an unauthenticated TCP port (prefer UDS file-perms, or localhost + token).
+
+### 5. Spike 2026-10-25 — validado (UDS + streamable HTTP + proxy stdio)
+**Host corregido**: el `SovereignDaemon` actual es **monitor-only** (`DaemonPlugin`: “nunca ejecutar tareas pesadas”). El backend del MCP irá en un **servicio systemd dedicado** (`redpill-mcp.service` + `redpill-mcp.socket`, UDS 0600, socket-activated); los clientes usan un **proxy stdio ligero** por instancia que reenvía al backend por UDS. La idea original (un MCP, N clientes) se mantiene; cambia el host.
+
+**Medido** (backend UDS `streamable_http` + 2 proxies + 2 sesiones concurrentes):
+| | PSS | Arranque a `tools/list` |
+|---|---|---|
+| MCP stdio directo (1 instancia) | 442 MB | 2.24 s |
+| Backend compartido (1 proceso) | 447 MB | una vez, en servicio |
+| Proxy stdio (cada pestaña) | 45 MB | 0.33–0.38 s |
+
+Proyección: 3 pestañas → ~582 MB (backend + 3 proxies) vs 1.33 GB actuales; 6 → ~718 MB vs 2.65 GB. Los 13 tools se listan/ejecutan a través del proxy.
+
+**Identidad**: el proxy pone `redpill-proxy:<base64(json)>` en el `clientInfo` del `initialize` (canal de confianza del proxy, no del modelo). Dos proxies vieron `alma-spike-a`/`spike-a` y `alma-spike-b`/`spike-b`, sin fugas; el coro listó ambas legs. **Validado también con opencode real** (`opencode run` con `OPENCODE_CONFIG` override, proxy PID confirmado, tag `<session continuity_id="alma-spike-oc" leg="opencode:spike-oc" mission="repo:spike"/>`).
+
+**Slice A implementada (2026-10-25)**:
+- `red-pill mcp serve --socket <UDS>` → backend compartido (`src/red_pill/mcp_backend.py`); el kernel se importa una vez.
+- `python -m red_pill.mcp_proxy --socket <UDS> --harness opencode` → proxy stdio ligero (`src/red_pill/mcp_proxy.py`). La variante `red-pill mcp proxy` existe por comodidad, pero importa el CLI completo (~2.3s); el installer debe usar el módulo (`-m`) para el arranque rápido (~0.3s).
+- Identidad por petición: el proxy lee env/bridge en cada request y manda `X-RedPill-Proxy: <b64(json)>`; el backend la publica en un contextvar y `_resolve_session_identity` la usa como canal de confianza. Verificado con dos sesiones concurrentes: `alma-prod-a`/`opencode:prod-a` y `alma-prod-b`/`opencode:prod-b`, 13 tools, backend **452.8 MB**, proxies **0.29–0.35 s**.
+- `systemd/redpill-mcp.service` (servicio de usuario, UDS en `state/mcp.sock`, UMask 0077).
+- Tests: `tests/test_mcp_shared.py` (unitarios + E2E gateado por `REDPILL_MCP_SHARED_E2E=1`; en esta máquina el E2E queda bloqueado por SEC-TEST-001, se ejecuta en instancia de test dedicada).
+
+**Instalador (2026-10-25)**:
+- `seeds/opencode/settings/opencode.jsonc` emite por defecto `RedPill-Kernel` como proxy (`${PYTHON} -m red_pill.mcp_proxy --socket ${MCP_SOCKET} --harness opencode`) y deja `RedPill-Kernel-Direct` deshabilitado como fallback. `REDPILL_MCP_SHARED=0` + reseed invierte los `enabled`.
+- `scripts/install_mcp_service.sh` renderiza/instala `systemd/redpill-mcp.service` (socket `state/mcp.sock`, 0700/UMask), hace `enable` y `restart`, y espera el socket. `upgrade.sh` e `install_neo.sh` lo invocan tras la inyección de IDEs.
+- Pi y Claude siguen en stdio directo en v1 (Pi: su extensión gestiona su propio cliente MCP; Claude: cuenta de trabajo, no se resiembra). El proxy ya soporta `--harness` para el día que se cableen.
+
+**Pendiente antes de producción**:
+1. `InvalidStateError` al cerrar el cliente streamable HTTP (sigue apareciendo; verificar/remediar).
+2. Punto único de fallo (socket activation/restart) y concurrencia (handlers síncronos → thread/lock).
+3. Identidad real multi-arnés: el proxy ya lee env/bridge; falta mejorar el bridge global por sesión (last-writer) y cablear Claude/Pi.
+4. Seguridad: UDS 0600, sin TCP abierto; el proxy es la frontera de identidad (mismo UID).
+5. Migración: `inject_mcp`/`inject_opencode`/Claude/Pi al proxy, con modo stdio directo como fallback; instalar `systemd/redpill-mcp.service`; tests de dos sesiones y de reinicio del backend.
+
+Los scripts del spike viven en `/tmp/opencode/mcp-spike/` (fuera del repo; no se commitean).
 
 ---
 

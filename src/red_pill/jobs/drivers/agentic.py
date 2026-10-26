@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
@@ -36,12 +37,27 @@ class AgenticJobDriver(ResumableJobDriver):
 		from red_pill.swarm.bridges.factory import create_bridge, create_cascade_bridge
 
 		origin = payload.get("origin")
+		identity: Dict[str, Any] = {}
+		if payload.get("continuity_id"):
+			identity = {
+				"continuity_id": payload.get("continuity_id"),
+				"mission_id": payload.get("parent_mission_id") or payload.get("mission_id"),
+				"parent_mission_id": payload.get("parent_mission_id"),
+				"originator": payload.get("originator") or (f"job:{self.job_id}" if getattr(self, "job_id", None) else None),
+				"role": payload.get("role") or "job",
+				"job_id": getattr(self, "job_id", None),
+			}
 		cascade_spec = payload.get("cascade")
 		if cascade_spec:
 			from red_pill.config import BridgeTarget
 
 			targets = [BridgeTarget(**t) for t in cascade_spec]
-			return create_cascade_bridge(targets, name=f"job:{payload.get('title', 'agentic')}", origin=origin)
+			return create_cascade_bridge(
+				targets,
+				name=f"job:{payload.get('title', 'agentic')}",
+				origin=origin,
+				**{key: value for key, value in identity.items() if value},
+			)
 		kwargs: Dict[str, Any] = {}
 		if origin is not None:
 			kwargs["origin"] = origin
@@ -70,6 +86,8 @@ class AgenticJobDriver(ResumableJobDriver):
 					kwargs[key] = payload[key]
 			if getattr(self, "job_id", None):
 				kwargs["run_ref"] = f"{self.job_id}:{getattr(self, 'attempts', 0)}"
+		else:
+			kwargs.update({key: value for key, value in identity.items() if value})
 		return create_bridge(payload.get("backend"), **kwargs)
 
 	def _request_id(self) -> str:
@@ -130,6 +148,15 @@ class AgenticJobDriver(ResumableJobDriver):
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		"""Entorno no disponible (IDE cerrado, SIP caído) → deferral R1, no fallo."""
+		# Un cwd efímero (/tmp) puede desaparecer en un reinicio; un job reanudable
+		# debe fallar claro, no arrancar el hijo en otro workspace. Solo se valida
+		# si el payload lo declara: sin cwd, el bridge usa su default persistente.
+		cwd = str(payload.get("cwd") or "").strip()
+		if cwd and not Path(cwd).is_dir():
+			raise ValueError(
+				f"agentic_job cwd no existe o no es un directorio: {cwd}. "
+				"Para jobs reanudables usa un workspace persistente (no /tmp)."
+			)
 		try:
 			bridge = self._create_bridge(payload)
 			healthy = bridge.health_check()

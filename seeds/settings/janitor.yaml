@@ -27,3 +27,11 @@ plugins:
     # recorte de turnos viejos de almas activas conservando los últimos 200.
   orphaned_parents_sweep:
     enabled: true
+  state_artifacts_purge:
+    enabled: true
+    days_to_keep: 30                    # journal archive (B-01h) + results de jobs cerrados (S5)
+    jobs_results_keep_per_mission: 1    # conserva el último result por misión
+  harness_scratch_purge:
+    enabled: true
+    days_to_keep: 14                    # scratch de arneses fuera de ${RP_TMP_DIR} (opt-in)
+    paths: []                           # ej.: ["/tmp/opencode"]

@@ -230,13 +230,30 @@ class MiniSession:
 		turns = self.mirror.read_turns(self.continuity_id)
 		if self.compactor is not None:
 			budget = self.config.context_tokens if context_tokens is None else int(context_tokens)
+			extra_tokens = estimate_tokens(system_prompt) + estimate_tokens(task)
 			ctx = self.compactor.ensure_context(
 				self.continuity_id,
 				budget_tokens=budget,
-				extra_tokens=estimate_tokens(system_prompt) + estimate_tokens(task),
+				extra_tokens=extra_tokens,
 				mission_id=self.config.mission_id,
 			)
 			turns = ctx.turns
+			if not ctx.compacted and self.compactor.should_start_background(
+				ctx.messages,
+				extra_tokens=extra_tokens,
+				budget_tokens=budget,
+				reserve_tokens=self.compactor.reserve_tokens,
+			):
+				try:
+					self.compactor.maybe_start(
+						self.continuity_id,
+						mission_id=self.config.mission_id,
+						extra_tokens=extra_tokens,
+						budget_tokens=budget,
+						reserve_tokens=self.compactor.reserve_tokens,
+					)
+				except Exception as exc:
+					logger.warning("[MiniSession] background compaction enqueue failed: %s", exc)
 		limit = self.config.history_turns if history_turns is None else history_turns
 		if limit > 0:
 			turns = trim_history_window(turns, limit)

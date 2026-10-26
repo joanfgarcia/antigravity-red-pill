@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from typing import Any, Dict, List, Optional
@@ -144,7 +145,11 @@ def handle_job(args: argparse.Namespace) -> None:
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
-		tasks = queue.list_tasks(statuses=statuses, mission_id=getattr(args, "mission", None))
+		tasks = queue.list_tasks(
+			statuses=statuses,
+			mission_id=getattr(args, "mission", None),
+			continuity_id=getattr(args, "continuity", None),
+		)
 		if getattr(args, "json", False):
 			# JOB-001: salida estructurada para parseo agéntico directo
 			print(_json.dumps(tasks, ensure_ascii=False, indent=1, default=str))
@@ -189,7 +194,12 @@ def handle_job(args: argparse.Namespace) -> None:
 				print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición a pausa no aplicable.")
 		else:
 			prev_st = task.get("status")
+			conflict = _lease_conflict(task, force=bool(getattr(args, "force", False)))
+			if conflict:
+				print(conflict)
+				return
 			if queue.resume_task(task["id"]):
+				_acquire_mission(task, force=bool(getattr(args, "force", False)) or os.getenv("REDPILL_OPERATOR") == "1")
 				updated = queue.get_task(task["id"])
 				st = updated["status"] if updated else "PENDING"
 				if prev_st == "PAUSING" and st == "PROCESSING":
@@ -372,9 +382,17 @@ def _kill_job(queue, task: dict, discard: bool = False) -> None:
 	un fallo del job y le queme un intento del disyuntor.
 	"""
 	job_id = task["id"]
-	if not queue.kill_task(job_id, discard=discard):
+	try:
+		killed, previous = queue.kill_task_ex(job_id, discard=discard)
+		if not isinstance(killed, bool):
+			raise TypeError("fake queue sin kill_task_ex real")
+	except (AttributeError, TypeError, ValueError):
+		killed, previous = queue.kill_task(job_id, discard=discard), task.get("status")
+	if not killed:
 		print(f"[WARN] Job {job_id[:8]} en estado '{task['status']}': no se puede abatir.")
 		return
+	if previous not in ("PROCESSING", "PAUSING"):
+		_release_mission(task)
 
 	short = job_id[:8]
 	# Abatir TODOS los scopes del job por PREFIJO: el element_job usa
@@ -404,6 +422,100 @@ def _kill_job(queue, task: dict, discard: bool = False) -> None:
 	destino = "FRUSTRATED (descartado)" if discard else "PAUSED* (reanudable con `job resume`)"
 	print(f"[OK] Job {short} → {destino}.")
 	print(f"     Scopes abatidos: {', '.join(stopped) if stopped else 'ninguno activo'}.")
+
+
+def _job_scope(task: Dict[str, Any]) -> "tuple[str, str]":
+	cp = task.get("checkpoint_data") or {}
+	return (
+		str(task.get("continuity_id") or cp.get("continuity_id") or ""),
+		str(task.get("parent_mission_id") or cp.get("parent_mission_id") or ""),
+	)
+
+
+def _lease_conflict(task: Dict[str, Any], *, force: bool = False) -> Optional[str]:
+	"""CLI = Operador, pero sin atropellar el mando vivo de otra alma."""
+	import os
+	import time
+
+	from red_pill.session.lease import LeaseStore
+
+	if force or os.getenv("REDPILL_OPERATOR") == "1":
+		return None
+	if str(task.get("source") or "") != "dag_job":
+		return None
+	owner, mission = _job_scope(task)
+	if not owner or not mission:
+		return None
+	row = LeaseStore().active_mission_lease(mission)
+	if not row:
+		return None
+	deadline = min(
+		float(row["last_heartbeat_at"]) + int(row["idle_ttl_s"]),
+		float(row["started_at"]) + int(row["max_wall_s"]),
+	)
+	if time.time() > deadline or str(row.get("continuity_id") or "") == owner:
+		return None
+	return f"[ERROR] misión {mission} en manos de otra alma; split-brain bloqueado."
+
+
+def _acquire_mission(task: Dict[str, Any], *, force: bool = False) -> None:
+	if str(task.get("source") or "") != "dag_job":
+		return
+	owner, mission = _job_scope(task)
+	if not owner or not mission:
+		return
+	try:
+		from red_pill.session.lease import LeaseStore
+
+		LeaseStore().begin_mission_lease(
+			mission,
+			continuity_id=owner,
+			holder_originator="",
+			owner_kind="operator",
+			max_wall_s=604800,
+			metadata={"job_id": str(task.get("id") or "")},
+			allow_takeover=force,
+		)
+	except Exception:
+		pass
+
+
+def _release_mission(task: Dict[str, Any]) -> None:
+	if str(task.get("source") or "") != "dag_job":
+		return
+	owner, mission = _job_scope(task)
+	if not owner or not mission:
+		return
+	try:
+		import json as _json
+
+		from red_pill.session.lease import LeaseError, LeaseStore
+
+		leases = LeaseStore()
+		row = leases.get(f"mission:{mission}")
+		if not row:
+			return
+		try:
+			meta = _json.loads(row.get("metadata_json") or "{}")
+		except (TypeError, ValueError):
+			meta = {}
+		if str(meta.get("job_id") or "") != str(task.get("id") or ""):
+			return
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		siblings = CognitiveQueueManager().list_tasks(
+			statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"],
+			continuity_id=owner,
+			limit=200,
+		)
+		if any(
+			str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "")
+			for r in siblings
+		):
+			return
+		leases.finish(f"mission:{mission}", state="aborted", reason="operator_kill", continuity_id=owner)
+	except LeaseError:
+		pass
 
 
 def _purge_jobs(queue, args: argparse.Namespace) -> None:

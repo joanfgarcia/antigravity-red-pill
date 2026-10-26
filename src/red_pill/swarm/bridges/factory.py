@@ -69,7 +69,9 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	if backend in ("local-tools", "local_tools"):
 		from .local import LocalToolBridge
 
-		allowed = {key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens") if key in kwargs}
+		allowed = {
+			key: kwargs[key] for key in ("continuity_id", "mission_id", "originator", "history_turns", "run_ref", "context_tokens") if key in kwargs
+		}
 		return LocalToolBridge(**allowed)
 	if backend == "local":
 		from .local import LocalBridge
@@ -81,7 +83,12 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	return GrpcBridge()
 
 
-def create_cascade_bridge(cascade: List[cfg.BridgeTarget], name: str = "cascade", origin: Optional[str] = None) -> AgentBridge:
+def create_cascade_bridge(
+	cascade: List[cfg.BridgeTarget],
+	name: str = "cascade",
+	origin: Optional[str] = None,
+	**identity: Any,
+) -> AgentBridge:
 	"""Execution bridge, cascade-aware.
 
 	If `cascade` is configured, returns a CascadeBridge that tries each target in
@@ -93,13 +100,16 @@ def create_cascade_bridge(cascade: List[cfg.BridgeTarget], name: str = "cascade"
 	letting the autonomous cron tell real operator activity apart from
 	autonomous-awakening headless runs.
 	"""
+	allowed = {
+		key: identity[key] for key in ("continuity_id", "mission_id", "parent_mission_id", "originator", "role", "job_id") if identity.get(key)
+	}
 	if cascade:
 		from .cascade import CascadeBridge
 
-		return CascadeBridge(cascade, name=name, origin=origin)
+		return CascadeBridge(cascade, name=name, origin=origin, **allowed)
 	if origin is not None:
-		return create_bridge(origin=origin)
-	return create_bridge()
+		return create_bridge(origin=origin, **allowed)
+	return create_bridge(**allowed)
 
 
 def create_extraction_bridge() -> AgentBridge:
