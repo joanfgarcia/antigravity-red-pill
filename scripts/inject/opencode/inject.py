@@ -233,7 +233,14 @@ def _ensure_esm_package(config_dir: str, backup: bool, major: int | None) -> boo
 			return False
 		if not isinstance(pkg, dict):
 			return False
-	if pkg.get("type") == "module":
+	deps = pkg.get("dependencies")
+	changed = pkg.get("type") != "module"
+	if isinstance(deps, dict) and "@opencode-ai/plugin" in deps:
+		deps.pop("@opencode-ai/plugin", None)
+		changed = True
+		if not deps:
+			pkg.pop("dependencies", None)
+	if not changed:
 		return False
 	if backup and os.path.exists(pkg_path):
 		shutil.copy2(pkg_path, pkg_path + ".bak")
