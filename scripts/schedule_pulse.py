@@ -34,6 +34,8 @@ GRAPHIFY_SERVICE = "redpill-graphify.service"
 GRAPHIFY_TIMER = "redpill-graphify.timer"
 BANK_JANITOR_SERVICE = "redpill-bank-janitor.service"
 BANK_JANITOR_TIMER = "redpill-bank-janitor.timer"
+COMPACT_SWEEP_SERVICE = "redpill-compact-sweep.service"
+COMPACT_SWEEP_TIMER = "redpill-compact-sweep.timer"
 SYSTEMD_USER_DIR = str(get_systemd_user_dir())
 
 # Launchd label (macOS)
@@ -132,6 +134,19 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	)
 	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Queue Worker (memory + jobs)")
 
+	# 4b. Compact sweep (B-02 safety net) — active continuities only. The
+	# compactor may boot a local summarizer, so give the oneshot the same OOM
+	# shield as the queue worker instead of the old 1G cap.
+	_write_systemd_unit(
+		COMPACT_SWEEP_SERVICE,
+		f"{uv_path} run red-pill session compact-sweep",
+		"Red Pill compact sweep (active continuities, B-02)",
+		type="oneshot",
+		nice=10,
+		memory_max="10G",
+	)
+	_write_systemd_timer(COMPACT_SWEEP_TIMER, "15m", "Timer for Red Pill compact sweep (B-02)")
+
 	# 5. Sovereign Daemon (Telegram/Ide Bridge) - 1m
 	DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "run_sovereign_daemon.py")
 	_write_systemd_unit("redpill-worker.service", f"{uv_path} run python {DAEMON_SCRIPT}", "Sovereign Daemon Pulse", type="oneshot", nice=10)
@@ -146,6 +161,7 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 		subprocess.run(["systemctl", "--user", "enable", "--now", NIGHTLY_TIMER], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", COMPACT_SWEEP_TIMER], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-worker.timer"], check=True)
 		print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
 	else:
@@ -228,6 +244,7 @@ def _uninstall_linux() -> None:
 		"redpill-pulse.timer",
 		GRAPHIFY_TIMER,
 		BANK_JANITOR_TIMER,
+		COMPACT_SWEEP_TIMER,
 	):
 		if has_systemd:
 			subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
@@ -253,6 +270,8 @@ def _uninstall_linux() -> None:
 		GRAPHIFY_SERVICE,
 		BANK_JANITOR_TIMER,
 		BANK_JANITOR_SERVICE,
+		COMPACT_SWEEP_TIMER,
+		COMPACT_SWEEP_SERVICE,
 	):
 		path = os.path.join(SYSTEMD_USER_DIR, name)
 		if os.path.exists(path):

@@ -86,10 +86,13 @@ def sweep_active_compactions(
 	for row in registry.list_sessions(max(1, min(int(limit), 5000))):
 		if str(row.get("ttl_state") or "") != "active":
 			continue
-		if float(row.get("updated_at") or 0.0) < cutoff:
-			continue
 		continuity = str(row.get("continuity_id") or "").strip()
 		if not continuity or continuity in seen:
+			continue
+		# El registro solo se toca al crear el leg; un turno fresco del espejo
+		# debe mantener viva la continuidad para el safety net.
+		last_activity = max(float(row.get("updated_at") or 0.0), mirror.last_completed_ts(continuity))
+		if last_activity < cutoff:
 			continue
 		seen.add(continuity)
 		scanned += 1

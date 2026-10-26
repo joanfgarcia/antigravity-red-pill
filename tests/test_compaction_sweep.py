@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -62,6 +64,9 @@ def test_sweep_active_only_and_scope(monkeypatch, db_path):
 			mission_id="repo:next",
 			role="task",
 		)
+	mirror = SessionMirror(db_path)
+	_seed_mirror(mirror, "alma-job", "job:test")
+	_seed_mirror(mirror, "alma-user", "opencode:ses_user")
 	registry.unregister_session("job:inactive")
 	qm = CognitiveQueueManager(db_path + ".queue")
 	result = sweep_active_compactions(db_path=db_path, queue_manager=qm)
@@ -97,4 +102,50 @@ def test_maybe_start_after_turn_scope(monkeypatch, db_path):
 		)
 		is None
 	)
+	assert len(qm.list_tasks()) == 1
+
+
+def test_sweep_uses_fresh_mirror_turn_when_registry_is_stale(monkeypatch, db_path):
+	_config(monkeypatch)
+	registry = SessionRegistry(db_path)
+	registry.upsert_session(
+		originator="job:stale",
+		continuity_id="alma-stale",
+		mission_id="repo:next",
+		role="task",
+	)
+	mirror = SessionMirror(db_path)
+	_seed_mirror(mirror, "alma-stale", "job:stale")
+	conn = sqlite3.connect(db_path)
+	conn.execute("UPDATE session_registry SET updated_at = ? WHERE originator = 'job:stale'", (time.time() - 16 * 60,))
+	conn.commit()
+	conn.close()
+
+	qm = CognitiveQueueManager(db_path + ".queue")
+	result = sweep_active_compactions(db_path=db_path, queue_manager=qm)
+	assert result["scanned"] == 1
+	assert result["enqueued"] == 1
+
+
+def test_sweep_does_not_duplicate_samantha_compaction(monkeypatch, db_path):
+	_config(monkeypatch)
+	registry = SessionRegistry(db_path)
+	registry.upsert_session(
+		originator="job:telegram",
+		continuity_id="alma-telegram",
+		mission_id="repo:next",
+		role="task",
+	)
+	mirror = SessionMirror(db_path)
+	_seed_mirror(mirror, "alma-telegram", "job:telegram")
+	qm = CognitiveQueueManager(db_path + ".queue")
+	qm.enqueue_task(
+		source="samantha",
+		payload={"continuity_id": "alma-telegram", "session_id": "telegram-session"},
+		priority=7,
+	)
+
+	result = sweep_active_compactions(db_path=db_path, queue_manager=qm)
+	assert result["scanned"] == 1
+	assert qm.find_task_by_payload_key(source="script_job", key="continuity_id", value="alma-telegram", limit=None) is None
 	assert len(qm.list_tasks()) == 1

@@ -381,7 +381,7 @@ class Compactor:
 			return 0
 		latest = self.mirror.latest_compaction(continuity)
 		since = int(latest["range_end_seq"]) if latest else 0
-		chars = self.mirror.context_chars_since(continuity, since_seq=since)
+		chars = self.mirror.context_chars_since(continuity, since_seq=since, exclude_source="compactor")
 		return max(1, int(chars / 3.2))
 
 	def maybe_start(
@@ -435,14 +435,16 @@ class Compactor:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		qm = self.queue_manager or CognitiveQueueManager()
-		try:
-			existing = qm.find_task_by_payload_key(
-				source="script_job", key="continuity_id", value=continuity, limit=None
-			)
-		except Exception:
-			existing = None
-		if existing:
-			return str(existing["id"])
+		existing = None
+		for source in ("script_job", "samantha"):
+			try:
+				existing = qm.find_task_by_payload_key(
+					source=source, key="continuity_id", value=continuity, limit=None
+				)
+			except Exception:
+				existing = None
+			if existing:
+				return str(existing["id"])
 		mission = str(mission_id or "").strip()
 		if not mission:
 			turns = self.mirror.read_turns(continuity)

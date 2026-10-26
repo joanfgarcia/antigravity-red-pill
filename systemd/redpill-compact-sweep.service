@@ -8,5 +8,5 @@ WorkingDirectory=/home/joan/Documents/IA/sharing
 Environment=PYTHONPATH=/home/joan/Documents/IA/sharing/src
 ExecStart=/home/joan/Documents/IA/sharing/.venv/bin/red-pill session compact-sweep
 Nice=10
-MemoryMax=1G
+MemoryMax=10G
 TimeoutStartSec=120

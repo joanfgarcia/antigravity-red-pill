@@ -88,11 +88,12 @@ def test_telegram_trigger_uses_compactor_estimate(tmp_path, monkeypatch):
 			FakeCompactor.instances.append(self)
 
 		def estimate_context_tokens(self, continuity_id):
-			return 999
+			return 2000
 
 	calls = []
 	monkeypatch.setattr("red_pill.config.get_config", lambda: SimpleNamespace(
 		SESSION_COMPACTOR_ENABLED=True,
+		TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
 		TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
 		TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
 		TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
@@ -120,3 +121,34 @@ def test_telegram_reset_continuity_records_compaction(tmp_path, monkeypatch):
 	turns = mirror.context_turns(session["continuity_id"])
 	assert turns and turns[0]["content"] == "## Handoff\nseguimos"
 	assert len(mirror.compactions(session["continuity_id"])) == 1
+
+
+def test_telegram_trigger_does_not_recompact_its_own_summary(tmp_path, monkeypatch):
+	from types import SimpleNamespace
+
+	tsm = _manager(tmp_path, mapping=True)
+	session = tsm.create_session("user-42")
+	tsm.append_message(session["id"], "user", "hola")
+	monkeypatch.setattr(
+		"red_pill.config.get_config",
+		lambda: SimpleNamespace(
+			SESSION_COMPACTOR_ENABLED=True,
+			SESSION_COMPACTOR_ENGINE="extractive",
+			TELEGRAM_COMPACTOR_CONTEXT_CHARS=4000,
+			TELEGRAM_COMPACTOR_BACKGROUND_CHARS=800,
+			TELEGRAM_COMPACTOR_RESERVE_CHARS=400,
+			TELEGRAM_COMPACTOR_PROTECT_LAST_N=8,
+		),
+	)
+	done = tsm.reset_continuity(session, "## Handoff\nseguimos")
+	assert done is not None
+
+	calls = []
+	monkeypatch.setattr("red_pill.inference.samantha_worker.enqueue", lambda **kw: calls.append(kw))
+	assert tsm.trigger_compaction(session["id"]) is None
+	assert calls == []
+
+	tsm.append_message(session["id"], "user", "x" * 4000)
+	assert tsm.trigger_compaction(session["id"]) is None
+	assert calls and calls[0]["action"] == "compact_session"
+	assert calls[0]["payload"]["continuity_id"] == session["continuity_id"]

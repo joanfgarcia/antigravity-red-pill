@@ -494,22 +494,40 @@ class SessionMirror:
 			).fetchone()
 		return int(row["n"]) if row else 0
 
-	def context_chars_since(self, continuity_id: str, *, since_seq: int = 0) -> int:
+	def context_chars_since(self, continuity_id: str, *, since_seq: int = 0, exclude_source: Optional[str] = None) -> int:
 		"""Chars (content + tool_calls) de turnos completados con `seq > since_seq`.
 
 		Proxy barato para el chequeo de fondo: no relee ni replaya el historial;
-		solo suma longitudes en SQL. El turno de resumen del compactor cuenta.
+		solo suma longitudes en SQL. El turno de resumen del compactor cuenta
+		por defecto; los gates de contexto deben excluirlo para no medir su
+		propio handoff como si fuera conversación nueva.
 		"""
 		continuity = str(continuity_id or "").strip()
 		if not continuity:
 			return 0
+		sql = (
+			"SELECT COALESCE(SUM(LENGTH(COALESCE(content, '')) + LENGTH(COALESCE(tool_calls, ''))), 0) AS n "
+			"FROM session_mirror WHERE continuity_id = ? AND seq > ? AND status = 'completed'"
+		)
+		params: List[Any] = [continuity, int(since_seq or 0)]
+		if exclude_source is not None:
+			sql += " AND source != ?"
+			params.append(str(exclude_source))
+		with connect_session_db(self.db_path) as conn:
+			row = conn.execute(sql, tuple(params)).fetchone()
+		return int(row["n"]) if row else 0
+
+	def last_completed_ts(self, continuity_id: str) -> float:
+		"""Timestamp del último turno completado (0 si el alma está vacía)."""
+		continuity = str(continuity_id or "").strip()
+		if not continuity:
+			return 0.0
 		with connect_session_db(self.db_path) as conn:
 			row = conn.execute(
-				"SELECT COALESCE(SUM(LENGTH(COALESCE(content, '')) + LENGTH(COALESCE(tool_calls, ''))), 0) AS n "
-				"FROM session_mirror WHERE continuity_id = ? AND seq > ? AND status = 'completed'",
-				(continuity, int(since_seq or 0)),
+				"SELECT COALESCE(MAX(ts), 0) AS ts FROM session_mirror WHERE continuity_id = ? AND status = 'completed'",
+				(continuity,),
 			).fetchone()
-		return int(row["n"]) if row else 0
+		return float(row["ts"] or 0.0) if row else 0.0
 
 	def last_seq(self, continuity_id: str) -> int:
 		with connect_session_db(self.db_path) as conn:

@@ -321,16 +321,25 @@ class TelegramSessionManager:
 				from red_pill.session.mirror import SessionMirror
 
 				background_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_BACKGROUND_CHARS", 800)))
+				context_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_CONTEXT_CHARS", 4000)))
 				reserve_chars = max(1, int(getattr(conf, "TELEGRAM_COMPACTOR_RESERVE_CHARS", 400)))
 				protect = max(0, int(getattr(conf, "TELEGRAM_COMPACTOR_PROTECT_LAST_N", 8)))
+				background_tokens = max(1, int(background_chars / 3.2))
+				budget_tokens = max(1, int(context_chars / 3.2))
+				reserve_tokens = max(1, int(reserve_chars / 3.2))
+				# The background threshold must fit the total Telegram budget,
+				# otherwise a normal handoff summary alone re-triggers compaction
+				# forever (the summary is excluded from the estimate, but the
+				# threshold still has to leave room for it).
+				threshold_tokens = max(background_tokens, max(1, budget_tokens - reserve_tokens))
 				compactor = Compactor(
 					SessionMirror(self.db_path),
-					background_tokens=max(1, int(background_chars / 3.2)),
-					reserve_tokens=max(1, int(reserve_chars / 3.2)),
+					background_tokens=threshold_tokens,
+					reserve_tokens=reserve_tokens,
 					protect_last_n=protect,
 				)
 				estimate = compactor.estimate_context_tokens(session["continuity_id"])
-				if estimate < max(1, int(background_chars / 3.2)):
+				if estimate < threshold_tokens:
 					return None
 			except Exception as e:
 				logger.warning(f"[TelegramSession] compactor threshold failed; fallback legacy: {e}")
@@ -341,13 +350,22 @@ class TelegramSessionManager:
 
 		# Dedup: una compactación ya encolada/en vuelo para esta sesión rotará la
 		# sesión al completar — encolar otra solo duplica trabajo del LLM local.
+		# También consultamos el carril sweep por continuity: ambos no comparten
+		# un lease de trabajo, así que la cola es el punto de encuentro.
 		try:
 			from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
-			existing = CognitiveQueueManager().find_task_by_payload_key(source="samantha", key="session_id", value=session_id)
+			qm = CognitiveQueueManager()
+			existing = qm.find_task_by_payload_key(source="samantha", key="session_id", value=session_id)
 			if existing:
 				logger.info(f"[TelegramSession] Compaction already {existing['status']} for {session_id} ({existing['id'][:8]}) — skipping duplicate")
 				return None
+			continuity = str(session.get("continuity_id") or "")
+			if continuity:
+				existing_sweep = qm.find_task_by_payload_key(source="script_job", key="continuity_id", value=continuity, limit=None)
+				if existing_sweep:
+					logger.info(f"[TelegramSession] Sweep compaction already {existing_sweep['status']} for {continuity[:8]} — skipping duplicate")
+					return None
 		except Exception as e:
 			logger.warning(f"[TelegramSession] Compaction dedup check failed: {e} — enqueueing anyway")
 
@@ -363,6 +381,7 @@ class TelegramSessionManager:
 				payload={
 					"session_id": session_id,
 					"channel_user_id": session.get("channel_user_id", ""),
+					"continuity_id": session.get("continuity_id", ""),
 					"history_text": history_text,
 				},
 				priority=7,
