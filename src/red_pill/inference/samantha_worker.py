@@ -58,8 +58,17 @@ def _handle_compact_session(payload: Dict[str, Any], samantha_fn: Callable) -> D
 	if not history_text:
 		return {"status": "skipped", "reason": "empty history"}
 
-	prompt, system_prompt = _prompt("samantha_compact_user", history=history_text)
-	summary = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=300)
+	# Mismo prompt operativo que el compactor B-02 (decisiones, refs, pendientes,
+	# blockers, próximo paso). El prompt legacy `samantha_compact_user` no metía
+	# el historial de forma fiable y Samantha devolvía "no hay mensajes".
+	from red_pill.session.summarizer import compaction_system_prompt, render_compaction_prompt
+
+	prompt = render_compaction_prompt(
+		history_text,
+		"Compactación de una conversación de Telegram. Resume decisiones, refs, pendientes, blockers y próximo paso.",
+	)
+	system_prompt = compaction_system_prompt()
+	summary = samantha_fn(prompt=prompt, system_prompt=system_prompt, max_tokens=500)
 
 	if not summary:
 		return {"status": "error", "reason": "Samantha returned empty"}
@@ -399,10 +408,9 @@ class SamanthaWorker(threading.Thread):
 						new_id, "assistant", "Entendido. He archivado el historial en el Bünker y consolidado el contexto. Continuemos."
 					)
 
-					# Mark old session for purge
+					# Mark old session for purge (also expires its soul leg).
 					if old_session:
-						old_session["status"] = "pending_purge"
-						tsm.save_session(session_id, old_session)
+						tsm.mark_for_deletion(session_id)
 
 					result["new_session_id"] = new_id
 					logger.info(f"[SamanthaWorker] Compaction callback: {session_id[:8]} → {new_id}")

@@ -4,6 +4,20 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-086] Fase 3 — compactor/Telegram en producción (flags + E2E)
+**Date**: 2026-10-26
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El compactor B-02 tenía código, retry/heartbeat, mapeo Telegram y safety net, pero seguía con flags OFF y sin E2E de producción. El primer E2E reveló dos fallos: el leg viejo de Telegram no se expiraba (callback no llamaba a `mark_for_deletion`) y Samantha devolvía “no hay mensajes” (prompt legacy `samantha_compact_user`).
+**Decision**:
+1. Flags live: `SESSION_COMPACTOR_ENABLED=true`, `TELEGRAM_SOUL_MAPPING_ENABLED=true`, `COMPACTOR_SCOPE=autonomous`, `COMPACTOR_SWEEP_ACTIVE_MIN=15`; `AUTO_HEAL_ENABLED=false`.
+2. Telegram usa el presupuesto del compactor para decidir, Samantha resume con el prompt operativo B-02, y el callback registra `reset(handoff)` + `mark_for_deletion` (leg viejo `expired`).
+3. Safety net `compact-sweep` active-only (timer 15 min, fuente) y hook externo con el mismo scope.
+**Alternatives**: mantener el trigger legacy 16/4000 y el prompt antiguo — reproducía el resumen vacío; descartado.
+**Rationale / Evidence**: E2E real `9457d640` → `54d7ae98` (continuidad `2aab2ac3`), leg viejo `expired`/nuevo `active`, `session_compactions` `5d8693da` completed. Primer E2E `e2e-fase3` expuso los dos fallos; corregidos. Tests **177**; `ruff` limpio.
+**Consequences**: Fase 3 operativa con flags live; el interactivo queda fuera por `COMPACTOR_SCOPE=autonomous`; el timer sweep es fuente (no instalado); los heals siguen manuales (AD-085).
+
+---
+
 ## [AD-084] D23-SCORE v0.1 — auto-revisor con modos off/review/semi/auto
 **Date**: 2026-10-25
 **Status**: ACCEPTED & IMPLEMENTED.

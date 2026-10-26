@@ -132,6 +132,15 @@ This document provides a comprehensive list of all parameters available in the `
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
 | `PULSE_INTERVAL` | `3600` | Interval in seconds between Sovereign Pulses. |
 | `LAZARUS_SYNC_ENABLED` | `True` | Activates constant state-sync to prevent process interruptions from losing RAM context. |
+| `SESSION_COMPACTOR_ENABLED` | `False` (live `True`) | Activa el compactor de contexto (B-02) en el fondo/los carriles locales. |
+| `SESSION_COMPACTOR_ENGINE` | `samantha` | Motor de resumen: `samantha` (local), `memento` o `extractive`. |
+| `TELEGRAM_SOUL_MAPPING_ENABLED` | `False` (live `True`) | Mapea sesiones Telegram a un alma/leg y espeja sus turnos. |
+| `COMPACTOR_SCOPE` | `autonomous` | `autonomous` (misión/Telegram/awakening/local; interactivas fuera), `all` u `off`. |
+| `COMPACTOR_SWEEP_ACTIVE_MIN` | `15` | Ventana de actividad para la safety net `compact-sweep`. |
+| `TELEGRAM_COMPACTOR_CONTEXT_CHARS` | `4000` | Presupuesto de contexto del carril Telegram (chars). |
+| `TELEGRAM_COMPACTOR_BACKGROUND_CHARS` | `800` | Umbral de fondo del carril Telegram (chars). |
+| `TELEGRAM_COMPACTOR_RESERVE_CHARS` | `400` | Reserva del carril Telegram (chars). |
+| `TELEGRAM_COMPACTOR_PROTECT_LAST_N` | `8` | Turnos recientes que no se compactan en Telegram. |
 | `LAZARUS_SYNC_INTERVAL` | `300` | Interval in seconds (5 min) for the Lazarus checkpoint generator. |
 | `RESONANCE_ENABLED`| `True` | Enables automated "Aha!" moments by checking similarities across previously idle engrams. |
 | `RESONANCE_THRESHOLD`| `0.4` | How close two disparate memories need to be in vector space to trigger forced integration. |
