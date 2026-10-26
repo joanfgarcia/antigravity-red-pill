@@ -744,6 +744,8 @@ async def run_local_minion(
 					if done is not None:
 						from red_pill.session.switch import replay_messages, trim_history_chars, trim_history_window
 
+						if mirror is None:
+							raise RuntimeError("mirror no inicializado en retry de longitud")
 						turns = mirror.context_turns(cid)
 						if history_turns > 0:
 							turns = trim_history_window(turns, history_turns)
