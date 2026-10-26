@@ -531,6 +531,9 @@ class RedPillConfig(BaseSettings):
 	# interactivas opencode quedan fuera salvo `all` (opt-in explícito) u `off`.
 	COMPACTOR_SCOPE: str = "autonomous"
 	COMPACTOR_SCOPE_PREFIXES: str = "job:,telegram:,local:,mini:,forge:,loom:,d23-review:,awakening:"
+	# Safety net de baja frecuencia: solo continuidades activas (leg activo y
+	# último latido dentro de esta ventana); nunca barrido histórico.
+	COMPACTOR_SWEEP_ACTIVE_MIN: int = 15
 	# Umbrales de AVISO (señales de dolor, no purgas) para el crecimiento del espejo.
 	SESSION_MIRROR_GROWTH_ROWS: int = 200000
 	SESSION_MIRROR_GROWTH_BYTES: int = 536870912

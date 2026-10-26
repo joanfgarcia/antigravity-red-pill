@@ -189,6 +189,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_compact.add_argument("--handoff", default=None, help="Fichero con una nota de handoff: reset del contexto")
 	session_compact.add_argument("--db-path", default=None, help="session.db alternativa (jobs de test/worktree)")
 	session_compact.add_argument("--json", action="store_true", help="Salida JSON")
+	session_sweep = session_sub.add_parser("compact-sweep", help="Safety net: compacta continuidades activas (B-02)")
+	session_sweep.add_argument("--active-min", type=int, default=None, help="Ventana de actividad en minutos (default: config)")
+	session_sweep.add_argument("--limit", type=int, default=500, help="Máximo de legs a revisar")
+	session_sweep.add_argument("--db-path", default=None, help="session.db alternativa")
+	session_sweep.add_argument("--json", action="store_true", help="Salida JSON")
 	session_decisions = session_sub.add_parser("decisions", help="Bandeja de D-obj pendientes (D23-SCORE)")
 	session_decisions.add_argument("--mission", default=None, help="Filtra por misión")
 	session_decisions.add_argument(

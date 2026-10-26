@@ -307,6 +307,26 @@ def handle_session(args: argparse.Namespace) -> None:
 			)
 		)
 		return
+	if getattr(args, "session_cmd", None) == "compact-sweep":
+		import json
+
+		from red_pill.session.compaction_hook import sweep_active_compactions
+
+		result = sweep_active_compactions(
+			active_min=getattr(args, "active_min", None),
+			limit=int(getattr(args, "limit", 500) or 500),
+			db_path=getattr(args, "db_path", None),
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+		else:
+			print(
+				f"[SWEEP] activas={result.get('scanned', 0)} "
+				f"encoladas={result.get('enqueued', 0)} "
+				f"ventana={result.get('active_min', '-')}m"
+				+ ("" if result.get("enabled") else " (compactor OFF)")
+			)
+		return
 	if getattr(args, "session_cmd", None) == "decisions":
 		import json
 
