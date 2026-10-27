@@ -89,7 +89,7 @@ class BridgeTarget(BaseModel):
 	backend: Literal["agy", "claude", "opencode", "local", "pi"]
 	model: Optional[str] = None
 	effort: Optional[Literal["low", "medium", "high"]] = None
-	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --attach (None → direct/cold)
+	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --server (None → direct/cold)
 	timeout: Optional[int] = None  # per-target bridge timeout (s). None → use the method's timeout argument (D3/D14)
 
 

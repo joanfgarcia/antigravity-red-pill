@@ -68,8 +68,8 @@ class BridgeCapabilities:
 # ── Standard effort vocabulary (portable) ──────────────────────────────────
 # red-pill exposes ONE standard effort scale; each bridge MAPS it to its platform's
 # real control: ClaudeBridge → `--effort`; AgyBridge → the model's "(Mode)" variant
-# (agy fuses model+mode in the model name); OpenCodeBridge → `--variant`;
-# LocalBridge → ignored (no effort knob).
+# (agy fuses model+mode in the model name); OpenCodeBridge → the model reference
+# variant (`provider/model#variant`); LocalBridge → ignored (no effort knob).
 # Callers (skills, the bot) speak this standard and never the platform-specific value.
 STANDARD_EFFORTS = ("low", "medium", "high")
 

@@ -78,41 +78,14 @@ class TestCapabilitiesAndArgs:
 		assert bridge._model_args("anthropic/claude-opus") == ["-m", "anthropic/claude-opus"]
 		assert bridge._model_args("opus") == ["-m", "anthropic/opus"]
 
-	def test_effort_args(self, bridge):
-		assert bridge._effort_args("low") == ["--variant", "minimal"]
-		assert bridge._effort_args("HIGH") == ["--variant", "high"]
-		assert bridge._effort_args("medium") == []
-		assert bridge._effort_args(None) == []
-
-	def test_model_effort_args_v1(self, bridge):
-		bridge._cli_major_cache = 1
-		assert bridge._model_effort_args("anthropic/claude-opus", "high") == ["-m", "anthropic/claude-opus", "--variant", "high"]
-		assert bridge._model_effort_args("flash", "high") == ["--variant", "high"]
-		assert bridge._model_effort_args("flash", "medium") == []
-
-	def test_model_effort_args_v2(self, bridge):
-		bridge._cli_major_cache = 2
-		# v2 embebe la variante en la referencia del modelo (#variant).
+	def test_model_effort_args(self, bridge):
+		# V2 embebe la variante en la referencia del modelo (#variant): no existe
+		# `--variant` como flag propia.
 		assert bridge._model_effort_args("anthropic/claude-opus", "high") == ["-m", "anthropic/claude-opus#high"]
+		assert bridge._model_effort_args("anthropic/claude-opus", "low") == ["-m", "anthropic/claude-opus#minimal"]
 		assert bridge._model_effort_args("anthropic/claude-opus", "medium") == ["-m", "anthropic/claude-opus"]
 		# Sin modelo no hay dónde embeberla: se omite.
 		assert bridge._model_effort_args("flash", "high") == []
-
-
-# ── CLI major detection (mock subprocess) ─────────────────────────────────────
-class TestCliMajor:
-	def test_detects_v2_and_caches(self):
-		b = OpenCodeBridge(opencode_path="/bin/true")
-		fake = MagicMock(returncode=0, stdout="opencode v2.0.16", stderr="")
-		with patch("subprocess.run", return_value=fake) as run:
-			assert b._cli_major() == 2
-			assert b._cli_major() == 2
-		assert run.call_count == 1  # cacheado por instancia
-
-	def test_fallback_a_v1_si_falla(self):
-		b = OpenCodeBridge(opencode_path="/bin/true")
-		with patch("subprocess.run", side_effect=OSError("no bin")):
-			assert b._cli_major() == 1
 
 
 # ── Scribe relay (temp sqlite) ────────────────────────────────────────────────
@@ -203,14 +176,19 @@ class TestRunOpencode:
 			out = bridge._run_opencode(["hi"], timeout=5)
 		assert out["text"] == "ok"
 
-	def test_cwd_sets_session_dir_and_process_cwd(self, bridge, tmp_path):
-		"""`--dir` fija el workspace de la sesión; `cwd=` solo el del proceso."""
+	def test_cwd_is_the_only_workspace_source(self, bridge, tmp_path):
+		"""V2 no tiene `--dir`: el workspace de la sesión ES el cwd del subproceso.
+
+		Regresión del job `09192498` (2026-10-27): pasar `--dir` hacía fallar el
+		CLI con `Unrecognized flag: --dir in command opencode run`.
+		"""
 		fake = MagicMock(returncode=0, stdout="", stderr="")
 		with patch("subprocess.run", return_value=fake) as run:
 			bridge._run_opencode(["hi"], timeout=5, cwd=str(tmp_path))
 		cmd = run.call_args.args[0]
-		assert cmd[cmd.index("--dir") + 1] == str(tmp_path)
 		assert run.call_args.kwargs["cwd"] == str(tmp_path)
+		assert "--dir" not in cmd
+		assert not any(str(a) == str(tmp_path) for a in cmd)
 
 	def test_nonzero_returncode_raises(self, bridge):
 		fake = MagicMock(returncode=2, stdout="", stderr="bad")
@@ -256,31 +234,33 @@ class TestRunOpencode:
 			tg._run_opencode(["hi"], timeout=5)
 		assert run.call_args.kwargs["env"]["REDPILL_SCRIBE_DISABLE"] == "1"
 
-	def test_v2_attached_uses_server_flag(self, bridge):
+	def test_attached_uses_server_flag(self, bridge):
 		fake = MagicMock(returncode=0, stdout="", stderr="")
-		bridge._cli_major_cache = 2
 		bridge._server_url = "http://127.0.0.1:4096"
 		with patch("subprocess.run", return_value=fake) as run:
 			bridge._run_opencode(["hi"], timeout=5)
 		cmd = run.call_args.args[0]
-		assert "--server" in cmd and "--attach" not in cmd and "--standalone" not in cmd
+		assert "--server" in cmd and "--standalone" not in cmd
+		# `--attach` es de V1 y ya no existe en el CLI.
+		assert "--attach" not in cmd
 
-	def test_v2_direct_uses_standalone(self, bridge):
+	def test_direct_uses_standalone(self, bridge):
 		fake = MagicMock(returncode=0, stdout="", stderr="")
-		bridge._cli_major_cache = 2
 		bridge._server_url = ""
 		with patch("subprocess.run", return_value=fake) as run:
 			bridge._run_opencode(["hi"], timeout=5)
 		assert "--standalone" in run.call_args.args[0]
 
-	def test_v1_attach_unchanged(self, bridge):
+	def test_no_v1_flags_ever(self, bridge):
+		"""Blindaje V2+: ninguna bandera retirada puede reaparecer."""
 		fake = MagicMock(returncode=0, stdout="", stderr="")
-		bridge._cli_major_cache = 1
-		bridge._server_url = "http://127.0.0.1:4096"
-		with patch("subprocess.run", return_value=fake) as run:
-			bridge._run_opencode(["hi"], timeout=5)
-		cmd = run.call_args.args[0]
-		assert "--attach" in cmd and "--server" not in cmd and "--standalone" not in cmd
+		for server in ("", "http://127.0.0.1:4096"):
+			bridge._server_url = server
+			with patch("subprocess.run", return_value=fake) as run:
+				bridge._run_opencode(["hi"], timeout=5)
+			cmd = run.call_args.args[0]
+			for banned in ("--dir", "--attach", "--variant"):
+				assert banned not in cmd, f"{banned} reapareció en {cmd}"
 
 
 # ── health_check ──────────────────────────────────────────────────────────────
