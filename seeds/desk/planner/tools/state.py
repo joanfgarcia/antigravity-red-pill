@@ -83,11 +83,16 @@ def build(root: Path = ROOT) -> str:
 
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Genera STATE.md (entrada en frío del desk).")
-	ap.add_argument("-o", "--output", default=str(ROOT / "STATE.md"), help="Fichero destino")
+	ap.add_argument("-o", "--output", help="Fichero destino (por defecto: stdout)")
 	ap.add_argument("--root", type=Path, default=ROOT)
 	args = ap.parse_args()
-	Path(args.output).write_text(build(args.root), encoding="utf-8")
-	print(f"STATE.md escrito en {args.output}")
+	report = build(args.root)
+	if args.output:
+		Path(args.output).write_text(report, encoding="utf-8")
+		print(f"STATE.md escrito en {args.output}")
+	else:
+		# Escribir SÓLO con -o: inspeccionar el estado no debe dejar ficheros.
+		print(report)
 	return 0
 
 
