@@ -548,10 +548,12 @@ export default {
     // Si el handshake viaja DENTRO de `execute` (Code Mode), el turno ya cumplió.
     // Sin esto el gateway quedaba exento pero sin acreditar y la siguiente tool
     // real se rechazaba (✗ "HANDSHAKE REQUIRED" visible en el IDE tras un
-    // handshake correcto).
-    const mentionsHandshake = (payload) => {
+    // handshake correcto). Se mira el evento ENTERO (menos el nombre de la tool):
+    // el argumento llega en `input`, en `args` o como string según el arnés.
+    const mentionsHandshake = (event) => {
       try {
-        return /sovereign_handshake/i.test(JSON.stringify(payload ?? ""));
+        const { tool, sessionID, callID, ...rest } = event || {};
+        return /sovereign_handshake/i.test(JSON.stringify(rest));
       } catch (_) {
         return false;
       }
@@ -578,7 +580,7 @@ export default {
           turnHandshake.set(sid, true);
           return;
         }
-        if (GATEWAY_TOOLS.has(toolName) && mentionsHandshake(event?.input ?? event?.args)) {
+        if (GATEWAY_TOOLS.has(toolName) && mentionsHandshake(event)) {
           turnHandshake.set(sid, true);
           return;
         }

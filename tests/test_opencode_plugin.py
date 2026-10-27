@@ -185,6 +185,17 @@ await fire(sessionHooks, "prompt", { sessionID: "s3", prompt: { text: "code mode
 result.gatewayCarriesHandshake = await tryTool("s3", "execute", {
   code: 'await tools["RedPill-Kernel"].sovereign_handshake({ user_prompt: "x" })',
 });
+// 1d) Forma REAL del evento: `input` vacío y el código en `args`. Con
+// `event.input ?? event.args` nunca se miraba `args` y el turno no se acreditaba.
+await fire(sessionHooks, "prompt", { sessionID: "s4", prompt: { text: "args" } });
+result.gatewayArgs = await tryTool("s4", "execute", {});
+await fire(toolHooks, "execute.before", {
+  sessionID: "s4",
+  tool: "execute",
+  input: {},
+  args: { code: 'tools["RedPill-Kernel"].sovereign_handshake({user_prompt:"y"})' },
+});
+result.nonHandshakeAfterGatewayArgs = await tryTool("s4", "RedPill-Kernel_check_parallel_sessions");
 result.nonHandshakeAfterGateway = await tryTool("s3", "RedPill-Kernel_check_parallel_sessions");
 result.reminderAfterGateway = (await reminders("s3")).length;
 // 2) handshake: pasa y desbloquea el turno.
@@ -232,6 +243,10 @@ def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 		"el handshake dentro de execute debe acreditar el turno (evita el ✗ tras un handshake correcto)"
 	)
 	assert out["reminderAfterGateway"] == 0
+	# Forma real del evento (código en `args`, `input` vacío).
+	assert out["nonHandshakeAfterGatewayArgs"]["status"] == "allowed", (
+		"el handshake en `args` (evento real) debe acreditar el turno"
+	)
 	assert "HANDSHAKE REQUIRED" in out["nonHandshakeBefore"]["message"]
 	assert out["handshake"]["status"] == "allowed"
 	assert out["reminderAfter"] == 0, "tras el handshake no debe repetirse el recordatorio"
