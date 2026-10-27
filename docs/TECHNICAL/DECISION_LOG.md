@@ -4,6 +4,23 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-087] OpenCode sólo V2: siembra, handshake exigido por el arnés y MCP resiliente
+**Date**: 2026-10-27
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: Tras migrar a OpenCode V2 la identidad dejó de llegar al modelo y el agente "olvidaba" invocar el handshake. Tres causas encadenadas: (a) V2 **no** carga `instructions: ["RED_PILL.md"]` (ruta relativa ignorada en silencio); (b) el arnés sólo tenía un recordatorio en prosa, así que el handshake dependía de que el modelo se acordara (3/11 turnos en una sesión real); (c) reiniciar `redpill-mcp.service` dejaba a **todas** las sesiones del IDE con `Session terminated` hasta reiniciar la app.
+**Decision**:
+1. **Sólo V2+**. Las instrucciones globales se siembran en `~/.config/opencode/AGENTS.md` (carga nativa en cualquier workspace) y el seed V1 consolidado (`seeds/opencode/instructions/RED_PILL.md`) se **elimina del árbol**: su handshake mandaba llamar `swarm_orchestrator_api → interceptor_rp` y era el fallback de los inyectores. `seeds/anchors/*.md` es la única fuente y un anchor ausente **aborta** la siembra (`Siembra incompleta`).
+2. **Gate de versión único** (`scripts/opencode_version.py::support_error`): ¿existe opencode? → ¿qué versión? (`--version`, `.deb`, override de env) → **exactamente v2**. v1 (sólo migración), v3+, desacuerdo CLI/paquete o versión indeterminable → aborto con mensaje y sin tocar nada. El precheck corre antes de cualquier escritura; `--remove` no se bloquea.
+3. **Handshake exigido por el arnés**, no por la memoria: `session.hook("context")` inyecta el recordatorio en **cada** petición (no persistido → inmune a la compactación) y `tool.hook("execute.before")` niega cualquier tool hasta el handshake del turno (reset en cada `prompt`; fail-open a los 3 rechazos; sub-sesiones exentas). El gateway de Code Mode (`execute`) no se gatea y **acredita** el turno si su argumento menciona el handshake, mirando el **evento completo** (`input` llega vacío y `?? args` no lo veía).
+4. **Bridge sólo V2**: fuera `--dir` (no existe en V2; rompía los jobs), `--attach` (siempre `--server`) y `--variant` (embebido en `-m provider/model#variant`). Sin detección de versión en el bridge.
+5. **MCP compartido resiliente**: backend `stateless=True` (sin estado por conexión; la identidad viaja en cada request vía `X-RedPill-Proxy`) y proxy con **conexión por petición** + un reintento si el transporte falla.
+6. **Contrato de identidad explícito** en el anchor (v4): Step 0 con `"is_new_session": true` (sin él el payload es un esqueleto sin `CORE_RULES`) y regla **«Never truncate»** (la identidad sólo viaja como retorno del handshake; un `len=…`/`slice` la deja fuera de contexto).
+**Alternatives**: (a) mantener V1 con gates por versión — descartado por el Operador: V1 sólo como migración; (b) inyectar la identidad por un canal oculto del plugin — imposible: el plugin no tiene acceso MCP; (c) sesión MCP viva + reconexión manual — el reinicio del backend seguía orfanizando clientes.
+**Rationale / Evidence**: Siembra en sandbox limpio: 36 bloques, 6 anchors (v3/v2/v5/v3/v2/v1), cero `interceptor_rp`, idempotente; `--remove` sin restos (salvo `opencode.jsonc`, por diseño). Gate verificado: v1/v3/indeterminable → rc 3 sin escribir. Handshake en vivo: sin `is_new_session` 1.328 chars sin `CORE_RULES`; con él 8.345 chars con 18 directivas. Job agéntico real S6.2 `COMPLETED` (`S62 CONTINUITY=… LEG=job:… MISSION=repo:next`). Suite: `3566 passed, 16 skipped, 3 xfailed`; `ruff check .` limpio.
+**Consequences**: El repo asume OpenCode v2 (probado 2.1.4 y 2.2.0); una v3 exigirá su propia verificación antes de resembrar. Los hosts ya sembrados re-splican el anchor al subir `BLOCK_VERSION` (handshake 3→4). El MCP puede reiniciarse sin matar sesiones. Deuda: `${AGENT_CORE_DIR}` sin renderizar en una directiva del Búnker (Gold Rule de git).
+
+---
+
 ## [AD-086] Fase 3 — compactor/Telegram en producción (flags + E2E)
 **Date**: 2026-10-26
 **Status**: ACCEPTED & IMPLEMENTED.

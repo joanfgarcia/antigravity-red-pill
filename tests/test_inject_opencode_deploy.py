@@ -482,10 +482,7 @@ def test_falta_un_anchor_aborta_en_vez_de_sembrar_viejo(adapter, tmp_path) -> No
 	shutil.copytree(os.path.join(REPO_ROOT, "seeds", "anchors"), seeds)
 	(seeds / "sovereign_handshake.md").unlink()
 
-	import argparse
-
 	adapter._detect_config_dir = lambda: str(tmp_path)  # noqa: E731
-	args = argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False)
 	# `inject()` usa seeds/anchors del repo; se invoca la escritura directa para
 	# probar el contrato del inyector con un árbol incompleto.
 	with pytest.raises(RuntimeError, match="Siembra incompleta"):
