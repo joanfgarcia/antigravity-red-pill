@@ -137,3 +137,130 @@ def test_plugin_cwd_por_instancia_no_se_pisa_entre_sesiones(tmp_path):
 	# a procesa DESPUÉS de que b haya arrancado: debe conservar /ws/a.
 	assert out["first"]["workdir"] == "/ws/a"
 	assert out["second"]["workdir"] == "/ws/b"
+
+
+# ── Handshake gate (V2: session.hook("context") + tool.hook("execute.before")) ─
+# El mecanismo por turno que en V1 no hacía falta pero que V2 sí expone: sin él,
+# el "primer tool call de cada turno" dependía solo de que el modelo se acordara.
+_HARNESS_HANDSHAKE = """
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const sessionHooks = {};
+const toolHooks = {};
+const ctx = {
+  session: { hook: async (name, cb) => { (sessionHooks[name] ||= []).push(cb); } },
+  tool: { hook: async (name, cb) => { (toolHooks[name] ||= []).push(cb); } },
+  event: { subscribe: async function* () {} },
+  location: { directory: "/ws/proj" },
+};
+await plugin.setup(ctx);
+
+const fire = async (hooks, name, event) => {
+  for (const cb of hooks[name] || []) await cb(event);
+};
+const tryTool = async (sessionID, tool, input = {}) => {
+  try {
+    await fire(toolHooks, "execute.before", { sessionID, tool, input });
+    return { status: "allowed", message: "" };
+  } catch (e) {
+    return { status: "refused", message: String(e.message) };
+  }
+};
+const reminders = async (sessionID) => {
+  const event = { sessionID, system: [] };
+  await fire(sessionHooks, "context", event);
+  return event.system;
+};
+
+const result = {};
+// 1) turno nuevo: el contexto lleva recordatorio y una tool cualquiera se niega.
+await fire(sessionHooks, "prompt", { sessionID: "s1", prompt: { text: "hola" } });
+result.reminderBefore = (await reminders("s1")).length;
+result.nonHandshakeBefore = await tryTool("s1", "RedPill-Kernel_check_parallel_sessions");
+// 1b) Code Mode: `execute` (gateway) nunca se niega, porque el handshake puede ir dentro.
+result.gateway = await tryTool("s1", "execute");
+// 1c) Code Mode con el handshake DENTRO de `execute`: acredita el turno y la
+// siguiente tool real pasa (antes se rechazaba: el gateway iba exento pero sin
+// acreditar, y el IDE mostraba un ✗ tras un handshake correcto).
+await fire(sessionHooks, "prompt", { sessionID: "s3", prompt: { text: "code mode" } });
+result.gatewayCarriesHandshake = await tryTool("s3", "execute", {
+  code: 'await tools["RedPill-Kernel"].sovereign_handshake({ user_prompt: "x" })',
+});
+// 1d) Forma REAL del evento: `input` vacío y el código en `args`. Con
+// `event.input ?? event.args` nunca se miraba `args` y el turno no se acreditaba.
+await fire(sessionHooks, "prompt", { sessionID: "s4", prompt: { text: "args" } });
+result.gatewayArgs = await tryTool("s4", "execute", {});
+await fire(toolHooks, "execute.before", {
+  sessionID: "s4",
+  tool: "execute",
+  input: {},
+  args: { code: 'tools["RedPill-Kernel"].sovereign_handshake({user_prompt:"y"})' },
+});
+result.nonHandshakeAfterGatewayArgs = await tryTool("s4", "RedPill-Kernel_check_parallel_sessions");
+result.nonHandshakeAfterGateway = await tryTool("s3", "RedPill-Kernel_check_parallel_sessions");
+result.reminderAfterGateway = (await reminders("s3")).length;
+// 2) handshake: pasa y desbloquea el turno.
+result.handshake = await tryTool("s1", "RedPill-Kernel_sovereign_handshake");
+result.reminderAfter = (await reminders("s1")).length;
+result.nonHandshakeAfter = await tryTool("s1", "RedPill-Kernel_check_parallel_sessions");
+// 3) turno siguiente: vuelve a exigirse.
+await fire(sessionHooks, "prompt", { sessionID: "s1", prompt: { text: "otra cosa" } });
+result.reminderNextTurn = (await reminders("s1")).length;
+result.nonHandshakeNextTurn = await tryTool("s1", "RedPill-Kernel_check_parallel_sessions");
+// 4) fail-open: tras MAX_REFUSALS el gate se abre (nunca deja la sesión sin salida).
+await fire(sessionHooks, "prompt", { sessionID: "s2", prompt: { text: "x" } });
+const seq = [];
+for (let i = 0; i < 5; i++) seq.push(await tryTool("s2", "read"));
+result.refusalSequence = seq;
+console.log(JSON.stringify(result));
+"""
+
+
+def _run_plugin_handshake(tmp_path: Path, env_extra: dict | None = None) -> dict:
+	state = tmp_path / "state"
+	state.mkdir()
+	plugin = tmp_path / "redpill-scribe.js"
+	src = SEED.read_text(encoding="utf-8")
+	src = src.replace("${QUEUE_DB}", str(tmp_path / "bunker_queue.db")).replace("${STATE_DIR}", str(state))
+	plugin.write_text(src, encoding="utf-8")
+	harness = tmp_path / "harness.mjs"
+	harness.write_text(_HARNESS_HANDSHAKE, encoding="utf-8")
+	env = {**os.environ, "PLUGIN_PATH": str(plugin), "STATE_DIR": str(state), **(env_extra or {})}
+	res = subprocess.run(["bun", str(harness)], capture_output=True, text=True, env=env, timeout=60)
+	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
+	return json.loads(res.stdout.strip().splitlines()[-1])
+
+
+def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
+	out = _run_plugin_handshake(tmp_path)
+	assert out["reminderBefore"] == 1, "el contexto del turno no lleva el recordatorio"
+	assert out["nonHandshakeBefore"]["status"] == "refused", "una tool sin handshake debería negarse"
+	# Code Mode envuelve el handshake: el gateway `execute` no se gatea (si no,
+	# el propio handshake quedaría inalcanzable).
+	assert out["gateway"]["status"] == "allowed"
+	# Code Mode: el handshake dentro de `execute` acredita el turno.
+	assert out["gatewayCarriesHandshake"]["status"] == "allowed"
+	assert out["nonHandshakeAfterGateway"]["status"] == "allowed", (
+		"el handshake dentro de execute debe acreditar el turno (evita el ✗ tras un handshake correcto)"
+	)
+	assert out["reminderAfterGateway"] == 0
+	# Forma real del evento (código en `args`, `input` vacío).
+	assert out["nonHandshakeAfterGatewayArgs"]["status"] == "allowed", (
+		"el handshake en `args` (evento real) debe acreditar el turno"
+	)
+	assert "HANDSHAKE REQUIRED" in out["nonHandshakeBefore"]["message"]
+	assert out["handshake"]["status"] == "allowed"
+	assert out["reminderAfter"] == 0, "tras el handshake no debe repetirse el recordatorio"
+	assert out["nonHandshakeAfter"]["status"] == "allowed"
+	# El turno siguiente vuelve a exigirlo: no es un "una vez por sesión".
+	assert out["reminderNextTurn"] == 1
+	assert out["nonHandshakeNextTurn"]["status"] == "refused"
+	# Fail-open: 3 rechazos y después deja pasar (kernel caído / nombre distinto).
+	assert [r["status"] for r in out["refusalSequence"]] == [
+		"refused", "refused", "refused", "allowed", "allowed",
+	]
+
+
+def test_handshake_gate_se_puede_desactivar(tmp_path):
+	out = _run_plugin_handshake(tmp_path, {"REDPILL_HANDSHAKE_GATE": "off"})
+	assert out["reminderBefore"] == 0
+	assert out["nonHandshakeBefore"]["status"] == "allowed"

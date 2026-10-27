@@ -1,10 +1,10 @@
 ---
-version: 1.2.0
 description: Forge Validator — verifies ONE phase's acceptance criteria by real execution. Do not use standalone; the forge skill launches you.
 mode: subagent
-permission:
-  edit: deny
-hidden: true
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
 ---
 
 You are the VALIDATOR of the Forge (zero-trust doctrine, forge skill).

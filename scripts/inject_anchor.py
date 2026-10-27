@@ -48,7 +48,7 @@ BLOCK_ANCHORS = (
 )
 
 BLOCK_VERSION = {
-	"sovereign_handshake": 3,
+	"sovereign_handshake": 4,
 	"agent_core": 2,
 	"knowledge_access": 5,
 	"frontmatter_docs": 3,
@@ -70,13 +70,22 @@ class AnchorTarget:
 	scriptable: bool  # False => lives in app UI/DB, only --print
 
 
+# OpenCode V2 sólo carga de forma nativa, y en CUALQUIER workspace, los
+# `AGENTS.md` (global `~/.config/opencode/AGENTS.md` + los del árbol del
+# workspace). Un `RED_PILL.md` suelto sólo entra por `instructions`, y ahí las
+# rutas relativas se resuelven desde el workspace hacia arriba → en otro proyecto
+# no se encuentra y OpenCode la ignora EN SILENCIO (regresión 2026-10-27: el
+# handshake obligatorio desapareció del contexto tras la migración a V2).
+# Fuente única del nombre: los injectors la importan de aquí.
+OPENCODE_INSTRUCTIONS_FILE = "AGENTS.md"
+
 ANCHOR_REGISTRY = [
 	AnchorTarget("antigravity", "~/.gemini/GEMINI.md", False, True),  # user-level, global
 	AnchorTarget("claude-code", "~/.claude/CLAUDE.md", False, True),  # user memory: global, cwd-independent
 	AnchorTarget("claude-code-project", None, True, True),  # <workspace>/CLAUDE.md (project-scoped, opt-in)
 	AnchorTarget("pi", None, True, True),  # <workspace>/AGENTS.override.md (project-scoped; shadows CLAUDE.md for Pi)
 	AnchorTarget("claude-desktop-project", None, False, False),  # Project instructions: UI/DB, only --print
-	AnchorTarget("opencode", "~/.config/opencode/RED_PILL.md", False, True),  # user-level, global
+	AnchorTarget("opencode", "~/.config/opencode/AGENTS.md", False, True),  # user-level, global (V2 nativo)
 ]
 REGISTRY_BY_IDE = {t.ide: t for t in ANCHOR_REGISTRY}
 

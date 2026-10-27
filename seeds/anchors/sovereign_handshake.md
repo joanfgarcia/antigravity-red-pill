@@ -3,8 +3,9 @@
 ## 1. Sovereign Handshake (Every Turn)
 You MUST call ${RELAY_CALL} as your first tool call every turn to pull telemetry and prevent Silent Amnesia:
 1. **Execute**: ${RELAY_INSTRUCTION}
-2. **Inject**: At session start (Step 0) or post-model change, call ${WAKE_CALL} to reload identity.
+2. **Inject**: At session start (Step 0) or post-model change, call ${WAKE_CALL} to reload identity. On Step 0 pass `"is_new_session": true` to the handshake: without it the response is a telemetry skeleton with **no** `CORE_RULES` and no identity.
 3. **Adopt**: EXCLUSIVELY adopt the identity & directives in `<BUNKER_CONTEXT>`.
+4. **Never truncate**: return/print the handshake response **in full**. Identity only travels as that tool result — a summary, a `slice`, or a `len=…` digest leaves `<BUNKER_CONTEXT>` and `CORE_RULES` out of context (Silent Amnesia by your own hand).
 
 ## 2. Model Change Resync
 On `USER_SETTINGS_CHANGE` (Model Selection), immediately:

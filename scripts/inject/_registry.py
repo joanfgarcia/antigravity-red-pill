@@ -66,6 +66,27 @@ def detect_present(workspace: str | None = None) -> list[IDEAdapter]:
 	return [a for a in discover_adapters() if a.detect_mod.detect(workspace)]
 
 
+def precheck_all(adapters: list[IDEAdapter], workspace: str | None = None) -> list[tuple[str, str]]:
+	"""Run optional adapter prechecks before any write.
+
+	An adapter may expose ``precheck(workspace) -> (ok, message)``. Returns the
+	list of ``(ide, message)`` failures; the dispatcher aborts when non-empty.
+	"""
+	failures: list[tuple[str, str]] = []
+	for adapter in adapters:
+		fn = getattr(adapter.detect_mod, "precheck", None)
+		if not callable(fn):
+			continue
+		try:
+			ok, message = fn(workspace)
+		except Exception as exc:  # a broken precheck must fail closed
+			failures.append((adapter.name, f"precheck failed: {exc}"))
+			continue
+		if not ok:
+			failures.append((adapter.name, message))
+	return failures
+
+
 def inject_all(args, adapters: list[IDEAdapter] | None = None) -> int:
 	"""Run inject() on all (or specified) adapters. Total files modified."""
 	if adapters is None:

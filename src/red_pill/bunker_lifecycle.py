@@ -665,6 +665,10 @@ def bunker_update() -> None:
 		)
 		if res.returncode == 0:
 			print(f"   [OK] IDE anchors and MCP config refreshed:\n{res.stdout.strip()}")
+		elif res.returncode == 3:
+			# Precheck gate: a required runtime (OpenCode v2) is missing/legacy.
+			print(f"   [ERROR] {res.stderr.strip() or res.stdout.strip()}")
+			raise SystemExit(1)
 		else:
 			print(f"   [WARN] IDE injection dispatcher returned non-zero: {res.stderr[:300]}")
 	except Exception as e:

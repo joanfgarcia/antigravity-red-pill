@@ -1,0 +1,26 @@
+# Backup completo del Bünker y subida al Cloud.
+# Encadenado como hijo del job nocturno (--parent): solo corre cuando el
+source: dag_job
+priority: 3
+title: Cloud backup completo (Qdrant + Memento)
+mission_id: mission:cloud-backup
+control:
+  max_step_minutes: 120
+manifest:
+  workdir: .
+  stages:
+    - id: create
+      type: command
+      minion: command_runner
+      # El driver no expande `~`/`$VAR` y tokeniza con shlex: ruta relativa al
+      # cwd del job (raíz del repo, anclado por load_recipe).
+      command: .venv/bin/python scripts/cloud_backup.py create
+      timeout: 7200
+      on_fail: stop
+    - id: upload
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/cloud_backup.py upload
+      depends_on: [create]
+      timeout: 7200
+      on_fail: stop

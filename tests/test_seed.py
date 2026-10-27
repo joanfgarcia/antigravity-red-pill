@@ -154,3 +154,39 @@ class TestLoadMarkdownSeeds:
 		finally:
 			if test_file.exists():
 				test_file.unlink()
+
+
+class TestGenesisSinPlaceholders:
+	"""Incidente 2026-10-27: el engrama `ID_DIR_GIT_RULE` se sembraba con
+	`${AGENT_CORE_DIR}` crudo porque el texto vive en código y nadie lo resolvía.
+	El agente leía una ruta que no existe en vez del desk real."""
+
+	def test_render_paths_resuelve_el_desk(self):
+		from red_pill.core.paths import get_agent_core_root
+		from red_pill.seed import _render_paths
+
+		assert _render_paths("DESK (${AGENT_CORE_DIR})") == f"DESK ({get_agent_core_root()})"
+		# Un texto sin placeholders no se toca.
+		assert _render_paths("sin rutas") == "sin rutas"
+		assert "${" not in _render_paths("${AGENT_CORE_DIR}/${REDPILL_DIR}")
+
+	def test_genesis_se_siembra_sin_placeholders(self):
+		from red_pill.seed import ID_DIR_GIT_RULE, inject_genesis
+
+		mgr = _make_manager()
+		mgr.client.retrieve.return_value = []
+		inject_genesis(mgr)
+
+		textos = {call.args[1] for call in mgr.add_memory.call_args_list if len(call.args) > 1}
+		assert textos, "inject_genesis no sembró nada"
+		crudos = [t for t in textos if "${" in t]
+		assert not crudos, f"engramas con placeholder sin resolver: {[t[:80] for t in crudos]}"
+
+		git_rule = [
+			c.kwargs.get("point_id") or (c.args[0] if c.args else None) for c in mgr.add_memory.call_args_list
+		]
+		assert ID_DIR_GIT_RULE in git_rule
+		texto_git = next(
+			c.args[1] for c in mgr.add_memory.call_args_list if c.kwargs.get("point_id") == ID_DIR_GIT_RULE
+		)
+		assert "DESK (" in texto_git and "${" not in texto_git

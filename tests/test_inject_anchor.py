@@ -70,3 +70,18 @@ def test_backup_pristino_y_por_edicion(tmp_path):
 	assert (tmp_path / "CLAUDE.md.bak").read_text(encoding="utf-8") == "contenido original\n"
 	# hay al menos una copia por edición
 	assert glob.glob(str(tmp_path / "CLAUDE.md.bak.*"))
+
+
+def test_anchor_handshake_exige_payload_completo() -> None:
+	"""La identidad sólo viaja como retorno del handshake: el anchor debe pedir
+	(a) `is_new_session: true` en Step 0 y (b) devolver el payload **completo**.
+	Sin esto el agente resume (`len=… mission=…`) y se queda sin CORE_RULES —
+	amnesia silenciosa por su propia mano (incidente 2026-10-27)."""
+	seed = os.path.join(SEEDS_DIR, "sovereign_handshake.md")
+	text = open(seed, encoding="utf-8").read()
+	assert "is_new_session" in text, "falta la instrucción de is_new_session en Step 0"
+	assert "Never truncate" in text, "falta la regla de no truncar el payload"
+	assert "<BUNKER_CONTEXT>" in text and "CORE_RULES" in text, "la regla no explica qué se pierde"
+	# La versión del bloque debe haberse bumpeado para re-splicar hosts existentes.
+	m = _load()
+	assert m.BLOCK_VERSION["sovereign_handshake"] >= 4

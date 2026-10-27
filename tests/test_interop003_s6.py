@@ -83,7 +83,6 @@ def test_opencode_bridge_exports_identity(monkeypatch):
 
 	monkeypatch.setattr("red_pill.swarm.bridges.opencode.subprocess.run", fake_run)
 	bridge = OpenCodeBridge(opencode_path="/bin/true", **IDENTITY)
-	bridge._cli_major_cache = 1
 	bridge._scribe_plugin = True
 	out = bridge.prompt("hola", model="flash")
 	assert out.ok and out.response == "ok"

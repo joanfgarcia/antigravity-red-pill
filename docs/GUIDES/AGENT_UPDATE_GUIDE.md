@@ -10,6 +10,20 @@
 > 
 > **MANDATORY ACTION**: 
 > Your system will automatically attempt to heal the vault by regenerating the group state. However, your OLD encrypted backups (`.mls`) from previous versions are now unreadable. Ensure you have a RAW (unencrypted) backup before proceeding if you need to preserve data from much older versions.
+>
+> ### 🧩 OpenCode v2 required (install/update gate)
+> The IDE injector (`scripts/inject_cli.py`) **detects the installed OpenCode version and aborts** (exit code 3) unless it can positively identify **v2**. The order is: is OpenCode present? (if not, nothing is seeded) → which version is it (`opencode --version`, then the `.deb` package) → is it exactly v2?
+>
+> Everything else aborts **without touching anything**: **v1** (available *only* as a migration path, never as a seeding target), a future **v3** (not assumed compatible — it needs its own verification before red-pill re-seeds), a **CLI/package disagreement**, or a **version that cannot be determined** (there is no default tier).
+>
+> ```bash
+> curl -fsSL https://opencode.ai/v2/install | bash   # CLI
+> # desktop: remove the V1 .deb, then install the V2 .deb
+> ```
+>
+> Migrating from V1: `python3 scripts/migrate_opencode_v2.py --backup` converts an existing `opencode.jsonc` (the injector also runs this automatically before merging the v2 seed, once v2 is the identified version).
+>
+> `red-pill bunker update`, `scripts/install_neo.sh` and `scripts/upgrade.sh` propagate this failure instead of continuing with a half-seeded V1 setup.
 
 
 
@@ -455,7 +469,7 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 ### 4.6 IDE Anchors & Global Rules Sync
 Each detected IDE's instruction file carries the agent's boot protocol via the sovereign anchors
 (e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop,
-`~/.config/opencode/RED_PILL.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
+`~/.config/opencode/AGENTS.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
 anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
 1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
     - **Rule 1 — The Sovereign Handshake**: Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).

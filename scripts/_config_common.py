@@ -130,6 +130,73 @@ def strip_jsonc_comments(text):
 	return _JSONC_TOKEN.sub(_repl, text)
 
 
+def scrub_legacy_instructions(cfg):
+	"""Quita de ``instructions`` las entradas que apuntan al viejo ``RED_PILL.md``.
+
+	OpenCode V2 carga ``AGENTS.md`` de forma nativa en **cualquier** workspace
+	(global ``~/.config/opencode/AGENTS.md`` + los del árbol). ``RED_PILL.md`` sólo
+	entraba por ``instructions`` y, al ser una ruta relativa, se resolvía desde el
+	workspace hacia arriba: fuera del directorio del config no se encontraba y
+	OpenCode la ignoraba **en silencio** (regresión 2026-10-27: el handshake
+	obligatorio desapareció del contexto tras la migración a V2).
+
+	Deja intactas las entradas ajenas (urls, globs, otros ficheros) y elimina la
+	clave si se queda vacía. Devuelve ``True`` si tocó algo. Idempotente: converge
+	instalaciones que ya tenían la entrada muerta.
+	"""
+	if not isinstance(cfg, dict):
+		return False
+	entries = cfg.get("instructions")
+	if not isinstance(entries, list):
+		return False
+	kept = [
+		e
+		for e in entries
+		if not (isinstance(e, str) and os.path.basename(e.strip()) == "RED_PILL.md")
+	]
+	if kept == entries:
+		return False
+	if kept:
+		cfg["instructions"] = kept
+	else:
+		cfg.pop("instructions", None)
+	return True
+
+
+def merge_permissions(base, overlay):
+	"""Merge V2 permission rules preserving last-match-wins semantics.
+
+	Adds missing ``(action, resource)`` rules from ``overlay`` into ``base``.
+	A catch-all (``resource == "*"``) is inserted at the start of its action
+	group so specific rules keep winning (V2 evaluates last match). Existing
+	rules are never removed or reordered, so user/foreign policy is preserved.
+	"""
+	out = list(base or [])
+	if not isinstance(overlay, list):
+		return out
+
+	def _index():
+		return {(r.get("action"), r.get("resource")): i for i, r in enumerate(out) if isinstance(r, dict)}
+
+	seen = _index()
+	for rule in overlay:
+		if not isinstance(rule, dict):
+			continue
+		key = (rule.get("action"), rule.get("resource"))
+		if key in seen:
+			continue
+		if rule.get("resource") == "*":
+			pos = next(
+				(i for i, r in enumerate(out) if isinstance(r, dict) and r.get("action") == rule.get("action")),
+				len(out),
+			)
+			out.insert(pos, rule)
+		else:
+			out.append(rule)
+		seen = _index()
+	return out
+
+
 # ── Agent_Core / transversal vars (red-pill .env, with fallbacks) ─────────────
 def parse_env_file(path):
 	vals: dict[str, str] = {}

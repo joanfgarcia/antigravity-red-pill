@@ -1,6 +1,6 @@
 """Inject red-pill configuration into OpenCode.
 
-Handles: MCP server, permissions, references, instructions (RED_PILL.md),
+Handles: MCP server, permissions, references, instructions (AGENTS.md),
 and skills in a single pass.  Guest principle: merge, never overwrite.
 """
 
@@ -11,6 +11,7 @@ import copy
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 
@@ -18,7 +19,18 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import (  # noqa: E402
+	LEGACY_SKILL_DIRS,
+	agent_core_vars,
+	build_vars,
+	merge_permissions,
+	scrub_legacy_instructions,
+	strip_jsonc_comments,
+	subst,
+)
+from inject_anchor import OPENCODE_INSTRUCTIONS_FILE  # noqa: E402
+from migrate_opencode_v2 import migrate_file  # noqa: E402
+from opencode_version import detect_info, select_config_seed, support_error  # noqa: E402
 
 
 def _detect_config_dir() -> str | None:
@@ -38,6 +50,11 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 				# Comandos MCP: la lista del seed REEMPLAZA, no se concatena. Un
 				# union dejaba el comando directo + el proxy mezclados.
 				base[key] = val
+				continue
+			if key == "permissions":
+				# V2 last-match-wins: no concatenar (dejaría el catch-all al final
+				# pisando las reglas específicas). Insertar solo las que faltan.
+				base[key] = merge_permissions(base[key], val)
 				continue
 			for item in val:
 				if item not in base[key]:
@@ -62,6 +79,8 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}
 	merged = _deep_merge(copy.deepcopy(existing), template)
+	if scrub_legacy_instructions(merged):
+		logger.info("  instructions: entrada legacy a RED_PILL.md retirada (V2 carga AGENTS.md nativo)")
 	if merged == existing and existing:
 		logger.info(f"  {config_path}: sin cambios")
 		return False
@@ -75,6 +94,33 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 	return True
 
 
+def _retire_legacy_instructions_file(config_dir: str, backup: bool) -> bool:
+	"""Retira el viejo ``RED_PILL.md`` del dir de config si sólo tiene nuestros bloques.
+
+	V2 ya no lee ese fichero: las instrucciones viven en ``AGENTS.md``. Se respeta
+	si el operador dejó contenido propio fuera de los marcadores ``REDPILL:BEGIN/END``.
+	"""
+	path = os.path.join(config_dir, "RED_PILL.md")
+	if not os.path.exists(path):
+		return False
+	try:
+		with open(path, encoding="utf-8") as f:
+			text = f.read()
+	except OSError:
+		return False
+	rest = re.sub(
+		r"<!-- REDPILL:BEGIN [^>]*-->.*?<!-- REDPILL:END [^>]*-->", "", text, flags=re.DOTALL
+	).strip()
+	if rest:
+		logger.info("  RED_PILL.md conservado: tiene contenido propio fuera de los bloques")
+		return False
+	if backup:
+		shutil.copy2(path, path + ".bak")
+	os.remove(path)
+	logger.info("  RED_PILL.md legacy retirado (V2 carga AGENTS.md)")
+	return True
+
+
 def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool, update: bool) -> int:
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
@@ -82,16 +128,26 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	from inject_anchor import BLOCK_ANCHORS, BLOCK_VERSION, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
 
 	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
-	# Sin esto los `${RELAY_*}` del seed llegaban literales a RED_PILL.md.
+	# Sin esto los `${RELAY_*}` del seed llegaban literales al fichero de instrucciones.
 	ide_vars = {**variables, **ide_call_vars("opencode")}
+
+	# Sin fallback al viejo `instructions/RED_PILL.md` (V1): sembraba la llamada
+	# errónea (`swarm_orchestrator_api → interceptor_rp`) en vez del handshake real.
+	# Un anchor ausente es un árbol incompleto: abortar, no sembrar texto viejo.
+	missing = [
+		ide_seed_path(seeds_dir, "opencode", anchor)
+		for anchor in BLOCK_ANCHORS
+		if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
+	]
+	if missing:
+		raise RuntimeError(
+			"  Siembra incompleta: faltan seeds de anchor: " + ", ".join(os.path.basename(p) for p in missing)
+		)
 
 	changed = 0
 	for anchor in BLOCK_ANCHORS:
 		# Override per-IDE (seeds/opencode/anchors/<anchor>.md) si existe; si no, genérico.
 		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
-		if not os.path.exists(seed_path):
-			logger.warning(f"Seed not found: {seed_path}")
-			continue
 		body = subst(_read_seed(seed_path), ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
@@ -184,8 +240,37 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 	return deployed
 
 
-def _ensure_package_json(config_dir: str, backup: bool) -> bool:
-	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps)."""
+def _deploy_agents(src_dir: str, dest_dir: str, variables: dict, backup: bool) -> int:
+	"""Deploy opencode subagent definitions (seeds/opencode/agents/*.md).
+
+	Dest: ``<config>/agents/<name>.md`` (V2 discovers ``agents/``). Placeholders
+	are resolved because agents are Markdown.
+	"""
+	if not os.path.isdir(src_dir):
+		return 0
+	os.makedirs(dest_dir, exist_ok=True)
+	deployed = 0
+	for entry in sorted(os.listdir(src_dir)):
+		if not entry.endswith(".md"):
+			continue
+		src = os.path.join(src_dir, entry)
+		dest = os.path.join(dest_dir, entry)
+		resolved = subst(_read_seed(src), variables)
+		if os.path.exists(dest):
+			with open(dest, encoding="utf-8") as f:
+				if f.read() == resolved:
+					continue
+			if backup:
+				shutil.copy2(dest, dest + ".bak")
+		with open(dest, "w", encoding="utf-8") as f:
+			f.write(resolved)
+		deployed += 1
+		logger.info(f"  Agent '{entry}' → {dest_dir}")
+	return deployed
+
+
+def _ensure_esm_package(config_dir: str, backup: bool) -> bool:
+	"""V2: mark the plugins dir as ESM (``type: module``) to avoid Node reparsing."""
 	pkg_path = os.path.join(config_dir, "package.json")
 	pkg: dict = {}
 	if os.path.exists(pkg_path):
@@ -196,19 +281,118 @@ def _ensure_package_json(config_dir: str, backup: bool) -> bool:
 			logger.warning(f"  {pkg_path}: unreadable JSON, not touching it")
 			return False
 		if not isinstance(pkg, dict):
-			logger.warning(f"  {pkg_path}: unexpected shape, not touching it")
 			return False
-	deps = pkg.setdefault("dependencies", {})
-	if deps.get("@opencode-ai/plugin") == PLUGIN_PIN:
+	deps = pkg.get("dependencies")
+	changed = pkg.get("type") != "module"
+	if isinstance(deps, dict) and "@opencode-ai/plugin" in deps:
+		deps.pop("@opencode-ai/plugin", None)
+		changed = True
+		if not deps:
+			pkg.pop("dependencies", None)
+	if not changed:
 		return False
 	if backup and os.path.exists(pkg_path):
 		shutil.copy2(pkg_path, pkg_path + ".bak")
-	deps["@opencode-ai/plugin"] = PLUGIN_PIN
+	pkg["type"] = "module"
 	with open(pkg_path, "w", encoding="utf-8") as f:
 		json.dump(pkg, f, indent=2)
 		f.write("\n")
-	logger.info(f"  {pkg_path}: @opencode-ai/plugin → {PLUGIN_PIN}")
+	logger.info(f"  {pkg_path}: type=module (V2 plugin ESM)")
 	return True
+
+
+def _ensure_package_json(config_dir: str, backup: bool) -> bool:
+	"""Mark the plugins dir as ESM (``type: module``) and drop the V1 plugin pin.
+
+	V1 plugins imported ``@opencode-ai/plugin`` (pinned in ``package.json``). V2
+	plugins are plain ESM modules: the pin is dead weight and the package must
+	declare ``type: module`` so Node loads the plugin without reparsing it as
+	CommonJS. A leftover V1 pin is removed here (convergence of a migrated host).
+	"""
+	return _ensure_esm_package(config_dir, backup)
+
+
+def _remove_red_pill(config_dir: str, repo_root: str, backup: bool) -> int:
+	"""Quita red-pill del arnés opencode. Devuelve cuántas piezas retiró.
+
+	Sólo se borra lo NUESTRO: los bloques van por marcador (`REDPILL:BEGIN/END`),
+	las skills y los agentes por el nombre que siembra el seed, y el plugin por
+	nombre de fichero. `opencode.jsonc` (mcp/references/permissions) NO se toca:
+	deshacer el merge de claves ajenas no es posible sin marcas de propiedad.
+	"""
+	from inject_anchor import BLOCK_ANCHORS, remove_block
+
+	removed = 0
+
+	# 1. Bloques del fichero de instrucciones (AGENTS.md).
+	instructions_path = os.path.join(config_dir, OPENCODE_INSTRUCTIONS_FILE)
+	if os.path.exists(instructions_path):
+		for anchor in BLOCK_ANCHORS:
+			status = remove_block(instructions_path, anchor, backup=backup)
+			if status != "absent":
+				logger.info(f"  opencode:{anchor} removed [{instructions_path}]")
+				removed += 1
+		try:
+			with open(instructions_path, encoding="utf-8") as f:
+				rest = f.read().strip()
+		except OSError:
+			rest = "contenido-ilegible"
+		if not rest:
+			if backup:
+				shutil.copy2(instructions_path, instructions_path + ".bak")
+			os.remove(instructions_path)
+			logger.info(f"  {instructions_path}: vacío tras retirar los bloques → eliminado")
+			removed += 1
+
+	# 2. Skills: las que siembra el seed (genérico + IDE) y los renombres legacy.
+	seeded_skills = set(LEGACY_SKILL_DIRS)
+	for src in (os.path.join(repo_root, "skills"), os.path.join(repo_root, "seeds", "opencode", "skills")):
+		if not os.path.isdir(src):
+			continue
+		for entry in os.listdir(src):
+			if os.path.exists(os.path.join(src, entry, "SKILL.md")):
+				seeded_skills.add(entry)
+	skills_dir = os.path.join(config_dir, "skills")
+	for skill_name in sorted(seeded_skills):
+		skill_path = os.path.join(skills_dir, skill_name)
+		if os.path.isdir(skill_path):
+			shutil.rmtree(skill_path)
+			logger.info(f"  Skill '{skill_name}' removed")
+			removed += 1
+
+	# 3. Agentes forge-* (subagentes del enjambre).
+	agents_dir = os.path.join(config_dir, "agents")
+	if os.path.isdir(agents_dir):
+		for entry in sorted(os.listdir(agents_dir)):
+			if entry.startswith("forge-") and entry.endswith(".md"):
+				os.remove(os.path.join(agents_dir, entry))
+				logger.info(f"  Agent '{entry}' removed")
+				removed += 1
+
+	# 4. Plugin del scribe (por nombre: es nuestro).
+	plugins_seed = os.path.join(repo_root, "seeds", "opencode", "plugins")
+	plugins_dir = os.path.join(config_dir, "plugins")
+	if os.path.isdir(plugins_seed) and os.path.isdir(plugins_dir):
+		for entry in sorted(os.listdir(plugins_seed)):
+			if not os.path.isfile(os.path.join(plugins_seed, entry)):
+				continue
+			target = os.path.join(plugins_dir, entry)
+			if os.path.exists(target):
+				os.remove(target)
+				logger.info(f"  Plugin '{entry}' removed")
+				removed += 1
+
+	# 5. Directorios que quedan vacíos tras el barrido (nunca si tienen algo ajeno).
+	for sub in ("skills", "agents", "plugins"):
+		path = os.path.join(config_dir, sub)
+		try:
+			if os.path.isdir(path) and not os.listdir(path):
+				os.rmdir(path)
+				logger.info(f"  {path}: vacío → eliminado")
+		except OSError:
+			pass
+
+	return removed
 
 
 def inject(args: argparse.Namespace) -> int:
@@ -228,21 +412,49 @@ def inject(args: argparse.Namespace) -> int:
 	variables.update(agent_core_vars())
 	backup = not getattr(args, "no_backup", False)
 
+	# ── Remove mode (`inject_cli.py --ide opencode --remove`) ──────────────
+	# Antes era un no-op silencioso: el adapter no tenía rama de borrado y sólo el
+	# `inject_opencode.py` standalone lo implementaba (y ese no es el que corre
+	# install/update). Desinstalar dejaba bloques, skills, agentes y plugin vivos.
+	if getattr(args, "remove", False):
+		removed = _remove_red_pill(config_dir, repo_root, backup)
+		logger.info(f"  Red Pill removed from opencode ({removed} piece(s)).")
+		return removed
+
 	opencode_seeds = os.path.join(repo_root, "seeds", "opencode")
 	anchor_seeds = os.path.join(repo_root, "seeds", "anchors")
 	changed = 0
 
-	# 1. Config
-	config_template = os.path.join(opencode_seeds, "settings", "opencode.jsonc")
-	if os.path.exists(config_template):
+	# 0. Versión soportada (OpenCode v2 exacto). `support_error` es el único gate:
+	#    no instalado → nada que sembrar; v1 (sólo migrable), v3+, CLI/.deb en
+	#    desacuerdo o versión indeterminable → abortar sin tocar nada.
+	info = detect_info()
+	problem = support_error(info)
+	if problem:
+		raise RuntimeError(problem)
+	logger.info(f"  OpenCode detectado: {info} → seed {info.tier}")
+
+	# 1. Config (seed v2; un `opencode.jsonc` V1 heredado se MIGRA antes de fusionar).
+	config_path = os.path.join(config_dir, "opencode.jsonc")
+	config_template = select_config_seed(opencode_seeds)
+	if config_template:
+		if os.path.exists(config_path):
+			migrated, _, warnings = migrate_file(config_path, backup=backup)
+			if migrated:
+				logger.info("  opencode.jsonc: V1→V2 migrado antes de sembrar")
+				for warning in warnings:
+					logger.warning(f"    {warning}")
 		with open(config_template, encoding="utf-8") as f:
 			resolved = subst(f.read(), variables)
-		_merge_config(os.path.join(config_dir, "opencode.jsonc"), json.loads(resolved), backup)
+		_merge_config(config_path, json.loads(resolved), backup)
+	else:
+		logger.warning("  No config seed found for OpenCode %s", info.tier)
 
 	# 2. Instructions
-	instructions_path = os.path.join(config_dir, "RED_PILL.md")
+	instructions_path = os.path.join(config_dir, OPENCODE_INSTRUCTIONS_FILE)
 	seeds_dir = anchor_seeds if os.path.isdir(anchor_seeds) else os.path.join(opencode_seeds, "instructions")
 	changed += _write_instructions(instructions_path, seeds_dir, variables, backup, getattr(args, "update", False))
+	_retire_legacy_instructions_file(config_dir, backup)
 
 	# 3. Skills (two-layer: generic from sharing/skills/, then IDE-specific overrides)
 	generic_skills = os.path.join(repo_root, "skills")
@@ -257,6 +469,11 @@ def inject(args: argparse.Namespace) -> int:
 			shutil.rmtree(legacy_path)
 			logger.info(f"✓ Skill legacy '{legacy}' removed from {skills_dest}")
 			changed += 1
+
+	# 3.5 Agents (forge-* subagents; V2 discovers <config>/agents/)
+	agents_src = os.path.join(opencode_seeds, "agents")
+	agents_dest = os.path.join(config_dir, "agents")
+	changed += _deploy_agents(agents_src, agents_dest, variables, backup)
 
 	# 4. Package.json
 	_ensure_package_json(config_dir, backup)

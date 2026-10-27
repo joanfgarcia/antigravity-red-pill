@@ -48,6 +48,15 @@ SCRIPTS_PRE_SEED = {
 	SCRIPTS_DIR / "inject_settings.py",
 	SCRIPTS_DIR / "inject_opencode.py",
 	SCRIPTS_DIR / "migrate_prompt_language.py",
+	# Maquinaria del inyector de opencode (`inject_cli` → `inject/opencode/inject.py`
+	# → estos dos). Son standalone (solo stdlib, `test_preseed_scripts_son_standalone`
+	# lo blinda) y tocan las rutas del **OpenCode del host**, no las de red-pill:
+	# `~/.config/opencode` y `/etc/opencode` son las ubicaciones oficiales de V2
+	# (docs: config → Locations) y NO existen como helper en `core/paths.py`, que
+	# sólo posee las raíces XDG de red-pill. Misma clase que EXTERNAL_TOOL_FILES
+	# (`.claude`/`.pi`/`.opencode`), pero en scripts de la fase de inyección.
+	SCRIPTS_DIR / "opencode_version.py",
+	SCRIPTS_DIR / "migrate_opencode_v2.py",
 }
 INJECT_PKG = SCRIPTS_DIR / "inject"
 
@@ -96,3 +105,22 @@ def test_no_hardcoded_paths():
 		msg += "  (see CONVENTIONS.md §7 — path resolution)\n\nViolations:\n"
 		msg += "\n".join(f"  {v}" for v in violations)
 		pytest.fail(msg)
+
+
+_STDLIB_IMPORT = re.compile(r"^\s*(?:from|import)\s+red_pill\b", re.MULTILINE)
+
+
+@pytest.mark.parametrize("script", sorted(SCRIPTS_PRE_SEED), ids=lambda p: p.name)
+def test_preseed_scripts_son_standalone(script: Path):
+	"""La excepción de rutas sólo vale si el script no puede usar `core/paths.py`.
+
+	Si un pre-seed importa `red_pill`, ya puede resolver rutas por `paths.py` y su
+	entrada en `SCRIPTS_PRE_SEED` deja de estar justificada: hay que refactorizarlo
+	en vez de ampliar la lista.
+	"""
+	assert script.is_file(), f"{script} desapareció: retira su entrada del allowlist"
+	content = script.read_text(encoding="utf-8")
+	assert not _STDLIB_IMPORT.search(content), (
+		f"{script.name} importa red_pill: resuelve sus rutas por core/paths.py "
+		"y sácalo de SCRIPTS_PRE_SEED"
+	)

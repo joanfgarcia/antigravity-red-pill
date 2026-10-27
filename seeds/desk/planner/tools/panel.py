@@ -243,6 +243,16 @@ def render(docs: list[Doc], filters: Optional[dict] = None) -> str:
 	out.append("## 🟢 Activo")
 	out.append("")
 	_render_table(out, active)
+
+	# P1-3: ledger de decisiones de diseño (delegado en decisions.py; el parser
+	# minimal del panel no lee listas anidadas). Silencioso si no hay nada.
+	open_decs = _open_decisions(filters.get("root", ROOT))
+	if open_decs:
+		out.append("")
+		out.append("## ⚠️ Decisiones abiertas (ledger `decisions:`)")
+		out.append("")
+		for rel, dec in open_decs:
+			out.append(f"- `{rel}` · **{dec.id}** `{dec.status}/{dec.blast_radius}` — {dec.question}")
 	if include_archive:
 		out.append("")
 		out.append("## 🗄️ Finalizado (archive)")
@@ -272,6 +282,22 @@ def _render_table(out: list[str], docs: list[Doc]) -> None:
 		out.append(f"| {phase} | `{d.status}`{mismatch} | {d.priority} | {title} | {link} | {d.project} |")
 
 
+def _open_decisions(root: Path) -> list:
+	"""Decisiones `open`/`accepted_default` del planner (P1-3, defensivo)."""
+	try:
+		import importlib
+
+		sys.path.insert(0, str(Path(__file__).resolve().parent))
+		mod = importlib.import_module("decisions")
+		out = []
+		for doc in mod.scan(root):
+			for dec in doc.open_decisions:
+				out.append((doc.path, dec))
+		return out
+	except Exception:
+		return []
+
+
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Genera el panel del desk on-demand.")
 	ap.add_argument("-o", "--output", help="Escribir a fichero en vez de stdout")
@@ -290,6 +316,7 @@ def main() -> int:
 		"priority": args.priority,
 		"path": args.path,
 		"archive": args.archive,
+		"root": args.root,
 	}
 	panel = render(docs, filters)
 	if args.output:

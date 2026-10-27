@@ -12,22 +12,22 @@ sink the kernel's worker drains into `interaction_memories`.
 
 Two execution modes:
 
-1. **Direct** (default): ``opencode run`` — cold start, MCP servers initialize
-	per call.  Zero dependencies beyond the opencode CLI.
+1. **Direct** (default): ``opencode run --standalone`` — cold start, a private
+	server per run whose env the bridge controls.  The V2 shared background
+	service would ignore ``REDPILL_SCRIBE_DISABLE``, breaking the capture
+	contract, hence ``--standalone``.
 
-2. **Attached**: ``opencode run --attach <url>`` — reuses a persistent
+2. **Attached**: ``opencode run --server <url>`` — reuses a persistent
 	``opencode serve`` instance, avoiding MCP cold-start.  Set
 	``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
 
-CLI version adaptation (OpenCode v2, beta):
-
-- v1: effort is its own flag (``--variant <v>``) and the server is ``--attach``.
-- v2: the variant is embedded in the model reference
-	(``-m provider/model#variant``) and the server flag is ``--server``.
-	Direct mode adds ``--standalone`` so each run gets a private server whose
-	env the bridge controls (the v2 shared background service would ignore
-	``REDPILL_SCRIBE_DISABLE``, breaking the capture contract).
-	The ``--format json`` stream and its event shape are identical in both.
+**OpenCode v2+ only.** The repo targets V2 and no longer carries V1 (beta)
+compatibility paths (2026-10-27): ``--attach`` and the ``--variant`` flag were
+removed from the CLI — the variant is embedded in the model reference
+(``-m provider/model#variant``) — and there is no ``--dir`` flag: the session's
+workspace is the directory the CLI runs in, which the bridge sets as the
+subprocess ``cwd``. The ``--format json`` stream and its event shape are
+unchanged.
 
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
@@ -43,7 +43,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -145,32 +144,7 @@ class OpenCodeBridge(AgentBridge):
 		# plugin already captures the turn. Skipping here is the cheap guard; the
 		# hash check in enqueue_memory is the one that actually guarantees it.
 		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
-		# Detected CLI major (1|2), cached per instance; see _cli_major().
-		self._cli_major_cache: Optional[int] = None
 
-	def _cli_major(self) -> int:
-		"""Major version of the resolved CLI (1 or 2), cached per instance.
-
-		Detection failure falls back to 1: the v1 flags are the known-good
-		baseline and are also what the currently deployed plugin expects.
-		"""
-		if self._cli_major_cache is None:
-			assert self._opencode_path is not None
-			major = 1
-			try:
-				out = subprocess.run(
-					[self._opencode_path, "--version"],
-					capture_output=True,
-					text=True,
-					timeout=15,
-				).stdout
-				match = re.search(r"(\d+)\.\d+", out or "")
-				if match:
-					major = int(match.group(1))
-			except Exception:
-				pass
-			self._cli_major_cache = major
-		return self._cli_major_cache
 
 	# ── Handshake preamble ────────────────────────────────────────────────
 	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
@@ -244,21 +218,16 @@ class OpenCodeBridge(AgentBridge):
 		Returns a dict with ``session_id`` and ``text`` (concatenated response).
 		"""
 		cmd = [self._opencode_path, "run", *args, "--format", "json", "--auto"]
-		major = self._cli_major()
 
-		if cwd:
-			# `cwd=` solo cambia el directorio del proceso; opencode fija el
-			# workspace de la SESIÓN con --dir. Sin esto el agente opera en su
-			# proyecto por defecto (p. ej. $HOME), no en el cwd del job.
-			cmd.extend(["--dir", cwd])
-
+		# V2 no tiene `--dir`: el workspace de la sesión es el directorio en el que
+		# corre el CLI, así que `cwd=` del subproceso ES la fuente de verdad (ver
+		# `subprocess.run` más abajo). Nunca añadir flags de workspace a la línea.
 		if self._server_url:
-			# v1: --attach <url>; v2: --server <url> (--attach was removed).
-			cmd.extend(["--server" if major >= 2 else "--attach", self._server_url])
-		elif major >= 2:
-			# v2 defaults to a shared background service whose env the bridge
-			# cannot control (REDPILL_SCRIBE_DISABLE would never reach the
-			# plugin). --standalone restores v1 semantics: private server per run.
+			cmd.extend(["--server", self._server_url])
+		else:
+			# El servicio de fondo compartido de V2 no hereda nuestro env:
+			# `REDPILL_SCRIBE_DISABLE` nunca llegaría al plugin. `--standalone` da
+			# un servidor privado por ejecución cuyo env sí controlamos.
 			cmd.append("--standalone")
 
 		logger.debug(
@@ -288,11 +257,26 @@ class OpenCodeBridge(AgentBridge):
 			raise RuntimeError(f"opencode timed out after {timeout}s") from e
 
 		if result.returncode != 0:
-			stderr = (result.stderr or "").strip()
-			logger.error(f"[OpenCodeBridge] opencode failed (rc={result.returncode}): {stderr[:500]}")
-			raise RuntimeError(f"opencode failed (rc={result.returncode}): {stderr[:300]}")
+			detail = self._failure_detail(result.stderr, result.stdout)
+			logger.error(f"[OpenCodeBridge] opencode failed (rc={result.returncode}): {detail}")
+			raise RuntimeError(f"opencode failed (rc={result.returncode}): {detail}")
 
 		return self._parse_json_stream(result.stdout or "")
+
+	@staticmethod
+	def _failure_detail(stderr: Optional[str], stdout: Optional[str], limit: int = 300) -> str:
+		"""Diagnóstico de un fallo del CLI.
+
+		opencode imprime sus errores fatales por **stdout** y sale con rc≠0, así que
+		mirar solo `stderr` dejaba el `error_log` del job en `... (rc=1): ` — sin
+		nada que diagnosticar. Se usa el final del canal que sí traiga texto
+		(el error va al final del stream).
+		"""
+		for text in (stderr, stdout):
+			tail = (text or "").strip()
+			if tail:
+				return tail[-limit:]
+		return "<sin salida en stderr ni stdout>"
 
 	@staticmethod
 	def _parse_json_stream(stdout: str) -> dict:
@@ -346,7 +330,7 @@ class OpenCodeBridge(AgentBridge):
 			return ["-m", model]
 		return ["-m", f"anthropic/{model}"]
 
-	# Map the portable standard (low|medium|high) → opencode's --variant.
+	# Map the portable standard (low|medium|high) → opencode's model variant.
 	# None/unknown → omit (model default).
 	_EFFORT_MAP = {
 		"low": "minimal",
@@ -354,25 +338,18 @@ class OpenCodeBridge(AgentBridge):
 		# "medium" → omit (opencode default is reasonable for medium)
 	}
 
-	@classmethod
-	def _effort_args(cls, effort: Optional[str]) -> list:
-		mapped = cls._EFFORT_MAP.get((effort or "").strip().lower())
-		return ["--variant", mapped] if mapped else []
-
 	def _model_effort_args(self, model: str, effort: Optional[str]) -> list:
-		"""Compose -m/--variant flags for the detected CLI major.
+		"""Compose the ``-m`` flags for OpenCode v2+.
 
-		v1: ``--variant <v>`` is its own flag.
-		v2: the variant is embedded in the model reference
-		(``provider/model#variant``); without a model there is nowhere to put it.
+		V2 has no ``--variant`` flag: the variant is embedded in the model
+		reference (``provider/model#variant``). Without a model there is nowhere
+		to put it, so the effort is dropped.
 		"""
 		model_args = self._model_args(model)
 		mapped = self._EFFORT_MAP.get((effort or "").strip().lower())
-		if self._cli_major() >= 2:
-			if mapped and model_args:
-				return [model_args[0], f"{model_args[1]}#{mapped}"]
-			return model_args
-		return [*model_args, *self._effort_args(effort)]
+		if mapped and model_args:
+			return [model_args[0], f"{model_args[1]}#{mapped}"]
+		return model_args
 
 	def prompt(
 		self,

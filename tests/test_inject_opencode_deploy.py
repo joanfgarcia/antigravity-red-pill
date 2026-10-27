@@ -57,7 +57,7 @@ def test_repo_root_apunta_a_la_raiz_del_repo(adapter) -> None:
 
 
 def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
-	"""Instalación limpia: RED_PILL.md + skill job-manager/dag/forge/scout."""
+	"""Instalación limpia: AGENTS.md + skill job-manager/dag/forge/scout."""
 	import argparse
 	import os
 
@@ -68,10 +68,10 @@ def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
 	args = argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False)
 	n = adapter.inject(args)
 
-	redpill = os.path.join(tmp, "RED_PILL.md")
-	assert os.path.exists(redpill), "RED_PILL.md no generado"
+	redpill = os.path.join(tmp, "AGENTS.md")
+	assert os.path.exists(redpill), "AGENTS.md no generado"
 	text = open(redpill, encoding="utf-8").read()
-	assert "job_dag_execution" in text, "anchor job_dag_execution ausente en RED_PILL.md"
+	assert "job_dag_execution" in text, "anchor job_dag_execution ausente en AGENTS.md"
 
 	for skill in ("job-manager", "dag", "forge", "scout"):
 		path = os.path.join(tmp, "skills", skill, "SKILL.md")
@@ -93,15 +93,15 @@ def test_inject_idempotente(adapter, tmp_path) -> None:
 
 	adapter.inject(args)
 	# tocar el anchor para forzar divergencia
-	redpill = os.path.join(tmp, "RED_PILL.md")
+	redpill = os.path.join(tmp, "AGENTS.md")
 	original = open(redpill, encoding="utf-8").read()
 	n2 = adapter.inject(args)
 	assert n2 == 0, "segunda pasada debería ser idempotente (sin bloques modificados)"
 	assert open(redpill, encoding="utf-8").read() == original
 
 
-def test_package_json_pin_fresco(adapter, tmp_path) -> None:
-	"""Instalación limpia: package.json con el pin compartido PLUGIN_PIN."""
+def test_package_json_v2_type_module(adapter, tmp_path) -> None:
+	"""Instalación limpia en V2: package.json ESM, sin pin V1."""
 	import argparse
 	import json
 	import os
@@ -114,11 +114,12 @@ def test_package_json_pin_fresco(adapter, tmp_path) -> None:
 	pkg_path = os.path.join(tmp, "package.json")
 	assert os.path.exists(pkg_path), "package.json no creado"
 	pkg = json.load(open(pkg_path, encoding="utf-8"))
-	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+	assert pkg.get("type") == "module"
+	assert "@opencode-ai/plugin" not in pkg.get("dependencies", {})
 
 
-def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
-	"""Instalación existente: sube el pin viejo sin tocar deps ajenas (merge + .bak)."""
+def test_package_json_v2_limpia_pin_y_preserva_deps(adapter, tmp_path) -> None:
+	"""Instalación existente V1: quita el pin V1, preserva deps ajenas y marca ESM."""
 	import argparse
 	import json
 	import os
@@ -133,8 +134,9 @@ def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
 	adapter.inject(args)
 
 	pkg = json.load(open(pkg_path, encoding="utf-8"))
-	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+	assert "@opencode-ai/plugin" not in pkg.get("dependencies", {})
 	assert pkg["dependencies"]["better-sqlite3"] == "^12.11.1", "dep ajena perdida"
+	assert pkg.get("type") == "module"
 	assert os.path.exists(pkg_path + ".bak"), "backup no creado"
 
 	before = open(pkg_path, encoding="utf-8").read()
@@ -162,7 +164,7 @@ def test_red_pill_md_lleva_las_versiones_de_inject_anchor(adapter, tmp_path) -> 
 	adapter._detect_config_dir = lambda: tmp  # noqa: E731
 	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
 
-	text = open(os.path.join(tmp, "RED_PILL.md"), encoding="utf-8").read()
+	text = open(os.path.join(tmp, "AGENTS.md"), encoding="utf-8").read()
 	found = {name: int(v) for name, v in re.findall(r"<!-- REDPILL:BEGIN (\w+) v=(\d+) -->", text)}
 	expected = _block_version()
 	assert found == {name: expected[name] for name in found}
@@ -180,7 +182,7 @@ def test_inject_opencode_standalone_usa_la_misma_tabla() -> None:
 	assert "BLOCK_VERSION = {" not in open(path, encoding="utf-8").read()
 
 
-def test_red_pill_md_resuelve_placeholders_relay(adapter, tmp_path) -> None:
+def test_agents_md_resuelve_placeholders_relay(adapter, tmp_path) -> None:
 	"""Regresión: el adapter escribía los `${RELAY_*}` del seed VERBATIM (sin
 	ide_call_vars), así que opencode recibía `sovereign_handshake v=1` con
 	placeholders sin resolver. Debe resolverse con la frase hook-aware."""
@@ -190,8 +192,8 @@ def test_red_pill_md_resuelve_placeholders_relay(adapter, tmp_path) -> None:
 	adapter._detect_config_dir = lambda: tmp  # noqa: E731
 	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
 
-	text = open(os.path.join(tmp, "RED_PILL.md"), encoding="utf-8").read()
-	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver en RED_PILL.md"
+	text = open(os.path.join(tmp, "AGENTS.md"), encoding="utf-8").read()
+	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver en AGENTS.md"
 	assert "only `user_prompt`" in text, "frase hook-aware ausente (opencode debe pasar solo user_prompt)"
 	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"
 
@@ -309,3 +311,181 @@ def test_write_instructions_escribe_todo_el_roster(tmp_path) -> None:
 	found = set(re.findall(r"<!-- REDPILL:BEGIN (\w+) v=\d+ -->", text))
 	assert set(_block_anchors()) <= found
 	assert "identity_pact" in found
+
+
+def test_instrucciones_globales_viven_en_agents_md(adapter, tmp_path) -> None:
+	"""V2 sólo carga de forma nativa, y en cualquier workspace, los `AGENTS.md`.
+
+	Regresión 2026-10-27: el seed apuntaba a `instructions: ["RED_PILL.md"]`, una
+	ruta RELATIVA que V2 resuelve desde el workspace hacia arriba. En cualquier otro
+	proyecto no se encontraba y OpenCode la ignoraba EN SILENCIO: el handshake
+	obligatorio (`sovereign_handshake`) desapareció del contexto del agente.
+	El bloque debe vivir en el `AGENTS.md` global del config dir, que se carga
+	siempre, independientemente del workspace.
+	"""
+	import argparse
+	import json
+	import os
+	import re
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
+
+	agents = os.path.join(tmp, "AGENTS.md")
+	assert os.path.exists(agents), "AGENTS.md global no generado"
+	text = open(agents, encoding="utf-8").read()
+	assert re.search(r"<!-- REDPILL:BEGIN sovereign_handshake v=\d+ -->", text)
+
+	cfg = json.loads(open(os.path.join(tmp, "opencode.jsonc"), encoding="utf-8").read())
+	assert not any("RED_PILL.md" in e for e in (cfg.get("instructions") or [])), (
+		"`instructions` no debe apuntar al viejo RED_PILL.md: la ruta relativa se ignora en silencio"
+	)
+
+
+def test_migra_instalacion_con_instructions_legacy(adapter, tmp_path) -> None:
+	"""Una instalación previa con `instructions: ["RED_PILL.md"]` y el fichero
+	suelto converge: entrada retirada y fichero retirado (era sólo nuestro)."""
+	import argparse
+	import json
+	import os
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	cfg_path = os.path.join(tmp, "opencode.jsonc")
+	with open(cfg_path, "w", encoding="utf-8") as f:
+		json.dump(
+			{
+				"instructions": ["RED_PILL.md", "docs/mias.md"],
+				"references": {"keep": {"path": "/x"}},
+			},
+			f,
+		)
+	legacy = os.path.join(tmp, "RED_PILL.md")
+	with open(legacy, "w", encoding="utf-8") as f:
+		f.write("<!-- REDPILL:BEGIN sovereign_handshake v=3 -->\nbloque\n<!-- REDPILL:END sovereign_handshake -->\n")
+
+	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
+
+	cfg = json.loads(open(cfg_path, encoding="utf-8").read())
+	assert cfg["instructions"] == ["docs/mias.md"], "sólo debe caer la entrada legacy"
+	assert cfg["references"]["keep"]["path"] == "/x", "config ajena preservada"
+	assert not os.path.exists(legacy), "RED_PILL.md legacy (sólo bloques) debe retirarse"
+	assert os.path.exists(os.path.join(tmp, "AGENTS.md"))
+
+
+def test_red_pill_md_con_contenido_propio_se_conserva(adapter, tmp_path) -> None:
+	import argparse
+	import os
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	legacy = os.path.join(tmp, "RED_PILL.md")
+	with open(legacy, "w", encoding="utf-8") as f:
+		f.write("# mis notas\n<!-- REDPILL:BEGIN sovereign_handshake v=3 -->\nbloque\n<!-- REDPILL:END sovereign_handshake -->\n")
+
+	adapter.inject(argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False))
+	assert os.path.exists(legacy), "un fichero con contenido del operador no se toca"
+
+
+def test_registro_de_anchors_apunta_a_agents_md() -> None:
+	import importlib.util
+	import sys
+
+	path = os.path.join(REPO_ROOT, "scripts", "inject_anchor.py")
+	spec = importlib.util.spec_from_file_location("inject_anchor_under_test", path)
+	mod = importlib.util.module_from_spec(spec)
+	sys.modules["inject_anchor_under_test"] = mod
+	spec.loader.exec_module(mod)
+	target = mod.REGISTRY_BY_IDE["opencode"]
+	assert target.path == "~/.config/opencode/AGENTS.md"
+	assert mod.OPENCODE_INSTRUCTIONS_FILE == "AGENTS.md"
+
+
+def _inject(adapter, tmp_path, **kw):
+	import argparse
+
+	adapter._detect_config_dir = lambda: str(tmp_path)  # noqa: E731
+	args = argparse.Namespace(
+		redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False, **kw
+	)
+	return adapter.inject(args)
+
+
+def test_remove_desinstala_de_verdad(adapter, tmp_path) -> None:
+	"""Regresión 2026-10-27: `inject_cli --ide opencode --remove` era un no-op.
+
+	El adapter (camino de install/update, vía `inject_cli.py`) no tenía rama de
+	borrado: desinstalar dejaba bloques, skills, agentes y plugin vivos. Sólo el
+	`inject_opencode.py` standalone lo implementaba, y ese no es el que corre.
+	"""
+	import os
+
+	tmp = str(tmp_path)
+	assert _inject(adapter, tmp_path) > 0
+	assert os.path.exists(os.path.join(tmp, "AGENTS.md"))
+	cfg_antes = open(os.path.join(tmp, "opencode.jsonc"), encoding="utf-8").read()
+
+	removed = _inject(adapter, tmp_path, remove=True)
+	assert removed > 0, "el remove no retiró nada"
+	assert not os.path.exists(os.path.join(tmp, "AGENTS.md")), "AGENTS.md vacío debe irse"
+	for sub in ("skills", "agents", "plugins"):
+		path = os.path.join(tmp, sub)
+		assert not os.listdir(path) if os.path.isdir(path) else True, f"{sub} dejó restos"
+	# La config NO se toca: deshacer el merge de claves ajenas no es posible.
+	assert open(os.path.join(tmp, "opencode.jsonc"), encoding="utf-8").read() == cfg_antes
+
+
+def test_remove_conserva_el_agents_md_del_operador(adapter, tmp_path) -> None:
+	import os
+
+	tmp = str(tmp_path)
+	_inject(adapter, tmp_path)
+	agents = os.path.join(tmp, "AGENTS.md")
+	with open(agents, "a", encoding="utf-8") as f:
+		f.write("\n## Reglas mías\n- no tocar producción\n")
+
+	_inject(adapter, tmp_path, remove=True)
+
+	assert os.path.exists(agents), "el operador tenía contenido propio: no se borra"
+	rest = open(agents, encoding="utf-8").read()
+	assert "no tocar producción" in rest
+	assert "REDPILL:" not in rest, "los bloques nuestros sí deben irse"
+
+
+def test_remove_es_idempotente(adapter, tmp_path) -> None:
+	_inject(adapter, tmp_path)
+	_inject(adapter, tmp_path, remove=True)
+	assert _inject(adapter, tmp_path, remove=True) == 0
+
+
+# ── Siembra: sin seed V1 y fallo ruidoso si falta un anchor ───────────────────
+def test_no_queda_seed_v1_consolidado() -> None:
+	"""Regresión 2026-10-27: `seeds/opencode/instructions/RED_PILL.md` sobrevivió a
+	la migración V2 y mandaba llamar `swarm_orchestrator_api → interceptor_rp` en
+	vez de `sovereign_handshake`. Sembrarlo dejaba al agente sin la regla real del
+	turno (y sin identidad). Los anchors son la única fuente."""
+	import os
+
+	legacy = os.path.join(REPO_ROOT, "seeds", "opencode", "instructions", "RED_PILL.md")
+	assert not os.path.exists(legacy), "el seed V1 consolidado no debe volver al árbol"
+	anchors = os.path.join(REPO_ROOT, "seeds", "anchors")
+	assert os.path.isdir(anchors) and os.listdir(anchors), "faltan los anchors canónicos"
+
+
+def test_falta_un_anchor_aborta_en_vez_de_sembrar_viejo(adapter, tmp_path) -> None:
+	"""Un anchor ausente es un árbol incompleto: antes se avisaba y se seguía
+	sembrando (o se caía al RED_PILL.md V1). Ahora debe abortar."""
+	import shutil
+
+	seeds = tmp_path / "anchors_parciales"
+	shutil.copytree(os.path.join(REPO_ROOT, "seeds", "anchors"), seeds)
+	(seeds / "sovereign_handshake.md").unlink()
+
+	adapter._detect_config_dir = lambda: str(tmp_path)  # noqa: E731
+	# `inject()` usa seeds/anchors del repo; se invoca la escritura directa para
+	# probar el contrato del inyector con un árbol incompleto.
+	with pytest.raises(RuntimeError, match="Siembra incompleta"):
+		adapter._write_instructions(
+			str(tmp_path / "AGENTS.md"), str(seeds), {}, backup=False, update=False
+		)

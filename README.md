@@ -185,6 +185,18 @@ The Red Pill Protocol is designed to be **Water**. It scales based on your silic
 
 *Consult the [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 
+> [!IMPORTANT]
+> ### 🧩 OpenCode: v2 required / OpenCode: v2 obligatorio
+> Red Pill only seeds OpenCode **v2**, and only when the version is **positively identified**. The injector checks in this order: *(1)* is OpenCode present? if not, nothing is seeded; *(2)* which version is installed (`opencode --version`, then the `.deb` package)? *(3)* is it exactly v2? Anything else **aborts with a message and touches nothing** — v1 (migration only, never seeding), a future v3 (not assumed compatible: it needs its own verification), a CLI/package disagreement, or a version that cannot be determined (never falls back to a default tier).
+> / *Red Pill sólo siembra OpenCode **v2**, y sólo si la versión se **identifica con certeza**. El inyector comprueba en este orden: (1) ¿existe OpenCode? si no, no se siembra nada; (2) ¿qué versión hay instalada (`opencode --version`, luego el paquete `.deb`)?; (3) ¿es exactamente v2? Cualquier otra cosa **aborta con mensaje y sin tocar nada** — v1 (sólo migración, nunca siembra), una v3 futura (no se asume compatible: necesita su propia verificación), desacuerdo CLI/paquete o versión indeterminable (nunca se cae a un tier por defecto).*
+>
+> ```bash
+> curl -fsSL https://opencode.ai/v2/install | bash
+> ```
+> Remove the V1 desktop package before installing the V2 desktop. / *Desinstala el paquete desktop V1 antes de instalar el desktop V2.*
+>
+> **Coming from V1?** Red Pill does not seed over a V1 install, but it does migrate an existing `opencode.jsonc`: `python3 scripts/migrate_opencode_v2.py --backup` (the injector also runs it automatically before merging the v2 seed once v2 is the identified version). / *¿Vienes de V1? Red Pill no siembra sobre una instalación V1, pero sí migra un `opencode.jsonc` existente: `python3 scripts/migrate_opencode_v2.py --backup` (el inyector también lo ejecuta automáticamente antes de fusionar el seed v2 cuando la versión identificada ya es v2).*
+
 ### 🏅 Sovereignty Evidence (v6.1.0a1)
 The Red Pill Protocol is verified to utilize all available silicon tiers simultaneously (**Cannibal Protocol**). In this session, we have successfully orchestrated NVIDIA RTX 5070 (CUDA) + AMD Radeon 880M (ROCm) + Ryzen AI NPU (OpenVINO) in parallel execution for memory embeddings. Use `red-pill status` for real-time occupancy data.
 

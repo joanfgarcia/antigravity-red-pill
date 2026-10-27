@@ -24,6 +24,24 @@ On-demand (a stdout o `-o FILE`). También avisa de desajustes carpeta-vs-status
 python3 planner/tools/panel.py            # panel a stdout
 ```
 
+## `decisions.py` — ledger `decisions:` del frontmatter
+
+Parser de las decisiones de diseño declaradas en el frontmatter (`id`, `status`,
+`blast_radius`, `question`, `default`). Lo consume el panel para pintar el bloque
+«Decisiones abiertas»; el panel lo importa de forma **defensiva** (si falta, no
+pinta el bloque y sigue). Sin CLI propia.
+
+## `state.py` — `STATE.md`, punto de entrada en frío (P2-ARNES-004 §3.2)
+
+Genera un snapshot determinista del desk en un solo documento: panel activo +
+decisiones abiertas + ítems `blocked`/`paused` con su `reason`. Es **generado**
+(no se mantiene a mano): regenéralo tras cambios relevantes.
+
+```
+python3 planner/tools/state.py            # STATE.md a stdout
+python3 planner/tools/state.py -o STATE.md
+```
+
 ## `links.py` — grafo de enlaces (RFC-ENLACES-001)
 
 Construye el grafo de referencias tipadas (`related` / `depends_on` / `supersedes` /

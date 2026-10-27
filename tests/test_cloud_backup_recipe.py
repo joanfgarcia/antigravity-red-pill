@@ -1,15 +1,12 @@
-"""Receta viva del backup: dag_job válido y no seed."""
+"""Receta promovida del backup: dag_job válido y no seed."""
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parents[1]
-RECIPE = REPO / ".red-pill" / "jobs" / "cloud_backup.yaml"
+RECIPE = REPO / "configs" / "jobs" / "cloud_backup.yaml"
 
 
-@pytest.mark.skipif(not RECIPE.exists(), reason="receta live no presente (se promueve al repo tras verificar)")
 def test_cloud_backup_recipe_valida_y_es_hijo_manual():
 	from red_pill.jobs.drivers import get_driver_class
 	from red_pill.jobs.recipes import load_recipe
