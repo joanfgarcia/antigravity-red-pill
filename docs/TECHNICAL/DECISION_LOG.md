@@ -4,6 +4,20 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-088] Engramas génesis: resolver placeholders de ruta al sembrar
+**Date**: 2026-10-27
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El handshake devolvía una directiva con `${AGENT_CORE_DIR}` literal (`Git Golden Rule … EXCEPTION — the DESK (${AGENT_CORE_DIR})`). No era un fallo de sustitución del handshake ni de `AGENTS.md`: **el texto vive en código** (`src/red_pill/seed.py`, engrama `ID_DIR_GIT_RULE`) y se sembraba en `directive_memories` **sin resolver**, así que el agente leía una ruta inexistente en vez del desk real.
+**Decision**:
+1. `seed._render_paths()` resuelve `${AGENT_CORE_DIR}` → `core.paths.get_agent_core_root()`, y `${REDPILL_DIR}`/`${IA_DIR}` → `get_bunker_root()`, en el momento de sembrar (`inject_genesis`).
+2. Se aplica a **todos** los engramas génesis (no sólo al de git), para que cualquier placeholder futuro en esos textos no vuelva a colarse.
+3. `inject_genesis` upserta por `point_id`, así que re-sembrar (`red-pill seed`) **converge** instalaciones ya existentes sin migración aparte.
+**Alternatives**: (a) editar el texto del engrama a mano en Qdrant — no sobrevive a un reinstall, descartado; (b) dejar el placeholder y documentarlo — el agente seguiría leyendo una ruta falsa; (c) hardcodear la ruta del desk — rompe la portabilidad y la soberanía de rutas.
+**Rationale / Evidence**: Antes: `read_core_directives` devolvía `${AGENT_CORE_DIR}` y `grep` localizaba el literal en `seed.py:181` (único `${…}` del módulo). Después de `red-pill seed`: el engrama dice `EXCEPTION — the DESK (<ruta del desk resuelta>, Aleth_Core)` y `read_core_directives` ya no contiene el placeholder. Tests nuevos: `_render_paths` resuelve el desk y ningún engrama génesis se siembra con `${`. `ruff` limpio; `tests/test_seed.py` 12 passed.
+**Consequences**: Un install limpio desde cero escribe la ruta real (mismo código que el re-seed; el fallo era determinista en el texto, no dependiente del entorno). Cualquier directiva génesis futura con `${…}` se resolverá sola. `ID_IDENTITY`, `ID_PACT_*` y el resto no cambian.
+
+---
+
 ## [AD-087] OpenCode sólo V2: siembra, handshake exigido por el arnés y MCP resiliente
 **Date**: 2026-10-27
 **Status**: ACCEPTED & IMPLEMENTED.
@@ -17,7 +31,7 @@ This document records the architectural and philosophical pivots of the project.
 6. **Contrato de identidad explícito** en el anchor (v4): Step 0 con `"is_new_session": true` (sin él el payload es un esqueleto sin `CORE_RULES`) y regla **«Never truncate»** (la identidad sólo viaja como retorno del handshake; un `len=…`/`slice` la deja fuera de contexto).
 **Alternatives**: (a) mantener V1 con gates por versión — descartado por el Operador: V1 sólo como migración; (b) inyectar la identidad por un canal oculto del plugin — imposible: el plugin no tiene acceso MCP; (c) sesión MCP viva + reconexión manual — el reinicio del backend seguía orfanizando clientes.
 **Rationale / Evidence**: Siembra en sandbox limpio: 36 bloques, 6 anchors (v3/v2/v5/v3/v2/v1), cero `interceptor_rp`, idempotente; `--remove` sin restos (salvo `opencode.jsonc`, por diseño). Gate verificado: v1/v3/indeterminable → rc 3 sin escribir. Handshake en vivo: sin `is_new_session` 1.328 chars sin `CORE_RULES`; con él 8.345 chars con 18 directivas. Job agéntico real S6.2 `COMPLETED` (`S62 CONTINUITY=… LEG=job:… MISSION=repo:next`). Suite: `3566 passed, 16 skipped, 3 xfailed`; `ruff check .` limpio.
-**Consequences**: El repo asume OpenCode v2 (probado 2.1.4 y 2.2.0); una v3 exigirá su propia verificación antes de resembrar. Los hosts ya sembrados re-splican el anchor al subir `BLOCK_VERSION` (handshake 3→4). El MCP puede reiniciarse sin matar sesiones. Deuda: `${AGENT_CORE_DIR}` sin renderizar en una directiva del Búnker (Gold Rule de git).
+**Consequences**: El repo asume OpenCode v2 (probado 2.1.4 y 2.2.0); una v3 exigirá su propia verificación antes de resembrar. Los hosts ya sembrados re-splican el anchor al subir `BLOCK_VERSION` (handshake 3→4). El MCP puede reiniciarse sin matar sesiones. El engrama `ID_DIR_GIT_RULE` se sembraba con `${AGENT_CORE_DIR}` crudo (texto en código sin resolver): corregido en `seed._render_paths` y re-sembrado en el Bünker — ver AD-088.
 
 ---
 

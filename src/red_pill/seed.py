@@ -61,6 +61,27 @@ def _protocol_version_text() -> str:
 	return f"PROTOCOL VERSION: Red Pill Protocol v{__version__}. This engram MUST be updated on every version bump."
 
 
+def _render_paths(text: str) -> str:
+	"""Resuelve los placeholders de ruta de los engramas génesis.
+
+	Los textos viven en CÓDIGO, así que un `${AGENT_CORE_DIR}` sin resolver se
+	siembra tal cual en Qdrant: el agente lee una ruta literal inexistente en vez
+	del desk real (incidente 2026-10-27, engrama `ID_DIR_GIT_RULE`). Se resuelve
+	en el momento de sembrar —misma fuente que `core/paths.py`— para que un
+	install limpio y un re-seed converjan al mismo texto.
+	"""
+	from red_pill.core.paths import get_agent_core_root, get_bunker_root
+
+	replacements = {
+		"${AGENT_CORE_DIR}": str(get_agent_core_root()),
+		"${REDPILL_DIR}": str(get_bunker_root()),
+		"${IA_DIR}": str(get_bunker_root()),
+	}
+	for placeholder, value in replacements.items():
+		text = text.replace(placeholder, value)
+	return text
+
+
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
 	collections = [
@@ -258,7 +279,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 
 		manager.add_memory(
 			m["coll"],
-			m["text"],
+			_render_paths(m["text"]),
 			importance=m["meta"].get("importance", 1.0),
 			metadata=m["meta"],
 			point_id=m["id"],
