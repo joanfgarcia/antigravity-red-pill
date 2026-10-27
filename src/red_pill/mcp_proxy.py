@@ -12,7 +12,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 import httpx
@@ -25,6 +27,8 @@ from mcp.server.stdio import stdio_server
 from red_pill.core.paths import get_state_dir
 
 BACKEND_URL = "http://localhost/mcp/"
+
+logger = logging.getLogger(__name__)
 
 
 def state_dir() -> Path:
@@ -86,36 +90,81 @@ def _uds_client_factory(socket_path: str, harness: str | None):
 	return factory
 
 
-async def _run(socket_path: str, harness: str | None) -> None:
+async def _with_backend(socket_path: str, harness: str | None, client_info, fn, *, timeout: float = 30.0):
+	"""Abre una conexión nueva, ejecuta `fn(session)` y la cierra en ESTA task.
+
+	`streamablehttp_client` monta task groups de anyio: abrir la conexión en una
+	task y cerrarla en otra revienta con "Attempted to exit cancel scope in a
+	different task than it was entered in". Por eso la conexión es de vida corta
+	y no se reutiliza entre peticiones.
+
+	El backend corre en modo `stateless`, así que una conexión corta no deja
+	sesión colgada en el servidor: reiniciar `redpill-mcp.service` ya no orfaniza
+	nada (incidente 2026-10-27).
+	"""
 	factory = _uds_client_factory(socket_path, harness)
-	client_info = types.Implementation(name="RedPill-Proxy", version="0.1")
-	async with streamablehttp_client(BACKEND_URL, httpx_client_factory=factory, timeout=30) as (read, write, _get_session_id):
+	async with streamablehttp_client(BACKEND_URL, httpx_client_factory=factory, timeout=timeout) as (
+		read,
+		write,
+		_get_session_id,
+	):
 		async with ClientSession(read, write, client_info=client_info) as session:
 			await session.initialize()
-			proxy = Server("RedPill-Kernel", version="0.1")
+			return await fn(session)
 
-			@proxy.list_tools()
-			async def list_tools():
-				return (await session.list_tools()).tools
 
-			@proxy.call_tool()
-			async def call_tool(name: str, arguments: dict):
-				result = await session.call_tool(name, arguments or {})
-				if result.isError:
-					text = "\n".join(getattr(c, "text", "") for c in result.content)
-					raise ValueError(text or "tool error")
-				return result.content
+async def _call_backend(socket_path: str, harness: str | None, client_info, fn):
+	"""`fn(session)` con UN reintento si la conexión con el backend falla."""
+	for intento in (1, 2):
+		try:
+			return await _with_backend(socket_path, harness, client_info, fn)
+		except (KeyboardInterrupt, SystemExit):
+			raise
+		except ValueError:
+			raise  # error de herramienta: no es transporte
+		except asyncio.CancelledError:
+			raise
+		except BaseException as exc:  # noqa: BLE001 — anyio agrupa cancelaciones
+			# `streamablehttp_client` monta task groups: al morir el backend el
+			# fallo llega como `BaseExceptionGroup` (que NO hereda de Exception).
+			# Se normaliza a RuntimeError en el último intento: un BaseExceptionGroup
+			# escapando del handler se lleva por delante el servidor stdio entero.
+			if intento == 2:
+				raise RuntimeError(f"backend no disponible: {exc}") from exc
+			logger.warning(f"[RedPill-Proxy] backend no disponible ({exc}); reintentando")
+			await asyncio.sleep(0.3)
 
-			@proxy.list_prompts()
-			async def list_prompts():
-				return []
 
-			@proxy.list_resources()
-			async def list_resources():
-				return []
+async def _run(socket_path: str, harness: str | None) -> None:
+	client_info = types.Implementation(name="RedPill-Proxy", version="0.1")
+	proxy = Server("RedPill-Kernel", version="0.1")
 
-			async with stdio_server() as (stdin, stdout):
-				await proxy.run(stdin, stdout, proxy.create_initialization_options())
+	@proxy.list_tools()
+	async def list_tools():
+		return (
+			await _call_backend(socket_path, harness, client_info, lambda session: session.list_tools())
+		).tools
+
+	@proxy.call_tool()
+	async def call_tool(name: str, arguments: dict):
+		result = await _call_backend(
+			socket_path, harness, client_info, lambda session: session.call_tool(name, arguments or {})
+		)
+		if result.isError:
+			text = "\n".join(getattr(c, "text", "") for c in result.content)
+			raise ValueError(text or "tool error")
+		return result.content
+
+	@proxy.list_prompts()
+	async def list_prompts():
+		return []
+
+	@proxy.list_resources()
+	async def list_resources():
+		return []
+
+	async with stdio_server() as (stdin, stdout):
+		await proxy.run(stdin, stdout, proxy.create_initialization_options())
 
 
 def run_proxy(socket_path: str | None = None, harness: str | None = None) -> None:

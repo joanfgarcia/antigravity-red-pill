@@ -201,3 +201,137 @@ def test_resolve_workspace_desciende_al_repo_cuando_el_padre_lo_contiene(tmp_pat
 	workspace, branch, _ = _resolve_workspace([str(home)], cwd=str(repo))
 	assert workspace == str(repo)
 	assert branch == "next"
+
+
+class _SesionFalsa:
+	"""Sesión MCP de mentira: las primeras `fallos` llamadas fallan."""
+
+	def __init__(self, estado: dict, valor: str = "pong"):
+		self.estado = estado
+		self.valor = valor
+
+	async def ping(self):
+		if self.estado["fallos"] > 0:
+			self.estado["fallos"] -= 1
+			raise self.estado["exc"]
+		return self.valor
+
+
+def _parchea_backend(monkeypatch, **kwargs):
+	"""Sustituye la conexión real por una sesión falsa y cuenta los intentos."""
+	from red_pill import mcp_proxy
+
+	estado = {"fallos": kwargs.get("fallos", 0), "exc": kwargs.get("exc") or RuntimeError("Connection closed")}
+	intentos = {"n": 0}
+
+	async def _fake(socket_path, harness, client_info, fn, **kw):
+		intentos["n"] += 1
+		return await fn(_SesionFalsa(estado))
+
+	monkeypatch.setattr(mcp_proxy, "_with_backend", _fake)
+	return intentos
+
+
+def test_call_backend_reintenta_tras_reiniciar_el_backend(monkeypatch):
+	"""Incidente 2026-10-27: reiniciar `redpill-mcp.service` dejaba a TODAS las
+	sesiones del IDE con "Session terminated" hasta reiniciar la app, porque el
+	proxy abría una única sesión al arrancar y no sabía reconectar."""
+	from red_pill.mcp_proxy import _call_backend
+
+	intentos = _parchea_backend(monkeypatch, fallos=1)
+
+	resultado = asyncio.run(_call_backend("/tmp/x.sock", "opencode", None, lambda s: s.ping()))
+
+	assert resultado == "pong"
+	assert intentos["n"] == 2, "debe reintentar una vez contra el backend nuevo"
+
+
+def test_call_backend_sin_fallos_usa_un_solo_intento(monkeypatch):
+	from red_pill.mcp_proxy import _call_backend
+
+	intentos = _parchea_backend(monkeypatch)
+	assert asyncio.run(_call_backend("/tmp/x.sock", "opencode", None, lambda s: s.ping())) == "pong"
+	assert intentos["n"] == 1
+
+
+def test_call_backend_no_reintenta_errores_de_herramienta(monkeypatch):
+	"""Un tool que falla no es un transporte caído: reintentarlo duplicaría
+	efectos y perdería el mensaje original."""
+	import pytest
+
+	from red_pill.mcp_proxy import _call_backend
+
+	intentos = _parchea_backend(monkeypatch, fallos=99, exc=ValueError("tool error"))
+
+	with pytest.raises(ValueError):
+		asyncio.run(_call_backend("/tmp/x.sock", "opencode", None, lambda s: s.ping()))
+	assert intentos["n"] == 1
+
+
+def test_backend_stateless():
+	"""El backend no guarda sesión por conexión: si guardara, reiniciarlo
+	orfanizaría a todos los clientes vivos."""
+	import inspect
+
+	from red_pill import mcp_backend
+
+	fuente = inspect.getsource(mcp_backend.build_app)
+	assert "stateless=True" in fuente
+
+
+@pytest.mark.skipif(
+	os.getenv("REDPILL_MCP_SELFHEAL_E2E") != "1",
+	reason="E2E real (backend + proxy en subproceso); activar con REDPILL_MCP_SELFHEAL_E2E=1",
+)
+def test_proxy_sobrevive_al_reinicio_del_backend(tmp_path):
+	"""Incidente 2026-10-27, de punta a punta: matar el backend y revivirlo no
+	debe dejar al IDE sin tools. Backend propio en socket temporal — nunca el
+	servicio vivo."""
+	import asyncio
+
+	from mcp import ClientSession, StdioServerParameters
+	from mcp.client.stdio import stdio_client
+
+	py = str(REPO_ROOT / ".venv" / "bin" / "python")
+	sock = str(tmp_path / "e2e.sock")
+	env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src"), "REDPILL_HARNESS": "opencode"}
+
+	async def _arranca():
+		proc = await asyncio.create_subprocess_exec(
+			py, "-m", "red_pill.mcp_backend", "--socket", sock,
+			stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, env=env,
+		)
+		# Esperar a que ACEPTE conexiones, no sólo a que exista el fichero: tras un
+		# kill el socket viejo sigue en disco y "existe" sin escuchar a nadie.
+		for _ in range(150):
+			try:
+				reader, writer = await asyncio.open_unix_connection(sock)
+				writer.close()
+				await writer.wait_closed()
+				return proc
+			except (FileNotFoundError, ConnectionRefusedError):
+				await asyncio.sleep(0.1)
+		raise RuntimeError("el backend no arrancó")
+
+	async def _run():
+		backend = await _arranca()
+		params = StdioServerParameters(
+			command=py, args=["-m", "red_pill.mcp_proxy", "--socket", sock, "--harness", "opencode"], env=env
+		)
+		try:
+			async with stdio_client(params) as (r, w):
+				async with ClientSession(r, w) as session:
+					await session.initialize()
+					antes = await session.list_tools()
+					backend.kill()
+					await backend.wait()
+					backend = await _arranca()
+					despues = await session.list_tools()
+					return len(antes.tools), len(despues.tools)
+		finally:
+			if backend.returncode is None:
+				backend.kill()
+				await backend.wait()
+
+	antes, despues = asyncio.run(_run())
+	assert antes > 0 and despues == antes

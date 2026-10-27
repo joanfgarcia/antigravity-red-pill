@@ -58,7 +58,11 @@ class IdentityMiddleware:
 
 
 def build_app(json_response: bool = False) -> Starlette:
-	manager = StreamableHTTPSessionManager(app=kernel.server, json_response=json_response)
+	# Stateless (2026-10-27): el kernel no guarda estado por conexión — la
+	# identidad viaja en cada request (`X-RedPill-Proxy`). Con sesión viva, un
+	# reinicio del servicio dejaba huérfanas TODAS las sesiones de los IDEs
+	# ("Session terminated") y el proxy no podía recuperarse.
+	manager = StreamableHTTPSessionManager(app=kernel.server, json_response=json_response, stateless=True)
 
 	@contextlib.asynccontextmanager
 	async def lifespan(_app):
