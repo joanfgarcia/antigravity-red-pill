@@ -43,7 +43,11 @@
  * parts existed → empty responses (bug fixed 2026-09-24).
  *
  * ── HOOK LIFECYCLE (v2 — setup(ctx)) ─────────────────────────────────────
- *   ctx.session.hook("prompt")      → capture user prompt
+ *   ctx.session.hook("prompt")      → capture user prompt + RESET del turno (handshake gate)
+ *   ctx.session.hook("context")    → recordatorio del handshake en CADA petición al modelo
+ *                                    (no persistido: inmune a la compactación)
+ *   ctx.tool.hook("execute.before")→ GATE: niega tools hasta el handshake del turno
+ *                                    (fail-open tras N rechazos, exento en sub-sesiones)
  *   session.step.started            → capture model (providerID/id)
  *   session.text.delta              → accumulate assistant response text
  *   session.execution.succeeded     → FLUSH to DB (also .failed/.interrupted)
@@ -515,6 +519,65 @@ export default {
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
     });
+
+    // ── Handshake gate (por turno) ─────────────────────────────────────────
+    // V2: `session.hook("context")` corre ANTES DE CADA petición al modelo
+    // (incluido el bucle de herramientas), así que es el sitio exacto para que
+    // el agente vea el recordatorio en cada turno — inmune a la compactación
+    // porque no se persiste. `tool.hook("execute.before")` lo hace cumplir.
+    // Exentas las sub-sesiones (`task`/paneles): su padre ya hizo el handshake.
+    const HANDSHAKE_GATE = (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
+    const MAX_REFUSALS = 3; // fail-open: nunca dejar una sesión sin salida
+    const HANDSHAKE_REMINDER =
+      "<redpill_handshake_reminder>\n" +
+      "MANDATORY FIRST STEP OF THIS TURN (not done yet): call `sovereign_handshake` " +
+      "(the tool whose id contains `sovereign_handshake`) with only `user_prompt`, " +
+      "before calling any other tool (code-mode calls do not count). Until you do, " +
+      "every other tool call is refused. " +
+      "That call loads identity, pain signals and OPEN LOOPS.\n" +
+      "</redpill_handshake_reminder>";
+    const turnHandshake = new Map(); // sessionID -> bool
+    const turnRefusals = new Map(); // sessionID -> nº de rechazos
+    const turnSid = (event) => event?.sessionID || event?.data?.sessionID || "global";
+    const isHandshakeTool = (name) => /sovereign_handshake/i.test(String(name || ""));
+    // Code Mode: el modelo puede llamar al handshake DENTRO de `execute`, así que
+    // la puerta no puede negar el gateway (perdería el propio handshake). El
+    // recordatorio por `context` sigue llegando en cada petición, y las tools
+    // reales de trabajo (shell/edit/write/read/task) sí quedan gateadas.
+    const GATEWAY_TOOLS = new Set(["execute"]);
+
+    await ctx.session.hook("prompt", (event) => {
+      const sid = turnSid(event);
+      turnHandshake.set(sid, false);
+      turnRefusals.delete(sid);
+    });
+
+    await ctx.session.hook("context", (event) => {
+      if (!HANDSHAKE_GATE) return;
+      const sid = turnSid(event);
+      if (childSessions.has(sid) || turnHandshake.get(sid) === true) return;
+      if (Array.isArray(event?.system)) event.system.push({ type: "text", text: HANDSHAKE_REMINDER });
+    });
+
+    if (typeof ctx?.tool?.hook === "function") {
+      await ctx.tool.hook("execute.before", (event) => {
+        const sid = turnSid(event);
+        if (isHandshakeTool(event?.tool)) {
+          turnHandshake.set(sid, true);
+          return;
+        }
+        if (!HANDSHAKE_GATE || childSessions.has(sid) || turnHandshake.get(sid) === true) return;
+        if (GATEWAY_TOOLS.has(String(event?.tool || "").toLowerCase())) return;
+        const refusals = turnRefusals.get(sid) || 0;
+        if (refusals >= MAX_REFUSALS) return; // kernel caído o nombre distinto: no bloquear para siempre
+        turnRefusals.set(sid, refusals + 1);
+        throw new Error(
+          "HANDSHAKE REQUIRED: this turn has not called `sovereign_handshake` yet. " +
+            "Call it first (only `user_prompt`), then repeat this tool call. " +
+            `Refusal ${refusals + 1}/${MAX_REFUSALS} (after that the gate opens to avoid a deadlock).`,
+        );
+      });
+    }
 
     const controller = new AbortController();
     void (async () => {
