@@ -48,7 +48,7 @@ BLOCK_ANCHORS = (
 )
 
 BLOCK_VERSION = {
-	"sovereign_handshake": 3,
+	"sovereign_handshake": 4,
 	"agent_core": 2,
 	"knowledge_access": 5,
 	"frontmatter_docs": 3,
