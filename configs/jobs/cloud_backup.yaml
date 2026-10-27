@@ -12,13 +12,15 @@ manifest:
     - id: create
       type: command
       minion: command_runner
-      command: "/home/joan/Documents/IA/sharing/.venv/bin/python /home/joan/Documents/IA/sharing/scripts/cloud_backup.py create"
+      # El driver no expande `~`/`$VAR` y tokeniza con shlex: ruta relativa al
+      # cwd del job (raíz del repo, anclado por load_recipe).
+      command: .venv/bin/python scripts/cloud_backup.py create
       timeout: 7200
       on_fail: stop
     - id: upload
       type: command
       minion: command_runner
-      command: "/home/joan/Documents/IA/sharing/.venv/bin/python /home/joan/Documents/IA/sharing/scripts/cloud_backup.py upload"
+      command: .venv/bin/python scripts/cloud_backup.py upload
       depends_on: [create]
       timeout: 7200
       on_fail: stop

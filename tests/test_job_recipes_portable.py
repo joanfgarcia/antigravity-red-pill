@@ -32,6 +32,7 @@ def test_receta_sin_rutas_de_usuario(recipe):
 	"name",
 	[
 		"bakeoff_granite_42",
+		"cloud_backup",
 		"laya_adjudicate",
 		"laya_router_bakeoff",
 		"memento_redistill",
