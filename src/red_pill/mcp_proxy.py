@@ -14,7 +14,6 @@ import base64
 import json
 import logging
 import os
-from contextlib import AsyncExitStack
 from pathlib import Path
 
 import httpx

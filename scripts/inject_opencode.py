@@ -28,7 +28,15 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, merge_permissions, scrub_legacy_instructions, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import (  # noqa: E402
+	LEGACY_SKILL_DIRS,
+	agent_core_vars,
+	build_vars,
+	merge_permissions,
+	scrub_legacy_instructions,
+	strip_jsonc_comments,
+	subst,
+)
 from migrate_opencode_v2 import migrate_file  # noqa: E402
 from opencode_version import detect_info, select_config_seed, support_error  # noqa: E402
 

@@ -1811,15 +1811,15 @@ def _resolve_workspace(
 	checkout del kernel.
 
 	1. Gana el primer declarado que **es repo**. El puente es un fichero global
-	   (gana el último escritor) y ese escritor puede ser otra instancia abierta en
-	   una carpeta padre que no es repo; quedarse con él tiraba la misión a
-	   `mission:adhoc-<fecha>` aunque otro declarado apuntara al repo del agente.
+	(gana el último escritor) y ese escritor puede ser otra instancia abierta en
+	una carpeta padre que no es repo; quedarse con él tiraba la misión a
+	`mission:adhoc-<fecha>` aunque otro declarado apuntara al repo del agente.
 	2. Si ningún declarado es repo pero el `cwd` del servidor **desciende** de uno
-	   de ellos (la app abierta en `~` y el kernel en `~/…/sharing`), el repo es el
-	   del agente.
+	de ellos (la app abierta en `~` y el kernel en `~/…/sharing`), el repo es el
+	del agente.
 	3. Si no, se respeta la precedencia declarada (o el `cwd` si no declaró nada) y
-	   se deja que la cascada F3 (`infer_session_git`) y el fallback adhoc actúen:
-	   nunca se atribuye al agente el repo del kernel "porque era el único repo".
+	se deja que la cascada F3 (`infer_session_git`) y el fallback adhoc actúen:
+	nunca se atribuye al agente el repo del kernel "porque era el único repo".
 
 	Nunca lanza.
 	"""

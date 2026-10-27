@@ -19,7 +19,15 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, merge_permissions, scrub_legacy_instructions, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import (  # noqa: E402
+	LEGACY_SKILL_DIRS,
+	agent_core_vars,
+	build_vars,
+	merge_permissions,
+	scrub_legacy_instructions,
+	strip_jsonc_comments,
+	subst,
+)
 from inject_anchor import OPENCODE_INSTRUCTIONS_FILE  # noqa: E402
 from migrate_opencode_v2 import migrate_file  # noqa: E402
 from opencode_version import detect_info, select_config_seed, support_error  # noqa: E402
@@ -117,7 +125,7 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
 	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
-	from inject_anchor import BLOCK_ANCHORS, BLOCK_VERSION, OPENCODE_INSTRUCTIONS_FILE, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
+	from inject_anchor import BLOCK_ANCHORS, BLOCK_VERSION, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
 
 	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
 	# Sin esto los `${RELAY_*}` del seed llegaban literales al fichero de instrucciones.
