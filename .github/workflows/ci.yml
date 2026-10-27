@@ -102,6 +102,8 @@ jobs:
           --ignore-vuln CVE-2026-96778 \
           --ignore-vuln CVE-2026-96636 \
           --ignore-vuln GHSA-78g4-xqwv-q3g8 \
+          --ignore-vuln CVE-2026-114613 \
+          --ignore-vuln PYSEC-2026-4327 \
           -r direct_deps.txt
 
 

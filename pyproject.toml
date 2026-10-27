@@ -132,6 +132,9 @@ ignore-vuln = [
 	"CVE-2026-96778",
 	"CVE-2026-96636",
 	"GHSA-78g4-xqwv-q3g8",
+	# 2026-10-27: nuevas advisories sobre deps que no podemos subir todavía.
+	"CVE-2026-114613", # msgpack 1.2.1 → 1.2.3 (transitiva vía loguru). No deserializamos msgpack de entrada no confiable.
+	"PYSEC-2026-4327", # Pillow 12.3.0 → 13.0.0 (mayor; irresoluble con fastembed). Mismo criterio que AD-058.
 ]
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
 fix = false
