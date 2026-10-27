@@ -6,29 +6,29 @@ changed), preserves foreign keys, and is idempotent: a second run is a no-op.
 
 V1 -> V2 changes applied (see opencode.ai/v2/docs and migrate-v1):
 
-  plugin[]         -> plugins[]              (single-file paths are skipped by V2;
-                                              files under a discovered plugins/
-                                              dir are dropped and auto-discovered)
-  mcp.<name>       -> mcp.servers.<name>     (+ enabled:false -> disabled:true,
-                                              integer timeout -> {catalog,execution})
-  skills.paths[]   -> skills[]               (paths + urls combined)
-  permission{}     -> permissions[]          (last-match-wins; catch-all first,
-                                              task->subagent, bash->shell,
-                                              write/patch->edit; tools map)
-  provider{}       -> providers{}            (npm->package, api/options->settings,
-                                              model shape -> capabilities/variants)
-  default          -> model                  (root default block removed)
-  disabled_providers[] -> policies[]         (provider.use deny)
-  enabled_providers[]  -> policies[]         (deny * + allow each)
+	plugin[]         -> plugins[]              (single-file paths are skipped by V2;
+	files under a discovered plugins/
+	dir are dropped and auto-discovered)
+	mcp.<name>       -> mcp.servers.<name>     (+ enabled:false -> disabled:true,
+	integer timeout -> {catalog,execution})
+	skills.paths[]   -> skills[]               (paths + urls combined)
+	permission{}     -> permissions[]          (last-match-wins; catch-all first,
+	task->subagent, bash->shell,
+	write/patch->edit; tools map)
+	provider{}       -> providers{}            (npm->package, api/options->settings,
+	model shape -> capabilities/variants)
+	default          -> model                  (root default block removed)
+	disabled_providers[] -> policies[]         (provider.use deny)
+	enabled_providers[]  -> policies[]         (deny * + allow each)
 
 Plugin *code* is NOT migrated here: V1 plugin implementations do not run in V2
 (see opencode.ai/v2/docs/build/plugins/migrate-v1). The RedPill scribe plugin in
 ``seeds/opencode/plugins/redpill-scribe.js`` already ships a dual v1/v2 entrypoint.
 
 Usage:
-    python scripts/migrate_opencode_v2.py --dry-run
-    python scripts/migrate_opencode_v2.py --config ~/.config/opencode/opencode.jsonc
-    python scripts/migrate_opencode_v2.py --config X --output Y --no-backup
+	python scripts/migrate_opencode_v2.py --dry-run
+	python scripts/migrate_opencode_v2.py --config ~/.config/opencode/opencode.jsonc
+	python scripts/migrate_opencode_v2.py --config X --output Y --no-backup
 """
 
 from __future__ import annotations

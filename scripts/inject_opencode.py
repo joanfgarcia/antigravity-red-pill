@@ -28,9 +28,9 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, merge_permissions, scrub_legacy_instructions, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, merge_permissions, scrub_legacy_instructions, strip_jsonc_comments, subst  # noqa: E402
 from migrate_opencode_v2 import migrate_file  # noqa: E402
-from opencode_version import detect_info, needs_v1_plugin_pin, select_config_seed  # noqa: E402
+from opencode_version import detect_info, select_config_seed, support_error  # noqa: E402
 
 # ── Config directory discovery ────────────────────────────────────────────────
 OPENCODE_CONFIG_DIRS = [
@@ -427,36 +427,13 @@ def _ensure_esm_package(config_dir: str, backup: bool = True) -> bool:
 	return True
 
 
-def ensure_package_json(config_dir: str, backup: bool = True, major: int | None = None) -> bool:
-	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps).
+def ensure_package_json(config_dir: str, backup: bool = True) -> bool:
+	"""Mark the plugins dir as ESM (``type: module``) and drop the V1 plugin pin.
 
-	V2 plugins are plain modules and do not need the V1 ``@opencode-ai/plugin`` pin;
-	on V2 we mark the package as ESM instead.
+	V2 plugins are plain ESM modules; the V1 ``@opencode-ai/plugin`` pin is dead
+	weight (and removed here if a migrated host still carries it).
 	"""
-	if not needs_v1_plugin_pin(major):
-		return _ensure_esm_package(config_dir, backup)
-	pkg_path = os.path.join(config_dir, "package.json")
-	pkg: dict = {}
-	if os.path.exists(pkg_path):
-		try:
-			with open(pkg_path, encoding="utf-8") as f:
-				pkg = json.load(f)
-		except (OSError, json.JSONDecodeError):
-			logger.warning(f"✗ {pkg_path}: unreadable JSON, not touching it")
-			return False
-		if not isinstance(pkg, dict):
-			return False
-	deps = pkg.setdefault("dependencies", {})
-	if deps.get("@opencode-ai/plugin") == PLUGIN_PIN:
-		return False
-	if backup and os.path.exists(pkg_path):
-		shutil.copy2(pkg_path, pkg_path + ".bak")
-	deps["@opencode-ai/plugin"] = PLUGIN_PIN
-	with open(pkg_path, "w", encoding="utf-8") as f:
-		json.dump(pkg, f, indent=2)
-		f.write("\n")
-	logger.info(f"✓ {pkg_path}: @opencode-ai/plugin → {PLUGIN_PIN}")
-	return True
+	return _ensure_esm_package(config_dir, backup)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -520,21 +497,21 @@ def main():
 		logger.info("Red Pill removed from opencode.")
 		return
 
-	# ── Version detection (V1 vs V2 seed) ──────────────────────────────────
+	# ── Versión soportada: OpenCode v2 exacto ───────────────────────────────
+	# `support_error` centraliza el contrato: no instalado → nada que sembrar;
+	# v1 (sólo migrable), v3+, CLI/.deb en desacuerdo o versión indeterminable →
+	# abortar con mensaje (exit 3) sin tocar nada.
 	config_path = os.path.join(config_dir, "opencode.jsonc")
-	info = detect_info(config_path=config_path)
-	if info.installed and (info.major or 0) < 2:
-		logger.error(
-			f"OpenCode {info} detectado. Red Pill ya NO soporta OpenCode v1. "
-			"Actualiza a v2: curl -fsSL https://opencode.ai/v2/install | bash"
-		)
+	info = detect_info()
+	problem = support_error(info)
+	if problem:
+		logger.error(problem)
 		sys.exit(3)
-	major = info.major
 	logger.info(f"OpenCode detectado: {info} → seed {info.tier}")
 
 	# ── Print mode ─────────────────────────────────────────────────────────
 	if args.print_only:
-		config_template = select_config_seed(opencode_seeds, major)
+		config_template = select_config_seed(opencode_seeds)
 		if config_template and os.path.exists(config_template):
 			with open(config_template, encoding="utf-8") as f:
 				raw = f.read()
@@ -546,10 +523,11 @@ def main():
 		return
 
 	# ── 1. Merge opencode.jsonc (versioned seed) ───────────────────────────
-	config_template_path = select_config_seed(opencode_seeds, major)
+	config_template_path = select_config_seed(opencode_seeds)
 	config_dest = config_path
 
-	if (major or 1) >= 2 and os.path.exists(config_dest):
+	# Un `opencode.jsonc` V1 heredado se MIGRA antes de fusionar el seed v2.
+	if os.path.exists(config_dest):
 		migrated, _, warnings = migrate_file(config_dest, backup=backup)
 		if migrated:
 			logger.info("✓ opencode.jsonc: V1→V2 migrado antes de sembrar")
@@ -589,7 +567,7 @@ def main():
 	deploy_agents(agents_src, agents_dest, variables, backup=backup)
 
 	# ── 4. Ensure package.json ─────────────────────────────────────────────
-	ensure_package_json(config_dir, backup=backup, major=major)
+	ensure_package_json(config_dir, backup=backup)
 
 	# ── 5. Deploy plugins (the scribe that captures every turn) ────────────
 	plugins_src = os.path.join(opencode_seeds, "plugins")

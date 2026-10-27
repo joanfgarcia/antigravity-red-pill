@@ -12,12 +12,16 @@
 > Your system will automatically attempt to heal the vault by regenerating the group state. However, your OLD encrypted backups (`.mls`) from previous versions are now unreadable. Ensure you have a RAW (unencrypted) backup before proceeding if you need to preserve data from much older versions.
 >
 > ### 🧩 OpenCode v2 required (install/update gate)
-> The IDE injector (`scripts/inject_cli.py`) **detects the installed OpenCode version and aborts** (exit code 3) on OpenCode v1. V1 is no longer supported for OpenCode: upgrade before installing or updating.
+> The IDE injector (`scripts/inject_cli.py`) **detects the installed OpenCode version and aborts** (exit code 3) unless it can positively identify **v2**. The order is: is OpenCode present? (if not, nothing is seeded) → which version is it (`opencode --version`, then the `.deb` package) → is it exactly v2?
+>
+> Everything else aborts **without touching anything**: **v1** (available *only* as a migration path, never as a seeding target), a future **v3** (not assumed compatible — it needs its own verification before red-pill re-seeds), a **CLI/package disagreement**, or a **version that cannot be determined** (there is no default tier).
 >
 > ```bash
 > curl -fsSL https://opencode.ai/v2/install | bash   # CLI
 > # desktop: remove the V1 .deb, then install the V2 .deb
 > ```
+>
+> Migrating from V1: `python3 scripts/migrate_opencode_v2.py --backup` converts an existing `opencode.jsonc` (the injector also runs this automatically before merging the v2 seed, once v2 is the identified version).
 >
 > `red-pill bunker update`, `scripts/install_neo.sh` and `scripts/upgrade.sh` propagate this failure instead of continuing with a half-seeded V1 setup.
 

@@ -1,28 +1,31 @@
-"""Detect the installed OpenCode version and pick the matching seed.
+"""Detect the installed OpenCode version and resolve the V2 seed.
 
-V1 (``1.x``) and V2 (``2.x``) share the ``opencode`` command and
-``~/.config/opencode`` but use incompatible config schemas.  The injector must
-seed the schema the *running* OpenCode understands, so this module probes the
-host and resolves a versioned seed.
+Red Pill only supports **OpenCode v2** (decision: 2026-10-27). V1 is *migratable*,
+never seeded: if the host still has a V1 ``opencode.jsonc``, the injector migrates
+it in place (``scripts/migrate_opencode_v2.py``) **before** merging the V2 seed.
+A future v3 is **not** assumed compatible — it will need its own verification
+before red-pill re-seeds anything.
 
-Detection priority (highest first):
+Detection is explicit and ordered; nothing is inferred from the shape of an
+existing config:
 
 1. ``REDPILL_OPENCODE_VERSION`` / ``REDPILL_OPENCODE_MAJOR`` environment override
-   (tests, CI, operators pinning a tier explicitly).
-2. The ``opencode`` binary in ``PATH`` (``opencode --version``).
+	(tests, CI, operators pinning a tier explicitly).
+2. The ``opencode`` binary in ``PATH`` (``opencode --version``) — the binary that
+	will actually run.
 3. The desktop ``.deb`` package version (``dpkg-query``), if present.
-4. The shape of an existing ``opencode.jsonc`` (already-V2 markers).
-5. Default to V1 with a warning (legacy-safe: never silently emit V2 into an
-   unknown install).
 
-When several probes disagree, the highest major wins: V2 config is the
-forward-compatible target, and a V1 binary that coexists with a V2 desktop is
-the operator's transitional state.
+Contract (`support_error` decides for every caller — install, update, inject):
+
+- **not installed** → nothing to seed; the caller skips OpenCode (``None``).
+- **exactly v2** → seeding allowed.
+- **v1, v3+, or version that cannot be established** → abort with an explicit
+	message. An undetectable tier is ``major=None`` and is an ERROR, never a
+	default.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -31,6 +34,12 @@ import subprocess
 from dataclasses import dataclass
 
 logger = logging.getLogger("opencode_version")
+
+#: Única versión sembrable hoy. No se asume compatibilidad hacia adelante.
+SUPPORTED_MAJOR = 2
+INSTALL_URL = "https://opencode.ai/v2/install"
+MIGRATE_HINT = "python3 scripts/migrate_opencode_v2.py --backup"
+V1_PLUGIN_PACKAGE = "@opencode-ai/plugin"
 
 _SEMVER = re.compile(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)")
 _CONFIG_DIRS = ("~/.config/opencode", "/etc/opencode")
@@ -84,33 +93,6 @@ def _probe_dpkg() -> tuple[tuple[int, int, int] | None, str | None]:
 	return parse_version(out), (out.strip() if out and out.strip() else None)
 
 
-def config_is_v2(cfg: dict) -> bool:
-	"""Heuristic: does this config already use V2-only shapes?"""
-	if not isinstance(cfg, dict):
-		return False
-	if any(key in cfg for key in ("plugins", "permissions", "providers")):
-		return True
-	mcp = cfg.get("mcp")
-	return isinstance(mcp, dict) and "servers" in mcp
-
-
-def _probe_config(config_path: str | None) -> bool:
-	if not config_path or not os.path.isfile(config_path):
-		return False
-	try:
-		import sys
-
-		sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-		from _config_common import strip_jsonc_comments
-		from migrate_opencode_v2 import _strip_trailing_commas
-
-		raw = open(config_path, encoding="utf-8").read()
-		cfg = json.loads(_strip_trailing_commas(strip_jsonc_comments(raw)))
-	except Exception:
-		return False
-	return config_is_v2(cfg)
-
-
 def _config_dir_present() -> str | None:
 	for candidate in _CONFIG_DIRS:
 		expanded = os.path.expanduser(candidate)
@@ -119,8 +101,12 @@ def _config_dir_present() -> str | None:
 	return None
 
 
-def detect_info(config_path: str | None = None, binary: str = "opencode") -> OpenCodeInfo:
-	"""Probe the host and return the best-known OpenCode version."""
+def detect_info(binary: str = "opencode") -> OpenCodeInfo:
+	"""Probe the host and return the best-known OpenCode version.
+
+	``major`` is ``None`` when the version could not be established: callers must
+	treat that as an abort (``support_error``), not as a default tier.
+	"""
 	# 1. Explicit override.
 	env_version = parse_version(os.environ.get("REDPILL_OPENCODE_VERSION"))
 	env_major = os.environ.get("REDPILL_OPENCODE_MAJOR")
@@ -130,58 +116,68 @@ def detect_info(config_path: str | None = None, binary: str = "opencode") -> Ope
 		if env_version:
 			return OpenCodeInfo(True, env_version, ".".join(map(str, env_version)), env_version[0], "env")
 
-	# 2-3. CLI and desktop probes; highest major wins.
-	candidates: list[tuple[tuple[int, int, int], str]] = []
+	# 2-3. CLI and desktop probes. They must agree on the major: two different
+	# majors mean a transitional host (a v1 binary next to a v2 desktop) and
+	# picking the highest would be an assumption. Disagreement → undetermined.
 	cli_version, cli_raw = _probe_cli(binary)
-	if cli_version:
-		candidates.append((cli_version, "cli"))
 	dpkg_version, dpkg_raw = _probe_dpkg()
+	config_present = _config_dir_present()
+
+	if cli_version and dpkg_version and cli_version[0] != dpkg_version[0]:
+		logger.warning(
+			"OpenCode: la CLI dice v%s y el paquete .deb v%s; no se puede fijar la versión.",
+			cli_version[0],
+			dpkg_version[0],
+		)
+		return OpenCodeInfo(True, None, cli_raw or dpkg_raw, None, "conflict")
+
+	if cli_version:
+		return OpenCodeInfo(True, cli_version, cli_raw, cli_version[0], "cli")
 	if dpkg_version:
-		candidates.append((dpkg_version, "dpkg"))
+		return OpenCodeInfo(True, dpkg_version, dpkg_raw, dpkg_version[0], "dpkg")
 
-	installed = _config_dir_present() is not None or bool(candidates)
-
-	if candidates:
-		version, source = max(candidates, key=lambda item: item[0])
-		raw = cli_raw if source == "cli" else dpkg_raw
-		return OpenCodeInfo(True, version, raw, version[0], source)
-
-	# 4. Existing config shape.
-	if _probe_config(config_path):
-		return OpenCodeInfo(True, (2, 0, 0), "2.0.0 (config)", 2, "config")
-
-	if installed:
-		logger.warning("OpenCode installed but its version could not be detected; defaulting to V1 seeds.")
-		return OpenCodeInfo(True, None, None, 1, "default")
-
-	return OpenCodeInfo(False, None, None, None, "none")
+	installed = config_present is not None
+	return OpenCodeInfo(installed, None, None, None, "none" if not installed else "undetected")
 
 
-def select_config_seed(seeds_root: str, major: int | None) -> str | None:
-	"""Resolve the versioned config seed.
+def support_error(info: OpenCodeInfo) -> str | None:
+	"""``None`` si la instalación es sembrable; mensaje de aborto si no.
 
-	Supports both layouts so new versions need no code change:
-	``settings/v{major}/opencode.jsonc``, ``settings/opencode.v{major}.jsonc``,
-	then the flat legacy ``settings/opencode.jsonc``.
+	Único punto de verdad del contrato: instaladores, `precheck` de inject_cli y
+	los injectores deciden con esto, así que el mensaje al usuario no diverge.
 	"""
-	settings = os.path.join(seeds_root, "settings")
-	if major is not None:
-		candidates = [
-			os.path.join(settings, f"v{major}", "opencode.jsonc"),
-			os.path.join(settings, f"opencode.v{major}.jsonc"),
-		]
-		for candidate in candidates:
-			if os.path.isfile(candidate):
-				return candidate
-	flat = os.path.join(settings, "opencode.jsonc")
-	return flat if os.path.isfile(flat) else None
+	if not info.installed:
+		return None  # No hay OpenCode: no hay nada que sembrar (el caller lo omite).
+	if info.major is None:
+		return (
+			"No se ha podido determinar la versión de OpenCode instalada "
+			f"(detección: {info}). Red Pill sólo siembra OpenCode v2 y no se asume "
+			"compatibilidad con versiones desconocidas. Comprueba qué binario se está "
+			"usando (`which -a opencode` y `opencode --version`), o fija la versión "
+			"explícitamente con REDPILL_OPENCODE_VERSION. Nada se ha modificado."
+		)
+	if info.major < SUPPORTED_MAJOR:
+		return (
+			f"OpenCode {info} detectado. Red Pill ya NO es compatible con OpenCode v1: "
+			"v1 sólo se facilita como MIGRACIÓN de una config existente, nunca se "
+			f"siembra sobre él. Actualiza a v2 ({INSTALL_URL}) y vuelve a ejecutar; "
+			f"si quieres conservar tu config, migra primero con `{MIGRATE_HINT}`. "
+			"Nada se ha modificado."
+		)
+	if info.major > SUPPORTED_MAJOR:
+		return (
+			f"OpenCode {info} detectado. Red Pill sólo está validado con OpenCode v2: "
+			"una versión mayor nueva no se asume compatible y necesita su propia "
+			"verificación antes de resembrar. Usa OpenCode v2 o retira OpenCode de "
+			"esta máquina. Nada se ha modificado."
+		)
+	return None
 
 
-def needs_v1_plugin_pin(major: int | None) -> bool:
-	"""V1 plugins import ``@opencode-ai/plugin``; V2 plugins do not need it."""
-	return (major or 1) < 2
+def select_config_seed(seeds_root: str) -> str | None:
+	"""Ruta del seed de config de OpenCode v2 (``settings/v2/opencode.jsonc``).
 
-
-def requires_config_migration(major: int | None) -> bool:
-	"""V2 must not inherit V1 ``plugin``/``mcp.<name>``/``permission`` keys."""
-	return (major or 1) >= 2
+	Sin layouts heredados: sólo existe el seed de la versión soportada.
+	"""
+	candidate = os.path.join(seeds_root, "settings", f"v{SUPPORTED_MAJOR}", "opencode.jsonc")
+	return candidate if os.path.isfile(candidate) else None

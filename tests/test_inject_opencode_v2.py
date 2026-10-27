@@ -84,9 +84,16 @@ def test_v2_seed_migrates_v1_config(inject_mod, monkeypatch, tmp_path) -> None:
 	assert "permissions:" in agent.read_text() and "effect: deny" in agent.read_text()
 
 
-def test_v1_is_rejected(inject_mod, monkeypatch, tmp_path) -> None:
-	with pytest.raises(RuntimeError, match="soporta OpenCode v1"):
+def test_v1_is_rejected_only_migratable(inject_mod, monkeypatch, tmp_path) -> None:
+	"""v1 no se siembra: el mensaje lo dice y remite a la migración."""
+	with pytest.raises(RuntimeError, match="sólo se facilita como MIGRACIÓN"):
 		_run(inject_mod, monkeypatch, tmp_path, 1, {"model": "x/y"})
+
+
+def test_v3_is_rejected(inject_mod, monkeypatch, tmp_path) -> None:
+	"""Una v3 futura no se asume compatible: aborta en vez de sembrar."""
+	with pytest.raises(RuntimeError, match="no se asume compatible"):
+		_run(inject_mod, monkeypatch, tmp_path, 3, {"model": "x/y"})
 
 
 def test_precheck_requires_v2(monkeypatch) -> None:
@@ -104,6 +111,32 @@ def test_precheck_requires_v2(monkeypatch) -> None:
 	monkeypatch.setattr(detect, "info", lambda workspace=None: _Info())
 	ok, message = detect.precheck()
 	assert ok is False and "Actualiza a v2" in message
+
+
+@pytest.mark.parametrize(
+	"installed,major,ok_expected,needle",
+	[
+		# No instalado → nada que sembrar, no es un error.
+		(False, None, True, ""),
+		# La única versión sembrable.
+		(True, 2, True, ""),
+		# v1: sólo migración, nunca siembra.
+		(True, 1, False, "MIGRACIÓN"),
+		# v3+ no se asume compatible (no hay verificación).
+		(True, 3, False, "no se asume compatible"),
+		# Versión indeterminable: abortar, nunca caer a un tier por defecto.
+		(True, None, False, "No se ha podido determinar la versión"),
+	],
+)
+def test_precheck_contrato_de_version(monkeypatch, installed, major, ok_expected, needle) -> None:
+	detect = _load("opencode_detect_under_test2", os.path.join(REPO_ROOT, "scripts", "inject", "opencode", "detect.py"))
+	ov = _load("opencode_version_for_precheck", VERSION_PATH)
+	info = ov.OpenCodeInfo(installed, None, None, major, "test")
+	monkeypatch.setattr(detect, "info", lambda workspace=None: info)
+	ok, message = detect.precheck()
+	assert ok is ok_expected, message
+	if needle:
+		assert needle in message
 
 
 def test_seed_agents_are_v2_native() -> None:
