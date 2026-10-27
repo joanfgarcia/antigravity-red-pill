@@ -465,7 +465,7 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 ### 4.6 IDE Anchors & Global Rules Sync
 Each detected IDE's instruction file carries the agent's boot protocol via the sovereign anchors
 (e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop,
-`~/.config/opencode/RED_PILL.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
+`~/.config/opencode/AGENTS.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
 anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
 1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
     - **Rule 1 — The Sovereign Handshake**: Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).

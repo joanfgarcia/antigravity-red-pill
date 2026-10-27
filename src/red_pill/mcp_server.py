@@ -1801,6 +1801,56 @@ def _current_git_branch(workdir: Optional[str] = None) -> Optional[str]:
 	return _git_mirror(workdir).get("branch")
 
 
+def _resolve_workspace(
+	candidates: "list[str]", cwd: Optional[str] = None
+) -> "tuple[str, Optional[str], Dict[str, Optional[str]]]":
+	"""Workspace del agente → `(workspace, branch, mirror)`.
+
+	Los candidatos son lo que el arnés DECLARA (proxy → puente → env), en orden de
+	confianza. `cwd` es el del servidor MCP y NO es el workspace del agente: es el
+	checkout del kernel.
+
+	1. Gana el primer declarado que **es repo**. El puente es un fichero global
+	   (gana el último escritor) y ese escritor puede ser otra instancia abierta en
+	   una carpeta padre que no es repo; quedarse con él tiraba la misión a
+	   `mission:adhoc-<fecha>` aunque otro declarado apuntara al repo del agente.
+	2. Si ningún declarado es repo pero el `cwd` del servidor **desciende** de uno
+	   de ellos (la app abierta en `~` y el kernel en `~/…/sharing`), el repo es el
+	   del agente.
+	3. Si no, se respeta la precedencia declarada (o el `cwd` si no declaró nada) y
+	   se deja que la cascada F3 (`infer_session_git`) y el fallback adhoc actúen:
+	   nunca se atribuye al agente el repo del kernel "porque era el único repo".
+
+	Nunca lanza.
+	"""
+	base = os.path.abspath(os.path.expanduser(cwd or os.getcwd()))
+	declared, seen = [], set()
+	for cand in candidates or ():
+		if not cand:
+			continue
+		path = os.path.abspath(os.path.expanduser(str(cand)))
+		if path in seen:
+			continue
+		seen.add(path)
+		declared.append(path)
+
+	for path in declared:
+		mirror = _git_mirror(path)
+		if mirror.get("worktree"):
+			# `_current_git_branch` sigue siendo el seam de la rama (lo parchean
+			# tests y capas de arriba); `_git_mirror` decide "¿es repo?".
+			return path, _current_git_branch(path), mirror
+
+	descends = not declared or any(base == d or base.startswith(d + os.sep) for d in declared)
+	if descends:
+		mirror = _git_mirror(base)
+		if mirror.get("worktree"):
+			return base, _current_git_branch(base), mirror
+
+	fallback = declared[0] if declared else base
+	return fallback, _current_git_branch(fallback), _git_mirror(fallback)
+
+
 def _bridge_ttl_s() -> float:
 	"""TTL del bridge del harness (anti-stale); `REDPILL_BRIDGE_TTL_S` lo sobreescribe."""
 	try:
@@ -1906,10 +1956,22 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	else:
 		# Arnés sin hook (pi/antigravity): env → bridge → argumento.
 		originator = env_originator or bridge_originator or explicit_originator
-	# Workspace del agente (A2/`ws:`): bridge → env → cwd del proceso.
-	workspace = bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or os.getcwd()
+	# Workspace del agente (A2/`ws:`): proxy/bridge → env → cwd del proceso.
+	# El puente es UN fichero global (gana el último escritor) y ese escritor puede
+	# ser una instancia abierta en una carpeta padre que NO es repo (la app desktop
+	# arranca con cwd=`~`). Quedarse con ese valor tiraba la misión a `adhoc-<fecha>`
+	# y dejaba el leg sin `ws:` aunque otro candidato sí apuntara al repo del
+	# agente. Se resuelven TODOS y gana el primero que es repo, en orden de
+	# confianza; si ninguno lo es, se conserva la precedencia declarada.
+	candidates = []
 	if shared and str(shared.get("workdir") or "").strip():
-		workspace = str(shared["workdir"]).strip()
+		candidates.append(str(shared["workdir"]).strip())
+	candidates.extend(
+		[
+			str(bridge.get("workdir") or "").strip(),
+			str(os.getenv("REDPILL_WORKSPACE") or "").strip(),
+		]
+	)
 	# El alma NO se acepta del modelo: env de confianza (job/relay) → registro.
 	continuity_id = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip() or None
 	if shared and str(shared.get("continuity_id") or "").strip():
@@ -1934,8 +1996,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# Campaña: env (canal de confianza) → la ya atada al leg. Sin valor, no se infiere.
 	campaign_id = str(os.getenv("REDPILL_CAMPAIGN_ID") or "").strip() or (existing or {}).get("campaign_id")
 	# `git` bloquea ~0.8s: fuera del event loop (el handler MCP es async).
-	branch = await asyncio.to_thread(_current_git_branch, workspace)
-	mirror = await asyncio.to_thread(_git_mirror, workspace)
+	workspace, branch, mirror = await asyncio.to_thread(_resolve_workspace, candidates)
 	# F3: si el workspace no es un repo (p.ej. el IDE abierto en `~/Documents/IA`),
 	# la misión se resuelve por el repo que la sesión TOCA (P1b: rutas tocadas en
 	# opencode.db), no por el cwd del proceso. Solo opencode expone rutas tocadas.

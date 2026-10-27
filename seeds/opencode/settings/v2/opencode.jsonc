@@ -22,7 +22,6 @@
     }
   },
   "skills": ["~/.config/opencode/skills"],
-  "instructions": ["RED_PILL.md"],
   "permissions": [
     {
       "action": "external_directory",

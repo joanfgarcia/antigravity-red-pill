@@ -55,7 +55,7 @@ manifest, not `atlas:`, is the fleet map.
 
 1. **Identity & anchors** — the Sovereign Handshake + Agent_Core blocks are merged (never
    overwritten) into your IDE anchors (`~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`,
-   `~/.config/opencode/RED_PILL.md`, and Pi's `<workspace>/AGENTS.override.md`) via
+   `~/.config/opencode/AGENTS.md`, and Pi's `<workspace>/AGENTS.override.md`) via
    `inject_anchor.py`.
 2. **Transversal access** — Claude Code's `settings.json` gets `permissions.additionalDirectories`
    for Agent_Core + the red-pill XDG dirs (`~/.local/share`, `~/.config`, `~/.cache`), via
@@ -102,5 +102,12 @@ registry entirely.
 |------|------|
 | `~/.config/red-pill/workspaces.yaml` | the registry (source of truth; the `access` switch). |
 | `~/.claude/settings.json`            | Claude Code permissions (`.bak` on every change). |
-| `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.config/opencode/RED_PILL.md`, `<ws>/AGENTS.override.md` | IDE anchors (Sovereign Handshake + Agent_Core; Pi's override shadows `CLAUDE.md` for Pi only). |
+| `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.config/opencode/AGENTS.md`, `<ws>/AGENTS.override.md` | IDE anchors (Sovereign Handshake + Agent_Core; Pi's override shadows `CLAUDE.md` for Pi only). |
 | `examples/workspaces.yaml`           | the seeded template. |
+
+> **OpenCode V2 anchors live in `AGENTS.md`.** V2 loads natively, in **any**
+> workspace, the global `~/.config/opencode/AGENTS.md` plus every `AGENTS.md`
+> from the workspace up the tree. Any other file only enters through the
+> `instructions` config key, and a **relative** path there is resolved from the
+> workspace — so it is silently skipped outside the config directory. That is
+> why the OpenCode anchor is `AGENTS.md` and `instructions` stays free of it.

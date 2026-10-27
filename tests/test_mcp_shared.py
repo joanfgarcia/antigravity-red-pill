@@ -54,6 +54,46 @@ def test_identity_payload_reads_opencode_bridge(tmp_path, monkeypatch):
 	assert payload["workdir"] == "/ws/oc"
 
 
+def _git_repo(path: Path, branch: str) -> Path:
+	"""Repo git de verdad en `path` (los tests de identidad usan `git` real)."""
+	path.mkdir(parents=True, exist_ok=True)
+	subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True, capture_output=True)
+	for k, v in (("user.email", "t@t"), ("user.name", "t")):
+		subprocess.run(["git", "-C", str(path), "config", k, v], check=True, capture_output=True)
+	(path / "a.txt").write_text("x", encoding="utf-8")
+	subprocess.run(["git", "-C", str(path), "add", "."], check=True, capture_output=True)
+	subprocess.run(["git", "-C", str(path), "commit", "-qm", "init"], check=True, capture_output=True)
+	return path
+
+
+def test_resolve_workspace_salta_candidato_fuera_de_repo(tmp_path):
+	"""El puente es un fichero global: si el último escritor estaba en una carpeta
+	padre sin repo (app desktop con cwd=~), el handshake caía a `mission:adhoc-*`
+	y el leg se quedaba sin `ws:` aunque el repo estuviera más abajo en la lista.
+	(Regresión 2026-10-27: sesiones opencode en adhoc tras la migración a V2.)
+	"""
+	from red_pill.mcp_server import _resolve_workspace
+
+	parent = tmp_path / "papers"  # no es repo
+	parent.mkdir()
+	repo = _git_repo(tmp_path / "sharing", "next")
+	workspace, branch, mirror = _resolve_workspace([str(parent), str(repo)])
+	assert workspace == str(repo)
+	assert branch == "next"
+	assert mirror["worktree"] == str(repo)
+
+
+def test_resolve_workspace_sin_repo_conserva_precedencia(tmp_path):
+	from red_pill.mcp_server import _resolve_workspace
+
+	parent = tmp_path / "papers"
+	parent.mkdir()
+	workspace, branch, mirror = _resolve_workspace([str(parent), ""])
+	assert workspace == str(parent)
+	assert branch is None
+	assert mirror.get("worktree") is None
+
+
 def test_default_socket_prefers_runtime(monkeypatch):
 	monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 	assert default_socket() == "/run/user/1000/red-pill/mcp.sock"
@@ -134,3 +174,30 @@ def test_shared_backend_two_sessions(tmp_path):
 async def _run_both(sock: str, base: Path) -> dict:
 	a, b = await asyncio.gather(_session(sock, "a", base), _session(sock, "b", base))
 	return {"a": a, "b": b}
+
+
+def test_resolve_workspace_no_atribuye_el_repo_del_kernel(tmp_path):
+	"""Una sesión en una carpeta que no es repo NO debe heredar el checkout del
+	kernel (el `cwd` del servidor MCP) sólo porque sea el único repo a mano: eso
+	etiquetaría como `repo:<rama-del-kernel>` a quien trabaja en cualquier otro
+	sitio. Sin repo declarado → adhoc (honesto)."""
+	from red_pill.mcp_server import _resolve_workspace
+
+	kernel = _git_repo(tmp_path / "sharing", "next")
+	ajena = tmp_path / "notas"
+	ajena.mkdir()
+	workspace, branch, _ = _resolve_workspace([str(ajena)], cwd=str(kernel))
+	assert workspace == str(ajena)
+	assert branch is None
+
+
+def test_resolve_workspace_desciende_al_repo_cuando_el_padre_lo_contiene(tmp_path):
+	"""El caso real de la app desktop: el puente declara `~` (no es repo) y el
+	kernel vive debajo. Ahí sí el repo del agente es el del cwd."""
+	from red_pill.mcp_server import _resolve_workspace
+
+	home = tmp_path / "home"
+	repo = _git_repo(home / "Documents" / "sharing", "next")
+	workspace, branch, _ = _resolve_workspace([str(home)], cwd=str(repo))
+	assert workspace == str(repo)
+	assert branch == "next"

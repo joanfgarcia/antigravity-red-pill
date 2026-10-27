@@ -130,6 +130,39 @@ def strip_jsonc_comments(text):
 	return _JSONC_TOKEN.sub(_repl, text)
 
 
+def scrub_legacy_instructions(cfg):
+	"""Quita de ``instructions`` las entradas que apuntan al viejo ``RED_PILL.md``.
+
+	OpenCode V2 carga ``AGENTS.md`` de forma nativa en **cualquier** workspace
+	(global ``~/.config/opencode/AGENTS.md`` + los del árbol). ``RED_PILL.md`` sólo
+	entraba por ``instructions`` y, al ser una ruta relativa, se resolvía desde el
+	workspace hacia arriba: fuera del directorio del config no se encontraba y
+	OpenCode la ignoraba **en silencio** (regresión 2026-10-27: el handshake
+	obligatorio desapareció del contexto tras la migración a V2).
+
+	Deja intactas las entradas ajenas (urls, globs, otros ficheros) y elimina la
+	clave si se queda vacía. Devuelve ``True`` si tocó algo. Idempotente: converge
+	instalaciones que ya tenían la entrada muerta.
+	"""
+	if not isinstance(cfg, dict):
+		return False
+	entries = cfg.get("instructions")
+	if not isinstance(entries, list):
+		return False
+	kept = [
+		e
+		for e in entries
+		if not (isinstance(e, str) and os.path.basename(e.strip()) == "RED_PILL.md")
+	]
+	if kept == entries:
+		return False
+	if kept:
+		cfg["instructions"] = kept
+	else:
+		cfg.pop("instructions", None)
+	return True
+
+
 def merge_permissions(base, overlay):
 	"""Merge V2 permission rules preserving last-match-wins semantics.
 

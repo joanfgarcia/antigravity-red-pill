@@ -2,7 +2,7 @@
 
 Sibling of ``inject_mcp.py`` / ``inject_anchor.py``. Handles the three layers
 opencode consolidates into a single ``opencode.jsonc``: MCP server entry,
-permissions (external_directory), and references. Also deploys the RED_PILL.md
+permissions (external_directory), and references. Also deploys the instructions file (AGENTS.md)
 instructions file and opencode-specific skills.
 
 Guiding principle: red-pill is a GUEST, never the owner. Every write preserves
@@ -28,7 +28,7 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, merge_permissions, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, merge_permissions, scrub_legacy_instructions, strip_jsonc_comments, subst  # noqa: E402
 from migrate_opencode_v2 import migrate_file  # noqa: E402
 from opencode_version import detect_info, needs_v1_plugin_pin, select_config_seed  # noqa: E402
 
@@ -85,6 +85,8 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 	# Snapshot before merge to detect actual changes (deep_merge mutates base)
 	existing_snapshot = json.loads(json.dumps(existing))
 	merged = _deep_merge(existing, template)
+	if scrub_legacy_instructions(merged):
+		logger.info("instructions: entrada legacy a RED_PILL.md retirada (V2 carga AGENTS.md nativo)")
 
 	if merged == existing_snapshot and existing_snapshot:
 		logger.info(f"• {config_path}: sin cambios (ya presente)")
@@ -101,7 +103,7 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 	return True
 
 
-# ── Instructions file (RED_PILL.md) ──────────────────────────────────────────
+# ── Instructions file (opencode: AGENTS.md) ─────────────────────────────────
 # Reuse the anchor splice logic from inject_anchor.py for versioned blocks.
 # Block versions too: single source in inject_anchor.BLOCK_VERSION (a local copy
 # drifted and kept re-splicing RED_PILL.md with stale `v=` markers).
@@ -109,6 +111,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inject_anchor import (  # noqa: E402
 	BLOCK_ANCHORS,
 	BLOCK_VERSION,
+	OPENCODE_INSTRUCTIONS_FILE,
 	ide_call_vars,
 	ide_seed_path,
 	remove_block,
@@ -121,8 +124,38 @@ def _read_seed(seed_path: str) -> str:
 		return f.read()
 
 
+def _retire_legacy_instructions_file(config_dir: str, backup: bool) -> bool:
+	"""Retira el viejo `RED_PILL.md` del dir de config si sólo tiene nuestros bloques.
+
+	V2 ya no lee ese fichero: las instrucciones viven en `AGENTS.md`. Se respeta si
+	el operador dejó contenido propio fuera de los marcadores REDPILL:BEGIN/END.
+	"""
+	path = os.path.join(config_dir, "RED_PILL.md")
+	if not os.path.exists(path):
+		return False
+	try:
+		with open(path, encoding="utf-8") as f:
+			text = f.read()
+	except OSError:
+		return False
+	rest = re.sub(
+		r"<!-- REDPILL:BEGIN [^>]*-->.*?<!-- REDPILL:END [^>]*-->", "", text, flags=re.DOTALL
+	).strip()
+	if rest:
+		logger.info("RED_PILL.md conservado: tiene contenido propio fuera de los bloques")
+		return False
+	if backup:
+		shutil.copy2(path, path + ".bak")
+	os.remove(path)
+	logger.info("RED_PILL.md legacy retirado (V2 carga AGENTS.md)")
+	return True
+
+
 def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool = True, update: bool = False) -> int:
-	"""Write RED_PILL.md with versioned anchor blocks. Returns count of changed blocks."""
+	"""Write the harness instructions file (opencode: AGENTS.md) with versioned anchor blocks.
+
+	Returns count of changed blocks.
+	"""
 	# Canonical roster from inject_anchor (never a local list: it drifted before).
 	anchor_names = list(BLOCK_ANCHORS)
 	changed = 0
@@ -456,8 +489,8 @@ def main():
 
 	# ── Remove mode ────────────────────────────────────────────────────────
 	if args.remove:
-		# Remove RED_PILL.md anchor blocks
-		instructions_path = os.path.join(config_dir, "RED_PILL.md")
+		# Remove the instructions-file anchor blocks
+		instructions_path = os.path.join(config_dir, OPENCODE_INSTRUCTIONS_FILE)
 		if os.path.exists(instructions_path):
 			for anchor in BLOCK_ANCHORS:
 				status = remove_block(instructions_path, anchor, backup=backup)
@@ -530,8 +563,8 @@ def main():
 		template = json.loads(resolved)
 		merge_opencode_config(config_dest, template, backup=backup)
 
-	# ── 2. Write instructions (RED_PILL.md) ────────────────────────────────
-	instructions_path = os.path.join(config_dir, "RED_PILL.md")
+	# ── 2. Write instructions (AGENTS.md) ──────────────────────────────────
+	instructions_path = os.path.join(config_dir, OPENCODE_INSTRUCTIONS_FILE)
 	instructions_seeds = os.path.join(opencode_seeds, "instructions")
 
 	# Also check the consolidated seed and individual anchor seeds
@@ -542,6 +575,8 @@ def main():
 	else:
 		# Fallback to consolidated instruction seed
 		write_instructions(instructions_path, instructions_seeds, variables, backup=backup, update=args.update)
+
+	_retire_legacy_instructions_file(config_dir, backup)
 
 	# ── 3. Deploy skills ───────────────────────────────────────────────────
 	skills_src = os.path.join(opencode_seeds, "skills")
