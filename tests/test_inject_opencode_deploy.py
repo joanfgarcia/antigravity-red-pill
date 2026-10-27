@@ -457,3 +457,38 @@ def test_remove_es_idempotente(adapter, tmp_path) -> None:
 	_inject(adapter, tmp_path)
 	_inject(adapter, tmp_path, remove=True)
 	assert _inject(adapter, tmp_path, remove=True) == 0
+
+
+# ── Siembra: sin seed V1 y fallo ruidoso si falta un anchor ───────────────────
+def test_no_queda_seed_v1_consolidado() -> None:
+	"""Regresión 2026-10-27: `seeds/opencode/instructions/RED_PILL.md` sobrevivió a
+	la migración V2 y mandaba llamar `swarm_orchestrator_api → interceptor_rp` en
+	vez de `sovereign_handshake`. Sembrarlo dejaba al agente sin la regla real del
+	turno (y sin identidad). Los anchors son la única fuente."""
+	import os
+
+	legacy = os.path.join(REPO_ROOT, "seeds", "opencode", "instructions", "RED_PILL.md")
+	assert not os.path.exists(legacy), "el seed V1 consolidado no debe volver al árbol"
+	anchors = os.path.join(REPO_ROOT, "seeds", "anchors")
+	assert os.path.isdir(anchors) and os.listdir(anchors), "faltan los anchors canónicos"
+
+
+def test_falta_un_anchor_aborta_en_vez_de_sembrar_viejo(adapter, tmp_path) -> None:
+	"""Un anchor ausente es un árbol incompleto: antes se avisaba y se seguía
+	sembrando (o se caía al RED_PILL.md V1). Ahora debe abortar."""
+	import shutil
+
+	seeds = tmp_path / "anchors_parciales"
+	shutil.copytree(os.path.join(REPO_ROOT, "seeds", "anchors"), seeds)
+	(seeds / "sovereign_handshake.md").unlink()
+
+	import argparse
+
+	adapter._detect_config_dir = lambda: str(tmp_path)  # noqa: E731
+	args = argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False)
+	# `inject()` usa seeds/anchors del repo; se invoca la escritura directa para
+	# probar el contrato del inyector con un árbol incompleto.
+	with pytest.raises(RuntimeError, match="Siembra incompleta"):
+		adapter._write_instructions(
+			str(tmp_path / "AGENTS.md"), str(seeds), {}, backup=False, update=False
+		)

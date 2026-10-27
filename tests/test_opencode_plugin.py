@@ -157,9 +157,9 @@ await plugin.setup(ctx);
 const fire = async (hooks, name, event) => {
   for (const cb of hooks[name] || []) await cb(event);
 };
-const tryTool = async (sessionID, tool) => {
+const tryTool = async (sessionID, tool, input = {}) => {
   try {
-    await fire(toolHooks, "execute.before", { sessionID, tool, input: {} });
+    await fire(toolHooks, "execute.before", { sessionID, tool, input });
     return { status: "allowed", message: "" };
   } catch (e) {
     return { status: "refused", message: String(e.message) };
@@ -178,6 +178,15 @@ result.reminderBefore = (await reminders("s1")).length;
 result.nonHandshakeBefore = await tryTool("s1", "RedPill-Kernel_check_parallel_sessions");
 // 1b) Code Mode: `execute` (gateway) nunca se niega, porque el handshake puede ir dentro.
 result.gateway = await tryTool("s1", "execute");
+// 1c) Code Mode con el handshake DENTRO de `execute`: acredita el turno y la
+// siguiente tool real pasa (antes se rechazaba: el gateway iba exento pero sin
+// acreditar, y el IDE mostraba un ✗ tras un handshake correcto).
+await fire(sessionHooks, "prompt", { sessionID: "s3", prompt: { text: "code mode" } });
+result.gatewayCarriesHandshake = await tryTool("s3", "execute", {
+  code: 'await tools["RedPill-Kernel"].sovereign_handshake({ user_prompt: "x" })',
+});
+result.nonHandshakeAfterGateway = await tryTool("s3", "RedPill-Kernel_check_parallel_sessions");
+result.reminderAfterGateway = (await reminders("s3")).length;
 // 2) handshake: pasa y desbloquea el turno.
 result.handshake = await tryTool("s1", "RedPill-Kernel_sovereign_handshake");
 result.reminderAfter = (await reminders("s1")).length;
@@ -217,6 +226,12 @@ def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 	# Code Mode envuelve el handshake: el gateway `execute` no se gatea (si no,
 	# el propio handshake quedaría inalcanzable).
 	assert out["gateway"]["status"] == "allowed"
+	# Code Mode: el handshake dentro de `execute` acredita el turno.
+	assert out["gatewayCarriesHandshake"]["status"] == "allowed"
+	assert out["nonHandshakeAfterGateway"]["status"] == "allowed", (
+		"el handshake dentro de execute debe acreditar el turno (evita el ✗ tras un handshake correcto)"
+	)
+	assert out["reminderAfterGateway"] == 0
 	assert "HANDSHAKE REQUIRED" in out["nonHandshakeBefore"]["message"]
 	assert out["handshake"]["status"] == "allowed"
 	assert out["reminderAfter"] == 0, "tras el handshake no debe repetirse el recordatorio"

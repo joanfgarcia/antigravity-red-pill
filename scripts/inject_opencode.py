@@ -172,35 +172,23 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 	# Without this the raw `${RELAY_*}` placeholders shipped verbatim into RED_PILL.md.
 	ide_vars = {**variables, **ide_call_vars("opencode")}
 
+	# Sin fallback al viejo `instructions/RED_PILL.md` (V1): ese seed mandaba llamar
+	# `swarm_orchestrator_api → interceptor_rp` en vez de `sovereign_handshake`, así
+	# que sembrarlo dejaba al agente sin la regla real del turno. Un anchor que falte
+	# es un árbol incompleto: se aborta en vez de sembrar texto viejo en silencio.
+	missing = [
+		ide_seed_path(seeds_dir, "opencode", anchor)
+		for anchor in anchor_names
+		if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
+	]
+	if missing:
+		raise RuntimeError(
+			"Siembra incompleta: faltan seeds de anchor para " + ", ".join(os.path.basename(p) for p in missing)
+		)
+
 	for anchor in anchor_names:
 		# Per-IDE seed override (seeds/opencode/anchors/<anchor>.md) wins; else generic.
 		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
-		if not os.path.exists(seed_path):
-			# Fallback: try the consolidated RED_PILL.md seed
-			seed_path = os.path.join(seeds_dir, "..", "instructions", "RED_PILL.md")
-			if os.path.exists(seed_path):
-				# For consolidated seed, extract the individual block
-				raw = _read_seed(seed_path)
-				# Extract block between markers
-				pattern = re.compile(
-					r"<!-- REDPILL:BEGIN %s(?: v=\d+)? -->.*?<!-- REDPILL:END %s -->" % (re.escape(anchor), re.escape(anchor)),
-					re.DOTALL,
-				)
-				m = pattern.search(raw)
-				if m:
-					# Extract just the body (between markers)
-					block_text = m.group(0)
-					body_start = block_text.find("\n") + 1
-					body_end = block_text.rfind("\n")
-					body = subst(block_text[body_start:body_end].strip(), ide_vars)
-					status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
-					if status not in ("unchanged",):
-						changed += 1
-					logger.info(f"✓ opencode:{anchor} [{instructions_path}] → {status}")
-				continue
-			logger.warning(f"Seed not found for anchor '{anchor}': {seed_path}")
-			continue
-
 		raw = _read_seed(seed_path)
 		body = subst(raw, ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)

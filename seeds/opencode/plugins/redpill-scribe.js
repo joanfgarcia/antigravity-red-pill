@@ -545,6 +545,17 @@ export default {
     // recordatorio por `context` sigue llegando en cada petición, y las tools
     // reales de trabajo (shell/edit/write/read/task) sí quedan gateadas.
     const GATEWAY_TOOLS = new Set(["execute"]);
+    // Si el handshake viaja DENTRO de `execute` (Code Mode), el turno ya cumplió.
+    // Sin esto el gateway quedaba exento pero sin acreditar y la siguiente tool
+    // real se rechazaba (✗ "HANDSHAKE REQUIRED" visible en el IDE tras un
+    // handshake correcto).
+    const mentionsHandshake = (payload) => {
+      try {
+        return /sovereign_handshake/i.test(JSON.stringify(payload ?? ""));
+      } catch (_) {
+        return false;
+      }
+    };
 
     await ctx.session.hook("prompt", (event) => {
       const sid = turnSid(event);
@@ -562,12 +573,17 @@ export default {
     if (typeof ctx?.tool?.hook === "function") {
       await ctx.tool.hook("execute.before", (event) => {
         const sid = turnSid(event);
+        const toolName = String(event?.tool || "").toLowerCase();
         if (isHandshakeTool(event?.tool)) {
           turnHandshake.set(sid, true);
           return;
         }
+        if (GATEWAY_TOOLS.has(toolName) && mentionsHandshake(event?.input ?? event?.args)) {
+          turnHandshake.set(sid, true);
+          return;
+        }
         if (!HANDSHAKE_GATE || childSessions.has(sid) || turnHandshake.get(sid) === true) return;
-        if (GATEWAY_TOOLS.has(String(event?.tool || "").toLowerCase())) return;
+        if (GATEWAY_TOOLS.has(toolName)) return;
         const refusals = turnRefusals.get(sid) || 0;
         if (refusals >= MAX_REFUSALS) return; // kernel caído o nombre distinto: no bloquear para siempre
         turnRefusals.set(sid, refusals + 1);

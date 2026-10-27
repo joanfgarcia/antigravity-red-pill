@@ -131,13 +131,23 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	# Sin esto los `${RELAY_*}` del seed llegaban literales al fichero de instrucciones.
 	ide_vars = {**variables, **ide_call_vars("opencode")}
 
+	# Sin fallback al viejo `instructions/RED_PILL.md` (V1): sembraba la llamada
+	# errónea (`swarm_orchestrator_api → interceptor_rp`) en vez del handshake real.
+	# Un anchor ausente es un árbol incompleto: abortar, no sembrar texto viejo.
+	missing = [
+		ide_seed_path(seeds_dir, "opencode", anchor)
+		for anchor in BLOCK_ANCHORS
+		if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
+	]
+	if missing:
+		raise RuntimeError(
+			"  Siembra incompleta: faltan seeds de anchor: " + ", ".join(os.path.basename(p) for p in missing)
+		)
+
 	changed = 0
 	for anchor in BLOCK_ANCHORS:
 		# Override per-IDE (seeds/opencode/anchors/<anchor>.md) si existe; si no, genérico.
 		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
-		if not os.path.exists(seed_path):
-			logger.warning(f"Seed not found: {seed_path}")
-			continue
 		body = subst(_read_seed(seed_path), ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
