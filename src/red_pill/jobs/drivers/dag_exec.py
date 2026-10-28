@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
@@ -233,6 +234,56 @@ class DagExecMixin:
 		except Exception as e:
 			logger.warning(f"[DagJob] no se pudo soltar el claim de '{stage_path}': {e}")
 
+	@staticmethod
+	def _renew_interval(ttl_seconds: int) -> float:
+		"""Cada cuánto late la renovación: un tercio del TTL, con suelo de 5 s.
+
+		Un tercio deja dos oportunidades de renovar antes de que expire: un fallo
+		puntual de la BD no cuesta el claim. El suelo evita martillear con TTLs
+		cortos (tests, etapas pequeñas).
+		"""
+		try:
+			ttl = int(ttl_seconds) or 0
+		except Exception:
+			ttl = 0
+		if ttl <= 0:
+			from red_pill.session.stage_claims import DEFAULT_TTL_S
+
+			ttl = DEFAULT_TTL_S
+		return max(5.0, ttl / 3.0)
+
+	def _start_claim_renewer(self, payload: Dict[str, Any], stage_path: str, workdir: str) -> Optional[threading.Event]:
+		"""Arranca el latido de renovación (D9-a). Devuelve el evento de parada.
+
+		El hilo es daemon y no bloquea: si el proceso muere, el claim caduca solo
+		por TTL, que es exactamente la red de seguridad que queremos.
+		"""
+		params = self._claim_params(payload, workdir, stage_path)
+		if params is None:
+			return None
+		from red_pill.session.stage_claims import DEFAULT_TTL_S, renew_claim
+
+		try:
+			ttl = int(params.get("ttl_seconds") or DEFAULT_TTL_S)
+		except Exception:
+			ttl = DEFAULT_TTL_S
+		stop = threading.Event()
+		interval = self._renew_interval(ttl)
+
+		def _beat() -> None:
+			while not stop.wait(interval):
+				try:
+					if not renew_claim(**params):
+						# El claim ya no es nuestro o expiró: otro pudo robarlo. La
+						# etapa sigue (tirarla sería peor que el posible solape), pero
+						# queda registrado: es la señal de que el TTL se quedó corto.
+						logger.warning(f"[DagJob] el claim de '{stage_path}' no se pudo renovar (expirado o robado); la etapa continúa")
+				except Exception as e:
+					logger.warning(f"[DagJob] renovación del claim de '{stage_path}' falló: {e}")
+
+		threading.Thread(target=_beat, name=f"claim-renew-{stage_path[-24:]}", daemon=True).start()
+		return stop
+
 	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
 	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any = None) -> str:
 		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
@@ -271,12 +322,22 @@ class DagExecMixin:
 				f"etapa '{stage_path}' reclamada por otra alma ({claim.owner or 'desconocida'}, {claim.reason}); "
 				"se reintenta cuando expire el claim"
 			)
+		renewer: Optional[threading.Event] = None
 		try:
+			if claim is not None and claim.claimed:
+				# Fase 4 (E4, D9-a): latido que renueva el claim mientras la etapa
+				# corre. Sin esto, una etapa de más de `ttl` pierde el claim a mitad
+				# y otro driver la roba mientras sigue en vuelo — dos ejecutando lo
+				# mismo. Es un latido PROPIO y no un hook de checkpoint: las etapas
+				# atómicas pueden no emitir checkpoints intermedios, así que atar la
+				# renovación a ellos no cubriría justo los casos largos.
+				renewer = self._start_claim_renewer(payload, stage_path, str(workdir))
 			return self._run_atomic_inner(payload, stage, stage_path, gate, workdir)
 		finally:
+			if renewer is not None:
+				renewer.set()  # para el latido antes de soltar (evita renovar lo liberado)
 			if claim is not None and claim.claimed:
-				# Se suelta al terminar (o al diferir/pausar). Una etapa LARGA se
-				# renueva por checkpoint (E4); el TTL no pretende cubrir horas.
+				# Se suelta al terminar (o al diferir/pausar).
 				self._release_stage_claim(payload, stage_path, str(workdir))
 
 	def _run_atomic_inner(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any, workdir: Any) -> str:

@@ -132,3 +132,68 @@ class TestClaimParams:
 		driver = _StubDriver()
 		params = driver._claim_params(dict(_PAYLOAD, claim_ttl_s=600), "/ws", "x")
 		assert params.get("ttl_seconds") == 600
+
+
+class TestRenovacionPorLatido:
+	"""F4-E4 (D9-a): el claim se renueva mientras la etapa corre.
+
+	Sin latido, una etapa de más de `ttl` pierde el claim a mitad y otro driver
+	la roba **mientras sigue en vuelo**: dos ejecutando lo mismo. Atarlo a un
+	checkpoint no basta — las etapas atómicas pueden no emitir ninguno.
+	"""
+
+	def test_el_intervalo_es_un_tercio_del_ttl_con_suelo(self):
+		assert _StubDriver._renew_interval(1800) == 600.0
+		assert _StubDriver._renew_interval(60) == 20.0
+		assert _StubDriver._renew_interval(6) == 5.0, "el suelo evita martillear con TTLs cortos"
+		assert _StubDriver._renew_interval(0) > 0, "un TTL 0 cae al default, no a un bucle"
+
+	def test_el_latido_renueva_y_para_al_soltar(self):
+		"""El hilo debe renovar durante la etapa y detenerse ANTES del release."""
+		import time as _t
+
+		driver = _StubDriver()
+		eventos = []
+		with patch.object(_StubDriver, "_renew_interval", return_value=0.02), patch(
+			"red_pill.session.stage_claims.try_claim_stage", return_value=ClaimResult(True, "alma-a", "acquired")
+		), patch(
+			"red_pill.session.stage_claims.renew_claim",
+			side_effect=lambda **k: eventos.append("renew") or True,
+		), patch(
+			"red_pill.session.stage_claims.release_claim",
+			side_effect=lambda **k: eventos.append("release") or True,
+		), patch.object(
+			_StubDriver, "_run_atomic_inner", side_effect=lambda *a, **k: _t.sleep(0.12) or "ok"
+		):
+			driver._run_atomic(_PAYLOAD, _STAGE, "dag:m/stage:x")
+
+		assert eventos.count("renew") >= 2, f"esperaba varios latidos, hubo {eventos.count('renew')}"
+		assert eventos[-1] == "release", "el último evento debe ser el release"
+		# Y el latido no puede seguir renovando DESPUÉS del release.
+		n = eventos.count("renew")
+		_t.sleep(0.06)
+		assert eventos.count("renew") == n, "el latido siguió vivo tras soltar el claim"
+
+	def test_sin_claim_ganado_no_hay_latido(self):
+		driver = _StubDriver()
+		renovado = []
+		with patch.object(_StubDriver, "_renew_interval", return_value=0.01), patch(
+			"red_pill.session.stage_claims.try_claim_stage", return_value=ClaimResult(False, "alma-b", "held_by_other")
+		), patch("red_pill.session.stage_claims.renew_claim", side_effect=lambda **k: renovado.append(1) or True):
+			with pytest.raises(JobDeferred):
+				driver._run_atomic(_PAYLOAD, _STAGE, "dag:m/stage:x")
+		assert renovado == []
+
+	def test_una_renovacion_fallida_no_tira_la_etapa(self):
+		"""Si el claim expira, la etapa continúa: tirar el trabajo sería peor."""
+		import time as _t
+
+		driver = _StubDriver()
+		with patch.object(_StubDriver, "_renew_interval", return_value=0.01), patch(
+			"red_pill.session.stage_claims.try_claim_stage", return_value=ClaimResult(True, "alma-a", "acquired")
+		), patch("red_pill.session.stage_claims.renew_claim", return_value=False), patch(
+			"red_pill.session.stage_claims.release_claim", return_value=True
+		), patch.object(
+			_StubDriver, "_run_atomic_inner", side_effect=lambda *a, **k: _t.sleep(0.05) or "ok"
+		):
+			assert driver._run_atomic(_PAYLOAD, _STAGE, "dag:m/stage:x") == "ok"
