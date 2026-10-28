@@ -182,3 +182,83 @@ class TestProxyIdentityPayload:
 			payload = mcp_proxy.identity_payload("opencode")
 		assert payload["originator"] == "opencode:mia", "el proxy debe resolver SU cuerpo, no el global"
 		assert payload["workdir"] == "/ws/mia"
+
+
+class TestAmbiguedadDeIdentidad:
+	"""Regresión 2026-10-28: dos sesiones vivas en el MISMO cwd.
+
+	La correlación no puede decidir y el proxy caía al fichero global ("la última
+	que escribió"). Resultado real: un `job_submit` se atribuyó al alma de otra
+	sesión y el aviso de fin de job se entregó a quien no era.
+
+	Regla nueva: *atribuir a un alma ajena es peor que no atribuir*.
+	- AMBIGUO  → el proxy NO usa el global (se queda sin cuerpo).
+	- DESCONOCIDO (0 candidatas) → sí lo usa: es la única información que hay.
+	"""
+
+	def _dos_vivas_mismo_cwd(self, state):
+		_write_session_bridge(state, "s1", "/ws/a")
+		_write_session_bridge(state, "s2", "/ws/a")
+		return _live(["s1", "s2"])
+
+	def test_dos_vivas_mismo_cwd_es_ambiguo(self, tmp_path):
+		from red_pill.core.bridge import REASON_AMBIGUOUS, resolve_body
+
+		state = tmp_path / "state"
+		live = self._dos_vivas_mismo_cwd(state)
+		with _Ctx(_patches(state, live, {})):
+			entry, reason = resolve_body("opencode", "/ws/a")
+		assert entry is None
+		assert reason == REASON_AMBIGUOUS
+
+	def test_sin_candidatas_es_desconocido_no_ambiguo(self, tmp_path):
+		from red_pill.core.bridge import REASON_UNKNOWN, resolve_body
+
+		state = tmp_path / "state"
+		with _Ctx(_patches(state, [], {})):
+			entry, reason = resolve_body("opencode", "/ws/a")
+		assert entry is None
+		assert reason == REASON_UNKNOWN, "sin pistas se puede degradar al global"
+
+	def test_una_sola_viva_resuelve(self, tmp_path):
+		from red_pill.core.bridge import REASON_RESOLVED, resolve_body
+
+		state = tmp_path / "state"
+		_write_session_bridge(state, "s1", "/ws/a")
+		with _Ctx(_patches(state, _live(["s1"]), {})):
+			entry, reason = resolve_body("opencode", "/ws/a")
+		assert reason == REASON_RESOLVED
+		assert entry["session_id"] == "s1"
+
+	def test_el_proxy_no_usa_el_global_si_hay_ambiguedad(self, tmp_path):
+		"""El escenario exacto del incidente: global apuntando a OTRA alma."""
+		from red_pill import mcp_proxy
+
+		state = tmp_path / "state"
+		state.mkdir(parents=True, exist_ok=True)
+		(state / "opencode_session.json").write_text(
+			json.dumps({"provider": "opencode", "session_id": "otra", "workdir": "/ws/a", "updated_at": 10**12})
+		)
+		live = self._dos_vivas_mismo_cwd(state)
+		with _Ctx(_patches(state, live, {})), patch("red_pill.mcp_proxy.state_dir", return_value=state), patch.object(
+			mcp_proxy, "_instance_cwd", return_value="/ws/a"
+		):
+			payload = mcp_proxy.identity_payload("opencode")
+		assert payload["originator"] == "", (
+			"con identidad ambigua NO se puede tomar el global: atribuiría el trabajo a un alma ajena"
+		)
+
+	def test_el_proxy_si_usa_el_global_sin_pistas(self, tmp_path):
+		"""Contraprueba: sin candidatas, el global sigue siendo la degradación."""
+		from red_pill import mcp_proxy
+
+		state = tmp_path / "state"
+		state.mkdir(parents=True, exist_ok=True)
+		(state / "opencode_session.json").write_text(
+			json.dumps({"provider": "opencode", "session_id": "unica", "workdir": "/ws/a", "updated_at": 10**12})
+		)
+		with _Ctx(_patches(state, [], {})), patch("red_pill.mcp_proxy.state_dir", return_value=state), patch.object(
+			mcp_proxy, "_instance_cwd", return_value="/ws/a"
+		):
+			payload = mcp_proxy.identity_payload("opencode")
+		assert payload["originator"] == "opencode:unica"

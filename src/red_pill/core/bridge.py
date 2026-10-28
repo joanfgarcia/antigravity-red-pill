@@ -200,3 +200,45 @@ def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 		return {"provider": provider, "session_id": db_matches[0], "workdir": cwd}
 
 	return None
+
+
+# Resultados posibles de `resolve_body` (el llamante decide con el `reason`).
+REASON_RESOLVED = "resolved"
+REASON_UNKNOWN = "unknown"  # no hay pistas: el global sigue siendo la degradación
+REASON_AMBIGUOUS = "ambiguous"  # HAY pistas pero no deciden: NO se debe caer al global
+
+
+def resolve_body(provider: str, cwd: str) -> "tuple[Optional[dict], str]":
+	"""Como `resolve_body_by_cwd`, pero distingue NO-SÉ de AMBIGUO.
+
+	Por qué existe (incidente 2026-10-28): con **dos** sesiones vivas en el mismo
+	cwd, la correlación no puede decidir y `resolve_body_by_cwd` devolvía `None`.
+	El proxy interpretaba `None` como "no hay bridge" y caía al fichero global,
+	que es "la última que escribió" — así un `job_submit` se atribuyó al alma de
+	otra sesión y **el aviso de fin de job se entregó a quien no era**.
+
+	Regla: *atribuir a un alma ajena es peor que no atribuir*. Con ambigüedad el
+	proxy NO debe usar el global; sin pistas (0 candidatas) sí puede, porque ahí
+	el global es la única información que existe y suele ser correcto.
+	"""
+	entry = resolve_body_by_cwd(provider, cwd)
+	if entry is not None:
+		return entry, REASON_RESOLVED
+	if not provider or not cwd:
+		return None, REASON_UNKNOWN
+	target = _norm(cwd)
+	if not target:
+		return None, REASON_UNKNOWN
+	# ¿Había candidatas que no supieron decidir? Eso es ambigüedad, no ignorancia.
+	try:
+		live = set(_live_session_ids(provider))
+		same_cwd = [
+			e
+			for e in list_session_bridges(provider)
+			if e.get("session_id") in live and _norm(str(e.get("workdir") or "")) == target
+		]
+	except Exception:
+		return None, REASON_UNKNOWN
+	if len(same_cwd) > 1:
+		return None, REASON_AMBIGUOUS
+	return None, REASON_UNKNOWN

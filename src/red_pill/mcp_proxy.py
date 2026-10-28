@@ -67,13 +67,22 @@ def identity_payload(harness: str | None = None) -> dict:
 		# D-BRIDGE: primero la correlación por cwd (resuelve el cuerpo de ESTA
 		# instancia); el fichero global es la degradación (último escritor gana).
 		raw = None
+		ambiguous = False
 		try:
-			from red_pill.core.bridge import resolve_body_by_cwd
+			from red_pill.core.bridge import REASON_AMBIGUOUS, resolve_body
 
-			raw = resolve_body_by_cwd(provider, _instance_cwd())
+			raw, reason = resolve_body(provider, _instance_cwd())
+			ambiguous = reason == REASON_AMBIGUOUS
 		except Exception:
-			raw = None
-		if not raw:
+			raw, ambiguous = None, False
+		if ambiguous:
+			# Dos o más sesiones vivas en este mismo cwd: la correlación no decide
+			# y el global es "la última que escribió", que puede ser OTRA alma.
+			# Atribuir mal hace que los avisos y los jobs aterricen en un alma
+			# ajena (incidente 2026-10-28); sin cuerpo es degradación honesta
+			# (fail-closed: el backend no inventa alma).
+			logger.debug("[RedPill-Proxy] identidad ambigua en %s; sin cuerpo (no se usa el global)", _instance_cwd())
+		elif not raw:
 			try:
 				raw = json.loads((state_dir() / f"{provider}_session.json").read_text(encoding="utf-8"))
 			except Exception:
