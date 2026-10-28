@@ -104,6 +104,19 @@ _SW_FLAGS = (
 
 
 @pytest.fixture(autouse=True)
+def _soul_notify_disabled_por_defecto(monkeypatch):
+	"""Los tests NO deben lanzar entregas reales al alma (AD-090).
+
+	`_report_job` avisa al alma con `opencode run --session`, que inyecta un turno
+	real (proceso externo + coste). En la suite no hay cuerpos vivos registrados y
+	no debería dispararse, pero un test que registre un leg vivo sí lo haría. Este
+	fixture cierra esa puerta; los tests del propio aviso lo reactivan con
+	`monkeypatch` (gana el fixture) o parchean el transporte.
+	"""
+	monkeypatch.setenv("REDPILL_SOUL_NOTIFY_DISABLE", "1")
+
+
+@pytest.fixture(autouse=True)
 def _default_ingest_not_retired(monkeypatch):
 	"""Hermético a los flags single-writer/RFC-004: la suite corre con el default
 	de fábrica (OFF) aunque el `.env` del operador los tenga ON. Los tests que

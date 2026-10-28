@@ -2029,3 +2029,56 @@ Verificado en vivo (5 proxies, cwd por instancia, sesión del turno aún ausente
 confianza (`X-RedPill-Proxy`) gana sobre env/bridge en el resolver del
 handshake, así que arreglar la resolución en el proxy basta. 10 tests nuevos
 (`tests/test_bridge_per_session.py` + 1 de plugin); lint y tipos limpios.
+
+---
+
+## [AD-090] Aviso de fin de job al alma — pieza TEMPORAL, se reapunta a neon-link
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED, **PROVISIONAL** (transporte temporal por decisión del Operador).
+
+### 1. The Problem
+Un job lanzado desde una sesión viva terminaba y dejaba su reporte en el
+MinionInbox (`_report_job`, con la identidad del alma). Pero **nadie lo abría**: el
+reporte solo se veía si el agente llamaba `check_minion_inbox`. Para una tarea larga
+(suite completa, compilación, benchmark) no quedaba más salida que `nohup … &` — que
+además **no tiene alma**, así que ni siquiera puede avisar a quien lo lanzó.
+Es el mismo patrón que el RFC-RECIPE-001 documenta: *"no murió por ser un mal cajón,
+murió porque nadie lo abría"*.
+
+### 2. The Decision
+1. **Tras el push al MinionInbox**, el runner **avisa al alma** que lanzó el job
+   (`core/soul_notify.py`). El reporte del inbox **se conserva**: el push es *aditivo*
+   al pull, nunca lo sustituye. Si el aviso falla, el pull sigue funcionando.
+2. **Transporte TEMPORAL: `opencode run --session <id>`** — la ruta que **inyecta**
+   (D-11; `api POST` fallaría cerrado y el mensaje desaparecería). Es el patrón ya
+   probado en vivo con la sesión hermana (E-001..E-005, D-BRIDGE).
+3. **Seam único de transporte.** Todo el transporte vive detrás de `_TRANSPORTS` +
+   `_resolve_transport()`. **Repuntar a neon-link = cambiar `_DEFAULT_TRANSPORT`** (o
+   `REDPILL_SOUL_NOTIFY_TRANSPORT=neon_link`). Nada más en el repo debe invocar
+   `opencode run --session` para notificar a un alma.
+4. **Gateado por D-07** (cadena de mando): un job es hijo del alma que lo lanzó, así
+   que avisarla es *su* cadena — permitido sin ampliar el círculo. Sin cuerpo vivo
+   (latido), no hay push: el aviso se queda en el inbox (pull).
+5. **D-09**: el aviso es **dato**, no orden ("No requiere respuesta").
+6. **No bloquea al runner**: la entrega corre en hilo daemon con timeout. Un job no
+   puede quedarse colgado esperando el turno de otro.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| `nohup … &` con un wrapper que avise | rechazada | El proceso suelto **no tiene alma** (`continuity_id`): no sabe a quién avisar, no es reanudable ni trazable |
+| Solo MinionInbox (status quo) | insuficiente | El reporte existe pero nadie lo abre → tareas largas a ciegas |
+| Broker completo de neon-link ahora | **diferida** | Es la pieza buena (D-06), pero más grande; el MVP valida el patrón antes |
+
+### 4. Rationale
+Validado con 17 tests (`tests/test_soul_notify.py`) + 232 en la batería de cola/jobs/
+alma. **NO se retira el fallback SQLite del plugin ni el inbox**: el aviso es una capa
+más, no un reemplazo.
+
+### 5. Deuda declarada (SIGUIENTE PASO OBLIGATORIO)
+> **Cuando `neon-link` mire hacia dentro** (canal `soul`, D-06, mensaje como evento de
+> `mission_events` y broker guardando **solo** el estado de entrega), **esta pieza debe
+> reapuntarse a ese canal**; el transporte CLI quedará como fallback (o se retira).
+> `_deliver_neon_link()` existe ya como placeholder honesto que **no entrega** (devuelve
+> `False`) para que el repunte sea explícito y testeado, no una promesa.

@@ -79,6 +79,22 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 			originator=identity.get("originator") or f"queue_worker.process_driver_jobs({job_id})",
 			continuity_id=identity.get("continuity_id") or None,
 		)
+		# AD-090 (temporal): tras dejar el reporte en el inbox, avisar al alma que
+		# lanzó el job. Sin esto el reporte solo se ve si alguien mira el buzón
+		# ("nadie lo abre"), y la única salida para una tarea larga era un
+		# `nohup &` sin alma. Non-fatal: perder el aviso no tumba el runner.
+		continuity = identity.get("continuity_id") or None
+		if continuity:
+			try:
+				from red_pill.core.soul_notify import build_job_notice, notify_soul
+
+				notify_soul(
+					continuity,
+					build_job_notice(title, str(task.get("source") or "job"), status, content, result_path),
+					originator=identity.get("originator") or None,
+				)
+			except Exception as notify_err:
+				logger.warning(f"[soul-notify] aviso no entregado para job {job_id}: {notify_err}")
 	except Exception as e:
 		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
 
