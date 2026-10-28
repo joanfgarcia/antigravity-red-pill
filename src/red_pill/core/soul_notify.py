@@ -24,6 +24,10 @@ Para que el repunte sea un cambio de UNA línea y no una reescritura, todo el
 transporte vive detrás de `_TRANSPORTS` + `_resolve_transport()`. Nada más en
 el repo debe invocar `opencode run --session` para notificar a un alma.
 
+Segundo consumidor del seam (Fase 5, 2026-10-28): `session/delivery.py` — el
+adaptador que convierte un evento del tablón dirigido a un alma en un nudge.
+Reutiliza `resolve_live_leg` y `notify_soul`; no abre otro canal.
+
 Reglas que respeta (no las salta)
 ---------------------------------
 - **D-07 (quién puede despertar a quién)**: un job es hijo del alma que lo
@@ -32,7 +36,10 @@ Reglas que respeta (no las salta)
 - **D-11**: `opencode run --session` **inyecta**; `api POST` fallaría cerrado
 	y el mensaje desaparecería. Por eso se usa `run --session`.
 - **No bloquea al worker**: la entrega corre en un hilo daemon con timeout. Un
-	job NUNCA debe quedarse colgado esperando a que otro turno termine.
+	job NUNCA debe quedarse colgado esperando a que otro turno termine. Excepción
+	que es en realidad una corrección: un llamante **efímero** (la CLI) sí debe
+	esperar con `wait_for_deliveries()` antes de salir, porque el hilo daemon
+	muere con el proceso y el nudge se perdería en silencio.
 
 Non-fatal por diseño: cualquier fallo se registra y se ignora. Perder un aviso
 es malo; tumbar el runner por un aviso, peor.
@@ -45,6 +52,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -126,13 +134,52 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 
 # ── Transportes (SEAM ÚNICO PARA EL REPUNTE A NEON-LINK) ─────────────────────
 
+# Hilos de entrega en vuelo. Un llamante EFÍMERO (la CLI, un job de un solo paso
+# que termina nada más avisar) se llevaría el nudge por delante al salir: los
+# hilos daemon mueren con el proceso y el estado de entrega diría "entregado" en
+# falso. Se guardan aquí para que ese llamante pueda `wait_for_deliveries()`.
+_inflight: set = set()
+_inflight_lock = threading.Lock()
+
+
+def pending_deliveries() -> int:
+	"""Cuántas entregas siguen en vuelo (diagnóstico y espera de llamantes cortos)."""
+	with _inflight_lock:
+		return len(_inflight)
+
+
+def wait_for_deliveries(timeout_s: float = DELIVERY_TIMEOUT_S) -> bool:
+	"""Espera a que las entregas en vuelo terminen. True si quedó limpio.
+
+	No la llama el worker (que vive y no debe bloquearse); la llama quien sí es
+	efímero — hoy, `red-pill session deliver`. Con `timeout_s` se acota: si el
+	receptor no contesta, se sale y se registra el aviso pendiente, que es lo que
+	pasaba de todos modos con el hilo daemon, pero ahora sin mentirle al que mira.
+	"""
+	deadline = time.monotonic() + max(0.0, float(timeout_s))
+	while True:
+		with _inflight_lock:
+			threads = list(_inflight)
+		if not threads:
+			return True
+		budget = deadline - time.monotonic()
+		if budget <= 0:
+			logger.warning(f"[soul-notify] {len(threads)} entrega(s) siguen en vuelo; se abandona la espera")
+			return False
+		threads[0].join(min(budget, 5.0))
+
 
 def _deliver_cli(session_id: str, text: str) -> bool:
 	"""Transporte MVP: inyecta un turno con el CLI del arnés.
 
 	`opencode run --session` es la ruta que **inyecta** (D-11). Se lanza en un
 	hilo daemon para no bloquear al worker: la entrega implica un turno del
-	receptor y puede tardar.
+	receptor y puede tardar. Quien no pueda permitirse ese hilo vivo hasta el fin
+	(proceso efímero) usa `wait_for_deliveries` antes de salir.
+
+	Devuelve True cuando el proceso de entrega **arrancó**, no cuando el receptor
+	lo leyó: el `rc` se registra pero ya no vuelve al llamante. Esa es la
+	limitación honesta del seam; la confirmación real es terreno del canal `soul`.
 	"""
 	exe = shutil.which("opencode")
 	if exe is None:
@@ -151,8 +198,16 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 				logger.warning(f"[soul-notify] entrega falló (rc={res.returncode}): {res.stderr[:200]}")
 		except Exception as e:
 			logger.warning(f"[soul-notify] entrega falló: {e}")
+		finally:
+			with _inflight_lock:
+				_inflight.discard(threading.current_thread())
 
-	threading.Thread(target=_run, name=f"soul-notify-{session_id[:12]}", daemon=True).start()
+	def _traced() -> None:
+		with _inflight_lock:
+			_inflight.add(threading.current_thread())
+		_run()
+
+	threading.Thread(target=_traced, name=f"soul-notify-{session_id[:12]}", daemon=True).start()
 	return True
 
 
@@ -211,6 +266,16 @@ def _is_deliverable_leg(leg: Optional[str], transport: str) -> bool:
 	return provider in allowed
 
 
+def notify_disabled() -> bool:
+	"""True si el aviso está apagado por env. Único juez del kill switch.
+
+	Lo usa `notify_soul` y también `session/delivery.py` (el adaptador de eventos
+	del tablón, Fase 5): si el interruptor se consulta en dos sitios pueden
+	divergir y un lado puede quedar desprotegido.
+	"""
+	return str(os.getenv(ENV_DISABLE) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_job_notice(title: str, source: str, status: str, content: str, result_path: str = "") -> str:
 	"""Texto del aviso. Es DATO: no pide nada ni manda nada (D-09)."""
 	suffix = f"\n[result: {result_path}]" if result_path else ""
@@ -234,7 +299,7 @@ def notify_soul(
 	"""
 	if not continuity_id:
 		return False
-	if str(os.getenv(ENV_DISABLE) or "").strip().lower() in {"1", "true", "yes", "on"}:
+	if notify_disabled():
 		return False
 	transport = _resolve_transport()
 	fn = _TRANSPORTS.get(transport)

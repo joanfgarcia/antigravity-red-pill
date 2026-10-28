@@ -393,6 +393,64 @@ def handle_session(args: argparse.Namespace) -> None:
 			return
 		print(f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}")
 		return
+	if getattr(args, "session_cmd", None) == "deliver":
+		import json
+
+		from red_pill.session import delivery as _delivery
+
+		soul = str(getattr(args, "continuity", "") or "").strip()
+		limit = int(getattr(args, "limit", 20) or 20)
+		dry = bool(getattr(args, "dry_run", False))
+		if not dry and os.getenv("REDPILL_OPERATOR") != "1":
+			# Empujar un turno a la sesión de otra alma es meterse en su conversación.
+			# La política de wake por rol es C3; hasta eso, la superficie pública es
+			# el Operador. `--dry-run` solo lee, así que no está gated.
+			print("[DELIVER] solo Operador (REDPILL_OPERATOR=1). Con --dry-run se lista lo pendiente.")
+			return
+		if getattr(args, "summary", False):
+			print(json.dumps(_delivery.delivery_summary(soul), ensure_ascii=False))
+			return
+		if dry:
+			pending = _delivery.pending_for_soul(soul, limit=limit)
+			if getattr(args, "json", False):
+				print(json.dumps(pending, ensure_ascii=False, indent=2, default=str))
+				return
+			if not pending:
+				print(f"[DELIVER] {soul[:8]}: sin eventos pendientes de entrega.")
+				return
+			print(f"--- PENDIENTES DE ENTREGA ({len(pending)}) — alma {soul[:8]} ---")
+			for ev in pending:
+				print(
+					f"  seq={ev.get('event_seq')} · {ev.get('type')} · {str(ev.get('mission_id'))[:40]} · "
+					f"state={ev.get('delivery_state') or 'pending'} · attempts={ev.get('delivery_attempts') or 0} · "
+					f"{str(ev.get('summary') or '')[:100]}"
+				)
+			return
+		report = _delivery.deliver_events(
+			soul,
+			originator=getattr(args, "originator", None) or None,
+			limit=limit,
+			holder="cli-operator",
+		)
+		# La CLI es un proceso efímero: el hilo daemon de entrega moriría con él y
+		# el evento quedaría marcado como entregado sin haber salido. Se espera.
+		from red_pill.core import soul_notify as _soul_notify
+
+		clean = _soul_notify.wait_for_deliveries()
+		report["transport_drained"] = clean
+		if getattr(args, "json", False):
+			print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+			return
+		print(
+			f"[DELIVER] alma={soul[:8]} · cuerpo={report.get('leg') or '(ninguno)'} · "
+			f"entregados={len(report.get('delivered', []))} · diferidos={len(report.get('deferred', []))} · "
+			f"omitidos={len(report.get('skipped', []))} · rendidos={len(report.get('given_up', []))} · "
+			f"transporte={'drenado' if clean else 'aún en vuelo (se fue el tiempo)'}"
+		)
+		for bucket in ("deferred", "skipped", "given_up"):
+			for item in report.get(bucket, []):
+				print(f"  {bucket}: {str(item.get('event_id'))[:12]} · {item.get('reason')}")
+		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 
 

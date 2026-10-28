@@ -210,6 +210,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_moderate.add_argument("--action", required=True, choices=["flag", "hide", "retract", "restore"])
 	session_moderate.add_argument("--reason", required=True, help="Motivo (queda auditado)")
 	session_moderate.add_argument("--json", action="store_true", help="Salida JSON")
+	session_deliver = session_sub.add_parser(
+		"deliver",
+		help="Empujar los eventos pendientes del tablón al cuerpo vivo de un alma (Fase 5; solo Operador)",
+	)
+	session_deliver.add_argument("--continuity", required=True, help="Alma destinataria (continuity_id)")
+	session_deliver.add_argument("--originator", default=None, help="Fuerza el cuerpo (provider:session_id); default: por presencia")
+	session_deliver.add_argument("--limit", type=int, default=20, help="Máximo de eventos por pasada (default 20)")
+	session_deliver.add_argument("--dry-run", action="store_true", help="Solo lista lo pendiente; no empuja nada")
+	session_deliver.add_argument("--summary", action="store_true", help="Conteos por estado de entrega del alma")
+	session_deliver.add_argument("--json", action="store_true", help="Salida JSON")
 
 	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
 	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")

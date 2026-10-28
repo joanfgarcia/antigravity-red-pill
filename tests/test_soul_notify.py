@@ -13,6 +13,9 @@ por env, y que la entrega NO bloquea.
 from __future__ import annotations
 
 import os
+import threading
+import time
+import types
 from unittest.mock import patch
 
 from red_pill.core import soul_notify
@@ -282,6 +285,51 @@ class TestIdleSeDespierta:
 			"red_pill.core.session_liveness.list_sessions", return_value=[sig]
 		):
 			assert soul_notify.resolve_live_leg("alma-2") == "opencode:ses_activo"
+
+
+class TestEfimeroDrena:
+	"""Un llamante efímero (la CLI) se llevaría el hilo daemon por delante al salir.
+
+	El seam reporta `True` al lanzar; si el proceso muere antes de que el hijo
+	arranque, el aviso se perdió y el estado de entrega mintió. `wait_for_deliveries`
+	existe para esos llamantes, con presupuesto, para que nadie cuelgue.
+	"""
+
+	def test_el_hilo_se_cuenta_mientras_vive(self):
+		started = threading.Event()
+		release = threading.Event()
+
+		def fake_run(cmd, **_kw):
+			started.set()
+			release.wait(5.0)
+			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+		with patch.object(soul_notify, "shutil", types.SimpleNamespace(which=lambda _n: "/usr/bin/true")), patch.object(
+			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
+		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
+			assert soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a") is True
+			assert started.wait(2.0)
+			assert soul_notify.pending_deliveries() == 1, "la entrega no se registra como en vuelo"
+			release.set()
+			assert soul_notify.wait_for_deliveries(5.0) is True
+			assert soul_notify.pending_deliveries() == 0
+
+	def test_la_espera_se_acota_y_no_cuelga_al_llamante(self):
+		release = threading.Event()
+
+		def fake_run(cmd, **_kw):
+			release.wait(5.0)
+			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+		with patch.object(soul_notify, "shutil", types.SimpleNamespace(which=lambda _n: "/usr/bin/true")), patch.object(
+			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
+		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
+			soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a")
+			start = time.monotonic()
+			assert soul_notify.wait_for_deliveries(0.3) is False
+			assert time.monotonic() - start < 2.0
+			release.set()
+			assert soul_notify.wait_for_deliveries(5.0) is True
 
 
 class TestWarningNoDespierta:

@@ -1,0 +1,514 @@
+"""Entrega de eventos del tablón al arnés — adaptador de la Fase 5.
+
+Qué resuelve
+------------
+El tablón (`mission_events`) publica; el coro lee por cursor (`fetch_events`,
+digest del interceptor 12). Eso es **pull**: funciona siempre, pero solo cuando
+el destinatario abre un turno. Este módulo añade el otro medio — el **nudge**:
+coger un evento dirigido a un alma y convertirlo en un turno dentro de su arnés.
+
+No es un segundo buzón. El evento **siempre** vive en `mission_events` (append
+only, con triggers que impiden UPDATE/DELETE: `store.py:82-97`); aquí solo se
+guarda **el estado de entrega** (`event_deliveries`), una fila por
+(evento, alma). Borrar/reescribir el tablón para "marcar como leído" habría
+roto el log.
+
+Reglas que implementa (no inventa ninguna)
+------------------------------------------
+- **Dirección = `continuity_id` (D-05).** Un evento apunta a un ALMA, no a una
+	sesión. El cuerpo (`provider:session_id`) se resuelve por presencia con
+	`soul_notify.resolve_live_leg` — el mismo criterio que AD-090: un alma idle
+	también se puede despertar; `ttl_state='expired'` no.
+- **Un solo transporte.** La entrega pasa por el seam `_TRANSPORTS` de
+	`core/soul_notify.py`. Este módulo NO invoca `opencode run` por su cuenta:
+	si mañana `neon-link` ocupa el default, el nudge se repunta solo.
+- **Fail-closed.** Si no hay cuerpo, si el arnés no tiene punto de inyección o
+	si el transporte falla, el evento **se queda pendiente** en el tablón para el
+	siguiente turno. Nada se pierde: el pull sigue estando ahí.
+- **Pull-first.** El push solo vale hasta que el destinatario abre turno. Cuando
+	el cursor del digest pasa el evento, `reconcile_pulled` lo cierra como
+	`pulled`: empujarlo después sería duplicar lo que el digest ya anunció.
+- **Sin bucles.** El estado de entrega es el cursor. `claim_delivery` es un CAS
+	atómico (`BEGIN IMMEDIATE`, mismo patrón que D13 en `stage_claims`): dos
+	entregadores no empujan el mismo evento. Un `in_flight` colgado más de
+	`CLAIM_TTL_S` se puede reclamar (el entregador murió); pasado
+	`MAX_PUSH_ATTEMPTS` el evento cierra como `given_up` y deja de reintentarse.
+
+TABLA DE HONESTIDAD (por arnés)
+-------------------------------
+Medida en este repo, 2026-10-28. Sin maquillar: lo que no existe, no existe.
+
+| arnés        | ¿punto de inyección? | cómo                                              | degradación                                        |
+|--------------|----------------------|---------------------------------------------------|----------------------------------------------------|
+| `opencode`   | SÍ                   | seam `cli` de `soul_notify`: `opencode run --session <id>` — inyecta turno o despierta el cuerpo idle | n/a (este módulo)                                   |
+| `claude_code`| NO (aquí)            | existe `claude --resume <id> -p` (`swarm/bridges/claude.py:164`) pero es **headless**: abre un turno en otro proceso, no interrumpe ni despierta la sesión que el Operador tiene delante; los bridges son sustrato de `run_agent_task`, no canal de aviso | pull (digest del siguiente turno)                   |
+| `pi`         | NO (aquí)            | mismo caso: resume por cabecera de sesión (`swarm/bridges/pi.py`), headless | pull                                                |
+| `telegram`   | NO (aquí)            | tiene bandeja (el chat del Operador) pero la salida vive **fuera** del repo (neon-link/gateway); lo de dentro es `notify_os`, que no es un turno | pull + señal de dolor del metabolismo                |
+
+Dos limitaciones del único camino que sí existe, dichas en la cara:
+
+1. **El seam es optimista.** `_deliver_cli` devuelve `True` al **lanzar** el
+	proceso en un hilo daemon; el `rc != 0` se registra pero ya no vuelve. Así que
+	`delivered` significa «entregado al transporte», no «leído». Además, el hilo
+	vive lo que vive el proceso: un llamante efímero (la CLI) debe drenar con
+	`wait_for_deliveries()` antes de salir — si no, el nudge se va con el proceso y
+	el estado miente. La confirmación real necesitará el canal `soul` (C4), no esto.
+2. **La política decide, este módulo ejecuta.** Cada evento dirigido pasa primero
+	por el control de entrada del destinatario (`wake_policy.inbound_blocked`):
+	`refuse` cierra el empuje (`skipped`, terminal — lo dijo el destinatario),
+	`hold` o un estado ilegible lo difieren (sigue `pending`, lo recoge el pull).
+	La matriz de roles (`WAKE_POLICY`, D-07) **aún no se aplica aquí**: es el gap
+	declarado de C3 (ver `wake_policy.decide_wake`, ya probado, pendiente de
+	cablear con registro de sesiones). Superficie pública: `red-pill session
+	deliver` (`REDPILL_OPERATOR=1`).
+
+Non-fatal por diseño: un fallo de BD o de transporte degrada a pull y se
+registra; nunca tira el turno del llamante.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any, Dict, List, Optional
+
+from red_pill.session import wake_policy
+from red_pill.session.store import _INTERNAL_EVENT_TYPES, connect_session_db, sanitize_inline
+
+logger = logging.getLogger(__name__)
+
+# Estados del registro de entrega. `pending` puede ser implícito (sin fila = no
+# entregado); las filas se crean al reclamar.
+STATE_PENDING = "pending"
+STATE_IN_FLIGHT = "in_flight"
+STATE_DELIVERED = "delivered"
+STATE_PULLED = "pulled"
+STATE_GIVEN_UP = "given_up"
+STATE_SKIPPED = "skipped"
+TERMINAL_STATES = frozenset({STATE_DELIVERED, STATE_PULLED, STATE_GIVEN_UP, STATE_SKIPPED})
+
+# Ventana en la que un `in_flight` se considera en curso y no se reclama. Ha de
+# cubrir el hilo daemon del transporte (`soul_notify.DELIVERY_TIMEOUT_S` = 120 s)
+# más margen; por encima, se asume que el entregador murió a mitad.
+CLAIM_TTL_S = 300.0
+# Intentos de push antes de rendirse y dejar el evento en `given_up`. Corto: el
+# push es un lujo, el pull es la entrega real.
+MAX_PUSH_ATTEMPTS = 3
+
+# Arnés → nombre del seam en `soul_notify._TRANSPORTS`. Solo opencode tiene punto
+# de inyección hoy (ver la tabla del docstring): añadir otro arnés aquí exige
+# añadir antes su transporte al seam, no lo contrario.
+INJECTION_POINTS: Dict[str, str] = {"opencode": "cli"}
+
+_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS event_deliveries (
+	event_id TEXT NOT NULL,
+	continuity_id TEXT NOT NULL,
+	state TEXT NOT NULL DEFAULT 'pending',
+	attempts INTEGER NOT NULL DEFAULT 0,
+	holder TEXT NOT NULL DEFAULT '',
+	claimed_at REAL NOT NULL DEFAULT 0,
+	reason TEXT NOT NULL DEFAULT '',
+	updated_at REAL NOT NULL,
+	PRIMARY KEY (event_id, continuity_id)
+)
+"""
+
+_INDEX_DDL = "CREATE INDEX IF NOT EXISTS idx_deliveries_soul_state ON event_deliveries(continuity_id, state)"
+
+
+def _connect(db_path: Optional[str]):
+	from red_pill.core.paths import get_session_db
+
+	return connect_session_db(str(db_path) if db_path else str(get_session_db()))
+
+
+def ensure_schema(db_path: Optional[str] = None) -> None:
+	"""Crea la tabla de estado si no existe. Idempotente y non-fatal."""
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			conn.execute(_INDEX_DDL)
+			conn.commit()
+	except Exception as e:
+		logger.warning(f"[delivery] no se pudo asegurar el esquema: {e}")
+
+
+# ── Lectura de pendientes ────────────────────────────────────────────────────
+
+
+def _soul_cursor_cond() -> str:
+	"""Condición SQL del cursor del alma (pull-first).
+
+	El cursor vive en `session_registry.last_seen_event_seq` por CUERPO; el alma lo
+	toma por el MÁXIMO de sus cuerpos no expirados (un `switch_model` no lo
+	reinicia). Un evento con `event_seq` por debajo ya lo anunció el digest: el
+	push no es su canal. Se filtra AQUÍ, además de en `reconcile_pulled`, para que
+	un reconcile perdido (handshake caído) no derive en un nudge duplicado.
+	"""
+	return (
+		"e.event_seq > COALESCE((SELECT MAX(r.last_seen_event_seq) FROM session_registry r"
+		" WHERE r.continuity_id = ? AND r.ttl_state != 'expired'), 0)"
+	)
+
+
+def pending_for_soul(continuity_id: str, *, limit: int = 20, db_path: Optional[str] = None) -> List[dict]:
+	"""Eventos del tablón dirigidos a `continuity_id` y aún no entregados.
+
+	Qué se excluye y por qué:
+	- eventos internos de D23-SCORE (`decision_*`): son auditoría, no noticia.
+	- `sealed`: son privados del cuerpo que los publicó; empujarlos los expondría.
+	- notas `hidden`/`retracted`: la moderación ya las apartó del tablón.
+	- eventos ya pasados por el cursor del digest (pull-first, ver `_soul_cursor_cond`).
+	- eventos en estado terminal (`delivered`/`pulled`/`given_up`/`skipped`).
+
+	Un `in_flight` **sí** aparece: puede estar colgado de un entregador muerto; es
+	`claim_delivery` quien decide si se puede reclamar.
+	"""
+	soul = str(continuity_id or "").strip()
+	if not soul:
+		return []
+	internal = tuple(sorted(_INTERNAL_EVENT_TYPES))
+	placeholders = ",".join("?" * len(internal))
+	sql = (
+		"SELECT e.event_seq, e.event_id, e.type, e.mission_id, e.summary, e.ref,"
+		" e.originator, e.continuity_id, e.created_at,"
+		" d.state AS delivery_state, d.attempts AS delivery_attempts"
+		" FROM mission_events e"
+		" LEFT JOIN event_deliveries d ON d.event_id = e.event_id AND d.continuity_id = ?"
+		" LEFT JOIN note_status ns ON ns.event_id = e.event_id"
+		" WHERE e.continuity_id = ? AND e.sealed = 0"
+		f" AND e.type NOT IN ({placeholders})"
+		" AND COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted')"
+		f" AND {_soul_cursor_cond()}"
+		" AND (d.event_id IS NULL OR d.state IN ('pending', 'in_flight'))"
+		" ORDER BY e.event_seq ASC LIMIT ?"
+	)
+	params = [soul, soul, *internal, soul, max(1, min(int(limit or 20), 200))]
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			rows = conn.execute(sql, tuple(params)).fetchall()
+		return [dict(row) for row in rows]
+	except Exception as e:
+		logger.warning(f"[delivery] lectura de pendientes falló: {e}")
+		return []
+
+
+def get_delivery(event_id: str, continuity_id: str, *, db_path: Optional[str] = None) -> Optional[dict]:
+	"""Estado de entrega de (evento, alma); None si no hay fila."""
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			row = conn.execute(
+				"SELECT * FROM event_deliveries WHERE event_id = ? AND continuity_id = ?",
+				(str(event_id or ""), str(continuity_id or "")),
+			).fetchone()
+		return dict(row) if row else None
+	except Exception as e:
+		logger.debug(f"[delivery] lectura falló: {e}")
+		return None
+
+
+# ── Estado de entrega (CAS) ─────────────────────────────────────────────────
+
+
+def claim_delivery(
+	*,
+	event_id: str,
+	continuity_id: str,
+	holder: str,
+	ttl_s: float = CLAIM_TTL_S,
+	db_path: Optional[str] = None,
+	now: Optional[float] = None,
+) -> bool:
+	"""Reserva el evento para este entregador. CAS atómico (D13).
+
+	True si la reserva es nuestra; False si otro la tiene, si ya está cerrado o si
+	la BD falla (**fail-closed**: nunca se asume la entrega). Un `in_flight` más
+	viejo que `ttl_s` se puede reclamar: el entregador se cayó y el evento no debe
+	quedarse en tierra de nadie.
+	"""
+	if not event_id or not continuity_id:
+		return False
+	stamp = float(now) if now is not None else time.time()
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			conn.execute(_INDEX_DDL)
+			conn.execute("BEGIN IMMEDIATE")
+			try:
+				conn.execute(
+					"INSERT OR IGNORE INTO event_deliveries (event_id, continuity_id, state, attempts, holder, claimed_at, reason, updated_at)"
+					" VALUES (?, ?, ?, 0, '', 0, '', ?)",
+					(str(event_id), str(continuity_id), STATE_PENDING, stamp),
+				)
+				cur = conn.execute(
+					"UPDATE event_deliveries SET state = ?, holder = ?, claimed_at = ?, updated_at = ?"
+					" WHERE event_id = ? AND continuity_id = ?"
+					" AND (state = 'pending' OR (state = 'in_flight' AND claimed_at < ?))",
+					(STATE_IN_FLIGHT, str(holder or ""), stamp, stamp, str(event_id), str(continuity_id), stamp - float(ttl_s)),
+				)
+				if int(cur.rowcount or 0) != 1:
+					conn.rollback()
+					return False
+				conn.commit()
+				return True
+			except Exception:
+				conn.rollback()
+				raise
+	except Exception as e:
+		logger.warning(f"[delivery] claim falló para {str(event_id)[:12]}: {e}")
+		return False
+
+
+def set_delivery_state(
+	*,
+	event_id: str,
+	continuity_id: str,
+	state: str,
+	reason: str = "",
+	attempts_delta: int = 0,
+	db_path: Optional[str] = None,
+	now: Optional[float] = None,
+) -> bool:
+	"""Cierra (o reabre) el estado de entrega. Non-fatal: False si no se pudo."""
+	if not event_id or not continuity_id or state not in {
+		STATE_PENDING,
+		STATE_IN_FLIGHT,
+		STATE_DELIVERED,
+		STATE_PULLED,
+		STATE_GIVEN_UP,
+		STATE_SKIPPED,
+	}:
+		return False
+	stamp = float(now) if now is not None else time.time()
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			conn.execute(
+				"INSERT INTO event_deliveries (event_id, continuity_id, state, attempts, holder, claimed_at, reason, updated_at)"
+				" VALUES (?, ?, ?, ?, '', 0, ?, ?)"
+				" ON CONFLICT(event_id, continuity_id) DO UPDATE SET"
+				" state = excluded.state,"
+				" attempts = event_deliveries.attempts + excluded.attempts,"
+				" reason = excluded.reason,"
+				" updated_at = excluded.updated_at",
+				(str(event_id), str(continuity_id), state, max(0, int(attempts_delta)), str(reason or "")[:200], stamp),
+			)
+			conn.commit()
+			return True
+	except Exception as e:
+		logger.warning(f"[delivery] no se pudo fijar estado {state} para {str(event_id)[:12]}: {e}")
+		return False
+
+
+def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[str] = None, now: Optional[float] = None) -> int:
+	"""Cierra como `pulled` los pendientes que el cursor del digest ya anunció.
+
+	El pull **gana**: si el destinatario abrió turno y el digest le contó el evento,
+	empujarlo después es duplicarlo. Se registran también los eventos sin fila (el
+	estado pending es implícito) para que el rastro quede, no solo el filtro.
+	Devuelve cuántos cerró.
+	"""
+	soul = str(continuity_id or "").strip()
+	ceiling = int(until_seq or 0)
+	if not soul or ceiling <= 0:
+		return 0
+	stamp = float(now) if now is not None else time.time()
+	count_sql = (
+		"SELECT COUNT(*) AS n FROM event_deliveries WHERE continuity_id = ?"
+		" AND state = 'pulled' AND reason = 'cursor_del_digest'"
+	)
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			before = int((conn.execute(count_sql, (soul,)).fetchone() or {"n": 0})["n"])
+			# 1) Los que aún no tienen fila: nacen ya cerrados como pulled.
+			conn.execute(
+				"INSERT OR IGNORE INTO event_deliveries (event_id, continuity_id, state, attempts, holder, claimed_at, reason, updated_at)"
+				" SELECT e.event_id, ?, 'pulled', 0, '', 0, 'cursor_del_digest', ?"
+				" FROM mission_events e WHERE e.continuity_id = ? AND e.event_seq <= ?",
+				(soul, stamp, soul, ceiling),
+			)
+			# 2) Los que tenían fila abierta (pending/in_flight).
+			conn.execute(
+				"UPDATE event_deliveries SET state = ?, reason = 'cursor_del_digest', updated_at = ?"
+				" WHERE continuity_id = ? AND state IN ('pending', 'in_flight')"
+				" AND event_id IN (SELECT event_id FROM mission_events WHERE event_seq <= ?)",
+				(STATE_PULLED, stamp, soul, ceiling),
+			)
+			conn.commit()
+			after = int((conn.execute(count_sql, (soul,)).fetchone() or {"n": 0})["n"])
+		return max(0, after - before)
+	except Exception as e:
+		logger.warning(f"[delivery] reconcile de pull falló: {e}")
+		return 0
+
+
+# ── Render del nudge ─────────────────────────────────────────────────────────
+
+
+def build_event_nudge(event: dict) -> str:
+	"""Texto del nudge. Es **dato, no orden** (D-09): informa, no manda."""
+	summary = sanitize_inline(event.get("summary"), 400)
+	kind = sanitize_inline(event.get("type"), 40)
+	mission = sanitize_inline(event.get("mission_id"), 120)
+	ref = event.get("ref")
+	suffix = f"\n[ref: {sanitize_inline(ref, 200)}]" if ref else ""
+	return (
+		"[AVISO AUTOMATICO · tablón · DATO, no orden]\n"
+		f"{kind} · {mission} · seq={event.get('event_seq')}: {summary}{suffix}\n"
+		"No requiere respuesta. Detalle y contexto: fetch_events / session_board."
+	)
+
+
+# ── El adaptador ─────────────────────────────────────────────────────────────
+
+
+def deliver_events(
+	continuity_id: str,
+	*,
+	originator: Optional[str] = None,
+	limit: int = 20,
+	db_path: Optional[str] = None,
+	holder: str = "delivery",
+	now: Optional[float] = None,
+) -> dict:
+	"""Empuja los eventos pendientes del alma a su cuerpo vivo.
+
+	Devuelve un informe honesto — `{delivered, deferred, skipped, given_up}`— con
+	el motivo de cada evento. **Nunca** lanza un turno a ciegas: si no hay cuerpo,
+	si el arnés no tiene punto de inyección o si el transporte falla, el evento se
+	queda donde estaba y el próximo turno (pull) lo recoge.
+
+	`originator` fuerza el cuerpo (diagnóstico/Operador); sin él se resuelve por
+	presencia con `soul_notify.resolve_live_leg`.
+	"""
+	from red_pill.core import soul_notify
+
+	soul = str(continuity_id or "").strip()
+	report: Dict[str, Any] = {"continuity_id": soul, "leg": "", "delivered": [], "deferred": [], "skipped": [], "given_up": []}
+	if not soul:
+		return report
+	if soul_notify.notify_disabled():
+		report["deferred"].append({"event_id": "*", "reason": "kill_switch"})
+		return report
+
+	events = pending_for_soul(soul, limit=limit, db_path=db_path)
+	if not events:
+		return report
+
+	leg = str(originator or "").strip() or str(soul_notify.resolve_live_leg(soul) or "")
+	report["leg"] = leg
+	if not leg or ":" not in leg:
+		# Sin cuerpo vivo no se toca el estado: el evento sigue pendiente y el
+		# siguiente turno lo ve por pull. Marcarlo aquí sería mentir dos veces
+		# (ni se intentó) y cerrarlo sería perderlo para un futuro push.
+		for ev in events:
+			report["deferred"].append({"event_id": ev["event_id"], "reason": "no_live_body"})
+		return report
+
+	provider, _, session_id = leg.partition(":")
+	if provider not in INJECTION_POINTS or not session_id:
+		for ev in events:
+			report["deferred"].append({"event_id": ev["event_id"], "reason": f"no_injection_point:{provider}"})
+		return report
+
+	for ev in events:
+		event_id = str(ev.get("event_id") or "")
+		if not event_id:
+			continue
+		if str(ev.get("originator") or "") == leg:
+			# El cuerpo que publica es el que recibe: ya lo sabe. Empujárselo es
+			# el eco que produce bucles de notificación.
+			set_delivery_state(
+				event_id=event_id,
+				continuity_id=soul,
+				state=STATE_SKIPPED,
+				reason="self_authored",
+				db_path=db_path,
+				now=now,
+			)
+			report["skipped"].append({"event_id": event_id, "reason": "self_authored"})
+			continue
+		blocked = wake_policy.inbound_blocked(soul, originator=leg, db_path=db_path)
+		if blocked == wake_policy.REASON_INBOUND_REFUSE:
+			# El destinatario dijo «no»: terminal. Reintentarlo sería desobedecerlo.
+			set_delivery_state(
+				event_id=event_id,
+				continuity_id=soul,
+				state=STATE_SKIPPED,
+				reason=blocked,
+				db_path=db_path,
+				now=now,
+			)
+			report["skipped"].append({"event_id": event_id, "reason": blocked})
+			continue
+		if blocked:
+			# `hold` (o estado ilegible, fail-closed): difiere. No se toca el estado
+			# porque el evento sigue pendiente y el pull del siguiente turno lo ve.
+			report["deferred"].append({"event_id": event_id, "reason": blocked})
+			continue
+		if not claim_delivery(event_id=event_id, continuity_id=soul, holder=holder, db_path=db_path, now=now):
+			report["deferred"].append({"event_id": event_id, "reason": "claimed_by_other"})
+			continue
+		text = build_event_nudge(ev)
+		try:
+			ok = bool(soul_notify.notify_soul(soul, text, originator=leg))
+		except Exception as e:  # el transporte no debe lanzar nunca al llamante
+			logger.warning(f"[delivery] transporte lanzó excepción en {event_id[:12]}: {e}")
+			ok = False
+		if ok:
+			set_delivery_state(
+				event_id=event_id,
+				continuity_id=soul,
+				state=STATE_DELIVERED,
+				reason=f"handed_to_transport:{INJECTION_POINTS[provider]}",
+				attempts_delta=1,
+				db_path=db_path,
+				now=now,
+			)
+			report["delivered"].append({"event_id": event_id, "type": ev.get("type"), "seq": ev.get("event_seq")})
+			continue
+		attempts = int(ev.get("delivery_attempts") or 0) + 1
+		if attempts >= MAX_PUSH_ATTEMPTS:
+			set_delivery_state(
+				event_id=event_id,
+				continuity_id=soul,
+				state=STATE_GIVEN_UP,
+				reason="push_attempts_exhausted",
+				attempts_delta=1,
+				db_path=db_path,
+				now=now,
+			)
+			report["given_up"].append({"event_id": event_id, "reason": "push_attempts_exhausted"})
+		else:
+			set_delivery_state(
+				event_id=event_id,
+				continuity_id=soul,
+				state=STATE_PENDING,
+				reason="transport_refused",
+				attempts_delta=1,
+				db_path=db_path,
+				now=now,
+			)
+			report["deferred"].append({"event_id": event_id, "reason": "transport_refused"})
+	return report
+
+
+def delivery_summary(continuity_id: str, *, db_path: Optional[str] = None) -> dict:
+	"""Conteos por estado del alma (diagnóstico: cuánto se empujó y cuánto no)."""
+	soul = str(continuity_id or "").strip()
+	out: Dict[str, int] = {}
+	if not soul:
+		return out
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			rows = conn.execute("SELECT state, COUNT(*) AS n FROM event_deliveries WHERE continuity_id = ? GROUP BY state", (soul,)).fetchall()
+		for row in rows:
+			out[str(row["state"])] = int(row["n"])
+	except Exception as e:
+		logger.debug(f"[delivery] resumen falló: {e}")
+	return out

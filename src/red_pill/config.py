@@ -573,6 +573,15 @@ class RedPillConfig(BaseSettings):
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
+	# WAKE_POLICY (D-07): a quién puede DESPERTAR (push) un emisor, como dato:
+	# reglas `from:relation` en CSV, primera que casa permite. Relaciones: self,
+	# chain, same_mission, same_campaign, any. Vacío = default de fábrica
+	# (`session/wake_policy.DEFAULT_POLICY`: el alma, el orquestador a su cadena
+	# y los pares de la misma misión). Mal formada o con relación desconocida ⇒
+	# no se despierta a nadie (fail-closed). El campo existe para poder ampliar
+	# el círculo sin tocar código — con `extra="ignore"`, una clave no declarada
+	# aquí se descartaría en silencio.
+	WAKE_POLICY: str = ""
 	# D23-SCORE v0.1 — auto-revisor de objeciones (DECISION_LOG AD-084 / D23).
 	# off: solo Operador; review: sugiere sin mutar; semi: actúa solo con
 	# confianza alta (si no, escala); auto: decide low/medium (high/retract

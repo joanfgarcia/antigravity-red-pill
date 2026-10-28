@@ -2154,6 +2154,27 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	return "[CORO] " + " · ".join(parts) + " (fetch_events / session_board)"
 
 
+def _reconcile_pull_first(identity: Dict[str, Any], until_seq: int) -> None:
+	"""Pull-first (Fase 5): lo que el digest ANUNCIÓ ya no se empuja.
+
+	El push solo vale hasta que el destinatario abre turno. Si el digest ya le
+	contó los eventos pendientes, empujarlos después es duplicar la entrega. Se
+	llama **después** de fijar el cursor y **solo cuando el digest salió**: si
+	quedó mudo (política de rol `digest=none` o sin novedades) el nudge es la
+	única entrega, y cerrarlo aquí lo perdería.
+
+	Non-fatal por diseño: un fallo aquí puede costar un nudge duplicado (ruido);
+	un fallo mal encaminado costaría un nudge perdido. Por eso se limita a
+	`reconcile_pulled`, que no toca el tablón.
+	"""
+	try:
+		from red_pill.session import delivery as _delivery
+
+		_delivery.reconcile_pulled(str(identity.get("continuity_id") or ""), until_seq=int(until_seq or 0))
+	except Exception as e:
+		logger.debug(f"[CORO] reconcile de entrega no aplicable: {e}")
+
+
 @registry.register(
 	name="sovereign_handshake",
 	description=(
@@ -2283,6 +2304,8 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 			registry_obj.set_last_seen_event_seq(identity["originator"], until_seq)
 			if digest:
 				outputs.append(digest)
+				# El digest anunció estos eventos: ya no se empujan (pull-first).
+				_reconcile_pull_first(identity, until_seq)
 		except Exception as e:
 			logger.warning(f"Sovereign Handshake — coro digest unavailable: {e}")
 

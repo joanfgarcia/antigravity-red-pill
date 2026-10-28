@@ -2082,6 +2082,12 @@ más, no un reemplazo.
 > reapuntarse a ese canal**; el transporte CLI quedará como fallback (o se retira).
 > `_deliver_neon_link()` existe ya como placeholder honesto que **no entrega** (devuelve
 > `False`) para que el repunte sea explícito y testeado, no una promesa.
+>
+> **Actualizado 2026-10-28:** el canal `soul` **no existe** todavía. Medido: `neon-link`
+> tiene `core/inbox.py` = `LocalInbox` en memoria (28 líneas) y un `outbox` de **egress**
+> con estados, pero **ningún canal `soul`** ni `inbox_adapters.py`. Ver **AD-094 §3**
+> para la tabla de lo que sí y lo que no. El repunte sigue pendiente y el transporte
+> CLI sigue siendo el vigente.
 
 ---
 
@@ -2591,3 +2597,83 @@ de que no devuelve la cadena vacía disfrazada de rápido):
 código manda: se añaden las dos filas a la tabla (junto a las de latido) con sus defaults
 reales (`silent`, `8.0`), verificados por comando en §3. Sin este arreglo el documento
 afirmaría implícitamente que no existen knobs de sync.
+
+---
+
+## [AD-094] Fase 5 — adaptadores de entrega y política de wake; canal `soul` = GAP declarado
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTADO (adaptador + política). **C4 (repunte a neon-link): GAP
+DECLARADO, no implementado.** Bloque C de la misión `ALMA_Y_CORO_CIERRE`.
+
+### 1. The Problem
+Fase 5 tenía dos piezas: que un evento del tablón llegue **dentro** del arnés de un
+alma (no solo al buzón), y decidir **quién puede despertar a quién** sin que
+cualquiera pueda interrumpir a cualquiera (D-07). Además, AD-090 dejó el aviso de
+fin de job con un transporte **temporal** por CLI, pendiente de repuntar al canal
+`soul` de `neon-link` (D-06).
+
+### 2. The Decision
+1. **`session/delivery.py`** — entrega de eventos dirigida al **alma**
+   (`continuity_id`), con estados de entrega (`delivered` / `pulled` / `skipped` /
+   `given_up`) y CAS para no entregar dos veces. **Pull-first y fail-closed**: si
+   no hay cuerpo, o el arnés no tiene punto de inyección, el evento **sigue
+   pendiente** y se recoge en el siguiente turno. No invoca `opencode run` por su
+   cuenta: usa el seam de `core/soul_notify.py` (un solo transporte, AD-090).
+2. **Tabla de honestidad por arnés** en el docstring, con fichero:línea: `opencode`
+   sí tiene punto de inyección; `claude_code` y `pi` son **headless** (abren turno
+   en otro proceso, no despiertan la sesión del Operador); `telegram` vive fuera
+   del repo. Los tres degradan a **pull**. No se maquilla la asimetría.
+3. **`session/wake_policy.py`** — D-07 como **dato** (config), no cableado:
+   default de fábrica `*:self, orchestrator:chain, *:same_mission`. Controles de
+   entrada por sesión (`accept` / `hold` / `refuse`); `refuse` es terminal,
+   `hold` difiere. **`rules_invalid` ante config ilegible o malformada** en vez de
+   caer a un default permisivo: despertar por no saber es el fallo que se evita.
+   D-09 respetado: un mensaje es DATO y no suspende constraints del Operador.
+
+### 3. The GAP (C4) — medido, no supuesto
+El RFC suponía que `neon-link` ya tenía `events.db` con `inbox`/`outbox`/
+`dead_letters` y un `core/inbox_adapters.py` con el contrato «un canal nuevo añade
+su lector sin tocar el worker». **No es así.** Medido el 2026-10-28:
+
+| Comprobación | Resultado |
+|---|---|
+| `neon-link/src/neon_link/core/inbox.py` | existe, pero es `LocalInbox` **en memoria** (28 líneas: push/summary/pop_all) |
+| `core/inbox_adapters.py` | **NO existe** |
+| `outbox` con canales y estados | **SÍ existe** (`core/manager.py:_poll_outbox_loop`, `_fail_outbox_msg`, `status = SENT`) — es **egress** |
+| canal `soul` (`grep -rln soul --include=*.py`) | **vacío** |
+
+**Conclusión:** falta el canal `soul` (dirección = `continuity_id`) y el adaptador
+inbound por arnés; el puente para que `delivery.py` escriba en el `outbox` en vez
+de usar el CLI tampoco existe. La infraestructura de transporte **está a medias en
+los dos lados**, no ausente: red-pill ya tiene `delivery.py` + el seam
+`_TRANSPORTS`, y `neon-link` ya tiene outbox con estados. Lo que no hay es el
+canal que los une.
+
+**Por qué no se implementa ahora:** exige tocar otro repo y una decisión de diseño
+que el propio RFC ya fijó pero nadie ha materializado (el cuerpo del mensaje es un
+evento de `mission_events`; el broker guarda **solo** su estado de entrega). Y
+cerrar una fase fingiendo el canal sería peor que dejarla abierta con nombre.
+
+### 4. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Simular el canal `soul` para «cerrar» Fase 5 | **rechazada** | Un canal falso es peor que un GAP escrito: el aviso seguiría sin llegar |
+| Repuntar AD-090 al `LocalInbox` en memoria | rechazada | Es in-memory: se pierde al reiniciar, justo lo contrario del requisito |
+| Seguir con el transporte CLI como definitivo | rechazada | Funciona, pero es acoplamiento al arnés y no sobrevive a un cambio de proveedor |
+
+### 5. Rationale
+`delivery.py` (514 líneas + 477 de tests) y `wake_policy.py` (401 + 271) generados
+por `qwen3.8-omni-flash` en el `dag_job` `e328f02f` y **revisados a mano**: tabla de
+honestidad verificada contra los bridges, fail-closed comprobado, y el módulo no
+reabre una segunda vía de transporte. Suite del worktree: 3786 passed.
+
+### 6. Deuda declarada
+- **Canal `soul` en `neon-link`** (arriba). Es el destino de AD-090 y la pieza que
+  convierte Fase 5 en completa.
+- **El aviso al alma depende de un proveedor con crédito.** Incidente 2026-10-28:
+  `cheaper-inference` y `openrouter` se quedaron **sin crédito** a mitad de la
+  misión; el trabajo agéntico quedó bloqueado. El aviso (AD-090) usa el modelo de
+  la sesión, así que también cae con el proveedor. **Esto convierte el «fallback de
+  proveedores» de idea futura en necesidad operativa**: hoy no existe, y la única
+  ruta viva era `opencode-go`.
