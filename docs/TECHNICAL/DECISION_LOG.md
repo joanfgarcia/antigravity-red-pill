@@ -1982,3 +1982,50 @@ Validado por un panel adversarial de 5 rondas (veredicto final **PASS**, sin
 CRITICAL/HIGH). El núcleo verificado en vivo: el handshake emite
 `leg="opencode:<session_id>"` real y escribe `session_registry`; el bridge lo
 escribe el plugin nuevo. Suite completa verde.
+
+---
+
+## [AD-089] Bridge por sesión — resolución del cuerpo por instancia (D-BRIDGE)
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED. Cierra la deuda **P2a** que AD-050 §3 dejó *diferida a 0b*
+("Bridge por sesión (no por proveedor)").
+
+### 1. The Problem
+El bridge del arnés era **un fichero global por arnés** (`state/<harness>_session.json`):
+lo escribe el hook de cada pestaña y lo lee el proxy/MCP. Con varias pestañas vivas
+(todas escriben en el mismo fichero) gana el **último escritor**, así que un alma
+(`continuity_id`) podía quedar atribuida al **cuerpo** (`session_id`) de otra pestaña.
+Reproducido en vivo el 2026-10-28: 5 procesos `mcp_proxy` con el **mismo padre**
+(`opencode-cli`) y el mismo backend, pero `cwd` distinto por instancia; el entorno del
+proxy **no** trae el `session_id` (la config MCP es estática) y `PWD` está rancio.
+
+### 2. The Decision
+1. **Escritor (plugin):** además del bridge global, el hook escribe un bridge **por
+   sesión** (`state/sessions/bridge/opencode__<sid>.json`), con `session_id`, `workdir`
+   y `updated_at`. El global se conserva (compat + degradación).
+2. **Lector (proxy):** el proxy corre **por instancia** y tiene el `cwd` de su pestaña
+   (único discriminador disponible). `core/bridge.py` resuelve su cuerpo por correlación:
+   - **Capa 1:** bridges per-sesión con `workdir == cwd` **de sesión viva** (el hook
+     acaba de escribir el suyo; funciona aunque la sesión aún no esté en `opencode.db`).
+   - **Capa 2:** `opencode.db` (`session.directory == cwd`) entre las vivas — desempate.
+   - **Degradación honesta:** si hay varias pestañas vivas en el mismo workspace la
+     correlación no decide y se cae al bridge global (comportamiento anterior).
+3. **Vitalidad en todas las capas.** La capa 1 exige latido **y frescura** (`updated_at`
+   dentro de la ventana): un bridge rancio de una pestaña cerrada no puede ganar a la
+   sesión viva (defecto detectado por la auditoría adversarial del mismo día).
+4. **`_norm` con `realpath`** (symlinks) y **paridad de saneado** JS/Python (`[/:]`→`_`).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Colisión "rara y auto-sanable" (AD-050 §3) | **corregida** | No era auto-sanable: la última pestaña atribuía su cuerpo a la otra alma |
+| `session_id` por env del MCP | rechazada | La config MCP es estática: opencode no conoce la sesión al arrancar el proxy |
+| Bridge por sesión sin guarda de vitalidad | corregida | Un bridge rancio atribuía el cuerpo de una pestaña muerta (auditoría 2026-10-28) |
+
+### 4. Rationale
+Verificado en vivo (5 proxies, cwd por instancia, sesión del turno aún ausente de
+`opencode.db`). El path del backend ya era correcto: el `originator` del canal de
+confianza (`X-RedPill-Proxy`) gana sobre env/bridge en el resolver del
+handshake, así que arreglar la resolución en el proxy basta. 10 tests nuevos
+(`tests/test_bridge_per_session.py` + 1 de plugin); lint y tipos limpios.
