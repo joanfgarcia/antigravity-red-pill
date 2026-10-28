@@ -27,12 +27,12 @@ el repo debe invocar `opencode run --session` para notificar a un alma.
 Reglas que respeta (no las salta)
 ---------------------------------
 - **D-07 (quién puede despertar a quién)**: un job es hijo del alma que lo
-  lanzó, así que notificar a esa alma es *cadena de mando* — permitido.
+	lanzó, así que notificar a esa alma es *cadena de mando* — permitido.
 - **D-09**: el aviso es **dato**, nunca una orden; no pide nada al receptor.
 - **D-11**: `opencode run --session` **inyecta**; `api POST` fallaría cerrado
-  y el mensaje desaparecería. Por eso se usa `run --session`.
+	y el mensaje desaparecería. Por eso se usa `run --session`.
 - **No bloquea al worker**: la entrega corre en un hilo daemon con timeout. Un
-  job NUNCA debe quedarse colgado esperando a que otro turno termine.
+	job NUNCA debe quedarse colgado esperando a que otro turno termine.
 
 Non-fatal por diseño: cualquier fallo se registra y se ignora. Perder un aviso
 es malo; tumbar el runner por un aviso, peor.
