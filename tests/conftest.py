@@ -104,6 +104,39 @@ _SW_FLAGS = (
 
 
 @pytest.fixture(autouse=True)
+def _flags_de_fabrica_pese_al_env(monkeypatch):
+	"""Hermético al `.env` del Operador: la suite corre con los defaults de fábrica.
+
+	Algunos tests afirman el comportamiento de FÁBRICA (p.ej. "el compactor está
+	apagado por defecto"), pero el `.env` del puesto puede activarlo. Resultado:
+	la suite pasa en CI (sin `.env`) y falla en la máquina del Operador — o peor,
+	pasa o falla según el entorno, que es cobertura que no significa nada.
+
+	Detectado el 2026-10-28: con `SESSION_COMPACTOR_ENABLED=true` en `.env` fallaban
+	`test_compactor_flags_are_off_by_default`, `test_trigger_compaction` y
+	`test_pending_agentic_omite_anotadas_frescas_con_from_raw` (verificado: fallan
+	igual en el commit anterior a los cambios de ese día → deuda preexistente).
+
+	Se fijan como VARIABLES DE ENTORNO, no parcheando el objeto de config:
+	`bunker_isolation` hace `get_config.cache_clear()` y reconstruye el singleton
+	más tarde, así que un parche sobre la instancia se perdería. El rebuild lee
+	el entorno (y las env vars ganan al `.env`), de modo que esto sobrevive.
+
+	`monkeypatch` restaura al terminar cada test: un test que necesite el valor
+	del `.env` puede pedirlo con su propio `monkeypatch`/override.
+	"""
+	defaults = {
+		"SESSION_COMPACTOR_ENABLED": "false",
+		# El `.env` del puesto lo activa; con GATE activo, `pending_agentic` toma la
+		# rama del gate y NUNCA evalúa la frescura de `annotate/` (es un `elif`),
+		# así que el test de MEM-006 no puede pasar.
+		"MEMENTO_ANNOTATE_GATE": "false",
+	}
+	for name, value in defaults.items():
+		monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
 def _soul_notify_disabled_por_defecto(monkeypatch):
 	"""Los tests NO deben lanzar entregas reales al alma (AD-090).
 
