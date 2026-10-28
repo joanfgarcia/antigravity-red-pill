@@ -4,20 +4,27 @@ No hay harness de pi en CI para un test conductual, así que se valida el
 CONTRATO del artefacto desplegado: compila con `bun build` (sin placeholders) y
 conserva los símbolos de la paridad Alma y Coro (handshake MCP con originator
 compuesto) y NO reintroduce los mecanismos retirados (link en el hook / tagScan).
+
+Runtime: la compilación usa `bun build` (bundler exclusivo de Bun). Si no hay
+Bun, el test se marca **xfail NO silencioso** — antes era un `skip` mudo y en CI
+(que no instala bun) significaba cobertura cero sin avisar. Ver `_js_runtime.py`.
 """
 
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from tests._js_runtime import find_js_runtime, needs_js_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED = REPO_ROOT / "seeds" / "pi" / "extensions" / "red-pill.ts"
 
-pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="bun no disponible")
+# La extensión se COMPILA con `bun build` (no basta un runtime cualquiera): solo
+# Bun sirve. Se exige explícitamente el runtime de tipo bun, y el XFAIL ruidoso
+# se aplica SOLO al test que compila (el de paridad es puramente textual).
+_BUN = find_js_runtime(require_bun_sqlite=False)
+_runtime = needs_js_runtime(require_bun_sqlite=False, require_kind="bun")
 
 _EXTERNAL = [
 	"--external",
@@ -37,10 +44,16 @@ def _substituted(tmp_path: Path) -> Path:
 	return out
 
 
+@_runtime
 def test_pi_extension_compila(tmp_path):
 	out = _substituted(tmp_path)
-	res = subprocess.run(
-		["bun", "build", str(out), "--target=node", *_EXTERNAL, "--outfile", str(tmp_path / "out.js")],
+	res = _BUN.run(
+		"build",
+		str(out),
+		"--target=node",
+		*_EXTERNAL,
+		"--outfile",
+		str(tmp_path / "out.js"),
 		capture_output=True,
 		text=True,
 		timeout=60,
