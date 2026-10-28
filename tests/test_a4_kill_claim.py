@@ -141,6 +141,37 @@ def test_defer_cannot_revive_cancelled_job(queue):
 	assert queue.get_task(job_id)["status"] == "PAUSED"
 
 
+def test_cancelled_parent_does_not_unlock_dag_children(queue):
+	"""A4 (auditoría 2026-10-28): el kill no resucita el DAG por la puerta de los hijos.
+
+	El step en vuelo de un padre cancelado termina y llama `mark_completed`: el
+	COMPLETED se niega, pero el desbloqueo de dependencias corría igual y los
+	hijos BLOCKED volvían a PENDING (claimables) → resurrección por otra puerta.
+	"""
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+	assert queue.get_task(child)["status"] == "BLOCKED"
+	queue.pop_next_task()
+	queue.kill_task(parent)
+
+	queue.mark_completed(parent)
+
+	assert queue.get_task(parent)["status"] == "PAUSED", "el padre no puede sellarse COMPLETED (A4)"
+	assert queue.get_task(child)["status"] == "BLOCKED", "un padre cancelado no desbloquea a sus hijos"
+
+
+def test_completed_parent_does_unlock_dag_children(queue):
+	"""Contraprueba: el desbloqueo legítimo sigue funcionando."""
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+	queue.pop_next_task()
+
+	queue.mark_completed(parent)
+
+	assert queue.get_task(parent)["status"] == "COMPLETED"
+	assert queue.get_task(child)["status"] == "PENDING"
+
+
 # ── Las dos puertas explícitas del Operador SÍ limpian la marca ───────────
 
 

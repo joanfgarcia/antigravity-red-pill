@@ -391,9 +391,15 @@ class CognitiveQueueManager:
 				""",
 				(task_id,),
 			)
-			if cursor.rowcount == 0:
-				logger.info(f"[QUEUE] Task {task_id} completed after cancel; COMPLETED refused (A4).")
-			# DAG: Desbloquear dependencias
+			completed = cursor.rowcount > 0
+			if not completed:
+				# A4 (auditoría 2026-10-28): el COMPLETED se negó (job cancelado o
+				# frustrado) → NO se desbloquean los hijos. Un kill no puede
+				# resucitar trabajo por la puerta del DAG; antes este UPDATE
+				# corría igual y devolvía los hijos BLOCKED a PENDING.
+				logger.info(f"[QUEUE] Task {task_id} completed after cancel; COMPLETED refused, children kept BLOCKED (A4).")
+				return
+			# DAG: Desbloquear dependencias (solo si el padre pasó de verdad a COMPLETED)
 			cursor = conn.execute(
 				"""
 				UPDATE cognitive_tasks
