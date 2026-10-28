@@ -222,6 +222,15 @@ class DagExecMixin:
 			logger.warning(f"[DagJob] claim no disponible para '{stage_path}': {e}")
 			return None
 
+	# Claves que acepta cada operación de `stage_claims`. Se declaran explícitamente
+	# porque `_claim_params` devuelve el conjunto COMPLETO: pasarlo tal cual a
+	# `renew_claim`/`release_claim` lanzaba `TypeError` por kwargs de más
+	# (`intent`, `originator`) y —tragado por el `except`— dejaba el latido sin
+	# renovar (el claim expiraba y otro driver lo robaba) y el release sin soltar
+	# (filas huérfanas). Detectado por el E2E de F4-E5, 2026-10-28.
+	_RENEW_KEYS = ("stage_path", "affinity", "branch", "worktree", "continuity_id", "originator", "ttl_seconds")
+	_RELEASE_KEYS = ("stage_path", "affinity", "branch", "worktree", "continuity_id")
+
 	def _release_stage_claim(self, payload: Dict[str, Any], stage_path: str, workdir: str) -> None:
 		"""Suelta el claim de la etapa. Non-fatal."""
 		params = self._claim_params(payload, workdir, stage_path)
@@ -230,7 +239,7 @@ class DagExecMixin:
 		try:
 			from red_pill.session.stage_claims import release_claim
 
-			release_claim(**params)
+			release_claim(**{k: v for k, v in params.items() if k in self._RELEASE_KEYS})
 		except Exception as e:
 			logger.warning(f"[DagJob] no se pudo soltar el claim de '{stage_path}': {e}")
 
@@ -270,10 +279,12 @@ class DagExecMixin:
 		stop = threading.Event()
 		interval = self._renew_interval(ttl)
 
+		renew_kwargs = {k: v for k, v in params.items() if k in self._RENEW_KEYS}
+
 		def _beat() -> None:
 			while not stop.wait(interval):
 				try:
-					if not renew_claim(**params):
+					if not renew_claim(**renew_kwargs):
 						# El claim ya no es nuestro o expiró: otro pudo robarlo. La
 						# etapa sigue (tirarla sería peor que el posible solape), pero
 						# queda registrado: es la señal de que el TTL se quedó corto.

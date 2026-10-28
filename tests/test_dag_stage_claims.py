@@ -27,6 +27,8 @@ class _StubDriver(DagJobDriver):
 
 	short_id = "test1"
 	job_id = "job-test-1"
+	_RENEW_KEYS = DagJobDriver._RENEW_KEYS
+	_RELEASE_KEYS = DagJobDriver._RELEASE_KEYS
 
 	def _workdir(self, payload):  # type: ignore[override]
 		return "/ws"
@@ -197,3 +199,72 @@ class TestRenovacionPorLatido:
 			_StubDriver, "_run_atomic_inner", side_effect=lambda *a, **k: _t.sleep(0.05) or "ok"
 		):
 			assert driver._run_atomic(_PAYLOAD, _STAGE, "dag:m/stage:x") == "ok"
+
+
+class TestIntegracionSinMocks:
+	"""El E2E de F4-E5 (2026-10-28) cazó un fallo que los mocks tapaban.
+
+	`_claim_params` devuelve el conjunto completo; pasarlo tal cual a
+	`renew_claim`/`release_claim` lanzaba `TypeError` por kwargs de más. Los
+	tests anteriores mockeaban con `lambda **k`, que se traga cualquier firma:
+	verdes, y el latido no renovaba ni el release soltaba. Estos tests hablan con
+	las funciones REALES contra una BD temporal.
+	"""
+
+	@pytest.fixture
+	def sesion_temporal(self, tmp_path, monkeypatch):
+		db = str(tmp_path / "session.db")
+		monkeypatch.setattr("red_pill.core.paths.get_session_db", lambda: db)
+		return db
+
+	def test_firmas_compatibles_con_las_claves_que_envia_el_driver(self):
+		"""Test estructural: habría cazado el TypeError al instante."""
+		import inspect
+
+		from red_pill.session.stage_claims import release_claim, renew_claim
+
+		renew_args = set(inspect.signature(renew_claim).parameters)
+		release_args = set(inspect.signature(release_claim).parameters)
+		assert set(_StubDriver._RENEW_KEYS) <= renew_args, f"renew_claim no acepta {set(_StubDriver._RENEW_KEYS) - renew_args}"
+		assert set(_StubDriver._RELEASE_KEYS) <= release_args, f"release_claim no acepta {set(_StubDriver._RELEASE_KEYS) - release_args}"
+
+	def test_claim_se_suelta_de_verdad(self, sesion_temporal):
+		"""Sin mocks: la fila DESAPARECE al soltarla con las claves del driver.
+
+		Ojo con el detalle que hacía este test inútil al principio: importar
+		`try_claim_stage` DENTRO de un `patch(...)` devuelve el mock, así que el
+		claim nunca se creaba y la aserción pasaba en el vacío. Aquí se usa la
+		función real, importada fuera de cualquier parche.
+		"""
+		from red_pill.session.stage_claims import get_claim
+		from red_pill.session.stage_claims import try_claim_stage as real_claim
+
+		driver = _StubDriver()
+		kw = dict(stage_path="dag:m/stage:x", affinity=["mission:repo:next"], branch="next", worktree="/ws")
+		assert real_claim(**kw, continuity_id="alma-a", originator="dag:job-test-1").claimed
+		assert get_claim(**kw) is not None, "el claim debe existir antes de soltarlo"
+
+		driver._release_stage_claim(_PAYLOAD, "dag:m/stage:x", "/ws")
+
+		assert get_claim(**kw) is None, "el release real debe borrar la fila"
+
+	def test_el_latido_renueva_el_claim_real(self, sesion_temporal):
+		"""Con el reloj acelerado, el latido mantiene vivo el claim real."""
+		import time as _t
+
+		from red_pill.session.stage_claims import get_claim
+		from red_pill.session.stage_claims import try_claim_stage as real_claim
+
+		kw = dict(stage_path="dag:m/largo", affinity=["mission:repo:next"], branch="next", worktree="/ws")
+		real_claim(**kw, continuity_id="alma-a", originator="dag:job-test-1", ttl_seconds=3)
+		driver = _StubDriver()
+		with patch.object(_StubDriver, "_renew_interval", return_value=0.05), patch.object(
+			_StubDriver, "_claim_params", wraps=driver._claim_params
+		):
+			stop = driver._start_claim_renewer(dict(_PAYLOAD, claim_ttl_s=3), "dag:m/largo", "/ws")
+			_t.sleep(0.35)  # el TTL es 3 s: sin renovar seguiría vivo, así que miramos el claimed_at
+			antes = get_claim(**kw)["claimed_at"]
+			_t.sleep(0.3)
+			despues = get_claim(**kw)["claimed_at"]
+			stop.set()
+		assert despues > antes, "el latido debe mover claimed_at (renovar de verdad)"
