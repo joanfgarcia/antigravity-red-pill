@@ -53,22 +53,47 @@ logger = logging.getLogger(__name__)
 ENV_DISABLE = "REDPILL_SOUL_NOTIFY_DISABLE"
 # Env para forzar transporte: "cli" (MVP) | "neon_link" (futuro).
 ENV_TRANSPORT = "REDPILL_SOUL_NOTIFY_TRANSPORT"
+# Frescura máxima del leg para despertarlo estando idle (horas).
+ENV_LEG_TTL_H = "REDPILL_SOUL_NOTIFY_LEG_TTL_H"
 # Timeout de la entrega (segundos). Acota el hilo daemon.
 DELIVERY_TIMEOUT_S = 120.0
+# TTL por defecto para aceptar un leg NO activo. Alineado con el TTL anti-stale
+# del bridge (12 h): más allá, el cuerpo probablemente ya no existe y "despertar"
+# crearía una sesión nueva en vez de reanudar la del alma.
+LEG_TTL_H_DEFAULT = 12.0
 
 
 # ── Resolución del cuerpo vivo ───────────────────────────────────────────────
 
 
-def resolve_live_leg(continuity_id: str) -> Optional[str]:
-	"""`continuity_id` (alma) → `provider:session_id` del cuerpo **vivo**, o None.
+def _leg_ttl_s() -> float:
+	try:
+		return float(os.getenv(ENV_LEG_TTL_H) or LEG_TTL_H_DEFAULT) * 3600.0
+	except Exception:
+		return LEG_TTL_H_DEFAULT * 3600.0
 
-	Un alma puede haber vivido en varios cuerpos (reencarnaciones); solo tiene
-	sentido avisar si hay un cuerpo vivo que pueda recibir el turno. Se prefiere
-	el cuerpo con latido (`.start` reciente) y, si hay varios, el más reciente.
+
+def resolve_live_leg(continuity_id: str) -> Optional[str]:
+	"""`continuity_id` (alma) → `provider:session_id` del cuerpo a avisar, o None.
+
+	**Un alma idle también se puede despertar.** Este era el fallo del primer
+	MVP: exigir `is_active()` impedía avisar a una sesión entre turnos — que es
+	exactamente el caso normal (lanzas un job, te vas, termina). Verificado el
+	2026-10-28: el job terminó a las 12:34 y el turno de la sesión había acabado
+	a las 12:31 → `is_active=False` → el aviso nunca se entregó.
+
+	Regla (D-05: la dirección es el alma, el cuerpo se resuelve por presencia):
+	1. **Prefiere** un cuerpo con turno en vuelo (llega antes, sin despertar).
+	2. Si no hay, toma el leg **más reciente** cuyo `updated_at` esté dentro del
+			TTL de frescura (12 h por defecto): `opencode run --session` lo despierta.
+	3. Fuera del TTL, no hay push: el reporte queda en el inbox (pull). Despertar
+			un leg rancio crearía una sesión nueva en vez de reanudar la del alma, y
+			eso rompería la continuidad que el protocolo protege.
 	"""
 	if not continuity_id:
 		return None
+	import time as _time
+
 	try:
 		from red_pill.core.session_liveness import list_sessions
 		from red_pill.session.store import SessionRegistry
@@ -80,15 +105,31 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 	if not legs:
 		return None
 
+	def _originator(leg: dict) -> str:
+		orig = str(leg.get("originator") or "").strip()
+		return orig if orig and ":" in orig else ""
+
 	active = {s.session_id for s in list_sessions() if s.is_active()}
-	# Prioridad: cuerpo con latido activo; si ninguno, el más reciente del registro.
-	for leg in legs:  # ya vienen ordenados por updated_at DESC
-		originator = str(leg.get("originator") or "").strip()
-		if not originator or ":" not in originator:
+	# 1) Cuerpo con turno en vuelo (el más reciente de los activos).
+	for leg in legs:  # ordenados por updated_at DESC
+		orig = _originator(leg)
+		if orig and orig.partition(":")[2] in active:
+			return orig
+
+	# 2) Ninguno activo: el leg más reciente dentro del TTL (se despierta).
+	ttl = _leg_ttl_s()
+	now = _time.time()
+	for leg in legs:
+		orig = _originator(leg)
+		if not orig:
 			continue
-		_, _, sid = originator.partition(":")
-		if sid in active:
-			return originator
+		try:
+			updated = float(leg.get("updated_at") or 0.0)
+		except Exception:
+			updated = 0.0
+		if updated > 0.0 and (now - updated) <= ttl:
+			logger.info(f"[soul-notify] alma {continuity_id[:8]} idle; se despertará {orig} (leg fresco)")
+			return orig
 	return None
 
 

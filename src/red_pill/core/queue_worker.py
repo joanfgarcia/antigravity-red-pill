@@ -83,8 +83,14 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 		# lanzó el job. Sin esto el reporte solo se ve si alguien mira el buzón
 		# ("nadie lo abre"), y la única salida para una tarea larga era un
 		# `nohup &` sin alma. Non-fatal: perder el aviso no tumba el runner.
+		#
+		# Solo estados TERMINALES despiertan. Un "warning" (reintento con cota
+		# duplicada, pausa) no es un desenlace: interrumpir a alguien para decirle
+		# "sigo intentándolo" es ruido, y despertar cuesta un turno. Esos se leen
+		# por pull del inbox.
+		terminal = status in ("success", "failed", "killed")
 		continuity = identity.get("continuity_id") or None
-		if continuity:
+		if terminal and continuity:
 			try:
 				from red_pill.core.soul_notify import build_job_notice, notify_soul
 

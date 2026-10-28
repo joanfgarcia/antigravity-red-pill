@@ -47,13 +47,18 @@ class TestResolveLiveLeg:
 		):
 			assert soul_notify.resolve_live_leg("alma-1") == "opencode:ses_a"
 
-	def test_alma_sin_latido_no_hay_push(self, tmp_path):
-		"""Cuerpo registrado pero no vivo → None (el aviso queda en el inbox)."""
+	def test_alma_sin_latido_pero_fresca_se_despierta(self, tmp_path):
+		"""Cambio de diseño 2026-10-28: idle NO es motivo para no avisar.
+
+		Antes se exigía `is_active()`; pero un job terminado entre turnos es el
+		caso normal, y `opencode run --session` despierta la sesión. Se prefiere
+		una activa, y si no hay, se despierta la más reciente dentro del TTL.
+		"""
 		reg, sig = _seed_leg(tmp_path, "opencode:ses_a", "alma-1", active=False)
 		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
 			"red_pill.core.session_liveness.list_sessions", return_value=[sig]
 		):
-			assert soul_notify.resolve_live_leg("alma-1") is None
+			assert soul_notify.resolve_live_leg("alma-1") == "opencode:ses_a"
 
 	def test_alma_desconocida(self, tmp_path):
 		reg, _ = _seed_leg(tmp_path, "opencode:ses_a", "alma-1", active=True)
@@ -194,3 +199,92 @@ class TestSafetyNet:
 			assert soul_notify.notify_soul("alma-1", "x") is False
 		assert spawned == [], "la suite no debe lanzar entregas reales"
 		assert _sp is not None
+
+
+class TestIdleSeDespierta:
+	"""Regresión 2026-10-28: un alma IDLE debe poder despertarse.
+
+	El primer MVP exigía `is_active()`; el job terminó a las 12:34 con el turno
+	cerrado a las 12:31 → el aviso nunca llegó. `opencode run --session`
+	DESPIERTA, así que exigir turno en vuelo era ponerse una puerta a sí misma.
+	"""
+
+	def _leg(self, tmp_path, updated_at):
+
+		reg = SessionRegistry(db_path=str(tmp_path / "s.db"))
+		reg.upsert_session(
+			originator="opencode:ses_idle",
+			continuity_id="alma-idle",
+			mission_id="repo:t",
+			role="task",
+			affinity=["mission:repo:t"],
+		)
+		# El upsert real sella `updated_at`; lo forzamos para simular antigüedad.
+		with reg._connect() as conn:
+			conn.execute("UPDATE session_registry SET updated_at = ? WHERE originator = ?", (updated_at, "opencode:ses_idle"))
+			conn.commit()
+		return reg
+
+	def test_alma_idle_y_fresca_se_despierta(self, tmp_path):
+		import time as _t
+
+		reg = self._leg(tmp_path, _t.time() - 600)  # 10 min: idle pero fresca
+		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
+			"red_pill.core.session_liveness.list_sessions", return_value=[]
+		):
+			assert soul_notify.resolve_live_leg("alma-idle") == "opencode:ses_idle"
+
+	def test_leg_rancio_fuera_de_ttl_no_se_despierta(self, tmp_path):
+		"""Fuera del TTL no se despierta: crearía una sesión nueva, no la del alma."""
+		import time as _t
+
+		reg = self._leg(tmp_path, _t.time() - 48 * 3600)  # 48 h
+		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
+			"red_pill.core.session_liveness.list_sessions", return_value=[]
+		):
+			assert soul_notify.resolve_live_leg("alma-idle") is None
+
+	def test_activo_gana_a_idle(self, tmp_path):
+		import time as _t
+
+		reg = SessionRegistry(db_path=str(tmp_path / "s2.db"))
+		for orig in ("opencode:ses_viejo", "opencode:ses_activo"):
+			reg.upsert_session(
+				originator=orig, continuity_id="alma-2", mission_id="repo:t", role="task", affinity=["mission:repo:t"]
+			)
+		with reg._connect() as conn:
+			conn.execute(
+				"UPDATE session_registry SET updated_at = ? WHERE originator = 'opencode:ses_viejo'", (_t.time() - 60,)
+			)
+			conn.commit()
+		sig = SessionSignal(provider="opencode", session_id="ses_activo", start_mtime=_t.time() - 2, end_mtime=None)
+		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
+			"red_pill.core.session_liveness.list_sessions", return_value=[sig]
+		):
+			assert soul_notify.resolve_live_leg("alma-2") == "opencode:ses_activo"
+
+
+class TestWarningNoDespierta:
+	def test_warning_solo_queda_en_el_inbox(self):
+		"""Un reintento no es un desenlace: no debe interrumpir a nadie."""
+		from red_pill.core import queue_worker
+
+		calls = []
+		task = {"payload": {"title": "t"}, "source": "script_job", "continuity_id": "alma-1"}
+		with patch("red_pill.core.inbox.MinionInbox"), patch(
+			"red_pill.jobs.artifacts.write_job_result", return_value={"paths": {}}
+		), patch("red_pill.core.soul_notify.notify_soul", side_effect=lambda *a, **k: calls.append(a) or True):
+			queue_worker._report_job("job12345", task, "warning", "reintento con cota duplicada")
+		assert calls == [], "un warning no debe despertar al alma"
+
+	def test_terminal_si_despierta(self):
+		from red_pill.core import queue_worker
+
+		for st in ("success", "failed", "killed"):
+			calls = []
+			task = {"payload": {"title": "t"}, "source": "script_job", "continuity_id": "alma-1"}
+			with patch("red_pill.core.inbox.MinionInbox"), patch(
+				"red_pill.jobs.artifacts.write_job_result", return_value={"paths": {}}
+			), patch("red_pill.core.soul_notify.notify_soul", side_effect=lambda *a, **k: calls.append(a) or True):
+				queue_worker._report_job("job12345", task, st, "fin")
+			assert calls, f"el estado terminal {st} debe despertar al alma"
