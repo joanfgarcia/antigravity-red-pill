@@ -43,7 +43,15 @@ _CORRELATION_WINDOW_S = 900.0
 
 
 def _safe(token: str) -> str:
-	return str(token).replace("/", "_").replace("__", "_")
+	"""Sanea un token para el nombre del bridge: DEBE casar con el JS.
+
+	Paridad exacta con `sessionBridgePath` de `seeds/opencode/plugins/redpill-scribe.js`
+	(que hace `String(x).replace(/[/:]/g, "_").replace(/__/g, "_")`): si los dos
+	lados no producen el mismo nombre, el proxy no encuentra el bridge escrito por
+	el hook. Se escapan `/` y `:` (separadores peligrosos) y se colapsa `__` (que
+	es el delimitador `provider__session`).
+	"""
+	return str(token).replace("/", "_").replace(":", "_").replace("__", "_")
 
 
 def session_bridge_dir() -> Path:
@@ -96,48 +104,74 @@ def _session_directory(session_id: str) -> Optional[str]:
 	return str(row[0]) if row and row[0] else None
 
 
-def list_session_bridges(provider: str) -> List[dict]:
-	"""Todos los bridges per-sesión del provider, más reciente primero.
+def list_session_bridges(provider: str, max_age_s: float = _CORRELATION_WINDOW_S) -> List[dict]:
+	"""Bridges per-sesión del provider **frescos**, más reciente primero.
 
 	Es la fuente primaria de la correlación: el hook acaba de escribir el de ESTA
 	instancia, y `opencode.db` puede no tener aún la fila de la sesión viva
 	(opencode persiste la `session` de forma perezosa — verificado 2026-10-28:
 	731 sesiones históricas con `directory`, pero la sesión del turno en curso
 	aún no estaba). El bridge per-sesión sí existe en cuanto el turno arranca.
+
+	**Frescura obligatoria:** se descartan los bridges más viejos que `max_age_s`.
+	Un bridge rancio es de una pestaña cerrada; devolverlo atribuiría a esta
+	instancia el cuerpo de una sesión muerta (bug de la auditoría 2026-10-28).
+	Nunca se borran ficheros aquí (solo lectura); el barrido es del janitor.
 	"""
+	import time as _time
+
 	directory = session_bridge_dir()
 	try:
 		items = [p for p in directory.iterdir() if p.is_file() and p.name.startswith(f"{_safe(provider)}__") and p.name.endswith(".json")]
 	except (FileNotFoundError, NotADirectoryError):
 		return []
+	now = _time.time()
 	entries: List[tuple] = []
 	for p in items:
 		try:
 			entry = json.loads(p.read_text(encoding="utf-8"))
 		except Exception:
 			continue
-		if isinstance(entry, dict):
-			entries.append((float(entry.get("updated_at") or 0.0), entry))
+		if not isinstance(entry, dict):
+			continue
+		updated = float(entry.get("updated_at") or 0.0)
+		if max_age_s and (updated <= 0.0 or now - updated > max_age_s):
+			continue
+		entries.append((updated, entry))
 	entries.sort(key=lambda t: t[0], reverse=True)
 	return [e for _, e in entries]
 
 
 def _norm(path: str) -> str:
-	return os.path.normpath(os.path.abspath(os.path.expanduser(str(path)))) if path else ""
+	"""Normaliza una ruta para comparar (expanduser + realpath + normpath).
+
+	`realpath` resuelve symlinks: un workspace abierto por su enlace y por su
+	ruta real es el MISMO workspace, y sin resolverlos la correlación degradaba
+	en silencio al bridge global (hay que casar por identidad, no por deletreo).
+	"""
+	if not path:
+		return ""
+	return os.path.normpath(os.path.realpath(os.path.expanduser(str(path))))
 
 
 def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 	"""Cuerpo de la sesión que sirve a ESTA instancia, por correlación de cwd.
 
-	Estrategia por capas (de la señal más directa a la de degradación):
+	Estrategia por capas (de la señal más directa a la de degradación). **La
+	vitalidad (`session_liveness`) se consulta en TODAS las capas**: un bridge
+	per-sesión rancio de una pestaña cerrada en el mismo workspace no puede ganar
+	a la sesión viva de esta instancia (bug detectado por la auditoría adversarial
+	del 2026-10-28 — la capa 1 lo devolvía sin mirar el latido).
 
-	1. **Bridges per-sesión con `workdir` == cwd de la instancia.** Es la señal
-		primaria: el hook acaba de escribir el suyo, y funciona aunque la sesión
-		aún no esté en `opencode.db`. Si EXACTAMENTE uno casa → ese cuerpo.
+	1. **Bridges per-sesión con `workdir` == cwd, de sesión VIVA.** Señal primaria:
+		el hook acaba de escribir el suyo y la sesión late, aunque aún no esté en
+		`opencode.db`. Si EXACTAMENTE uno casa → ese cuerpo.
 	2. **Correlación por `opencode.db`** (`session.directory` == cwd) entre las
-		sesiones **vivas**: confirma/tie-break cuando hay varios bridges per-sesión
-		con el mismo workdir (dos pestañas, mismo workspace).
-	3. Si nada casa de forma inequívoca → None (el proxy degrada al bridge global,
+		sesiones **vivas**: confirma/desempata cuando la capa 1 no decide (varios
+		bridges en el mismo cwd, o el propio aún sin escribir).
+	3. **Carrera:** varios bridges en el mismo cwd pero solo UNA sesión viva entre
+		ellos (los demás son pestañas cerradas con bridge rancio) → la viva.
+	4. Si nada casa de forma inequívoca → None (el proxy degrada al bridge global,
 		comportamiento anterior; el bug persiste solo ahí).
 	"""
 	if not provider or not cwd:
@@ -146,28 +180,23 @@ def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 	if not target:
 		return None
 
-	# Capa 1: bridges per-sesión cuyo workdir == cwd de la instancia.
+	live = _live_session_ids(provider)
+	live_set = set(live)
+
+	# Capa 1: bridges per-sesión cuyo workdir == cwd Y cuya sesión está viva.
 	by_cwd = [
 		e for e in list_session_bridges(provider) if e.get("session_id") and _norm(str(e.get("workdir") or "")) == target
 	]
-	if len(by_cwd) == 1:
-		return by_cwd[0]
+	by_cwd_live = [e for e in by_cwd if e.get("session_id") in live_set]
+	if len(by_cwd_live) == 1:
+		return by_cwd_live[0]
 
 	# Capa 2: correlación por opencode.db entre las vivas (desempate).
-	live = _live_session_ids(provider)
 	db_matches = [sid for sid in live if _norm(str(_session_directory(sid) or "")) == target]
 	if len(db_matches) == 1:
 		entry = read_session_bridge(provider, db_matches[0])
 		if entry:
 			return entry
 		return {"provider": provider, "session_id": db_matches[0], "workdir": cwd}
-
-	# Capa 3 (carrera): hay varios bridges con el mismo cwd; si solo UNA de esas
-	# sesiones está viva, es esa (el resto son pestañas cerradas con bridge rancio).
-	if by_cwd:
-		live_set = set(live)
-		alive = [e for e in by_cwd if e.get("session_id") in live_set]
-		if len(alive) == 1:
-			return alive[0]
 
 	return None

@@ -96,6 +96,33 @@ class TestResolveBodyByCwd:
 			entry = bridge.resolve_body_by_cwd("opencode", "/ws/a")
 		assert entry is not None and entry["session_id"] == "s_viva"
 
+	def test_bridge_rancio_no_gana_a_la_sesion_viva(self, tmp_path):
+		"""Regresión auditoría 2026-10-28 (HIGH): un bridge RANCIO de una pestaña
+		cerrada en el mismo cwd NO puede ganar al bridge fresco de la sesión viva.
+
+		Antes la capa 1 devolvía un bridge por cwd sin mirar latido ni frescura,
+		así que una pestaña cerrada podía atribuirse el cuerpo — el mismo bug
+		D-BRIDGE, reintroducido por bridges rancios.
+		"""
+		state = tmp_path / "state"
+		# Bridge rancio de una pestaña CERRADA (mismo cwd) + bridge fresco de la VIVA.
+		_write_session_bridge(state, "otra_vieja", "/ws/a", updated_at=time.time() - 99999)
+		_write_session_bridge(state, "mia", "/ws/a")  # fresco (now)
+		with _Ctx(_patches(state, _live(["mia"]), {})):
+			entry = bridge.resolve_body_by_cwd("opencode", "/ws/a")
+		assert entry is not None and entry["session_id"] == "mia", "el bridge rancio no debe ganar al fresco de la viva"
+
+	def test_solo_bridge_rancio_degrada(self, tmp_path):
+		"""Si el único bridge por cwd es rancio, NO se devuelve (degrada a global).
+
+		El proxy caerá al fichero global; nunca se atribuye el cuerpo de una
+		pestaña muerta por un bridge viejo.
+		"""
+		state = tmp_path / "state"
+		_write_session_bridge(state, "otra_vieja", "/ws/a", updated_at=time.time() - 99999)
+		with _Ctx(_patches(state, _live(["mia"]), {})):
+			assert bridge.resolve_body_by_cwd("opencode", "/ws/a") is None
+
 	def test_dos_pestanas_mismo_workspace_ambas_vivas_degrada(self, tmp_path):
 		"""Ambigüedad real (dos pestañas vivas, mismo cwd): None → global."""
 		state = tmp_path / "state"
@@ -121,6 +148,20 @@ class TestResolveBodyByCwd:
 		state = tmp_path / "state"
 		with _Ctx(_patches(state, [], {})):
 			assert bridge.resolve_body_by_cwd("opencode", "/ws/a") is None
+
+	def test_symlink_casa_con_ruta_real(self, tmp_path):
+		"""`_norm` resuelve symlinks: el mismo workspace por enlace o ruta real casa."""
+		real = tmp_path / "real"
+		real.mkdir()
+		link = tmp_path / "link"
+		link.symlink_to(real)
+		assert bridge._norm(str(link)) == bridge._norm(str(real))
+
+	def test_sanitizer_paridad_con_js(self):
+		"""`_safe` debe producir el nombre que escribe el JS (`[/:]`→`_`, `__`→`_`)."""
+		# Equivale a: String(x).replace(/[/:]/g,"_").replace(/__/g,"_")
+		assert bridge._safe("ses:a/b") == "ses_a_b"
+		assert bridge._safe("a__b") == "a_b"
 
 
 class TestProxyIdentityPayload:
