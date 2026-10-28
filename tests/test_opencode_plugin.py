@@ -293,3 +293,23 @@ def test_handshake_gate_se_puede_desactivar(tmp_path):
 	out = _run_plugin_handshake(tmp_path, {"REDPILL_HANDSHAKE_GATE": "off"})
 	assert out["reminderBefore"] == 0
 	assert out["nonHandshakeBefore"]["status"] == "allowed"
+
+
+def test_recordatorio_nombra_la_forma_correcta_de_code_mode():
+	"""El recordatorio debe nombrar el id REAL de la tool según el modo de exposición.
+
+	Incidencia 2026-10-28: el recordatorio decía "(code-mode calls do not count)",
+	FALSO en opencode v2 (Code Mode es el default de exposición MCP) → empujaba al
+	agente a pedir `RedPill-Kernel_sovereign_handshake` directa, que en ese modo NO
+	está en el catálogo ("No tool named ... is currently available"). Debe nombrar
+	la forma de Code Mode y la de `codemode: false`, y NO repetir la afirmación falsa.
+	"""
+	text = SEED.read_text(encoding="utf-8")
+	assert 'tools["RedPill-Kernel"].sovereign_handshake' in text, "falta la forma de Code Mode (default v2)"
+	assert "RedPill-Kernel_sovereign_handshake" in text, "falta la forma de codemode:false (listado directo)"
+	# La afirmación falsa sólo importa si está EN EL RECORDATORIO (el comentario
+	# puede citarla para explicar por qué se retiró).
+	reminder_block = text.split("const HANDSHAKE_REMINDER =", 1)[1].split(";", 1)[0]
+	assert "code-mode calls do not count" not in reminder_block, (
+		"la afirmación falsa sobre Code Mode no debe reaparecer en el recordatorio (incidente 2026-10-28)"
+	)

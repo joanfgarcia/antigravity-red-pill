@@ -546,12 +546,24 @@ export default {
     // Exentas las sub-sesiones (`task`/paneles): su padre ya hizo el handshake.
     const HANDSHAKE_GATE = (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
     const MAX_REFUSALS = 3; // fail-open: nunca dejar una sesión sin salida
+    // El nombre REAL de la tool depende del modo de exposición del servidor MCP
+    // (opencode v2, docs/tools §Extensions):
+    //   - `codemode` (default v2): las tools se alcanzan SOLO dentro de `execute`
+    //     → tools["RedPill-Kernel"].sovereign_handshake
+    //   - `codemode: false`: el servidor las lista directamente
+    //     → RedPill-Kernel_sovereign_handshake
+    // La versión anterior decía "(code-mode calls do not count)", que es FALSO en
+    // v2 y empujaba al agente a pedir la tool directa, inexistente con Code Mode
+    // (incidente 2026-10-28: "No tool named RedPill-Kernel_sovereign_handshake").
     const HANDSHAKE_REMINDER =
       "<redpill_handshake_reminder>\n" +
       "MANDATORY FIRST STEP OF THIS TURN (not done yet): call `sovereign_handshake` " +
-      "(the tool whose id contains `sovereign_handshake`) with only `user_prompt`, " +
-      "before calling any other tool (code-mode calls do not count). Until you do, " +
-      "every other tool call is refused. " +
+      "(any tool id containing `sovereign_handshake`) with only `user_prompt`, " +
+      "before calling any other tool. Until you do, every other tool call is refused. " +
+      "Code Mode IS a valid way to call it: with the default MCP exposure the tool " +
+      'lives inside the gateway as `tools["RedPill-Kernel"].sovereign_handshake`; ' +
+      "only if the server is declared `codemode: false` is it listed directly as " +
+      "`RedPill-Kernel_sovereign_handshake`. " +
       "That call loads identity, pain signals and OPEN LOOPS.\n" +
       "</redpill_handshake_reminder>";
     const turnHandshake = new Map(); // sessionID -> bool
