@@ -9,6 +9,8 @@ dependencies. Each test verifies:
 	- Error paths return a user-facing error string (not an unhandled exception)
 """
 
+import json
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -326,7 +328,9 @@ class TestListTools:
 		assert "review_decision" in tool_names
 		assert "suggest_review" in tool_names
 		assert "moderate_note" in tool_names
-		assert len(result) == 14
+		# F4 (A1): el claim de etapa es tool del coro, no solo función interna.
+		assert "try_claim_stage" in tool_names
+		assert len(result) == 15
 
 
 class TestControlBunkerAdditional:
@@ -954,3 +958,195 @@ class TestSession0b:
 		row = SessionRegistry().get_by_originator("opencode:f3")
 		assert row["branch"] == "feat/touched"
 		assert row["worktree"] == "/ws/touched"
+
+
+class TestTryClaimStageTool:
+	"""Fase 4 / A1: el claim de etapa como tool MCP.
+
+	El CAS (clave canónica D12, `BEGIN IMMEDIATE` D13, propiedad por alma D18)
+	vive en `session/stage_claims.py` y está probado en `test_stage_claims.py`.
+	Aquí se prueba LO QUE AÑADE LA CAPA MCP, que es lo único que puede romperse
+	aquí y no allí:
+	- la identidad sale del canal de confianza (env/registro), NUNCA del argumento;
+	- sin alma no se reclama y se dice por qué (fail-closed, sin estado);
+	- rama/worktree se derivan del workspace del llamante cuando no vienen;
+	- el texto expone `claimed`/`owner`/`reason`;
+	- un fallo del claim no tumba el servidor.
+	"""
+
+	STAGE = "dag:job1/stage:a1"
+
+	@staticmethod
+	def _leg(originator, continuity_id, *, branch="cierre/alma-a", worktree="/ws/alma-a", affinity=("mission:repo:next",)):
+		from red_pill.session.store import SessionRegistry
+
+		SessionRegistry().upsert_session(
+			originator=originator,
+			continuity_id=continuity_id,
+			mission_id="repo:next",
+			role="task",
+			affinity=list(affinity),
+			branch=branch,
+			worktree=worktree,
+		)
+
+	@staticmethod
+	def _rows():
+		"""Filas de `stage_claims` en la BD aislada del test (esquema idempotente)."""
+		from red_pill.core.paths import get_session_db
+		from red_pill.session.store import connect_session_db
+
+		with connect_session_db(str(get_session_db())) as conn:
+			conn.execute(
+				"CREATE TABLE IF NOT EXISTS stage_claims (claim_key TEXT PRIMARY KEY, stage_path TEXT NOT NULL, "
+				"affinity_json TEXT NOT NULL, branch TEXT NOT NULL, worktree TEXT NOT NULL, "
+				"owner_continuity_id TEXT NOT NULL, owner_originator TEXT NOT NULL, claimed_at REAL NOT NULL, "
+				"ttl_seconds INTEGER NOT NULL, intent TEXT)"
+			)
+			return [dict(r) for r in conn.execute("SELECT * FROM stage_claims")]
+
+	async def test_tool_registrada_en_el_catalogo(self):
+		from red_pill.registry import registry
+
+		tool = next(t for t in registry.get_tools() if t.name == "try_claim_stage")
+		assert tool.inputSchema["required"] == ["stage_path"]
+		for field in ("stage_path", "affinity", "branch", "worktree", "ttl_seconds", "intent"):
+			assert field in tool.inputSchema["properties"]
+		assert tool.inputSchema["properties"]["affinity"]["type"] == "array"
+		# La regla dura queda documentada en la propia descripción de la tool.
+		assert "canal de confianza" in tool.description
+
+	async def test_reclamo_correcto_adquiere_y_reporta_dueno(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			res = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE, "intent": "implementar A1"})
+		text = res[0].text
+		assert "claimed=true" in text
+		assert "owner=alma-a" in text
+		assert "reason=acquired" in text
+		assert "cierre/alma-a" in text  # rama derivada del workspace del llamante
+		rows = self._rows()
+		assert len(rows) == 1
+		assert rows[0]["owner_continuity_id"] == "alma-a"
+		assert rows[0]["owner_originator"] == "opencode:soul_a"
+		assert rows[0]["branch"] == "cierre/alma-a"
+		assert rows[0]["worktree"] == "/ws/alma-a"
+		assert rows[0]["intent"] == "implementar A1"
+		assert json.loads(rows[0]["affinity_json"]) == ["mission:repo:next"]
+
+	async def test_segunda_alma_recibe_held_by_other_y_no_se_toca(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		self._leg("opencode:soul_b", "alma-b")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			first = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+		assert "claimed=true" in first[0].text
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_b"}):
+			second = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+		assert "claimed=false" in second[0].text
+		assert "reason=held_by_other" in second[0].text
+		assert "owner=alma-a" in second[0].text  # el dueño sigue siendo el primero
+		rows = self._rows()
+		assert len(rows) == 1 and rows[0]["owner_continuity_id"] == "alma-a"
+
+	async def test_misma_alma_renueva(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+			res = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE, "ttl_seconds": 60})
+		assert "claimed=true" in res[0].text
+		assert "reason=owned" in res[0].text
+		assert len(self._rows()) == 1
+
+	async def test_sin_alma_no_reclama_y_no_deja_estado(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
+			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:desconocido"}):
+				res = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+		text = res[0].text
+		assert "claimed=false" in text
+		assert "reason=error" in text
+		assert "sin alma" in text
+		assert self._rows() == []
+
+	async def test_identidad_del_argumento_no_manda(self):
+		"""Aunque el modelo declare alma y cuerpo, reclama el del canal de confianza."""
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			res = await handle_call_tool(
+				"try_claim_stage",
+				{"stage_path": self.STAGE, "continuity_id": "alma-victima", "originator": "opencode:victima"},
+			)
+		assert "owner=alma-a" in res[0].text
+		assert "alma-victima" not in res[0].text
+		assert "opencode:victima" not in res[0].text
+		rows = self._rows()
+		assert rows[0]["owner_continuity_id"] == "alma-a"
+
+	async def test_rama_y_worktree_del_workspace_cuando_no_vienen(self, tmp_path):
+		"""El leg sin espejo git → la clave se apoya en el workspace declarado (env)."""
+		import subprocess
+
+		from red_pill.mcp_server import handle_call_tool
+
+		repo = tmp_path / "proj"
+		repo.mkdir()
+		subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+		subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+		subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+		(repo / "f").write_text("x")
+		subprocess.run(["git", "add", "."], cwd=repo, check=True)
+		subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+		subprocess.run(["git", "checkout", "-q", "-b", "feat/claim"], cwd=repo, check=True)
+
+		self._leg("opencode:soul_ws", "alma-ws", branch=None, worktree=None, affinity=())
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
+			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_ws", "REDPILL_WORKSPACE": str(repo)}):
+				res = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+		assert "claimed=true" in res[0].text
+		assert "rama=feat/claim" in res[0].text
+		rows = self._rows()
+		assert rows[0]["branch"] == "feat/claim"
+		assert rows[0]["worktree"] == str(repo.resolve())
+
+	async def test_stage_path_obligatorio(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			res = await handle_call_tool("try_claim_stage", {"stage_path": "  "})
+		assert "claimed=false" in res[0].text
+		assert "reason=error" in res[0].text
+		assert self._rows() == []
+
+	async def test_argumentos_malformados_no_reclaman(self):
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+			bad_affinity = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE, "affinity": "mission:m1"})
+			bad_ttl = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE, "ttl_seconds": "mucho"})
+		assert "reason=error" in bad_affinity[0].text
+		assert "reason=error" in bad_ttl[0].text
+		assert self._rows() == []
+
+	async def test_fallo_del_claim_es_non_fatal(self):
+		"""Regla dura: un fallo del claim devuelve texto, nunca rompe el servidor."""
+		from red_pill.mcp_server import handle_call_tool
+
+		self._leg("opencode:soul_a", "alma-a")
+		with patch("red_pill.session.stage_claims.try_claim_stage", side_effect=RuntimeError("sqlite down")):
+			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "opencode:soul_a"}):
+				res = await handle_call_tool("try_claim_stage", {"stage_path": self.STAGE})
+		assert res[0].type == "text"
+		assert "claimed=false" in res[0].text
+		assert "reason=error" in res[0].text
+		assert "sqlite down" in res[0].text

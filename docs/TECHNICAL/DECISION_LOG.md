@@ -2091,7 +2091,8 @@ más, no un reemplazo.
 **Status**: IMPLEMENTED (E0–E5). El E2E de aceptación corre contra la cola y el
 driver reales (ver §6.1 de `STAGE_CLAIMS.md`): con un TTL de 20 s sobre una etapa
 de 75 s, otra alma intentó reclamarla 25 veces y recibió `held_by_other` las 25,
-sin un solo robo, y no quedaron filas huérfanas.
+sin un solo robo, y no quedaron filas huérfanas. El cierre del F4 expone el claim
+como tool MCP `try_claim_stage` y cierra los flecos de captura — ver **AD-092**.
 **Contrato**: [`docs/TECHNICAL/STAGE_CLAIMS.md`](STAGE_CLAIMS.md).
 
 ### 1. The Problem
@@ -2147,3 +2148,206 @@ reproducidos y corregidos con test de regresión. El test de carrera se valida p
   se llamaban con kwargs de más (`TypeError` tragado por el `except`) mientras
   los tests —con mocks `lambda **k`— daban verde. Un mock con `**kwargs` no
   verifica un contrato de llamada.
+
+---
+
+## [AD-092] Cierre Alma y Coro (etapa A) — el claim como tool MCP y dos flecos de captura
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED & VERIFIED (doc-anchor, etapa A de ALMA_Y_CORO_CIERRE).
+**Commits**: `a77cda5` (tool MCP `try_claim_stage`) · `5d3b9e7` (filtro D2 en `drop_report` + prefijo de provider en `chronicle_sources`).
+
+### 1. The Problem
+Tres piezas dejaban al sistema mintiendo o desprotegido:
+1. El CAS de etapas de Fase 4 (`session/stage_claims.py`) era alcanzable sólo en
+   Python in-process: un alma en otro arnés no podía reclamar una etapa sin
+   escribir código — el claim existía pero no estaba expuesto a quien lo necesita.
+2. `MinionInbox.drop_report` insertaba **sin deduplicación**: un reintento del
+   minion o una doble entrega dejaba dos filas con el mismo `event_id`.
+3. La fuente chronicle `memory_queue` (RFC-002 MUST 10) excluía originators por
+   **igualdad exacta** contra `CHRONICLE_ARCHIVE_SOURCES`. Los providers nativos
+   llegan como `proveedor:id` (`opencode:ses_abc`), así que la igualdad nunca los
+   cazaba: su verbatim se **duplicaba** en Memento (entra por el provider store
+   y también por la cola). Además el docstring afirmaba que Telegram capturaba
+   sólo vía `memorize_interaction` — falso: `telegram` está en la lista de config
+   y su verbatim entra por su propia fuente de chronicle.
+
+### 2. The Decision
+1. **Tool MCP como envoltorio, nunca como reimplementación** (`a77cda5`):
+   `try_claim_stage` en `mcp_server.py` delega en `session/stage_claims.py` —
+   la clave canónica (D12), el `BEGIN IMMEDIATE` (D13), la propiedad por alma
+   (D18) y el TTL (D9-a) siguen viviendo ahí. Lo que añade la capa MCP es sólo
+   el canal de confianza y texto legible: identidad (alma+cuerpo) del registro,
+   **ignorada** en los argumentos del modelo; sin alma resuelta no se reclama
+   (`reason=error`, fail-closed); `branch`/`worktree`/`affinity` salen por defecto
+   del workspace del llamante (nunca del cwd del servidor, que es el checkout del
+   kernel), y un argumento explícito **gana** sobre lo derivado — lo único que un
+   argumento no puede sustituir es la identidad; cualquier fallo degrada a
+   texto y el servidor sigue vivo (non-fatal); la transacción corre fuera del
+   event loop (`asyncio.to_thread`; `busy_timeout=5000` en `session/store.py:314`,
+   no en `stage_claims.py`).
+2. **D2 dentro de la sentencia de escritura** (`5d3b9e7`): el filtro es
+   `INSERT ... SELECT WHERE NOT EXISTS`, no un `SELECT` previo — lo único que
+   SQLite serializa bajo el write-lock frente a dos minions simultáneos. Con
+   `event_id` vacío se inserta (comportamiento histórico).
+3. **Exclusión por prefijo de provider** (`5d3b9e7`): `_is_excluded` parte el
+   `originator` en `:` y compara el provider contra la lista; la igualdad exacta
+   sigue valiendo para formas legacy sin sesión. El filtro se traslada de SQL
+   (`NOT IN`) a Python porque el prefijo no cabe en un `NOT IN` exacto.
+4. **Hermeticidad de identidad en la suite** (`a77cda5`, `tests/conftest.py`):
+   fixture autouse que **borra** `REDPILL_ORIGINATOR/CONTINUITY_ID/MISSION_ID/
+   CAMPAIGN_ID/ROLE/HARNESS` por test. Un job lanza la suite heredando el cuerpo
+   del job en el entorno y los tests de identidad lo afirmaban como propio —
+   9 fallos (o verdes mentirosos) sin tocar producción. Se borra, no se fija:
+   la identidad de un test viene de lo que el test declara.
+
+### 3. Rationale / Evidence
+Todo lo afirmado arriba está respaldado por comandos ejecutados en el worktree
+`cierre/alma-a` (2026-10-28), salida literal:
+
+```
+$ git log --oneline -4
+5d3b9e7 fix(captura): filtro D2 en drop_report + prefijo de provider en chronicle
+a77cda5 feat(f4): tool MCP try_claim_stage
+29a1f00 docs(f4): E5 cerrado — evidencia del E2E y la lección de los mocks
+46965b5 fix(f4): el latido renovaba con kwargs de más — el claim expiraba y otro lo robaba
+```
+
+**Tool registrada en el catálogo real** (no «lo dice un test»: se importa el
+módulo y se interroga el registry que sirve `handle_list_tools`):
+
+```
+$ PYTHONPATH=<worktree>/src:<worktree> python -c "from red_pill.mcp_server import registry; …"
+total tools: 11
+try_claim_stage registered: True
+handler registered: True
+['announce_intent', 'check_parallel_sessions', 'fetch_divergent_turns', 'fetch_events',
+ 'list_decisions', 'moderate_note', 'review_decision', 'sovereign_handshake',
+ 'suggest_review', 'try_claim_stage', 'unregister_session']
+```
+
+**Tests** (venv del kernel, `PYTHONPATH` al worktree):
+
+```
+$ python -m pytest tests/test_mcp_server.py -q
+86 passed, 1 warning in 3.34s
+
+$ python -m pytest tests/test_mcp_server.py -q -k "TryClaimStage"
+10 passed, 76 deselected in 2.27s
+
+$ python -m pytest tests/test_inbox.py tests/test_memento.py -q
+37 passed in 2.00s
+
+$ python -m pytest tests/test_stage_claims.py -q
+30 passed in 2.41s
+
+$ python -m pytest tests/ -q --timeout=300        # suite íntegra
+3678 passed, 18 skipped, 11 xfailed, 6 warnings in 134.95s (0:02:14)
+```
+
+**D2 verificado en vivo** (no por aserción: tres `drop_report` reales sobre una
+BD temporal, dos con el mismo `event_id`):
+
+```
+filas tras 3 drops (2 con mismo event_id): 2
+event_ids: ['', 'evt-1']
+```
+
+**Prefijo de provider verificado en vivo** (fuente sobre BD temporal con
+originators nativos, legacy y sin provider):
+
+```
+descubierto: [('mcp:awakening:2026-10-28', 1), ('unknown:2026-10-28', 1)]
+excluded config: ['antigravity', 'claude_code', 'opencode', 'pi', 'telegram']
+opencode:ses_abc -> excluido: True
+telegram:uuid-1 -> excluido: True
+opencode -> excluido: True          # legacy sin sesión: la igualdad exacta sigue valiendo
+mcp:awakening -> excluido: False
+```
+
+`opencode:ses_x` y `telegram:uuid` ya no duplican; `opencode` pelado (legacy)
+sigue excluyéndose; las superficies sin provider store entran. (Que el verbatim
+de Telegram no se pierda con el filtro está respaldado por la existencia de su
+propia fuente: `chronicle_sources/telegram.py`, `name = "telegram"`.)
+
+**Hermeticidad de identidad: el contrafáctico reproducido** (no se acepta el
+«9 fallos» del mensaje de commit; se ejecuta). Con el `conftest.py` revertido a
+`a77cda5^` y el entorno del job puesto (`REDPILL_ORIGINATOR=dag:bf5ce21e…`,
+`REDPILL_MISSION_ID=repo:next`):
+
+```
+$ python -m pytest tests/test_mcp_server.py -q          # SIN el fixture de a77cda5
+9 failed, 77 passed, 1 warning in 3.62s
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_emite_alma_y_tag_session
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_bridge_resuelve_originator_y_workspace
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_originator_explicito_deriva_provider_del_bridge
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_mision_por_defecto_repo_rama
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_llamante_legacy_role_task
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_relay_propaga_originator_al_sink
+FAILED tests/test_mcp_server.py::TestSession0b::test_reloj_late_y_se_guarda
+FAILED tests/test_mcp_server.py::TestSession0b::test_espejo_git_se_llena - Ty...
+FAILED tests/test_mcp_server.py::TestSession0b::test_mision_por_repo_tocado_f3
+
+$ cp /tmp/opencode/conftest.keep tests/conftest.py      # conftest de HEAD, mismo entorno del job
+$ python -m pytest tests/test_mcp_server.py -q
+86 passed, 1 warning in 3.51s
+```
+
+Los 9 fallos son exactamente los que afirma el commit, incluidos los dos que
+nombra (`test_mision_por_defecto_repo_rama`, `test_emite_alma_y_tag_session`).
+El fix es necesario y suficiente en este puesto.
+
+### 4. Alternatives
+(a) Reimplementar el CAS en la capa MCP — rechazada: dos fuentes de verdad para
+D12/D13/D18; la lección de `**kwargs` (AD-091 §5) aplicada al diseño, el
+envoltorio no toca la lógica. (b) D2 con `SELECT` previo + `INSERT` — rechazada:
+carrera entre dos minions (`test_drop_report_idempotente_bajo_carrera` la
+reproduce con 8 hilos y una fila esperada). (c) Filtro SQL `NOT LIKE 'opencode:%'`
+por provider — rechazada: la lista es config cerrada y el patrón `LIKE` se
+saldría de la semántica exacta de `CHRONICLE_ARCHIVE_SOURCES`; se agrupa todo y
+se filtra en Python. (d) Fijar la identidad de test a valores fijos en vez de
+borrar el entorno — rechazada: los tests de identidad miden lo que el test
+declara; un valor fijo sería otra mentira heredada.
+
+### 5. Consequences
+- El claim de etapa está al alcance de cualquier arnés con MCP: misma semántica
+  CAS que el driver (nada cambia en `stage_claims.py`), texto explícito con
+  `claimed/owner/reason` + rama/worktree/afinidad/expiración.
+- MinionInbox es idempotente por `event_id`. **Observación estática**: los drops
+  de señales usan `event_id=f"signal_{name}"` (`memory.py:1429`,
+  `cloud_sync/plugin.py:78`, `metabolism/auditor.py:615`) — una segunda
+  ocurrencia de la misma señal se deduplicará mientras la primera fila viva.
+  Si eso es intención o efecto colateral: **UNVERIFIED** (ningún test ni doc lo
+  afirma; ver §6).
+- La fuente `memory_queue` ya no duplica el verbatim de providers nativos en
+  Memento; el docstring corrigió la afirmación sobre Telegram.
+- La suite es hermética a la identidad del proceso que la lanza (jobs,
+  awakenings): los 9 fallos reproducidos quedan cerrados por el fixture de
+  `conftest.py`.
+- El contrato `STAGE_CLAIMS.md` **no cambia de semántica**: la tool expone lo que
+  ya estaba. Se le añade una subsección en §4 («MCP surface») que documenta la
+  capa MCP —canal de confianza, precedencia de argumentos, non-fatal— y deja
+  explícito que `renew_claim`/`release_claim`/`get_claim` siguen siendo sólo
+  Python (el latido vive en el driver, E4, no en el modelo).
+
+### 6. UNVERIFIED (declarado, no afirmado)
+- **Invocación de la tool por transporte MCP** contra `redpill-mcp.service` con
+  un cliente real y bridge de sesión: verificado el registro in-process (catálogo
+  + handler) y los 10 tests del handler; no se llamó la tool por el transporte en
+  esta etapa.
+- **Deduplicación de señales en producción** (`signal_{name}`, §5): concluida por
+  grep de llamantes, no probada en runtime ni confirmada por el Operador como
+  intención.
+- **Efecto del filtro por prefijo sobre el Memento ya renderizado**: los grupos
+  duplicados escritos antes de `5d3b9e7` siguen en disco; no se verificó aquí
+  ninguna limpieza/regeneración retroactiva.
+
+### 7. Discrepancia detectada (doc vs código — gana el código)
+El mensaje de `a77cda5` dice «Los argumentos del modelo afinan, no sustituyen».
+Cierto sólo para la **identidad** (`continuity_id`/`originator` se ignoran). En
+`mcp_server.py:3144-3146`, `branch`, `worktree` y `affinity` explícitos **sí
+sustituyen** al valor derivado del workspace — es la funcionalidad que necesita
+un driver que trabaja en otro worktree. El código está bien; el enunciado del
+commit era demasiado ancho. Se corrige aquí y en `STAGE_CLAIMS.md` §4 para que la
+próxima alma no lea «no sustituyen» y espere que un `worktree` explícito sea
+ignorado.

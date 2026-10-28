@@ -107,6 +107,33 @@ Default TTL is **1800 s**. That is deliberately short: a stage that has not left
 a checkpoint in 30 minutes probably died (power loss, kill). **Long stages renew** —
 the TTL is not a promise of duration.
 
+### MCP surface (`try_claim_stage`, AD-092)
+
+The same CAS is exposed as the MCP tool `try_claim_stage` so a soul on any
+harness can claim before running a stage. The tool **wraps, it does not
+reimplement**: D12/D13/D18/D9-a stay in this module, and the semantics of
+`reason` are identical. What the MCP layer adds:
+
+- **Identity comes from the trusted channel only** (bridge/env/registry). A
+  `continuity_id` or `originator` passed as a model argument is **ignored** —
+  that is the one thing arguments can never substitute. With no resolved soul the
+  tool does not claim: `claimed=false reason=error` (fail-closed — a claim
+  without an owner cannot survive a `switch_model`, D18).
+- `branch`/`worktree`/`affinity` default to the caller's workspace (git-derived,
+  never the server's cwd — that is the kernel checkout); an explicit argument
+  **wins over the derived value** so a driver working in another worktree can
+  name it. If nothing is declared the field stays **empty** and the claim is
+  still deterministic (empty branch/worktree is a valid key; affinity and path
+  keep distinguishing).
+- The answer is text for the agent: `claimed/owner/reason` plus
+  branch/worktree/affinity/expiry, with the `held_by_other` / `stolen_expired`
+  policy hint ("do not touch" / "renew if the stage is long").
+- **Non-fatal by rule**: any failure degrades to text and the server stays alive;
+  the SQLite transaction (5 s `busy_timeout`) runs outside the event loop.
+
+`renew_claim` / `release_claim` / `get_claim` remain Python-only for now: the
+heartbeat lives in the driver (E4), not in the model.
+
 ### Minimum driver usage
 
 ```python

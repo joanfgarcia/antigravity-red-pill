@@ -137,6 +137,40 @@ def _flags_de_fabrica_pese_al_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _identidad_del_puesto_apagada(monkeypatch):
+	"""Hermético a la identidad del proceso que lanza la suite (misma familia que
+	`_flags_de_fabrica_pese_al_env`, pero para el canal de confianza).
+
+	Un job (`dag_job`/awakening) lanza la suite con `REDPILL_ORIGINATOR`,
+	`REDPILL_CONTINUITY_ID`, `REDPILL_MISSION_ID`, `REDPILL_ROLE`,
+	`REDPILL_CAMPAIGN_ID` y `REDPILL_HARNESS` puestos en el entorno: el proceso de
+	test HEREDA ese cuerpo y `_resolve_session_identity` lo trata como canal de
+	confianza. Resultado: los tests de identidad afirman el llamante del job, no el
+	suyo — `test_mision_por_defecto_repo_rama` ve `mission="repo:next"` en vez de
+	la rama parcheada, y `test_emite_alma_y_tag_session` ve el alma real del
+	Operador. La suite verde en CI y roja (o mentirosa) en el puesto.
+
+	Detectado el 2026-10-28 (etapa A1, cierre-alma-a): 9 fallos en
+	`tests/test_mcp_server.py` sin tocar el código de producción.
+
+	Se BORRA el entorno por test, no se fija a un valor: la identidad de un test
+	llega de lo que el test declara (`monkeypatch.setenv` / `patch.dict` /
+	argumento / bridge parcheado), que es exactamente la semántica que estos tests
+	estan midiendo. Precedente local: `tests/test_mcp_shared.py` ya hace este pop
+	en su propio fixture.
+	"""
+	for name in (
+		"REDPILL_ORIGINATOR",
+		"REDPILL_CONTINUITY_ID",
+		"REDPILL_MISSION_ID",
+		"REDPILL_CAMPAIGN_ID",
+		"REDPILL_ROLE",
+		"REDPILL_HARNESS",
+	):
+		monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _soul_notify_disabled_por_defecto(monkeypatch):
 	"""Los tests NO deben lanzar entregas reales al alma (AD-090).
 

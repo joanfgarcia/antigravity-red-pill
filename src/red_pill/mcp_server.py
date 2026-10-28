@@ -2998,6 +2998,188 @@ async def handle_fetch_divergent_turns(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"[DIVERGENCIA] error: {e}")]
 
 
+def _caller_claim_context(session: Dict[str, Any]) -> Dict[str, Any]:
+	"""Rama, worktree y afinidad del llamante, SIEMPRE del canal de confianza.
+
+	La fila del leg manda: es lo que el handshake persistió desde bridge/env
+	(incluida la inferencia F3 del repo que la sesión realmente toca). Si falta
+	alguna pieza, se deriva en vivo con `_resolve_workspace` sobre lo DECLARADO
+	(proxy → bridge → `REDPILL_WORKSPACE`). El cwd del servidor NO se usa nunca
+	aquí: es el checkout del kernel, y reclamar contra él pondría la etapa del
+	agente bajo la clave de un repo ajeno. Sin nada declarado, la pieza queda
+	vacía — `try_claim_stage` sigue siendo determinista (rama/worktree vacíos son
+	una clave válida, la afinidad y la ruta siguen distinguiendo).
+
+	Best-effort por diseño: un fallo de registro o de git degrada a vacío y se
+	registra a `debug`; nunca tira el turno abajo.
+	"""
+	originator = str(session.get("originator") or "")
+	row: Dict[str, Any] = {}
+	if ":" in originator:
+		try:
+			from red_pill.session.store import SessionRegistry
+
+			row = SessionRegistry().get_by_originator(originator) or {}
+		except Exception as e:
+			logger.debug(f"[CLAIM] registro no disponible: {e}")
+
+	branch = str(row.get("branch") or "").strip()
+	worktree = str(row.get("worktree") or "").strip()
+	try:
+		affinity = json.loads(row.get("affinity_json") or "[]")
+	except Exception:
+		affinity = []
+
+	if not branch or not worktree:
+		candidates: list = []
+		shared = _shared_identity_var.get()
+		if shared and str(shared.get("workdir") or "").strip():
+			candidates.append(str(shared["workdir"]).strip())
+		if worktree:
+			candidates.append(worktree)
+		harness = os.getenv("REDPILL_HARNESS") or (originator.split(":", 1)[0] if originator else None)
+		candidates.append(str(_harness_bridge(harness).get("workdir") or "").strip())
+		candidates.append(str(os.getenv("REDPILL_WORKSPACE") or "").strip())
+		if any(candidates):
+			try:
+				workspace, live_branch, mirror = _resolve_workspace(candidates)
+			except Exception as e:
+				logger.debug(f"[CLAIM] workspace no resoluble: {e}")
+				workspace, live_branch, mirror = "", None, {}
+			branch = branch or str(live_branch or "")
+			worktree = worktree or str((mirror or {}).get("worktree") or "")
+			if not affinity:
+				try:
+					from red_pill.core.affinity import derive_affinity
+
+					affinity = derive_affinity(workdir=workspace or worktree or None, mission_id=session.get("mission_id"))
+				except Exception:
+					affinity = []
+
+	return {"branch": branch, "worktree": worktree, "affinity": [str(a) for a in affinity or ()]}
+
+
+@registry.register(
+	name="try_claim_stage",
+	description=(
+		"[OFFICIAL] Reclama UNA etapa de tu árbol de misión antes de ejecutarla "
+		"(F4, claims de etapa): exclusión federada entre almas con TTL y robo del "
+		"claim caducado. La identidad (alma/cuerpo) sale del canal de confianza "
+		"(bridge/env/registro), NUNCA de los argumentos: sin alma no se reclama. "
+		"Es CAS puro — dice si/no y por qué (acquired|owned|held_by_other|"
+		"stolen_expired|error); esperar, saltar o reintentar es política tuya, no "
+		"del almacén. Reclamar dos veces con tu alma RENUEVA (`owned`); si la etapa "
+		"muere sin renovar, el TTL lo abre para otra alma (`stolen_expired`)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"stage_path": {
+				"type": "string",
+				"description": "Ruta canónica de la etapa, p.ej. 'dag:<job>/stage:<n>' (obligatorio).",
+			},
+			"affinity": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "Afinidad explícita de la etapa; por defecto la de tu sesión. Estrecha la clave del claim; no otorga permisos.",
+			},
+			"branch": {"type": "string", "description": "Rama del trabajo; por defecto la del workspace del llamante."},
+			"worktree": {"type": "string", "description": "Raíz del árbol de trabajo; por defecto la del workspace del llamante."},
+			"ttl_seconds": {
+				"type": "integer",
+				"description": "Vigencia del claim (default 1800 = 30 min). Las etapas largas RENUEVAN, no piden TTL infinito.",
+			},
+			"intent": {"type": "string", "description": "Qué vas a hacer (breve, sin secretos). Informativo."},
+		},
+		"required": ["stage_path"],
+	},
+)
+async def handle_try_claim_stage(arguments: Dict[str, Any]):
+	"""Envoltorio MCP de `session.stage_claims.try_claim_stage` (F4): no reimplementa
+	nada — la lógica (clave canónica D12, `BEGIN IMMEDIATE` D13, propiedad por alma
+	D18, TTL D9-a) vive ahí. Lo que añade esta capa es SOLO el canal de confianza y
+	un texto legible por el agente.
+	"""
+	try:
+		from red_pill.session.stage_claims import DEFAULT_TTL_S, try_claim_stage
+
+		stage_path = str(arguments.get("stage_path") or "").strip()
+		if not stage_path:
+			return [types.TextContent(type="text", text="[CLAIM] claimed=false owner=— reason=error: `stage_path` es obligatorio.")]
+
+		session = await _caller_session(arguments)
+		continuity = str(session.get("continuity_id") or "").strip()
+		originator = str(session.get("originator") or "")
+		if not continuity or ":" not in originator:
+			# Fail-closed: sin alma en el registro no hay dueño, y un claim sin
+			# dueño no sobrevive a un switch_model (D18). No se reclama, se dice
+			# por qué, y el servidor sigue vivo.
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						"[CLAIM] claimed=false owner=— reason=error: sin alma en el canal de "
+						"confianza (bridge/env/registro); no se reclama. Haz el handshake primero."
+					),
+				)
+			]
+
+		affinity_raw = arguments.get("affinity")
+		if affinity_raw is not None and not isinstance(affinity_raw, list):
+			return [types.TextContent(type="text", text="[CLAIM] claimed=false owner=— reason=error: `affinity` debe ser una lista de etiquetas.")]
+
+		ttl_raw = arguments.get("ttl_seconds")
+		if ttl_raw is not None:
+			try:
+				ttl = int(ttl_raw)
+			except (TypeError, ValueError):
+				return [types.TextContent(type="text", text="[CLAIM] claimed=false owner=— reason=error: `ttl_seconds` debe ser entero.")]
+		else:
+			ttl = DEFAULT_TTL_S
+
+		context = await asyncio.to_thread(_caller_claim_context, session)
+		# Los argumentos del modelo AFINAN, nunca sustituyen la identidad: rama y
+		# worktree pueden venir explícitos (un driver que trabaja en otro worktree),
+		# y si no, salen del workspace del llamante.
+		affinity = [str(a) for a in affinity_raw] if affinity_raw else list(context.get("affinity") or ())
+		branch = str(arguments.get("branch") or "").strip() or str(context.get("branch") or "")
+		worktree = str(arguments.get("worktree") or "").strip() or str(context.get("worktree") or "")
+		intent = str(arguments.get("intent") or "").strip() or None
+
+		# El claim es una transacción sqlite con `busy_timeout` de 5 s: si otro
+		# driver sostiene el lock, esperarla en el event loop pararía al resto de
+		# clientes del MCP. Fuera del loop, como el git de arriba.
+		result = await asyncio.to_thread(
+			try_claim_stage,
+			stage_path=stage_path,
+			affinity=affinity,
+			branch=branch,
+			worktree=worktree,
+			continuity_id=continuity,
+			originator=originator,
+			ttl_seconds=ttl,
+			intent=intent,
+		)
+
+		lines = [f"[CLAIM] {stage_path}: claimed={str(bool(result.claimed)).lower()} owner={result.owner or '—'} reason={result.reason}"]
+		lines.append(f"  rama={branch or '—'} worktree={worktree or '—'}")
+		lines.append(f"  afinidad={','.join(affinity) if affinity else '—'} ttl={ttl}s")
+		if result.expires_at:
+			try:
+				lines.append(f"  expira={time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(float(result.expires_at)))}")
+			except Exception:
+				pass
+		if result.reason == "held_by_other":
+			lines.append("  la etapa está VIVA en otra alma: no se toca (difierela o reinténtala tú; el wait es tu política).")
+		elif result.reason == "stolen_expired":
+			lines.append("  el claim anterior había caducado (abandonado): robado de forma explícita; renuévalo si la etapa es larga.")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		# Non-fatal por regla dura: un fallo del claim nunca tumba el servidor.
+		logger.warning(f"[CLAIM] try_claim_stage degradado (non-fatal): {e}")
+		return [types.TextContent(type="text", text=f"[CLAIM] claimed=false owner=— reason=error: {e}")]
+
+
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
 	return registry.get_tools()
