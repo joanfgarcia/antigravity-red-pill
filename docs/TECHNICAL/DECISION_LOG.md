@@ -2082,3 +2082,60 @@ más, no un reemplazo.
 > reapuntarse a ese canal**; el transporte CLI quedará como fallback (o se retira).
 > `_deliver_neon_link()` existe ya como placeholder honesto que **no entrega** (devuelve
 > `False`) para que el repunte sea explícito y testeado, no una promesa.
+
+---
+
+## [AD-091] Fase 4 — claims de etapa: coordinación federada sin carrera
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED (E0–E2). Pendiente E3–E5 (integración en `DagJobDriver`,
+renovación por checkpoint y E2E con 2 opencode + 1 awakening).
+**Contrato**: [`docs/TECHNICAL/STAGE_CLAIMS.md`](STAGE_CLAIMS.md).
+
+### 1. The Problem
+El `DagJobDriver` recorre el árbol de una misión por sí solo. Eso es seguro con
+**un** driver; deja de serlo cuando varias ejecuciones tocan el mismo proyecto
+(dos sesiones en la misma rama, un `awakening` retomando lo que una sesión humana
+ya retomó, un `dag_job` y un bucle a mano sobre el mismo worktree). Todos ven la
+misma etapa como "pendiente" y todos la ejecutan: trabajo duplicado en el mejor
+caso, worktree corrupto en el peor.
+
+### 2. The Decision
+1. **Lock ligero por etapa**, no cola ni planificador: una tabla de claims.
+   Decidir si se salta, espera o reintenta es **política del llamante** (E3).
+2. **`claim_key` canónica (D12)**: `sha256(afinidad_canónica | branch | worktree |
+   stage_path)`, serializada como **JSON de tupla** (codificación inyectiva) y con
+   el worktree normalizado (`realpath`). Reutiliza `canonize_affinity` (D19).
+3. **Atomicidad (D13)**: `BEGIN IMMEDIATE` con **re-lectura dentro** de la
+   transacción. El `SELECT`-y-luego-escribir tiene carrera: dos drivers ven
+   "expirado" y los dos roban.
+4. **Propiedad por alma (D18)**: `owner_continuity_id` es el dueño;
+   `owner_originator` es solo el cuerpo. Un `switch_model` no pierde el claim.
+5. **TTL renovable (D9-a)**: 1800 s por defecto, renovable por checkpoint. No se
+   renueva lo ajeno **ni lo propio ya expirado**: resucitar un claim caducado
+   decide por quien legítimamente iba a robarlo.
+6. **Fail-closed**: entrada inválida o BD caída → `claimed=False`, `reason="error"`.
+   Nunca "supongo que sí".
+7. **Purga (D14)** por job periódico, no por el camino del claim.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Cola/scheduler por etapa | rechazada | Convierte el lock en un punto de bloqueo y hace los timeouts inanalizables; el DAG ya tiene su propio recorrido |
+| Claim por `originator` (cuerpo) | rechazada | Un `switch_model` a mitad de etapa perdería el lock (D18) |
+| Concatenar la clave con separadores | **corregida** | Colisión entre etapas distintas (un `\|` o una coma bastaban) → una bloqueaba y robaba a la otra |
+| Esperar dentro del claim | rechazada | El almacén no conoce la política de la misión |
+
+### 4. Rationale
+Precondición A4 verificada por ejecución real (166 tests, §6 del contrato).
+E2 validado con **segunda lente independiente** (sesión hermana, GLM 5.3 Flash,
+hilo E-006): cinco defectos reales —colisión de clave, renovación de expirados,
+worktree no canónico, `rowcount` ausente, fail-closed incompleto— todos
+reproducidos y corregidos con test de regresión. El test de carrera se valida por
+**mutación**: sin `BEGIN IMMEDIATE` falla con "8 almas robaron el mismo claim".
+
+### 5. Deuda declarada
+- **E3/E4/E5** pendientes: sin la integración en el driver, la tabla no protege
+  nada todavía; sin E5 no se cumple el criterio de aceptación del RFC.
+- **Multi-host** fuera de alcance: es un SQLite local. La coordinación entre
+  máquinas es territorio de `neon-rings` y depende de **D26** (firma real).
