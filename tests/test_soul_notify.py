@@ -308,3 +308,63 @@ class TestWarningNoDespierta:
 			), patch("red_pill.core.soul_notify.notify_soul", side_effect=lambda *a, **k: calls.append(a) or True):
 				queue_worker._report_job("job12345", task, st, "fin")
 			assert calls, f"el estado terminal {st} debe despertar al alma"
+
+
+class TestLegNoEntregable:
+	"""Regresión 2026-10-28 (job e328f02f): el aviso se perdió porque se pasó el
+	leg del JOB (`dag:<uuid>`) como si fuera el cuerpo del alma.
+
+	Síntoma real en el log del runner:
+	[soul-notify] entrega falló (rc=1): Error: Expected a string starting with "ses"
+
+	El dag_job escribe su propio `leg_originator` en el checkpoint y
+	`job_identity` lo devuelve como `originator`; pasarlo a `opencode run
+	--session` revienta. La dirección es el ALMA: hay que resolver el cuerpo.
+	"""
+
+	def test_leg_de_job_no_se_usa_como_cuerpo(self):
+		"""`dag:<uuid>` no es entregable: se resuelve por alma."""
+		entregas = []
+		with patch.object(soul_notify, "resolve_live_leg", return_value="opencode:ses_real") as resolver, patch.dict(
+			soul_notify._TRANSPORTS, {"cli": lambda sid, txt: entregas.append(sid) or True}
+		), patch.object(soul_notify, "_resolve_transport", return_value="cli"), patch.dict(
+			os.environ, {soul_notify.ENV_DISABLE: "0"}
+		):
+			ok = soul_notify.notify_soul("alma-1", "hola", originator="dag:e328f02f-e11d-40d0")
+		assert ok is True
+		assert entregas == ["ses_real"], "debía entregar al cuerpo del arnés, no al leg del job"
+		assert resolver.called, "con un leg no entregable hay que resolver por alma"
+
+	def test_leg_de_arnes_si_se_usa(self):
+		"""Contraprueba: un cuerpo opencode explícito se respeta (sin resolver)."""
+		entregas = []
+		with patch.object(soul_notify, "resolve_live_leg") as resolver, patch.dict(
+			soul_notify._TRANSPORTS, {"cli": lambda sid, txt: entregas.append(sid) or True}
+		), patch.object(soul_notify, "_resolve_transport", return_value="cli"), patch.dict(
+			os.environ, {soul_notify.ENV_DISABLE: "0"}
+		):
+			ok = soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_directa")
+		assert ok is True
+		assert entregas == ["ses_directa"]
+		assert not resolver.called
+
+	def test_sin_cuerpo_entregable_no_entrega(self):
+		"""Ni leg de job ni alma resoluble → pudre en el inbox (pull), sin error."""
+		entregas = []
+		with patch.object(soul_notify, "resolve_live_leg", return_value=None), patch.dict(
+			soul_notify._TRANSPORTS, {"cli": lambda sid, txt: entregas.append(sid) or True}
+		), patch.object(soul_notify, "_resolve_transport", return_value="cli"), patch.dict(
+			os.environ, {soul_notify.ENV_DISABLE: "0"}
+		):
+			ok = soul_notify.notify_soul("alma-1", "hola", originator="job:abc")
+		assert ok is False
+		assert entregas == []
+
+	def test_tabla_de_entregabilidad_por_transporte(self):
+		assert soul_notify._is_deliverable_leg("opencode:ses_x", "cli")
+		assert not soul_notify._is_deliverable_leg("dag:uuid", "cli")
+		assert not soul_notify._is_deliverable_leg("job:abc", "cli")
+		assert not soul_notify._is_deliverable_leg("claude_code:c1", "cli"), "el CLI solo habla opencode"
+		assert soul_notify._is_deliverable_leg("claude_code:c1", "neon_link")
+		assert not soul_notify._is_deliverable_leg("", "cli")
+		assert not soul_notify._is_deliverable_leg("opencode", "cli"), "sin id no hay cuerpo"

@@ -185,6 +185,32 @@ def _resolve_transport() -> str:
 # ── API pública ─────────────────────────────────────────────────────────────
 
 
+# Providers que cada transporte sabe entregar. `cli` habla `opencode run
+# --session`, así que solo entiende cuerpos de opencode. Un leg de job (`dag:`)
+# o de otro arnés NO es entregable por esta vía.
+_DELIVERABLE_BY_TRANSPORT = {
+	"cli": frozenset({"opencode"}),
+	"neon_link": frozenset({"opencode", "claude_code", "pi", "telegram"}),
+}
+
+
+def _is_deliverable_leg(leg: Optional[str], transport: str) -> bool:
+	"""¿Es `leg` un cuerpo que este transporte puede entregar de verdad?
+
+	Evita el fallo silencioso de pasar un leg informativo (`dag:<uuid>`,
+	`job:<id>`) a un CLI que espera un `session_id` del arnés.
+	"""
+	if not leg or ":" not in str(leg):
+		return False
+	provider, _, session_id = str(leg).partition(":")
+	if not session_id:
+		return False
+	allowed = _DELIVERABLE_BY_TRANSPORT.get(transport)
+	if allowed is None:
+		return False
+	return provider in allowed
+
+
 def build_job_notice(title: str, source: str, status: str, content: str, result_path: str = "") -> str:
 	"""Texto del aviso. Es DATO: no pide nada ni manda nada (D-09)."""
 	suffix = f"\n[result: {result_path}]" if result_path else ""
@@ -210,16 +236,27 @@ def notify_soul(
 		return False
 	if str(os.getenv(ENV_DISABLE) or "").strip().lower() in {"1", "true", "yes", "on"}:
 		return False
-	leg = originator or resolve_live_leg(continuity_id)
-	if not leg or ":" not in leg:
-		logger.debug(f"[soul-notify] alma {continuity_id[:8]} sin cuerpo vivo; queda en el inbox (pull)")
-		return False
-	_, _, session_id = leg.partition(":")
-	if not session_id:
-		return False
 	transport = _resolve_transport()
 	fn = _TRANSPORTS.get(transport)
 	if fn is None:
+		return False
+	# El `originator` que llega puede ser el leg del JOB (`dag:<uuid>`), no el
+	# cuerpo de un arnés. Pasarlo tal cual a `opencode run --session` reventaba
+	# con `Expected a string starting with "ses"` y el aviso se perdía en
+	# silencio (incidente 2026-10-28, job e328f02f: el dag_job escribe su propio
+	# `leg_originator` en el checkpoint y `job_identity` lo devuelve).
+	# Solo se acepta como cuerpo un provider que el transporte sepa entregar;
+	# en cualquier otro caso se resuelve por alma, que es la dirección real.
+	leg = originator if _is_deliverable_leg(originator, transport) else None
+	if leg is None:
+		leg = resolve_live_leg(continuity_id)
+		if leg is not None and not _is_deliverable_leg(leg, transport):
+			leg = None
+	if not leg or ":" not in leg:
+		logger.debug(f"[soul-notify] alma {continuity_id[:8]} sin cuerpo entregable; queda en el inbox (pull)")
+		return False
+	_, _, session_id = leg.partition(":")
+	if not session_id:
 		return False
 	try:
 		return bool(fn(session_id, text))
