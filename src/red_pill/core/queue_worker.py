@@ -403,7 +403,17 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			else:
 				cog_queue.mark_failed(job_id, str(e))
 				after_fail = cog_queue.get_task(job_id)
-				if after_fail and str(after_fail.get("status") or "") == "FRUSTRATED":
+				if after_fail and after_fail.get("cancel_requested_at"):
+					# A4: la cancelación ganó la carrera; `mark_failed` se negó a
+					# devolver el job a PENDING. Se reporta como kill, no como
+					# fallo con reintento (que ya no existe).
+					try:
+						driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+					except Exception as term_err:
+						logger.warning(f"Job {job_id} on_terminal failed after cancel race: {term_err}")
+					_report_job(job_id, task, "killed", "interrumpido por el Operador")
+					logger.info(f"Job {job_id} step failed after cancel; job stays {after_fail.get('status')} (A4).")
+				elif after_fail and str(after_fail.get("status") or "") == "FRUSTRATED":
 					try:
 						driver.on_terminal(task["payload"], checkpoint, "failed", str(e))
 					except Exception as term_err:
