@@ -41,6 +41,20 @@ def default_socket() -> str:
 	return str(state_dir() / "mcp.sock")
 
 
+def _instance_cwd() -> str:
+	"""cwd real de ESTA instancia del proxy (el workspace que sirve su pestaña).
+
+	opencode arranca un proxy por instancia y le fija el cwd al workspace (la app
+	de escritorio hospeda varias). Es el único discriminador per-instancia
+	disponible: el env NO trae el session id (config MCP estática) y `PWD` está
+	rancio (heredado del lanzador). Ver D-BRIDGE / core/bridge.py.
+	"""
+	try:
+		return os.getcwd()
+	except Exception:
+		return ""
+
+
 def identity_payload(harness: str | None = None) -> dict:
 	"""Identidad de la instancia para el backend (canal de confianza del proxy)."""
 	provider = (harness or os.getenv("REDPILL_HARNESS") or "opencode").strip() or "opencode"
@@ -50,15 +64,26 @@ def identity_payload(harness: str | None = None) -> dict:
 	mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip()
 	role = str(os.getenv("REDPILL_ROLE") or "task").strip() or "task"
 	if not originator and provider in ("opencode", "claude_code"):
+		# D-BRIDGE: primero la correlación por cwd (resuelve el cuerpo de ESTA
+		# instancia); el fichero global es la degradación (último escritor gana).
+		raw = None
 		try:
-			raw = json.loads((state_dir() / f"{provider}_session.json").read_text(encoding="utf-8"))
+			from red_pill.core.bridge import resolve_body_by_cwd
+
+			raw = resolve_body_by_cwd(provider, _instance_cwd())
+		except Exception:
+			raw = None
+		if not raw:
+			try:
+				raw = json.loads((state_dir() / f"{provider}_session.json").read_text(encoding="utf-8"))
+			except Exception:
+				raw = None
+		if isinstance(raw, dict):
 			bridge_provider = str(raw.get("provider") or provider)
 			session_id = str(raw.get("session_id") or "")
 			if session_id:
 				originator = f"{bridge_provider}:{session_id}"
 			workdir = workdir or str(raw.get("workdir") or "")
-		except Exception:
-			pass
 	return {
 		"originator": originator,
 		"workdir": workdir,

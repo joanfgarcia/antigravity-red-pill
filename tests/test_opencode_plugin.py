@@ -132,6 +132,35 @@ def test_plugin_no_pisa_bridge_con_subsession(tmp_path):
 	assert out["bridge"]["session_id"] == "s1"
 
 
+_HARNESS_PER_SESSION = """
+import { readFileSync, existsSync } from "node:fs";
+
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const a = await plugin.server({ directory: "/ws/a" });
+const b = await plugin.server({ directory: "/ws/b" });
+
+await a["chat.message"]({ sessionID: "s1" }, { parts: [{ type: "text", text: "uno" }] });
+await b["chat.message"]({ sessionID: "s2" }, { parts: [{ type: "text", text: "dos" }] });
+
+const dir = `${process.env.STATE_DIR}/sessions/bridge`;
+const readOne = (sid) => {
+  const p = `${dir}/opencode__${sid}.json`;
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
+};
+console.log(JSON.stringify({ s1: readOne("s1"), s2: readOne("s2") }));
+"""
+
+
+def test_plugin_escribe_bridge_por_sesion(tmp_path):
+	"""D-BRIDGE: además del global, un bridge por sesión (el proxy resuelve por cwd)."""
+	out = _run_plugin(tmp_path, _HARNESS_PER_SESSION)
+	assert out["s1"] is not None and out["s2"] is not None, "falta el bridge por sesión"
+	assert out["s1"]["session_id"] == "s1"
+	assert out["s1"]["workdir"] == "/ws/a"
+	assert out["s2"]["session_id"] == "s2"
+	assert out["s2"]["workdir"] == "/ws/b"
+
+
 def test_plugin_cwd_por_instancia_no_se_pisa_entre_sesiones(tmp_path):
 	out = _run_plugin(tmp_path, _HARNESS_MULTI)
 	# a procesa DESPUÉS de que b haya arrancado: debe conservar /ws/a.

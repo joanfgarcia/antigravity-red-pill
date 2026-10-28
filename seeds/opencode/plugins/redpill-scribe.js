@@ -208,6 +208,17 @@ function touchLiveness(sessionId, phase) {
 // (best-effort) cwd. `_resolve_session_identity` lo lee cuando el handshake no
 // pasa originator → `opencode:<session_id>` real + rama del workspace.
 const BRIDGE_PATH = `${STATE_DIR}/opencode_session.json`;
+// Bridge POR SESIÓN (D-BRIDGE, 2026-10-28): el global de arriba es un fichero
+// único por arnés, así que con varias pestañas vivas el ÚLTIMO ESCRITOR gana y
+// el alma puede acabar atribuida al cuerpo de otra. Este directorio guarda un
+// JSON por sesión para que el proxy pueda resolver SU cuerpo por correlación
+// (cwd de instancia → sesión viva) sin depender de quién escribió después.
+const SESSION_BRIDGE_DIR = `${STATE_DIR}/sessions/bridge`;
+
+function sessionBridgePath(sessionId) {
+  const safe = String(sessionId).replace(/[/:]/g, "_").replace(/__/g, "_");
+  return `${SESSION_BRIDGE_DIR}/opencode__${safe}.json`;
+}
 
 // Directorio del workspace de la instancia que sirve la sesión (v1
 // PluginInput.directory / v2 ctx.location.directory). Viaja en una closure por
@@ -223,9 +234,16 @@ function writeBridge(sessionId, cwdHint) {
       workdir: String(cwdHint || "").trim(),
       updated_at: Date.now() / 1000,
     };
+    // Global (compat: arneses sin hook de instancia y fallback del proxy).
     const tmp = `${BRIDGE_PATH}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(payload));
     renameSync(tmp, BRIDGE_PATH);
+    // Por sesión (D-BRIDGE): el proxy lo elige por correlación de cwd.
+    const dir = SESSION_BRIDGE_DIR;
+    mkdirSync(dir, { recursive: true });
+    const tmp2 = `${sessionBridgePath(sessionId)}.${process.pid}.tmp`;
+    writeFileSync(tmp2, JSON.stringify(payload));
+    renameSync(tmp2, sessionBridgePath(sessionId));
   } catch (_) {}
 }
 
