@@ -52,7 +52,7 @@ class TestResolveLiveLeg:
 
 		Antes se exigía `is_active()`; pero un job terminado entre turnos es el
 		caso normal, y `opencode run --session` despierta la sesión. Se prefiere
-		una activa, y si no hay, se despierta la más reciente dentro del TTL.
+		una activa, y si no hay, se despierta la que tiene `ttl_state='active'`.
 		"""
 		reg, sig = _seed_leg(tmp_path, "opencode:ses_a", "alma-1", active=False)
 		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
@@ -234,11 +234,31 @@ class TestIdleSeDespierta:
 		):
 			assert soul_notify.resolve_live_leg("alma-idle") == "opencode:ses_idle"
 
-	def test_leg_rancio_fuera_de_ttl_no_se_despierta(self, tmp_path):
-		"""Fuera del TTL no se despierta: crearía una sesión nueva, no la del alma."""
+	def test_leg_viejo_pero_activo_se_despierta(self, tmp_path):
+		"""La EDAD no gobierna el aviso: un leg de hace 48 h con ttl_state=active
+		sigue siendo el cuerpo vigente del alma y se despierta.
+
+		Caso de uso que lo motivó: pausar un DAG para entrenar BIT y retomarlo dos
+		días después. Un TTL por horas castigaba justo ese uso (decisión del
+		Operador, 2026-10-28). La alcanzabilidad la decide la PRESENCIA
+		(`ttl_state`), no el tiempo.
+		"""
 		import time as _t
 
-		reg = self._leg(tmp_path, _t.time() - 48 * 3600)  # 48 h
+		reg = self._leg(tmp_path, _t.time() - 48 * 3600)  # 48 h de antigüedad
+		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
+			"red_pill.core.session_liveness.list_sessions", return_value=[]
+		):
+			assert soul_notify.resolve_live_leg("alma-idle") == "opencode:ses_idle"
+
+	def test_leg_expirado_no_se_despierta(self, tmp_path):
+		"""`ttl_state=expired` = el alma migró de cuerpo: no se despierta el viejo."""
+		import time as _t
+
+		reg = self._leg(tmp_path, _t.time() - 600)
+		with reg._connect() as conn:
+			conn.execute("UPDATE session_registry SET ttl_state='expired' WHERE originator='opencode:ses_idle'")
+			conn.commit()
 		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
 			"red_pill.core.session_liveness.list_sessions", return_value=[]
 		):

@@ -53,24 +53,14 @@ logger = logging.getLogger(__name__)
 ENV_DISABLE = "REDPILL_SOUL_NOTIFY_DISABLE"
 # Env para forzar transporte: "cli" (MVP) | "neon_link" (futuro).
 ENV_TRANSPORT = "REDPILL_SOUL_NOTIFY_TRANSPORT"
-# Frescura máxima del leg para despertarlo estando idle (horas).
-ENV_LEG_TTL_H = "REDPILL_SOUL_NOTIFY_LEG_TTL_H"
 # Timeout de la entrega (segundos). Acota el hilo daemon.
 DELIVERY_TIMEOUT_S = 120.0
-# TTL por defecto para aceptar un leg NO activo. Alineado con el TTL anti-stale
-# del bridge (12 h): más allá, el cuerpo probablemente ya no existe y "despertar"
-# crearía una sesión nueva en vez de reanudar la del alma.
-LEG_TTL_H_DEFAULT = 12.0
+# NOTA (2026-10-28): aquí vivía un TTL de frescura en HORAS para decidir si un
+# leg era despertable. Se retiró: la alcanzabilidad del alma la gobierna
+# `ttl_state` (presencia), no la edad. Detalle en `resolve_live_leg`.
 
 
 # ── Resolución del cuerpo vivo ───────────────────────────────────────────────
-
-
-def _leg_ttl_s() -> float:
-	try:
-		return float(os.getenv(ENV_LEG_TTL_H) or LEG_TTL_H_DEFAULT) * 3600.0
-	except Exception:
-		return LEG_TTL_H_DEFAULT * 3600.0
 
 
 def resolve_live_leg(continuity_id: str) -> Optional[str]:
@@ -82,17 +72,25 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 	2026-10-28: el job terminó a las 12:34 y el turno de la sesión había acabado
 	a las 12:31 → `is_active=False` → el aviso nunca se entregó.
 
-	Regla (D-05: la dirección es el alma, el cuerpo se resuelve por presencia):
-	1. **Prefiere** un cuerpo con turno en vuelo (llega antes, sin despertar).
-	2. Si no hay, toma el leg **más reciente** cuyo `updated_at` esté dentro del
-			TTL de frescura (12 h por defecto): `opencode run --session` lo despierta.
-	3. Fuera del TTL, no hay push: el reporte queda en el inbox (pull). Despertar
-			un leg rancio crearía una sesión nueva en vez de reanudar la del alma, y
-			eso rompería la continuidad que el protocolo protege.
+	Regla (D-05: la dirección es el alma, el cuerpo se resuelve por **presencia**):
+
+	1. **Prefiere** un cuerpo con turno en vuelo: llega antes y sin despertar.
+	2. Si no hay, usa el leg con **`ttl_state='active'`** — el cuerpo VIGENTE del
+		alma. Ese estado **no caduca por tiempo**: solo cambia si el alma migra de
+		cuerpo (`activate_leg` marca los anteriores como `expired`) o si se cierra
+		el leg. Por eso un DAG pausado **dos días** sigue siendo avisables: el
+		caso de uso que motivó esto (parar para entrenar BIT y retomar después).
+	3. Sin leg `active` → no hay push; el reporte queda en el inbox (pull).
+
+	**Por qué NO un TTL de horas** (decisión del Operador, 2026-10-28): la vida
+	del *mensaje* y la alcanzabilidad del *alma* son dos relojes distintos. Un TTL
+	por horas castigaba justo el uso legítimo (pausar el DAG días para dar
+	prioridad a otra cosa) y, peor, era un segundo criterio que contradecía el que
+	el registro ya mantiene. Si la edad no gobierna la presencia, no debe gobernar
+	el aviso.
 	"""
 	if not continuity_id:
 		return None
-	import time as _time
 
 	try:
 		from red_pill.core.session_liveness import list_sessions
@@ -109,27 +107,20 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 		orig = str(leg.get("originator") or "").strip()
 		return orig if orig and ":" in orig else ""
 
-	active = {s.session_id for s in list_sessions() if s.is_active()}
 	# 1) Cuerpo con turno en vuelo (el más reciente de los activos).
+	active_turn = {s.session_id for s in list_sessions() if s.is_active()}
 	for leg in legs:  # ordenados por updated_at DESC
 		orig = _originator(leg)
-		if orig and orig.partition(":")[2] in active:
+		if orig and orig.partition(":")[2] in active_turn:
 			return orig
 
-	# 2) Ninguno activo: el leg más reciente dentro del TTL (se despierta).
-	ttl = _leg_ttl_s()
-	now = _time.time()
+	# 2) Cuerpo VIGENTE del alma (presencia, no edad).
 	for leg in legs:
 		orig = _originator(leg)
-		if not orig:
-			continue
-		try:
-			updated = float(leg.get("updated_at") or 0.0)
-		except Exception:
-			updated = 0.0
-		if updated > 0.0 and (now - updated) <= ttl:
-			logger.info(f"[soul-notify] alma {continuity_id[:8]} idle; se despertará {orig} (leg fresco)")
+		if orig and str(leg.get("ttl_state") or "") == "active":
+			logger.info(f"[soul-notify] alma {continuity_id[:8]} idle; se despertará {orig} (ttl_state=active)")
 			return orig
+
 	return None
 
 
