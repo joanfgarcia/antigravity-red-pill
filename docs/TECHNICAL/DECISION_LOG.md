@@ -2351,3 +2351,243 @@ un driver que trabaja en otro worktree. El código está bien; el enunciado del
 commit era demasiado ancho. Se corrige aquí y en `STAGE_CLAIMS.md` §4 para que la
 próxima alma no lea «no sustituyen» y espere que un `worktree` explícito sea
 ignorado.
+
+---
+
+## [AD-093] Interceptor 12_session_sync — digest global de la sala de guerra (D16) con presupuesto p99 medido
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED & VERIFIED (doc-anchor, etapa B de ALMA_Y_CORO_CIERRE).
+**Commits**: `da56589` (feat: interceptor + config + tests unitarios) · `8e3a7fb` (perf: benchmark p99) · `a3bdcb3` (test: E2E de sala de guerra y digest).
+
+### 1. The Problem
+El coro (varias sesiones paralelas sobre el mismo Búnker) abría turno **ciego**: un agente no
+sabía quién más estaba vivo ni en qué misión hasta que invocaba `session_board` a mano — y
+eso era cierto justamente cuando más importaba (dos almas tocando el mismo repo). La pieza
+D16 de RFC_CONSCIENCIA pedía un digest global al abrir turno, pero cualquier inyección por
+turno tiene un enemigo: el coste. Un interceptor pesado en el camino crítico del prompt
+frena al sistema entero, y un interceptor que degrada en silencio puede estar "verde" en
+tests mientras devuelve la cadena vacía siempre.
+
+### 2. The Decision
+1. **Un plugin Ferrari (12) con tres modos y default SILENT** (`12_session_sync.py`,
+   `SESSION_SYNC_MODE` en `config.py`): `silent` → `""` con **cero I/O** (el modo se
+   resuelve antes del caché; ni se mira); `minimal` → una línea
+   (`[SYNC: N otra(s) viva(s) · global_turn=T]`); `header` → bloque agrupado por misión
+   con origen/rol/estado (en vuelo vs activa), turno global y aviso de eventos
+   pendientes en la misión propia. Un modo desconocido cae a `silent`
+   (`_mode()`: `raw if raw in MODES else "silent"`).
+2. **Presupuesto p99 < 20 ms por turno, medido y no declarado**: el digest se cachea con
+   TTL corto (`SESSION_SYNC_TTL_S`, default 8 s) y solo usa lecturas baratas que ya
+   existían — latidos en disco (`session_liveness.iterdir`) y `session.db` (SELECTs
+   indexados). Sin Qdrant, sin `opencode.db`, sin LLM, sin subprocess. `timeout=0.5` s
+   (el pipeline impone `asyncio.wait_for`; corto a propósito: nunca frena el turno).
+3. **Fallar en silencio, pero jamás rápido-vacío**: cualquier excepción degrada a `""` y
+   registra a debug (el interceptor NUNCA tumba el turno). El benchmark cierra la
+   trampa de la degradación: un `_FailureDetector` cuenta CUALQUIER log del plugin y
+   **invalida la medición** (exit 2) — un interceptor roto es rapidísimo y no sale verde.
+4. **Benchmark con carga real Y coro sintético** (`scripts/bench_interceptor_session_sync.py`):
+   dos escenarios por modo (cold = TTL ínfimo, peor caso por turno; warm = TTL de
+   producción) × dos cargas (estado real del Búnker; coro sintético de 24 sesiones
+   vivas en 4 misiones con 40 eventos pendientes, sobre `XDG_DATA_HOME` redirigido a un
+   tmp — el estado del Operador no se toca). 300 iteraciones por escenario, percentil
+   por rango más cercano **sin recortar muestras**; la primera (boot) entra en la
+   distribución y se reporta aparte.
+5. **E2E sobre piezas reales, no mocks** (`tests/test_session_sync_e2e.py`): registro
+   SQLite en `tmp_path`, latidos `.start`/`.end` envejecidos con `os.utime`, reloj global
+   de turnos andado; el tablón (`build_board`/`render_board`, fuente del MCP
+   `session_board`) se prueba en la misma escena. La sala de guerra simulada: YO + 2
+   vivas en una misión + 2 vivas en misiones distintas (una en la mía) + 1 muerta.
+
+### 3. Rationale / Evidence
+Todo lo afirmado arriba está respaldado por comandos ejecutados en el worktree
+`cierre/alma-b` (2026-10-28), salida literal.
+
+**Terreno** (`git log --oneline -5` y `git diff HEAD~3 --stat`):
+
+```
+a3bdcb3 test(session): E2E de sala de guerra y digest
+8e3a7fb perf(session): benchmark del interceptor con p99 medido
+da56589 feat(session): interceptor 12_session_sync (SILENT/MINIMAL/HEADER)
+e37c611 fix(identidad): con dos sesiones vivas en el mismo cwd, no se atribuye por el global
+acb9445 feat(f4): tool MCP try_claim_stage + filtros de captura (Bloque A del cierre)
+```
+
+```
+ scripts/bench_interceptor_session_sync.py    | 377 +++++++++++++++++++++++++++
+ src/red_pill/config.py                       |   9 +
+ src/red_pill/interceptors/12_session_sync.py | 211 +++++++++++++++
+ tests/test_interceptor_session_sync.py       | 260 ++++++++++++++++++
+ tests/test_session_sync_e2e.py               | 296 +++++++++++++++++++++
+ 5 files changed, 1153 insertions(+)
+```
+
+**Tests** (venv del kernel, `PYTHONPATH` al worktree):
+
+```
+$ PYTHONPATH=<worktree>/src:<worktree> <venv>/bin/python -m pytest tests/test_interceptor_session_sync.py tests/test_session_sync_e2e.py -q
+...........................                                              [100%]
+27 passed in 1.95s
+```
+
+Por fichero: `tests/test_interceptor_session_sync.py` → `15 passed in 1.79s`;
+`tests/test_session_sync_e2e.py` → `12 passed in 1.81s`.
+
+**Default SILENT, verificado por tres vías independientes** (modelo de config, fallback
+del plugin, y `execute()` real):
+
+```
+$ PYTHONPATH=<worktree>/src <venv>/bin/python - <<'EOF'
+> import importlib, os, unittest.mock as mock
+> os.environ.pop("SESSION_SYNC_MODE", None)
+> import red_pill.config as c
+> print("modulo config:", c.__file__)
+> f = c.RedPillConfig.model_fields["SESSION_SYNC_MODE"]
+> print("config default SESSION_SYNC_MODE =", repr(f.default))
+> ft = c.RedPillConfig.model_fields["SESSION_SYNC_TTL_S"]
+> print("config default SESSION_SYNC_TTL_S =", repr(ft.default))
+> m = importlib.import_module("red_pill.interceptors.12_session_sync")
+> print("modulo plugin:", m.__file__)
+> with mock.patch.object(m, "_conf", lambda name, default: default):
+>     print("_mode() con config ausente =", repr(m._mode()))
+> import asyncio
+> p = m.SessionSyncPlugin()
+> with mock.patch.object(m, "_conf", lambda name, default: default):
+>     out = asyncio.run(p.execute("turno de prueba"))
+> print("execute() con default =", repr(out))
+> EOF
+modulo config: <worktree>/src/red_pill/config.py
+config default SESSION_SYNC_MODE = 'silent'
+config default SESSION_SYNC_TTL_S = 8.0
+modulo plugin: <worktree>/src/red_pill/interceptors/12_session_sync.py
+_mode() con config ausente = 'silent'
+execute() con default = ''
+```
+
+(La primera ejecución de este chequeo dio `KeyError: 'SESSION_SYNC_MODE'`: sin
+`PYTHONPATH` al worktree, `import red_pill.config` resolvía el paquete **instalado**
+del sharing, que aún no tiene los flags. El `modulo config:` impreso en la salida de
+arriba es la prueba de que el chequeo corre contra el código correcto — y recordatorio
+de que estos flags solo existen en esta rama.)
+
+**Integración real en el pipeline** (no «lo dice un test»: se recarga el pipeline
+in-process con el `PYTHONPATH` del worktree y se interroga `_PLUGINS`):
+
+```
+$ PYTHONPATH=<worktree>/src <venv>/bin/python - <<'EOF'
+> import red_pill.interceptors as itp
+> msg = itp.reload_plugins()
+> print("mensaje reload:", msg)
+> for p in itp._PLUGINS:
+>     print(f"{type(p).__name__} | {p.name} | timeout={p.timeout} | enabled={p.is_enabled}")
+> EOF
+mensaje reload: [HOT RELOAD] 5 plugins reloaded.
+...
+TelemetryPlugin          | Telemetry & Context OS-Agnostic File Reader | timeout=0.5 | enabled=True
+MoodOrchestratorPlugin   | Mood Orchestrator (Ferrari 05-09) | timeout=8.0 | enabled=True
+PredictivePreloadPlugin  | Predictive Preload (Ferrari 10)  | timeout=2.0 | enabled=True
+EmotionalPreHeatingPlugin | Emotional Pre-Heating (Oracle Protocol) | timeout=4.0 | enabled=True
+SessionSyncPlugin        | Session Sync (Ferrari 12)        | timeout=0.5 | enabled=True
+```
+
+**Benchmark** (`<venv>/bin/python scripts/bench_interceptor_session_sync.py`, 300
+iteraciones por escenario, presupuesto 20 ms, exit code 0). Estado REAL del Búnker
+(host `Joan-OMEN-16`, python 3.12.12, kernel 7.0.0-38-generic; carga: 75 latidos, 24
+filas de registro, global_turn=390, 1 otra sesión viva):
+
+```
+modo     escenario     n      p50      p95      p99    media      max
+---------------------------------------------------------------------
+silent   cold        300    0.007    0.009    0.010    0.007    0.030
+minimal  cold        300    0.736    1.134    1.623    0.792    1.831
+minimal  warm        300    0.013    0.013    0.015    0.013    0.018
+header   cold        300    1.312    1.516    2.294    1.387    9.258
+header   warm        300    0.013    0.017    0.020    0.013    0.022
+---------------------------------------------------------------------
+  silent    p99 =    0.010 ms  → CUMPLE del presupuesto (20.0 ms)
+  minimal   p99 =    1.623 ms  → CUMPLE del presupuesto (20.0 ms)
+  header    p99 =    2.294 ms  → CUMPLE del presupuesto (20.0 ms)
+```
+
+Coro SINTÉTICO (25 latidos, 25 filas, 16 otras vivas, 40 eventos pendientes):
+
+```
+modo     escenario     n      p50      p95      p99    media      max
+---------------------------------------------------------------------
+silent   cold        300    0.006    0.007    0.011    0.007    0.013
+minimal  cold        300    0.322    0.396    0.545    0.338    1.161
+minimal  warm        300    0.013    0.019    0.020    0.014    0.023
+header   cold        300    0.841    0.952    1.182    0.862    1.693
+header   warm        300    0.013    0.015    0.018    0.013    0.047
+---------------------------------------------------------------------
+  silent    p99 =    0.011 ms  → CUMPLE del presupuesto (20.0 ms)
+  minimal   p99 =    0.545 ms  → CUMPLE del presupuesto (20.0 ms)
+  header    p99 =    1.182 ms  → CUMPLE del presupuesto (20.0 ms)
+
+[bench] OK: los tres modos caben en 20.0 ms (p99), con el estado real y con el coro sintético lleno.
+EXIT_CODE=0
+```
+
+El **peor p99 medido es 2.294 ms** (header cold, estado real) — 8,7 veces por debajo del
+presupuesto. El `max` de 9.258 ms en header cold es la primera muestra (boot: construir
+el `SessionRegistry`), coste por proceso y no por turno; el script la reporta aparte a
+propósito. Nota honesta: el coro sintético (16 vivas) sale MÁS rápido que el estado real
+(1 viva, 75 latidos en disco) — el coste dominante del cold real es el `iterdir` sobre el
+directorio de latidos del Búnker, no el tamaño del digest; el número que decide el
+presupuesto es el peor de ambos: **2.294 ms < 20 ms, CUMPLE**.
+
+**Muestra del digest real** (header, estado real, tal cual sale del interceptor — prueba
+de que no devuelve la cadena vacía disfrazada de rápido):
+
+```
+--- SYNC: global_turn=390 · 1 otra(s) viva(s) ---
+## '(sin misión)' (1)
+  [opencode] task · en vuelo · hace 106s
+```
+
+### 4. Qué cambia para el Operador
+- Nada por defecto: `SESSION_SYNC_MODE=silent` → el interceptor devuelve `""` con cero
+  I/O y el turno no paga nada. El feature está instalado pero dormido.
+- Para verlo: `SESSION_SYNC_MODE=minimal` (una línea) o `header` (bloque por misión) en
+  el `.env` / config, y hot-reload (`swarm_orchestrator_api → hot_reload_interceptors` o
+  `refresh_session_context`). La caché TTL (default 8 s) amortiza turnos rápidos; fuera
+  del TTL cada turno paga el cold (p99 ≤ 2.3 ms medido).
+- `ENV_REFERENCE.md` documenta ahora los dos flags nuevos (estaban sin documentar —
+  ver §6).
+
+### 5. Consequences
+- La sala de guerra pasa de pull-only (`session_board` a demanda) a push por turno con
+  coste acotado y medido. El conteo es de **otras** sesiones (la propia nunca se
+  cuenta) y las muertas (latido viejo) ni aparecen en el digest; en el tablón sí se
+  muestran como `huérfana`/`reciente` — diferencia intencionada, cubierta por E2E.
+- El benchmark es re-ejecutable por cualquiera (`scripts/bench_interceptor_session_sync.py`)
+  y su exit code es contractual: 0 = cumple, 1 = algún p99 supera el presupuesto (la
+  decisión de subirlo es del Operador, no del script), 2 = medición inválida.
+- El patrón «FailureDetector invalida la medición» cierra la clase de bug «interceptor
+  roto = interceptor rápido»; reusable por los próximos plugins.
+
+### 6. UNVERIFIED (declarado, no afirmado)
+- **Inyección por transporte en producción**: el registro en `_PLUGINS` se verificó
+  in-process (proceso nuevo con `PYTHONPATH` al worktree), NO contra el
+  `redpill-mcp.service` vivo tras un `hot_reload_interceptors`. Con el default `silent`
+  esto no cambia el comportamiento del servicio, pero la activación real (`minimal`/
+  `header` en un turno vivo) no se ha probado end-to-end por el pipeline.
+- **Generalización de los milisegundos**: las cifras son de este host (Joan-OMEN-16,
+  NVMe, python 3.12.12, kernel 7.0.0-38-generic) con la carga de latidos de HOY (75).
+  Otro host o un directorio de latidos mucho mayor (retención 48 h) puede dar otros
+  números; el presupuesto queda cumplido con margen 8,7×, no verificado en otras
+  máquinas.
+- **Contención SQLite concurrente**: el benchmark corre en un solo proceso. No se midió
+  el p99 con varias almas escribiendo `session.db` simultáneamente (write-lock real);
+  los SELECT del digest son de lectura y `busy_timeout=5000` las cubre, pero el número
+  bajo contención de escritura es UNVERIFIED.
+- **El `max=9.258 ms` del boot**: es un punto muestral, no una distribución; se reporta
+  como coste por proceso. No se midió su varianza entre arranques.
+
+### 7. Discrepancia detectada (doc vs código — gana el código)
+`docs/ENV_REFERENCE.md` documentaba `SESSION_ACTIVE_MIN` y `SESSION_LIVENESS_TTL_H` pero
+**no** los dos flags nuevos (`SESSION_SYNC_MODE`, `SESSION_SYNC_TTL_S`), que sí existen en
+`config.py` (`grep -n "SESSION_SYNC" docs/ENV_REFERENCE.md` → vacío antes de este AD). El
+código manda: se añaden las dos filas a la tabla (junto a las de latido) con sus defaults
+reales (`silent`, `8.0`), verificados por comando en §3. Sin este arreglo el documento
+afirmaría implícitamente que no existen knobs de sync.
