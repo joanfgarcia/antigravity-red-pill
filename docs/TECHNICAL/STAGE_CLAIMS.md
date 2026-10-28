@@ -188,10 +188,39 @@ All five were confirmed by reproduction and fixed with regression tests.
 | **E0** | This document: contract + schema + API | ✅ done |
 | **E1** | Verify the A4 precondition | ✅ done (§6) |
 | **E2** | `stage_claims` core (D12/D13/D18/D9-a/D14) | ✅ done (`src/red_pill/session/stage_claims.py`) |
-| **E3** | `DagJobDriver` integration: claim before each atomic stage, honour `claimed=False` | ⏳ pending |
-| **E4** | Renewal on checkpoint (D9-a) wired into the driver | ⏳ pending |
-| **E5** | E2E acceptance: 2 opencode + 1 awakening on the same DAG, no collision | ⏳ pending (supervised) |
+| **E3** | `DagJobDriver` integration: claim before each atomic stage, honour `claimed=False` | ✅ done (`JobDeferred`) |
+| **E4** | Renewal heartbeat while the stage runs (D9-a) | ✅ done |
+| **E5** | E2E acceptance: no duplicate execution, long claims survive | ✅ done (§6.1) |
 
-Fase 4 is **not** complete until E5 runs green. E2 alone is the lock; the
-acceptance criterion is the RFC's: *"2 opencode + 1 awakening sobre el mismo DAG
-sin pisada ni robo con carrera; claims largos sobreviven por checkpoint."*
+### 6.1 E2E acceptance (E5)
+
+Run against the real queue and the real driver (2026-10-28), with a 3-stage DAG
+whose middle stage sleeps **75 s** while `claim_ttl_s` is **20 s** — deliberately
+less than half the stage, so the heartbeat has real work to do:
+
+- A second soul (`e5-competidor-0001`), polling every 3 s, tried to claim that
+  same stage: **25 attempts, all `held_by_other`, zero steals**.
+- **No `stolen_expired`**: the heartbeat kept the 20 s claim alive for 75 s.
+- After the job ended, **no rows remained** in `stage_claims` — release works.
+
+**This test found two real bugs that the unit suite could not see:**
+
+1. `renew_claim(**params)` / `release_claim(**params)` were called with the
+   full parameter set, including `intent` and `originator`. Both raised
+   `TypeError`, swallowed by the `except`: the heartbeat never renewed (the claim
+   expired mid-stage and another soul stole it — observed as `stolen_expired`)
+   and release never freed the row (orphans: `fast1`/`fast2` stayed claimed).
+2. The unit tests were **blind to it** because they mocked with `lambda **k`,
+   which swallows any signature mismatch. One test was worse: it imported
+   `try_claim_stage` *inside* a `patch(...)` block, so it received the mock, never
+   created the claim, and the assertion passed on an empty table.
+
+Fixed with explicit `_RENEW_KEYS`/`_RELEASE_KEYS` filtering, a structural test
+that compares those key sets against the real function signatures, and
+integration tests that talk to a real temporary database.
+
+**Lesson, recorded because it will repeat:** a mock with `**kwargs` does not
+verify a call contract. If a boundary has a signature, assert the signature.
+
+Fase 4 is complete at the code level. What it still does **not** do is stated in
+§5; the federated multi-host case belongs to F5 and depends on D26.

@@ -2088,8 +2088,10 @@ más, no un reemplazo.
 ## [AD-091] Fase 4 — claims de etapa: coordinación federada sin carrera
 
 **Date**: 2026-10-28
-**Status**: IMPLEMENTED (E0–E2). Pendiente E3–E5 (integración en `DagJobDriver`,
-renovación por checkpoint y E2E con 2 opencode + 1 awakening).
+**Status**: IMPLEMENTED (E0–E5). El E2E de aceptación corre contra la cola y el
+driver reales (ver §6.1 de `STAGE_CLAIMS.md`): con un TTL de 20 s sobre una etapa
+de 75 s, otra alma intentó reclamarla 25 veces y recibió `held_by_other` las 25,
+sin un solo robo, y no quedaron filas huérfanas.
 **Contrato**: [`docs/TECHNICAL/STAGE_CLAIMS.md`](STAGE_CLAIMS.md).
 
 ### 1. The Problem
@@ -2135,7 +2137,13 @@ reproducidos y corregidos con test de regresión. El test de carrera se valida p
 **mutación**: sin `BEGIN IMMEDIATE` falla con "8 almas robaron el mismo claim".
 
 ### 5. Deuda declarada
-- **E3/E4/E5** pendientes: sin la integración en el driver, la tabla no protege
-  nada todavía; sin E5 no se cumple el criterio de aceptación del RFC.
 - **Multi-host** fuera de alcance: es un SQLite local. La coordinación entre
   máquinas es territorio de `neon-rings` y depende de **D26** (firma real).
+- **Responsable de misión y skip bloqueante**: propuesto por el Operador
+  (2026-10-28) y anotado en `planner/ideas/F4-ORQUESTADOR-MISION`. Hoy los skips
+  por claim ajeno se difieren (`JobDeferred`) y se ven en el checkpoint; no hay
+  aviso al responsable ni un dueño durable de la misión. Trabajo posterior.
+- **Lección de verificación**: el E2E encontró que `renew_claim`/`release_claim`
+  se llamaban con kwargs de más (`TypeError` tragado por el `except`) mientras
+  los tests —con mocks `lambda **k`— daban verde. Un mock con `**kwargs` no
+  verifica un contrato de llamada.
