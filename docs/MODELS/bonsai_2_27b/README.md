@@ -117,3 +117,21 @@ mediciones de esta ficha se hicieron con `-fa on` explícito, así que no están
 flash_attn: true
 fa_capable: true
 ```
+
+## Servido por el daemon (verificado 2026-10-30)
+
+Ya no hace falta un banco aparte: el daemon lo sirve de punta a punta.
+
+```
+POST localhost:8760/v1/chat/completions {"model": "bonsai_2_27b", ...}
+→ 200 en 5,9 s · {"motor": "bonsai", "via": "daemon"}
+→ /status: loaded_profile=bonsai_2_27b, mode=gpu, flash_attn=true
+→ system_fingerprint: b1-4fbda12  (build prism)
+```
+
+Y la vuelta a `granite_8b` en caliente: 200 en 1,5 s, sin fugas de VRAM (7.453 MiB).
+El daemon no sabe qué motor hay detrás: `build_local_backend` resuelve perfil →
+runtime → binario o proceso.
+
+**Pendiente para entrar en un carril:** `minion_tool`. `RuntimeServer.chat` ya
+acepta `tools`; falta medir el function calling del ternario.

@@ -1,5 +1,31 @@
 ## Unreleased
 
+### 🔌 Motor de inferencia agnóstico — un modelo ternario servido por el daemon
+
+- **[NEW]** `red_pill/inference/local_backend.py`: `build_local_backend(resolved)`
+  devuelve un objeto con la interfaz que el daemon ya usaba (`tokenize` +
+  `create_chat_completion`), tanto si carga en proceso con llama-cpp-python como
+  si lo sirve el binario de un fork. **El daemon no ramifica por motor.**
+- **[NEW]** `ForkChatBackend` sirve por HTTP el modelo del fork: tokenize vía
+  `/tokenize`, chat con `tools`, streaming SSE traducido a chunks. Descarta las
+  claves que sólo existen en proceso (`chat_format`, `grammar`…).
+- **[REFACTOR]** `ForkServerInferenceProvider` delega en `RuntimeServer` (AD-049)
+  en vez de reimplementar arranque, health y apagado. Primer intento duplicaba
+  algo que ya existía y mejor.
+- **[NEW]** `RuntimeServer.chat` acepta `tools`/`tool_choice`/`response_format`:
+  un perfil de fork también puede hacer function calling (`minion_tool`).
+- **[NEW]** `ResolvedModel.extra_server_args`: las peculiaridades de un modelo se
+  declaran en el perfil, no en código. `bonsai_2_27b` declara
+  `--reasoning off --reasoning-budget 0` y `flash_attn`/`fa_capable` (AD-037).
+- **[FIX]** Desmontaje sin parar el servicio: `build_local_backend(unload_daemon=)`
+  pide evict al proxy; el daemon llama `stop()` al backend si lo expone. Antes un
+  servidor de fork se quedaba con la VRAM al cambiar de modelo.
+- **[FIX]** `ResolvedModel.runtime` es el dict resuelto; el id es `runtime_id`
+  (rompía `RuntimeRegistry.get` con un dict).
+- **[E2E]** Verificado bidireccional por el puerto 8760: bonsai 200 en 5,9 s y
+  vuelta a granite 200 en 1,5 s, sin fugas de VRAM. `system_fingerprint` del
+  servidor = build prism `b1-4fbda12`.
+
 ### 🎭 Atribución de hablante — los mensajes entre almas dejan de ser del Operador
 
 - **[FIX]** El buffer rápido etiquetaba como `USER:` *cualquier* prompt, y el prompt
