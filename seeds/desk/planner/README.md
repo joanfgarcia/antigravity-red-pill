@@ -113,14 +113,34 @@ planner/
 ## Tamaño de documento (guardarraíl medible)
 
 Un documento que no se asimila no se lee: se hojea. Y se carga en contexto, así
-que además **desplaza** lo demás. Los umbrales están calibrados para que un
-**modelo local pequeño (7B-9B)** pueda leer un documento de una sentada y, con
-dos, compararlos.
+que además **desplaza** lo demás.
+
+**La unidad son TOKENS, no KB.** El KB es lo que ocupa en disco; el token es lo
+que ocupa **en la ventana del modelo**, y es lo único que se compara con el
+contexto disponible. Un documento de 30 KB de prosa española son ~9.400 tok; el
+mismo peso en tablas y rutas pasa de 12.000. El KB miente; el token no. Por eso
+el KB se muestra al lado sólo como comodidad (`~x KB`).
 
 | Umbral | Regla | En folios A4 técnicos |
 |---|---|---|
-| **> 10 KB** | El documento **debe** llevar un índice de secciones al principio | ~3-4 páginas |
-| **> 30 KB** | **Señal de dividir**: sub-carpeta + `INDEX.md` que resuma y enlace | ~10 páginas |
+| **> 2.000 tok** (~6 KB) | El documento **debe** llevar un índice de secciones al principio | ~2-3 páginas |
+| **> 6.000 tok** (~19 KB) | **Señal de dividir**: sub-carpeta + `INDEX.md` que resuma y enlace | ~6-7 páginas |
+
+De dónde salen (medido el 2026-10-29, no supuesto): con `granite_8b` el
+**prompt útil** real es `n_ctx - 4.096` = **6.144 tok** — no los 10.240 que
+anuncia la ventana, porque 4.096 se reservan para la salida. Y **3,2 caracteres
+≈ 1 token** en prosa española. De ahí:
+
+- **blando = un tercio del presupuesto** (~2.000): se lee entero junto a otros
+  dos o tres documentos y la pregunta.
+- **duro = el presupuesto entero** (~6.000): por sí solo ya no deja sitio a nada
+  con lo que compararlo. No se razona, se hojea.
+
+Ojo con dar por buena una ventana: depende de la **compresión del KV cache**, no
+del modelo. El mismo `granite_8b` en la misma máquina: `f16` → 12.288 tok,
+`q8_0` → 24.576, `q4_0` → 49.152. Estos umbrales están anclados al caso
+**conservador (`f16`)**: con KV comprimido hay más sitio y el criterio sigue
+siendo válido, sólo que exigente.
 
 **El índice es la pieza, no la fusión.** Un directorio con muchos documentos
 pequeños **no** se fusiona: se le pone un `INDEX.md` con un resumen general del
@@ -141,13 +161,14 @@ con su propio índice) sin crear monolitos. Sólo se fusiona lo que está
    `related: ./README.md` **relativos dentro de la misma carpeta**. Un `grep` de
    la ruta completa no los ve; el hook de `links.py` sí. Correr `links.py` **antes**
    de commitear, no después.
-6. Regenerar `STATE.md` (`tools/state.py`).
+6. Regenerar `STATE.md`: `python3 planner/tools/state.py -o STATE.md`.
 
 **Es una hipótesis fechada, no una ley.** Los números viven en
-`tools/check_doc_size.py` como dos constantes (`SOFT_LIMIT_KB`, `HARD_LIMIT_KB`)
-con fecha de calibración. Cuando los modelos objetivo crezcan —un 12B o 27B donde
-hoy hay un 9B, o una técnica de lectura por partes— se suben ahí y se anota el
-nuevo objetivo. Nunca se cambia un número disperso por el código.
+`tools/check_doc_size.py` como dos constantes (`SOFT_LIMIT_TOKENS`,
+`HARD_LIMIT_TOKENS`) con su fecha de calibración, más `CHARS_PER_TOKEN` para el
+`~x KB`. Cuando los modelos objetivo crezcan —un 12B o 27B donde hoy hay un 9B,
+o una técnica de lectura por partes— se suben ahí y se anota el nuevo objetivo.
+Nunca se cambia un número disperso por el código.
 
 ```bash
 python3 planner/tools/check_doc_size.py            # el desk
