@@ -30,7 +30,16 @@ from red_pill.session.store import SessionRegistry
 
 @pytest.fixture
 def reg(tmp_path):
-	return SessionRegistry(str(tmp_path / "session.db"))
+	"""Registro con dos almas vivas (una por cuerpo de opencode).
+
+	Desde AD-095 la entrega resuelve **emisor y destinatario** contra
+	`session_registry` (D-07): sin fila no hay rol ni misión, y ese mensaje
+	espera al pull. Los tests necesitan esas dos filas para probar el push.
+	"""
+	r = SessionRegistry(str(tmp_path / "session.db"))
+	for soul, originator in (("alma-1", "opencode:ses_a"), ("alma-2", "opencode:ses_b")):
+		r.upsert_session(originator=originator, continuity_id=soul, mission_id="repo:next")
+	return r
 
 
 @pytest.fixture
@@ -53,6 +62,11 @@ def push(monkeypatch):
 
 
 def _event(reg, *, continuity="alma-1", originator="dag:job-1", kind="phase_done", summary="etapa c2 hecha", sealed=False, ref=None):
+	"""Evento dirigido al alma `continuity` (AD-095: el destinatario va en el evento).
+
+	El caso canónico es el de AD-090: el cuerpo es un job (`dag:job-1`) que publica
+	en nombre del alma que lo lanzó; la dirección sigue siendo el alma.
+	"""
 	return reg.add_event(
 		event_type=kind,
 		mission_id="repo:next",
@@ -62,6 +76,7 @@ def _event(reg, *, continuity="alma-1", originator="dag:job-1", kind="phase_done
 		global_turn=1,
 		sealed=sealed,
 		ref=ref,
+		to_continuity=continuity,
 	)
 
 
@@ -123,7 +138,9 @@ class TestDegradacionPull:
 		assert [item["reason"] for item in report["deferred"]] == ["no_live_body"]
 		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db) is None
 		assert [e["event_id"] for e in delivery.pending_for_soul("alma-1", db_path=db)] == [ev["event_id"]]
-		assert reg.fetch_events("repo:next")[0]["event_id"] == ev["event_id"], "el tablón no se toca"
+		# El evento sigue en el registro (append-only). No se busca en la vista del
+		# tablón: desde AD-095 la correspondencia no se renderiza en él.
+		assert reg.get_event(ev["event_id"]) is not None, "el tablón no se toca"
 
 	def test_arnes_sin_punto_de_inyeccion_degrada_a_pull(self, reg, db, push):
 		"""claude_code/pi/telegram no tienen inyección aquí: no se empuja nada."""
@@ -228,7 +245,7 @@ class TestNoDuplicado:
 		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)
 		assert row["state"] == delivery.STATE_GIVEN_UP
 		assert row["attempts"] == delivery.MAX_PUSH_ATTEMPTS
-		assert reg.fetch_events("repo:next")[0]["event_id"] == ev["event_id"], "rendirse no borra el tablón"
+		assert reg.get_event(ev["event_id"]) is not None, "rendirse no borra el tablón"
 
 
 class TestPoliticaDeEntrada:

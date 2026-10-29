@@ -26,6 +26,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [IDENTITY_PACT.md](TECHNICAL/IDENTITY_PACT.md) | Identity & Pact (760/770): el agente redacta su identidad; solo carga el pacto vigente |
 | [WAR_ECONOMY.md](TECHNICAL/WAR_ECONOMY.md) | War Economy: Reuse and orchestration of system organs and components |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
+| [CORO_PROTOCOL.md](TECHNICAL/CORO_PROTOCOL.md) | Protocolo del coro (AD-095): tablón, correspondencia entre almas y `coro_api` |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |

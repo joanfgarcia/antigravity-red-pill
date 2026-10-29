@@ -157,7 +157,7 @@ class SessionSyncPlugin(BaseInterceptorPlugin):
 			return ""
 		from red_pill.session.store import sanitize_inline
 
-		return f"Pendientes: {n} evento(s) nuevo(s) en misión {sanitize_inline(mission, 80)} (fetch_events / session_board)"
+		return f"Pendientes: {n} evento(s) nuevo(s) en misión {sanitize_inline(mission, 80)} (coro_api.fetch / coro_api.board)"
 
 	# ── Digest ─────────────────────────────────────────────────────────────
 	def _digest(self, mode: str) -> str:

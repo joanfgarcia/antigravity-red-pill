@@ -2697,13 +2697,14 @@ servía para el aviso de fin de job.
 ### 2. The Decision
 1. **Una tool consolidada `coro_api`** (lectura y escritura), registrada por el
    `ToolRegistry` como **módulo** (`src/red_pill/coro/`), no cableada en `mcp_server.py`.
-   Acciones: `post`, `send(verb)`, `inbox`, `ack`, `fetch`, `board`, `dlq`, `replay`.
-   El verbo (`notify`/`ask`/`reply`/`park`) es **enum de `send`**, no una tool.
+   Acciones: `post`, `send(verb)`, `inbox`, `ack`, `fetch`, `board`, `object`
+   (`dlq`/`replay` llegan con el broker en S2 y no se registran antes). El verbo
+   (`notify`/`ask`/`reply`/`park`) es **enum de `send`**, no una tool.
 2. **Purga, no deprecación** (Operador, 2026-10-29): `announce_intent` → `post`,
    `fetch_events` → `fetch`, `check_parallel_sessions` y `session_board` → `board`.
    Se borran del catálogo con sus llamantes actualizados; sin alias de compatibilidad.
 3. **El destinatario se añade al evento, no se inventa un buzón paralelo**:
-   `session.db` v4 con `to_continuity`, `verb`, `thread_id`, `hop`/`hop_max`,
+   `session.db` v8 con `to_continuity`, `verb`, `thread_id`, `hop`/`hop_max`,
    `expects_reply`, `value_class` (`now`/`seed`) y `expires_at`; `EVENT_TYPES += "message"`.
 4. **Un solo dueño del estado de entrega: `neon-link`**. `outbox` con
    `channel='soul'` (`channel_user_id = continuity_id`) y payload = **sobre**, nunca

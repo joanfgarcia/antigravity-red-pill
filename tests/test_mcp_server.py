@@ -318,9 +318,11 @@ class TestListTools:
 		assert "bunker_memory_api" in tool_names
 		assert "sovereign_handshake" in tool_names
 		assert "job_manager_api" in tool_names
-		assert "announce_intent" in tool_names
-		assert "fetch_events" in tool_names
-		assert "check_parallel_sessions" in tool_names
+		# AD-095: el coro es UNA tool. Las cuatro viejas se purgaron (sin alias):
+		# si vuelven, es una regresión, no una comodidad.
+		assert "coro_api" in tool_names
+		for purged in ("announce_intent", "fetch_events", "check_parallel_sessions"):
+			assert purged not in tool_names
 		assert "unregister_session" in tool_names
 		assert "fetch_divergent_turns" in tool_names
 		# D23-SCORE v0: bandeja, revisión y moderación (Operador).
@@ -330,7 +332,8 @@ class TestListTools:
 		assert "moderate_note" in tool_names
 		# F4 (A1): el claim de etapa es tool del coro, no solo función interna.
 		assert "try_claim_stage" in tool_names
-		assert len(result) == 15
+		# 16 antes de AD-095: −3 sueltas del coro, +1 `coro_api` consolidada.
+		assert len(result) == 13
 
 
 class TestControlBunkerAdditional:

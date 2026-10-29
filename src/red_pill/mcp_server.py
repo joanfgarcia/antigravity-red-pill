@@ -742,26 +742,6 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
 
 
-@registry.register_action(
-	parent="swarm_orchestrator_api",
-	action="session_board",
-	description="[OFFICIAL] Sala de guerra: sesiones agrupadas por misión/campaña (vivas primero), con alma/rol/proyecto/título/modelo (RFC-DESPERTAR-001 P1a).",
-	schema={"type": "object", "properties": {}},
-)
-async def handle_session_board(arguments: Dict[str, Any]):
-	try:
-		import mcp.types as types
-
-		from red_pill.core.session_index import build_board, render_board, write_index
-
-		board = build_board()
-		write_index(board)
-		return [types.TextContent(type="text", text=render_board(board))]
-	except Exception as e:
-		import mcp.types as types
-
-		return [types.TextContent(type="text", text=f"Error building session board: {e}")]
-
 
 @registry.register_action(
 	parent="metabolism_health_api",
@@ -1921,7 +1901,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		`mission:adhoc-<fecha>`.
 	- `role`: por defecto 'task'. `affinity`: resolver compartido + canonizada.
 	- `persist=False`: NO avanza el reloj ni escribe el registro (lectura de
-		identidad para acciones como `announce_intent`/`fetch_events`).
+		identidad para acciones de misión (`coro_api.post`/`coro_api.fetch`).
 	Nunca lanza: un fallo de identidad no debe tumbar el turno.
 	"""
 	from red_pill.core.affinity import derive_affinity
@@ -2151,7 +2131,7 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		parts.append(f"{awaiting} awaiting_operator")
 	if parallel:
 		parts.append("1 sesión paralela" if parallel == 1 else f"{parallel} sesiones paralelas")
-	return "[CORO] " + " · ".join(parts) + " (fetch_events / session_board)"
+	return "[CORO] " + " · ".join(parts) + " (coro_api.fetch / coro_api.board)"
 
 
 def _reconcile_pull_first(identity: Dict[str, Any], until_seq: int) -> None:
@@ -2351,266 +2331,6 @@ async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 		"campaign_id": (row or {}).get("campaign_id") if row_mission == trusted_mission else None,
 		"role": (row or {}).get("role") or ident.get("role"),
 	}
-
-
-_EVENT_TYPES_SCHEMA = [
-	"phase_done",
-	"commit",
-	"claim_acquired",
-	"claim_released",
-	"blocked",
-	"unblocked",
-	"awaiting_operator",
-	"intent_updated",
-	"mission_closed",
-	"objection",
-]
-
-
-@registry.register(
-	name="announce_intent",
-	description=(
-		"[OFFICIAL] Publica un evento de misión (append-only) en el tablón del coro: "
-		"phase_done, commit, blocked, unblocked, awaiting_operator, intent_updated, "
-		"mission_closed, objection, claim_acquired/released. Solo publicas en TU misión "
-		"(anti-spoof); `summary` sin secretos (máx. 800 chars)."
-	),
-	schema={
-		"type": "object",
-		"properties": {
-			"type": {
-				"type": "string",
-				"enum": _EVENT_TYPES_SCHEMA,
-				"description": "Tipo de evento (default: intent_updated).",
-			},
-			"summary": {"type": "string", "description": "Resumen breve y sin secretos (máx. 800 chars)."},
-			"ref": {"type": "string", "description": "Referencia verificable opcional (commit, path, job_id)."},
-			"sealed": {"type": "boolean", "description": "Si true, el evento solo lo ve su propia misión."},
-			"mission_id": {"type": "string", "description": "Debe coincidir con la misión de tu sesión (anti-spoof)."},
-			"campaign_id": {"type": "string", "description": "Debe coincidir con la campaña de tu sesión (si difiere, se rechaza)."},
-			"target_event_id": {
-				"type": "string",
-				"description": "Solo objection: event_id de la nota objetada (misma misión).",
-			},
-			"severity": {
-				"type": "string",
-				"enum": ["low", "medium", "high"],
-				"description": "Solo objection: severidad (default low). high → Operador.",
-			},
-			"proposed_action": {
-				"type": "string",
-				"enum": ["flag", "hide", "retract"],
-				"description": "Solo objection: acción propuesta (default flag). retract → Operador.",
-			},
-			"evidence": {"type": "string", "description": "Solo objection: evidencia breve (sin secretos)."},
-		},
-		"required": ["summary"],
-	},
-)
-async def handle_announce_intent(arguments: Dict[str, Any]):
-	try:
-		from red_pill.session.store import SessionRegistry
-
-		session = await _caller_session(arguments)
-		originator = str(session.get("originator") or "")
-		if ":" not in originator:
-			return [
-				types.TextContent(
-					type="text",
-					text="[ANNOUNCE] sin cuerpo compuesto (bridge/env); no se publica (fail-closed).",
-				)
-			]
-		mission = session.get("mission_id")
-		if not mission:
-			return [types.TextContent(type="text", text="[ANNOUNCE] sin misión resuelta; no se publica.")]
-		requested = str(arguments.get("mission_id") or "").strip()
-		if requested and requested != mission:
-			return [
-				types.TextContent(
-					type="text",
-					text=f"[ANNOUNCE] rechazado: la misión de tu sesión es {mission!r}, no {requested!r}.",
-				)
-			]
-		campaign = session.get("campaign_id")
-		requested_campaign = str(arguments.get("campaign_id") or "").strip()
-		if requested_campaign and requested_campaign != str(campaign or ""):
-			return [
-				types.TextContent(
-					type="text",
-					text=f"[ANNOUNCE] rechazado: la campaña de tu sesión es {campaign!r}, no {requested_campaign!r}.",
-				)
-			]
-		sealed_raw = arguments.get("sealed", False)
-		if not isinstance(sealed_raw, bool):
-			return [types.TextContent(type="text", text="[ANNOUNCE] `sealed` debe ser boolean (true/false).")]
-		registry_obj = SessionRegistry()
-		event_type = str(arguments.get("type") or "intent_updated")
-		target = str(arguments.get("target_event_id") or "").strip()
-		if event_type == "objection":
-			if not target:
-				return [types.TextContent(type="text", text="[ANNOUNCE] objection requiere `target_event_id`.")]
-			if sealed_raw:
-				return [types.TextContent(type="text", text="[ANNOUNCE] una objection no puede ser sealed (v0).")]
-			continuity = str(session.get("continuity_id") or "").strip()
-			if not continuity:
-				return [types.TextContent(type="text", text="[ANNOUNCE] sin alma resuelta; no se publica la objeción.")]
-			subject = registry_obj.get_event(target)
-			if not subject:
-				return [types.TextContent(type="text", text="[ANNOUNCE] la nota objetivo no existe.")]
-			if subject["mission_id"] != mission:
-				return [
-					types.TextContent(
-						type="text",
-						text="[ANNOUNCE] objeción cross-misión no soportada en v0 (misma misión que la nota).",
-					)
-				]
-			if subject.get("sealed"):
-				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota sealed (v0).")]
-			if registry_obj.get_note_status(target) in {"hidden", "retracted"}:
-				return [types.TextContent(type="text", text="[ANNOUNCE] no se objeta una nota hidden/retracted.")]
-			decision = registry_obj.open_decision(
-				subject_event_id=target,
-				claim=str(arguments.get("summary") or ""),
-				created_by=continuity,
-				mission_id=mission,
-				evidence=str(arguments.get("evidence") or ""),
-				severity=str(arguments.get("severity") or "low"),
-				proposed_action=str(arguments.get("proposed_action") or "flag"),
-			)
-			if not decision.get("created"):
-				return [
-					types.TextContent(
-						type="text",
-						text=(f"[OBJECTION] ya existe D-obj {decision['decision_id'][:12]} state={decision['state']} note={target[:12]}"),
-					)
-				]
-			event = registry_obj.add_event(
-				event_type="objection",
-				mission_id=mission,
-				campaign_id=campaign,
-				continuity_id=continuity,
-				originator=originator,
-				global_turn=registry_obj.get_max_global_turn(),
-				summary=str(arguments.get("summary") or ""),
-				ref=decision["decision_id"],
-				sealed=False,
-			)
-			op = " [requiere Operador]" if decision.get("requires_operator") else ""
-			review_job = None
-			mode = "off"
-			try:
-				from red_pill.session.d23_review import enqueue_review, review_mode
-
-				mode = review_mode()
-				if mode != "off":
-					review_job = enqueue_review(decision, subject, mode)
-			except Exception as e:
-				logger.warning(f"[OBJECTION] review enqueue failed: {e}")
-			review_note = f" · review_job={review_job}" if review_job else ""
-			mode_note = f" · mode={mode}" if mode != "off" else ""
-			return [
-				types.TextContent(
-					type="text",
-					text=(
-						f"[OBJECTION] decision={decision['decision_id']} · state={decision['state']}{op} · "
-						f"note={target} · event={event['event_id']} · seq={event['event_seq']}"
-						f"{review_note}{mode_note}"
-					),
-				)
-			]
-		if target or arguments.get("severity") or arguments.get("proposed_action") or arguments.get("evidence"):
-			return [
-				types.TextContent(
-					type="text",
-					text="[ANNOUNCE] target_event_id/severity/proposed_action/evidence solo valen con type=objection.",
-				)
-			]
-		event = registry_obj.add_event(
-			event_type=event_type,
-			mission_id=mission,
-			campaign_id=campaign,
-			continuity_id=session.get("continuity_id"),
-			originator=originator,
-			global_turn=registry_obj.get_max_global_turn(),
-			summary=str(arguments.get("summary") or ""),
-			ref=arguments.get("ref"),
-			sealed=sealed_raw,
-		)
-		sealed = " [sealed]" if event.get("sealed") else ""
-		return [
-			types.TextContent(
-				type="text",
-				text=f"[ANNOUNCE] {event['type']} · {event['mission_id']} · seq={event['event_seq']} · event={event['event_id']}{sealed}",
-			)
-		]
-	except Exception as e:
-		return [types.TextContent(type="text", text=f"[ANNOUNCE] error: {e}")]
-
-
-@registry.register(
-	name="fetch_events",
-	description=(
-		"[OFFICIAL] Lee los eventos de una misión desde tu cursor (`since_seq`): "
-		"la base del coro (la hermana se entera). Por defecto, tu propia misión. "
-		"Los eventos `sealed` solo los ve el mismo originator que los publicó."
-	),
-	schema={
-		"type": "object",
-		"properties": {
-			"mission_id": {"type": "string", "description": "Misión a leer (default: la tuya)."},
-			"since_seq": {
-				"type": "integer",
-				"description": "Cursor: devuelve eventos con event_seq > este valor (0 = desde el principio).",
-			},
-			"types": {"type": "array", "items": {"type": "string"}, "description": "Filtro por tipos (opcional)."},
-			"limit": {"type": "integer", "description": "Máximo de eventos (default 50, tope 500)."},
-		},
-	},
-)
-async def handle_fetch_events(arguments: Dict[str, Any]):
-	try:
-		from red_pill.session.store import SessionRegistry, sanitize_inline
-
-		session = await _caller_session(arguments)
-		originator = str(session.get("originator") or "")
-		if ":" not in originator:
-			return [types.TextContent(type="text", text="[EVENTS] sin cuerpo compuesto (bridge/env); deny-by-default.")]
-		session_mission = str(session.get("mission_id") or "").strip()
-		if not session_mission:
-			return [types.TextContent(type="text", text="[EVENTS] sin misión de sesión; deny-by-default.")]
-		target = str(arguments.get("mission_id") or session_mission).strip()
-		if target != session_mission:
-			return [
-				types.TextContent(
-					type="text",
-					text=f"[EVENTS] cross-misión denegado (deny-by-default): {sanitize_inline(target)!r}.",
-				)
-			]
-		events = SessionRegistry().fetch_events(
-			target,
-			since_seq=int(arguments.get("since_seq") or 0),
-			types=arguments.get("types"),
-			limit=int(arguments.get("limit") or 50),
-			viewer_originator=session.get("originator"),
-			viewer_continuity_id=session.get("continuity_id"),
-			include_hidden=os.getenv("REDPILL_OPERATOR") == "1",
-		)
-		safe_target = sanitize_inline(target)
-		if not events:
-			return [types.TextContent(type="text", text=f"[EVENTS] {safe_target}: sin novedades.")]
-		lines = [f"--- EVENTOS {safe_target} ({len(events)}) ---"]
-		for event in events:
-			ref = f" · {event['ref']}" if event.get("ref") else ""
-			seal = " [sealed]" if event.get("sealed") else ""
-			status = str(event.get("note_status") or "visible")
-			tag = f" [{status}]" if status in {"flagged", "hidden", "retracted"} else ""
-			open_decisions = int(event.get("open_decisions") or 0)
-			if open_decisions > 0:
-				tag += f" [disputed:{open_decisions}]"
-			lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}")
-		return [types.TextContent(type="text", text="\n".join(lines))]
-	except Exception as e:
-		return [types.TextContent(type="text", text=f"[EVENTS] error: {e}")]
 
 
 def _fmt_decision_age(seconds: float) -> str:
@@ -2836,77 +2556,6 @@ async def handle_moderate_note(arguments: Dict[str, Any]):
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[MODERATE] error: {e}")]
 
-
-@registry.register(
-	name="check_parallel_sessions",
-	description=(
-		"[OFFICIAL] Sala de guerra del coro: global_turn, tu marca, divergencia y "
-		"sesiones vivas/recientes (originator, alma, misión, rol, delta, rama). "
-		"Solo lectura; visibilidad global (D16)."
-	),
-	schema={
-		"type": "object",
-		"properties": {
-			"include_git_status": {"type": "boolean", "description": "Incluye rama/HEAD del espejo git."},
-			"limit": {"type": "integer", "description": "Máximo de sesiones (default 50, tope 200)."},
-		},
-	},
-)
-async def handle_check_parallel_sessions(arguments: Dict[str, Any]):
-	try:
-		from red_pill.core.session_index import _registry_ttl_s
-		from red_pill.session.store import SessionRegistry, sanitize_inline
-
-		session = await _caller_session(arguments)
-		registry_obj = SessionRegistry()
-		global_turn = registry_obj.get_max_global_turn()
-		rows = registry_obj.list_sessions(limit=max(1, min(int(arguments.get("limit") or 50), 200)))
-		my = registry_obj.get_by_originator(session["originator"]) if session.get("originator") else None
-		my_last = int((my or {}).get("last_seen_global_turn") or 0)
-		delta = max(0, global_turn - my_last)
-		include_git = bool(arguments.get("include_git_status"))
-		ttl = _registry_ttl_s()
-		now = time.time()
-		lines = [
-			f"--- CORO: global_turn={global_turn} · tú={sanitize_inline(session.get('mission_id'), 120)} · last_seen={my_last} · delta={delta} ---"
-		]
-		shown = 0
-		for row in rows:
-			if row.get("ttl_state") == "expired":
-				continue
-			if (now - float(row.get("updated_at") or 0.0)) > ttl:
-				continue
-			last = int(row.get("last_seen_global_turn") or 0)
-			parts = [
-				f"[{sanitize_inline(row.get('provider'), 40)}] {sanitize_inline(row.get('session_id'), 60)}",
-				f"alma={sanitize_inline(row.get('continuity_id'), 12)}",
-				f"misión={sanitize_inline(row.get('mission_id'), 80)}",
-			]
-			if row.get("campaign_id"):
-				parts.append(f"campaña={sanitize_inline(row.get('campaign_id'), 80)}")
-			parts.append(f"rol={sanitize_inline(row.get('role'), 20)}")
-			parts.append(f"delta={max(0, global_turn - last)}")
-			parts.append(f"ttl={sanitize_inline(row.get('ttl_state'), 20)}")
-			try:
-				aff = json.loads(row.get("affinity_json") or "[]")
-			except Exception:
-				aff = []
-			if isinstance(aff, list) and aff:
-				parts.append("afinidad=" + sanitize_inline(",".join(str(a) for a in aff), 120))
-			if include_git:
-				if row.get("branch"):
-					parts.append(f"rama={sanitize_inline(row.get('branch'), 80)}")
-				if row.get("worktree"):
-					parts.append(f"worktree={sanitize_inline(row.get('worktree'), 120)}")
-				if row.get("head_commit"):
-					parts.append(f"head={sanitize_inline(row.get('head_commit'), 12)}")
-			lines.append(" · ".join(parts))
-			shown += 1
-		if shown == 0:
-			lines.append("(sin sesiones recientes)")
-		return [types.TextContent(type="text", text="\n".join(lines))]
-	except Exception as e:
-		return [types.TextContent(type="text", text=f"[CORO] error: {e}")]
 
 
 @registry.register(
@@ -3201,6 +2850,18 @@ async def handle_try_claim_stage(arguments: Dict[str, Any]):
 		# Non-fatal por regla dura: un fallo del claim nunca tumba el servidor.
 		logger.warning(f"[CLAIM] try_claim_stage degradado (non-fatal): {e}")
 		return [types.TextContent(type="text", text=f"[CLAIM] claimed=false owner=— reason=error: {e}")]
+
+
+# ── El coro es un MÓDULO, no un parche aquí (AD-095) ────────────────────────
+# `coro_api` registra sus acciones en el registry y recibe la identidad del canal
+# por inyección: el módulo no conoce el MCP ni acepta `originator` del modelo.
+# Añadir o quitar una tool del coro no toca este fichero.
+try:
+	from red_pill.coro import register_coro
+
+	register_coro(registry, caller_session=_caller_session)
+except Exception as _coro_register_error:  # non-fatal: el servidor arranca igual
+	logger.warning(f"[CORO] no se pudo registrar coro_api: {_coro_register_error}")
 
 
 @server.list_tools()

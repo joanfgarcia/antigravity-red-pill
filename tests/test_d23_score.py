@@ -138,20 +138,22 @@ async def test_mcp_objection_abre_dobj_y_fetch_la_marca(tmp_path):
 	with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 		with patch("red_pill.mcp_server._current_git_branch", return_value="feat/d23"):
 			with patch("red_pill.session.d23_review.review_mode", return_value="off"):
-				announced = await _call("announce_intent", {"summary": "nota a revisar", "type": "intent_updated"})
+				announced = await _call("coro_api", {"action": "post", "payload": {"summary": "nota a revisar", "type": "intent_updated"}})
 				event_id = announced.split("event=")[1].split()[0].strip()
 				out = await _call(
-					"announce_intent",
+					"coro_api",
 					{
-						"summary": "el dato no cuadra",
-						"type": "objection",
-						"target_event_id": event_id,
-						"severity": "low",
-						"proposed_action": "flag",
+						"action": "object",
+						"payload": {
+							"claim": "el dato no cuadra",
+							"target_event_id": event_id,
+							"severity": "low",
+							"proposed_action": "flag",
+						},
 					},
 				)
-			fetched = await _call("fetch_events", {})
-	assert "OBJECTION" in out and "state=open" in out
+			fetched = await _call("coro_api", {"action": "fetch", "payload": {}})
+	assert "CORO object" in out and "state=open" in out
 	assert "[disputed:1]" in fetched
 
 	inbox = await _call("list_decisions", {})
