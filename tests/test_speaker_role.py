@@ -151,3 +151,30 @@ def test_fragment_view_pairs_conserva_el_peer():
 	vista = fragment_view(contenido, mode="pairs", operator="Joan", agent="Aleth")
 	assert "Aleth (otra sesión)" in vista
 	assert "recibido" in vista
+
+
+# ── Renderer: el rol se escribe en el arbol, no se calcula al vuelo ─────────
+
+
+def test_render_escribe_peer_en_el_arbol():
+	"""Si el arbol dice «Usuario», el destilado lo atribuye al Operador.
+
+	Es la pieza que faltaba: `distill.py` no usa la vista de fragmentos, lee el
+	bloque tal cual. El rol tiene que estar bien escrito en el `.md`.
+	"""
+	from red_pill.memento.render import render_session
+
+	rendered = render_session(
+		session_id="opencode:ses_peer",
+		source="opencode",
+		originator="opencode",
+		messages=[
+			{"role": "user", "timestamp": "2026-10-27T22:49:45Z", "content": "vale, adelante"},
+			{"role": "user", "timestamp": "2026-10-27T22:50:00Z",
+			 "content": "［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM］ la GPU esta libre"},
+			{"role": "assistant", "timestamp": "2026-10-27T22:50:10Z", "content": "compruebo con nvidia-smi"},
+		],
+	)
+	texto = rendered.index_text + "\n" + "\n".join(t for _n, t in rendered.splits)
+	assert "— Peer" in texto, texto[:400]
+	assert texto.count("— Usuario") == 1, "solo el turno real del Operador"
