@@ -208,3 +208,59 @@ hablen del mismo objeto. Índice en `docs/MODELS/INDEX.md`.
 Tamaño máximo de la ficha: **15 KB**. Es el mismo criterio que el planner aplica a
 sus documentos: si un modelo de 9B no puede leer dos fichas a la vez, la ficha es
 demasiado larga para servir de nada.
+
+---
+
+## 8. Checklist para añadir un modelo al elenco
+
+Ningún modelo entra por «cabe y responde». El caso `bonsai_2_27b` (2026-10-29) costó
+una purga fallida por saltarse el paso GP-1 y un diagnóstico de latencia equivocado
+por saltarse GP-5.
+
+### GP-1 · ¿Lo puede servir el runtime de PRODUCCIÓN?
+
+Medir con un binario no es medir en producción. Comprobar el formato de cuantización
+contra el runtime real del daemon:
+
+```bash
+python3 scripts/gguf_info.py modelo.gguf | grep file_type
+grep -c "ptq1_0" .venv/lib/python*/site-packages/llama_cpp/lib/libggml-base.so.0   # 0 = no lo lee
+```
+
+`llama-cpp-python` del venv **no conoce** las extensiones de fork (`PTQ1_0`, `PQ2_0`).
+Un modelo en formato de fork exige:
+
+- un `kind` de provider que lance el binario del fork (ver `runtimes.yaml`), **o**
+- renunciar a servirlo por el daemon.
+
+Precedentes: `BitNetInferenceProvider`, `FastFlowLMInferenceProvider`. Falta el de
+binarios de fork (`llama_cpp_prism`, `llama_cpp_xdna`).
+
+### GP-2 · `flash_attn` declarado (AD-037)
+
+Sin `flash_attn: true` **y** `fa_capable: true` en el perfil, el daemon lo resuelve a
+`auto` y puede correrlo **sin Flash Attention**: menos ventana útil y más lento. El
+caso de AD-037 fue un OOM en el scratch de prefill que parecía «contenido venenoso».
+
+### GP-3 · Conducta: medir con y sin razonamiento
+
+Un modelo de razonamiento sin `reasoning off` multiplica la latencia. `bonsai_2_27b`:
+misma puntuación con y sin thinking, **7× más lento con él**. Declarar en el perfil qué
+conducta usa el carril, no la que trae el template.
+
+### GP-4 · Latencia en **tok/s**, no en segundos
+
+Los segundos absolutos engañan: dependen de cuánto escriba el modelo. `bonsai_2_27b`
+parecía 7× más lento que el 3.7B y es un 25% más lento que el titular (40,5 frente a
+53,9 tok/s) midiendo la misma tarea.
+
+### GP-5 · Límites por cuantización de KV
+
+Sección 3 de este documento. Siempre `>=` cuando el sondeo no encontró el techo.
+
+### GP-6 · Ficha, licencia y **carril**
+
+Un perfil sin carril no se usa nunca. `bonsai_2_27b` estuvo a punto de purgarse porque
+nadie lo había medido: parecía inservible cuando solo estaba sin asignar. **Ningún
+modelo entra sin decir qué tarea lo va a pedir.**
+

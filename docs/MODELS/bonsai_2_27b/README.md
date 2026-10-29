@@ -91,3 +91,29 @@ Un perfil sin carril no se usa nunca. Ése fue todo el «descarte».
 
 **Pendiente:** prueba de textura sobre recuerdos reales y calidad de lectura a
 ventana llena (el 3.7B se cae a partir de ~46K; bonsai no está medido ahí).
+
+---
+
+## Latencia real y configuración pendiente (2026-10-29, tarde)
+
+**Cifra corregida.** Medido en tok/s sobre la misma tarea (`contract_entidades`):
+
+| Modelo | tok salida | s | tok/s |
+| --- | ---: | ---: | ---: |
+| `granite_8b` | 286 | 5,3 | **53,9** |
+| K2-7B `Q5_K_M` | 274 | 5,5 | 49,8 |
+| **`bonsai_2_27b`** | 299 | 7,4 | **40,5** |
+
+Es **un 25% más lento que el titular**, no 7×. El «7×» de la primera medición comparaba
+contra el 3.7B, que responde en 0,6 s porque es pequeño y escribe menos: los segundos
+absolutos no sirven para comparar.
+
+**Fallo de configuración abierto:** el perfil **no declara `flash_attn` ni `fa_capable`**
+(AD-037). Resuelto a `auto`, el daemon podría correrlo **sin Flash Attention**. Las
+mediciones de esta ficha se hicieron con `-fa on` explícito, así que no están afectadas
+— pero producción sí lo estaría. Añadir al perfil:
+
+```yaml
+flash_attn: true
+fa_capable: true
+```
