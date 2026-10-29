@@ -34,11 +34,14 @@ def reg(tmp_path):
 
 	Desde AD-095 la entrega resuelve **emisor y destinatario** contra
 	`session_registry` (D-07): sin fila no hay rol ni misión, y ese mensaje
-	espera al pull. Los tests necesitan esas dos filas para probar el push.
+	espera al pull. El emisor se resuelve por su **cuerpo** (`originator`), no por
+	el alma del evento (que es el destinatario): por eso se siembra también el leg
+	del job, que es quien publica en el caso canónico.
 	"""
 	r = SessionRegistry(str(tmp_path / "session.db"))
 	for soul, originator in (("alma-1", "opencode:ses_a"), ("alma-2", "opencode:ses_b")):
 		r.upsert_session(originator=originator, continuity_id=soul, mission_id="repo:next")
+	r.upsert_session(originator="dag:job-1", continuity_id="job-1", mission_id="repo:next", role="orchestrator")
 	return r
 
 
@@ -492,3 +495,68 @@ class TestLlamanteEfimero:
 		assert calls == []
 		out = capsys.readouterr().out
 		assert "PENDIENTES DE ENTREGA" in out and "pendiente de ver" in out
+
+
+class TestMatrizEnLaEntrega:
+	"""D-07 aplicada donde de verdad importa: el momento de empujar (no solo al entrar).
+
+	`next` ya resolvía emisor y destinatario contra el registro (`_wake_verdict`),
+	pero no había ni un test que lo fijara: esta clase es la red que impide que el
+	fail-closed por identidad desconocida se pierda en un refactor.
+	"""
+
+	def _config(self, monkeypatch, policy: str) -> None:
+		from types import SimpleNamespace
+
+		import red_pill.config as cfg
+
+		monkeypatch.setattr(cfg, "get_config", lambda: SimpleNamespace(WAKE_POLICY=policy))
+
+	def test_par_de_otra_mision_no_se_despierta(self, reg, db, push, monkeypatch):
+		self._config(monkeypatch, "orchestrator:chain,*:same_mission")
+		reg.upsert_session(originator="dag:otra", continuity_id="job-2", mission_id="mission:otra", role="orchestrator")
+		_event(reg, originator="dag:otra")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert report["delivered"] == []
+		assert [d["reason"] for d in report["deferred"]] == ["no_rule"]
+		# Nada se marca: el evento sigue pendiente y el pull del siguiente turno lo ve.
+		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1
+
+	def test_orquestrador_despierta_a_su_cadena(self, reg, db, push, monkeypatch):
+		self._config(monkeypatch, "orchestrator:chain")
+		reg.upsert_session(originator="dag:job-9", continuity_id="job-9", mission_id="repo:next", role="orchestrator")
+		_event(reg, originator="dag:job-9")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert len(report["delivered"]) == 1
+		assert len(push) == 1
+
+	def test_emisor_sin_registro_espera_al_pull(self, reg, db, push):
+		_event(reg, originator="dag:fantasma")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert report["delivered"] == []
+		assert report["deferred"][0]["reason"] == "no_rule"
+		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1
+
+	def test_politica_invalida_no_despierta_y_lo_dice(self, reg, db, push, monkeypatch):
+		self._config(monkeypatch, "orchestrator:inventada")
+		_event(reg)
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert report["delivered"] == []
+		assert report["deferred"][0]["reason"].startswith("rules_invalid")
+
+	def test_any_del_operador_abre_el_circulo_sin_tocar_codigo(self, reg, db, push, monkeypatch):
+		self._config(monkeypatch, "*:any")
+		_event(reg, originator="dag:desconocido")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert len(report["delivered"]) == 1
+
+	def test_el_refuse_del_destinatario_gana_a_la_matriz(self, reg, db, push, monkeypatch):
+		from red_pill.session import wake_policy
+
+		self._config(monkeypatch, "*:any")
+		wake_policy.set_inbound("alma-1", state=wake_policy.INBOUND_REFUSE, originator="opencode:ses_a", db_path=db)
+		_event(reg, originator="dag:job-9")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert report["delivered"] == []
+		assert [s["reason"] for s in report["skipped"]] == [wake_policy.REASON_INBOUND_REFUSE]
+		assert delivery.pending_for_soul("alma-1", db_path=db) == []
