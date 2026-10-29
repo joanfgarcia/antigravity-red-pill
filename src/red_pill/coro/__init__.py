@@ -27,7 +27,11 @@ _DESCRIPTIONS: Dict[str, str] = {
 	"post": (
 		"[OFFICIAL] Publica una nota en el tablón de TU misión (append-only, sin "
 		"destinatario): phase_done, commit, blocked, unblocked, awaiting_operator, "
-		"intent_updated, mission_closed. No despierta a nadie."
+		"intent_updated, mission_closed. No despierta a nadie. Con `scope='teatro'` "
+		"escribe un ACTA del teatro (notice/decision/suspension/waiver), legible por "
+		"todas las almas: ahí van las decisiones que no son de una misión. Una "
+		"`suspension`/`waiver` necesita `subject` (task:… / signal:…) y caduca con "
+		"`expires_in_days`."
 	),
 	"send": (
 		"[OFFICIAL] Escribe a OTRA alma (continuity_id). Verbos: notify (despierta, sin "
@@ -37,7 +41,11 @@ _DESCRIPTIONS: Dict[str, str] = {
 	),
 	"inbox": "[OFFICIAL] Mensajes dirigidos a TU alma, con su estado de entrega (global, por alma).",
 	"ack": "[OFFICIAL] Marca leído un mensaje de tu inbox (detiene su vida útil).",
-	"fetch": "[OFFICIAL] Eventos del tablón de tu misión desde un cursor (`since_seq`): el pull del coro.",
+	"fetch": (
+		"[OFFICIAL] Pull del coro: eventos de tu misión desde un cursor (`since_seq`), "
+		"o con `scope='teatro'` las actas generales del teatro (suspensiones, "
+		"decisiones, avisos) — lo que vale para todas las almas."
+	),
 	"board": (
 		"[OFFICIAL] Sala de guerra (solo lectura, visibilidad global D16): `scope=sesiones` "
 		"(cuerpos vivos, alma, misión, rol, delta) o `scope=misiones` (agrupado por misión)."
@@ -62,12 +70,29 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 				"awaiting_operator",
 				"intent_updated",
 				"mission_closed",
+				"notice",
+				"decision",
+				"suspension",
+				"waiver",
 			],
-			"description": "Tipo de evento (default intent_updated).",
+			"description": "Tipo (misión: phase_done/commit/…; teatro: notice/decision/suspension/waiver).",
 		},
 		"summary": {"type": "string", "description": "Resumen breve y sin secretos (máx. 800 chars)."},
 		"ref": {"type": "string", "description": "Referencia verificable opcional (commit, path, job_id)."},
 		"sealed": {"type": "boolean", "description": "Si true, solo lo ve el mismo cuerpo que lo publicó."},
+		"scope": {
+			"type": "string",
+			"enum": ["mision", "teatro"],
+			"description": "`teatro` escribe un acta general (no de una misión).",
+		},
+		"subject": {
+			"type": "string",
+			"description": "Solo suspension/waiver: qué se suspende o acepta (`task:awakening`, `signal:timers_offline`).",
+		},
+		"expires_in_days": {
+			"type": "number",
+			"description": "Solo teatro: caducidad del acta en días (recomendado en suspensiones).",
+		},
 	},
 	"send": {
 		"to": {"type": "string", "description": "continuity_id del alma destinataria (mírala en `board`)."},
@@ -88,6 +113,9 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 	},
 	"ack": {"event_id": {"type": "string", "description": "event_id del mensaje de tu inbox."}},
 	"fetch": {
+		"scope": {"type": "string", "enum": ["mision", "teatro"], "description": "`teatro` lee las actas generales."},
+		"active_only": {"type": "boolean", "description": "Solo teatro: oculta caducadas y revocadas (default true)."},
+		"subject": {"type": "string", "description": "Solo teatro: filtra por sujeto."},
 		"since_seq": {"type": "integer", "description": "Cursor: eventos con event_seq mayor (0 = desde el principio)."},
 		"types": {"type": "array", "items": {"type": "string"}, "description": "Filtro por tipos (opcional)."},
 		"limit": {"type": "integer", "description": "Máximo de eventos (default 50, tope 500)."},

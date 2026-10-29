@@ -58,15 +58,25 @@ class ToolRegistry:
 		for parent, actions in self._actions.items():
 			parent_desc = f"Consolidated API for {parent}.\n\nActions:\n"
 			action_enums = []
+			payload_props: Dict[str, Any] = {}
 			for act_name, act_info in actions.items():
 				parent_desc += f"- '{act_name}': {act_info['description']}\n"
 				action_enums.append(act_name)
+				# Unión de las propiedades de todas las acciones: sin esto el modelo
+				# ve `payload: {}` y tiene que adivinar los nombres de los campos
+				# (los schemas por acción se guardaban pero nunca se publicaban).
+				for prop_name, prop_schema in (act_info.get("schema") or {}).get("properties", {}).items():
+					payload_props.setdefault(prop_name, prop_schema)
 
 			parent_schema = {
 				"type": "object",
 				"properties": {
 					"action": {"type": "string", "enum": action_enums, "description": f"The specific action to execute under {parent}."},
-					"payload": {"type": "object", "description": "Serialized parameters matching the specified action."},
+					"payload": {
+						"type": "object",
+						"description": "Serialized parameters matching the specified action.",
+						"properties": payload_props,
+					},
 				},
 				"required": ["action", "payload"],
 			}

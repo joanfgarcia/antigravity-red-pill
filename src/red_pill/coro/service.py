@@ -89,6 +89,8 @@ def _new_thread() -> str:
 async def post(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	"""Nota al tablón de MI misión. Sin destinatario no hay correspondencia."""
 	originator = _require_body(session)
+	if str(payload.get("scope") or "").strip().lower() in {"teatro", "theatre"}:
+		return _post_theatre(session, payload, originator)
 	mission = _require_mission(session)
 	requested = str(payload.get("mission_id") or "").strip()
 	if requested and requested != mission:
@@ -113,6 +115,36 @@ async def post(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	)
 	tag = " [sealed]" if event.get("sealed") else ""
 	return f"[CORO post] {event['type']} · {event['mission_id']} · seq={event['event_seq']} · event={event['event_id']}{tag}"
+
+
+def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: str) -> str:
+	"""Acta del teatro (AD-095): lo que vale para todas las almas.
+
+	`type`: `notice` (constancia) · `decision` (se decidió) · `suspension` (la tarea
+	no corre; el proceso sigue vivo) · `waiver` (el defecto se acepta). Las dos
+	últimas exigen `subject` — una excepción sin sujeto no la obedece nadie.
+	"""
+	from red_pill.session import theatre
+
+	kind = str(payload.get("type") or "notice").strip().lower()
+	expires_raw = payload.get("expires_at")
+	expires: Optional[float] = float(expires_raw) if expires_raw else None
+	days = payload.get("expires_in_days")
+	if expires is None and days:
+		expires = time.time() + float(days) * 86400.0
+	note = theatre.post_note(
+		type=kind,
+		summary=str(payload.get("summary") or payload.get("body") or ""),
+		subject=str(payload.get("subject") or "").strip() or None,
+		ref=payload.get("ref"),
+		continuity_id=session.get("continuity_id"),
+		originator=originator,
+		mission_id=session.get("mission_id"),
+		expires_at=float(expires) if expires else None,
+	)
+	until = f" · hasta {time.strftime('%Y-%m-%d', time.localtime(note['expires_at']))}" if note.get("expires_at") else ""
+	subject = f" · {note['subject']}" if note.get("subject") else ""
+	return f"[CORO teatro] {note['type']}{subject} · nota={note['note_id'][:12]}{until}"
 
 
 async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
@@ -281,6 +313,8 @@ async def ack(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 async def fetch(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	"""Eventos del tablón desde mi cursor (pull; el push solo adelanta)."""
 	_require_body(session)
+	if str(payload.get("scope") or "").strip().lower() in {"teatro", "theatre"}:
+		return _fetch_theatre(payload)
 	mission = _require_mission(session)
 	target = str(payload.get("mission_id") or mission).strip()
 	if target != mission:
@@ -306,6 +340,29 @@ async def fetch(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		if open_decisions > 0:
 			tag += f" [disputed:{open_decisions}]"
 		lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}")
+	return "\n".join(lines)
+
+
+def _fetch_theatre(payload: Dict[str, Any]) -> str:
+	"""Actas del teatro (no de una misión): lo general, legible por cualquier alma."""
+	from red_pill.session import theatre
+
+	notes = theatre.list_notes(
+		type=payload.get("type"),
+		subject=payload.get("subject"),
+		active_only=bool(payload.get("active_only", True)),
+		limit=int(payload.get("limit") or 20),
+	)
+	if not notes:
+		return "[CORO teatro] sin actas vigentes."
+	lines = [f"--- TEATRO ({len(notes)}) ---"]
+	for note in notes:
+		until = ""
+		if note.get("expires_at"):
+			until = f" · hasta {time.strftime('%Y-%m-%d', time.localtime(float(note['expires_at'])))}"
+		subject = f" {note['subject']}" if note.get("subject") else ""
+		who = protocol.soul_mark(note.get("continuity_id"))
+		lines.append(f"[{note['type']}{subject}] {sanitize_inline(note.get('summary'), 400)}{until} · {who}")
 	return "\n".join(lines)
 
 

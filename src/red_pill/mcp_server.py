@@ -2120,9 +2120,28 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 			)
 		except Exception:
 			global_missions = 0
-	if not novelties and not awaiting and not parallel and not global_missions:
+	# Teatro (AD-095): lo general no se cuenta por misión. Si hay actas vigentes
+	# (una suspensión, una decisión), el agente tiene que saberlo SIN buscarlo —
+	# es el requisito que hace que el acta no sea un cajón que nadie abre.
+	try:
+		from red_pill.session import theatre
+
+		theatre_counts = theatre.counts()
+	except Exception:
+		theatre_counts = {}
+	if not novelties and not awaiting and not parallel and not global_missions and not theatre_counts.get("total"):
 		return None
 	parts = []
+	if theatre_counts.get("total"):
+		susp = int(theatre_counts.get("suspension") or 0)
+		waiv = int(theatre_counts.get("waiver") or 0)
+		detail = []
+		if susp:
+			detail.append(f"{susp} suspensión{'es' if susp != 1 else ''}")
+		if waiv:
+			detail.append(f"{waiv} excepción{'es' if waiv != 1 else ''}")
+		tail = f" ({', '.join(detail)})" if detail else ""
+		parts.append(f"teatro: {theatre_counts['total']} acta{'s' if theatre_counts['total'] != 1 else ''}{tail}")
 	if global_missions:
 		parts.append("1 misión viva" if global_missions == 1 else f"{global_missions} misiones vivas")
 	if novelties:

@@ -187,10 +187,14 @@ def test_event_type_schema_matches_store():
 
 	# El enum MCP es la superficie pública; los `decision_*` son auditoría interna
 	# que solo escribe el store (D23-SCORE).
-	# `message` no se publica con `post` (es correspondencia) y `objection` tiene su
-	# propia acción (`object`): el resto de la taxonomía pública sí.
+	# `message` no se publica con `post` (es correspondencia), `objection` tiene su
+	# propia acción (`object`) y los tipos del teatro (`notice`/`decision`/…, AD-095)
+	# solo valen con `scope=teatro`: el resto de la taxonomía pública sí.
 	public = EVENT_TYPES - set(_INTERNAL_EVENT_TYPES) - {"message", "objection"}
-	assert set(_PAYLOADS["post"]["type"]["enum"]) == public
+	public_mission = {t for t in public if t not in {"notice", "decision", "suspension", "waiver"}}
+	assert public_mission == public, "los tipos del teatro no entran en el store de misión"
+	teatro = {"notice", "decision", "suspension", "waiver"}
+	assert set(_PAYLOADS["post"]["type"]["enum"]) == public_mission | teatro
 
 
 class TestHardening:

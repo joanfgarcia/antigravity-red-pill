@@ -1433,6 +1433,31 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing AWAKENING in isolated context")
 
+		# ── Suspensión declarada (AD-095 §teatro) ──
+		# El Operador puede suspender el despertar sin apagar el pulso: el timer
+		# sigue latiendo (el vigilante no tiene de qué quejarse) y lo que no ocurre
+		# es el trabajo caro. Se comprueba ANTES de gastar: ni bridge ni modelo.
+		# Es su nota, no un auto-silenciado: quién y hasta cuándo van en el log.
+		try:
+			from red_pill.session import theatre
+			from red_pill.session.store import sanitize_inline as _sanitize
+
+			note = theatre.suspended("task:awakening")
+		except Exception as exc:  # non-fatal: sin nota, el despertar corre
+			logger.debug(f"[{msg_ids}] suspensión no consultable: {exc}")
+			note = None
+			_sanitize = None
+		if note:
+			until = note.get("expires_at")
+			when = f"hasta {time.strftime('%Y-%m-%d %H:%M', time.localtime(float(until)))}" if until else "sin caducidad"
+			logger.warning(
+				f"[{msg_ids}] AWAKENING suspendido por acta {str(note.get('note_id'))[:8]} ({when}): "
+				f"{_sanitize(note.get('summary'), 200) if _sanitize else note.get('summary')}"
+			)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+			return
+
 		# ── Budget Guard: check daily AWAKENING limit (día local) ──
 		# `started_at` es UTC (CURRENT_TIMESTAMP); se compara en hora local
 		# ('localtime') para alinear el reinicio del tope con el operador.
