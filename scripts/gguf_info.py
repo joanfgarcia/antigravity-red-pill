@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Lee la cabecera GGUF sin llama.cpp: valida integridad y saca la ctx declarada por el modelo."""
-import struct, sys, json
+import struct
+import sys
 
 FMT = {0:"B",1:"b",2:"H",3:"h",4:"I",5:"i",6:"f",7:"?",10:"Q",11:"q",12:"d"}
 SZ = {0:1,1:1,2:2,3:2,4:4,5:4,6:4,7:1,10:8,11:8,12:8}
@@ -30,15 +31,27 @@ with open(path, "rb") as f:
 		v = rd(f, t)
 		meta[k] = v
 	print(f"GGUF v{ver} | tensores={n_tensors} | kv={n_kv}")
-	keys = ["general.architecture", "general.name", "general.parameter_count",
-	        "general.file_type"]
+	keys = [
+		"general.architecture",
+		"general.name",
+		"general.parameter_count",
+		"general.file_type",
+	]
 	for k in keys:
-		if k in meta: print(f"  {k} = {meta[k]}")
+		if k in meta:
+			print(f"  {k} = {meta[k]}")
 	print("  --- contexto / arquitectura ---")
+	interesting = (
+		"context_length",
+		"block_count",
+		"head_count",
+		"embedding_length",
+		"rope.freq",
+		"expert_count",
+		"feed_forward_length",
+	)
 	for k in sorted(meta):
-		if any(s in k for s in ("context_length", "block_count", "head_count",
-		                        "embedding_length", "rope.freq", "expert_count",
-		                        "feed_forward_length")):
+		if any(s in k for s in interesting):
 			print(f"  {k} = {meta[k]}")
 	print("  --- tokenizer ---")
 	for k in ("tokenizer.ggml.model", "tokenizer.ggml.tokens", "tokenizer.ggml.merges"):

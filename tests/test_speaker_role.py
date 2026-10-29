@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from red_pill.core.speaker import OPERATOR, PEER, TOOL, classify_prompt, render_turn
+from red_pill.core.speaker import OPERATOR, PEER, classify_prompt, render_turn
 
 FIXTURE = Path(__file__).parent / "fixtures" / "peer_envelopes.json"
 CASES = json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]
@@ -170,8 +170,7 @@ def test_render_escribe_peer_en_el_arbol():
 		originator="opencode",
 		messages=[
 			{"role": "user", "timestamp": "2026-10-27T22:49:45Z", "content": "vale, adelante"},
-			{"role": "user", "timestamp": "2026-10-27T22:50:00Z",
-			 "content": "［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM］ la GPU esta libre"},
+			{"role": "user", "timestamp": "2026-10-27T22:50:00Z", "content": "［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM］ la GPU esta libre"},
 			{"role": "assistant", "timestamp": "2026-10-27T22:50:10Z", "content": "compruebo con nvidia-smi"},
 		],
 	)
