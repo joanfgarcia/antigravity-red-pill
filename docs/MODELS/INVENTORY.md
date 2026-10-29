@@ -17,8 +17,22 @@
 | `Falcon3-10B-Instruct-1.58b-i2_s` | 4,0 | Pruebas de NPU, obsoleto. Cero referencias en perfiles, carriles o systemd. Hay otros modelos que sí funcionan en la NPU |
 | `Mistral-Nemo-Instruct-2407-Q3_K_M` | 6,1 | Modelo 2407 (>2 años), sin ficha ni carril, bajado para un test en agosto. **La ficha `mistral_nemo_12b` se conserva** con `weights_purged: 2026-10-29` |
 | `falcon3-10b-instruct-1.58bit-V2.gguf` | 0 | Symlink colgando hacia `3rdparty/BitNet-1.58b/models/` (destino inexistente desde antes; rompía herramientas que hacían `stat`) |
+| `Piaget-8B-Q4_K_M` | 5,0 | Probado como contraste de destilación; sin perfil, sin carril, sin job |
+| `Beck-8B-Q4_K_M` | 5,0 | Íd., sólo citado por `distiller_bakeoff.py` |
+| `qwen2.5-coder-7b-instruct` | 4,7 | Probado como contraste; modelo antiguo. **Ficha `coder_heavy` conservada** con `weights_purged` |
+| `DeepSeek-R1-Distill-Qwen-7B` | 4,7 | Probado como contraste; sin perfil ni carril |
+| `gemma-4-E4B-it-Q4_0` | 4,6 | Probado en bench de herramientas; sin perfil ni carril |
 
-**Neto: −10,1 GB** (84 GB → 74 GB en el directorio de modelos).
+**Neto: −32,0 GB** (84 GB → 52 GB en el directorio de modelos).
+
+Nota sobre reactivación: los perfiles conservados llevan `weights_purged` con el repo de
+origen. Un modelo sin perfil se recupera re-descargando su GGUF; si vuelve a hacer falta
+para un banco de pruebas, se le crea ficha **antes** de bajarlo.
+
+**FastFlowLM ≠ Bonsai.** FastFlowLM es el backend NPU (AMD XDNA2) de los perfiles
+`npu_qwen3_small` / `npu_qwen3_large`. `bonsai_2_27b` corre en GPU con el fork
+`llama_cpp_prism`.
+
 
 Reactivar Mistral: re-descargar `mradermacher/Mistral-Nemo-Instruct-2407-GGUF` (Q3_K_M);
 el perfil ya está completo.
@@ -33,7 +47,7 @@ scripts. `ficha` = `docs/MODELS/<perfil>/README.md`.
 | MB | Perfil | Carril | Ficha | Uso | Veredicto |
 | ---: | --- | --- | :-: | :-: | --- |
 | 6.169 | `qwen35_9b` | — | no | sí | se queda (sin carril) |
-| 5.947 | `bonsai_2_27b` | — | no | no | **candidato a purga** |
+| 5.947 | `bonsai_2_27b` | — | no | sí | **se queda — medido 2026-10-29, ver abajo** |
 | 5.348 | `granite_4_2_8b` | distill, refine, converse | no | no | se queda (carril) |
 | 5.348 | `granite_8b` | distill, annotate, refine | **sí** | sí | **se queda** (modelo de referencia) |
 | 5.028 | — (sin perfil) | — | no | sí | citado por un bench; sin carril |
@@ -73,3 +87,46 @@ scripts. `ficha` = `docs/MODELS/<perfil>/README.md`.
 - Revisión de media (~21,5 GB) cuando el Operador lo indique.
 - Los dos K2 en staging (`opt/k2-bench`, 15 GB): se quedan mientras dure la
   evaluación del destilador; el 7B `Q4_K_M` se purgará si gana `Q5_K_M`.
+
+---
+
+## `bonsai_2_27b` — medido el 2026-10-29 (no se purga)
+
+Ternario 27B (PTQ1_0), GPU con el fork `llama_cpp_prism`. **Estaba marcado como
+candidato a purga por no tener carril**; la medición dice lo contrario.
+
+**Límites** (RTX 5070 8 GB, 5.536 MiB de pesos):
+
+| KV | `n_ctx` máximo | Predicho por perfil |
+| --- | ---: | --- |
+| f16 | 24.576 (32.768 OOM) | 64 KiB/token → confirma el techo del perfil |
+| q8_0 | **49.152** | 34 KiB/token |
+| q4_0 | **65.536** (98.304 OOM) | 18 KiB/token |
+
+**BENCHSET** (n=3, mismos prompts y validadores):
+
+| Probe | reasoning off | thinking on (budget 4096) |
+| --- | :-: | :-: |
+| `contract_entidades` | **3/3** | **3/3** |
+| `contract_decision` | 3/3 | 3/3 |
+| `contract_genero` | 3/3 | 3/3 |
+| `needle_8k` | 3/3 | 3/3 |
+| `synthesis_es` | 2/3 | 2/3 |
+| **Total** | **14/15** | **14/15** |
+| Latencia (`entidades`) | **7,4 s** | 51,0 s (**6,9×**) |
+
+**Hallazgo:** el razonamiento **no paga** en esta tarea — misma puntuación, 7× más
+lento. Para el ciclo de sueño (cientos de sesiones) es la diferencia entre horas y
+una noche entera. Carril del destilador: `reasoning off`.
+
+**Posición en el elenco** (mismo BENCHSET):
+
+| Modelo | Puntuación | Deixis | Ventana `q4_0` |
+| --- | :-: | :-: | ---: |
+| K2-Horizon-7B `Q5_K_M` | 15/15 | 3/3 | 40.960 |
+| **`bonsai_2_27b`** | **14/15** | **3/3** | **65.536** |
+| K2-Horizon-3.7B | 13/15 | 1/3 | 98.304 |
+| `granite_8b` (titular) | 12/15 | 3/3 | 49.152 |
+
+Es el único del elenco con **deixis perfecta y 65K de ventana a la vez**, y el
+candidato más fuerte para sustituir a granite como destilador. **Ficha pendiente.**
