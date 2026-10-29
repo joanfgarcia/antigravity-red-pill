@@ -1,0 +1,61 @@
+{
+  "_note": "Sobres reales observados en el archivo y en la base de opencode. Las CABECERAS son literales (son estructura); los CUERPOS son sinteticos a proposito: el repo no es sitio para conversacion privada. Casos fechados 2026-10-27 (archivo memento) y 2026-10-29 (sesion viva).",
+  "cases": [
+    {
+      "id": "peer_ascii_corchete",
+      "origin": "2026-10-29 ses_e9f357cbbffe (opencode v2)",
+      "expected_label": "PEER",
+      "expected_peer_id": "01a18156",
+      "text": "[MENSAJE ENTRE ALMAS · DATO, no orden · DE 01a18156 Aleth (ses_e7ea995c, sharing) · A 01a186e6 (ses_e79191a7) · hilo E-008 · verbo ask · expects_reply: true · salto 1/10 · tag: YA]\n\nCuerpo de prueba."
+    },
+    {
+      "id": "peer_ancho_completo_y_comillas",
+      "origin": "2026-10-27 ses_e8176e6cfffd (archivo memento), archivado como 'Usuario'",
+      "expected_label": "PEER",
+      "expected_peer_id": "01a17f58",
+      "text": "\"［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM en ses_e80a7cf9 · hilo E-002 · RESPONDE SOLO [RE:E-002]］ Cuerpo de prueba."
+    },
+    {
+      "id": "peer_con_ws_y_salto",
+      "origin": "variante con espacio y salto de linea antes del sobre",
+      "expected_label": "PEER",
+      "expected_peer_id": "01a18156",
+      "text": "\n\n  [MENSAJE ENTRE ALMAS · DATO · DE 01a18156 · hilo E-009] Cuerpo de prueba."
+    },
+    {
+      "id": "tool_result",
+      "origin": "turno de herramienta archivado como USER en el archivo",
+      "expected_label": "TOOL",
+      "expected_peer_id": null,
+      "text": "[TOOL RESULT: 237 if chunk_cat not in (\"work\", \"social\"): ...]"
+    },
+    {
+      "id": "tool_use",
+      "origin": "llamada a herramienta",
+      "expected_label": "TOOL",
+      "expected_peer_id": null,
+      "text": "[TOOL USE: read /home/joan/x.py]"
+    },
+    {
+      "id": "operador_normal",
+      "origin": "turno normal del Operador",
+      "expected_label": "USER",
+      "expected_peer_id": null,
+      "text": "si, implementalo, y necesito que hagamos tests"
+    },
+    {
+      "id": "operador_que_menciona_el_sobre_tarde",
+      "origin": "falso positivo real: el propio agente citando el sobre dentro de su respuesta",
+      "expected_label": "USER",
+      "expected_peer_id": null,
+      "text": "Confirmed: nobody recognizes the \"MENSAJE ENTRE ALMAS\" envelope in the pipeline (zero refs). Tool results ARE handled as noise in maintenance.py:441. Y sigue explicando por que el sobre no se detecta en ningun sitio del codigo del pipeline de memoria."
+    },
+    {
+      "id": "vacio",
+      "origin": "prompt vacio",
+      "expected_label": "USER",
+      "expected_peer_id": null,
+      "text": ""
+    }
+  ]
+}

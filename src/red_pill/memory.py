@@ -15,6 +15,7 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
+from red_pill.core.speaker import render_turn
 from red_pill.events import MemoryAddedEvent, RecallEvent, get_event_bus
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload, normalize_associations
@@ -499,8 +500,11 @@ class MemoryManager:
 		uid = str(uuid.uuid4())
 		timestamp = int(time.time())
 
-		# Structure the payload simply for the raw buffer
-		text = f"USER: {prompt}\n\n{role.upper()}: {response}"
+		# Structure the payload simply for the raw buffer.
+		# El prefijo NO es siempre `USER:`: un mensaje entre almas o un volcado de
+		# herramienta atribuidos al Operador fabrican autoridad y firman datos
+		# falsos (ver `red_pill/core/speaker.py`).
+		text = render_turn(prompt, response, role)
 		payload = {
 			"content": text,
 			"importance": 5.0,  # Neutral baseline

@@ -1,5 +1,32 @@
 ## Unreleased
 
+### 🎭 Atribución de hablante — los mensajes entre almas dejan de ser del Operador
+
+- **[FIX]** El buffer rápido etiquetaba como `USER:` *cualquier* prompt, y el prompt
+  del destilador define `USER:` como «habló el Operador». Un mensaje entre almas —o
+  un volcado de herramienta— se archivaba como frase del Operador: autoridad
+  fabricada y, si el dato era erróneo, un hecho falso con su firma.
+- **[NEW]** `red_pill/core/speaker.py`: clasifica el turno como `USER`/`PEER`/`TOOL`
+  tolerando las variantes reales del sobre (corchetes ASCII o de ancho completo,
+  envuelto en comillas por el arnés). El sobre debe **abrir** el turno: citarlo a
+  mitad de frase no reclasifica (falso positivo observado al consultar opencode).
+- **[NEW]** `PEER` y `TOOL` viajan como roles propios en `memory.py`, `chunker.py` y
+  `maintenance.py`. En el camino agentic, `fragments.py` los pinta como
+  `— <Agente> (otra sesión)` y conserva el turno en modo `pairs`.
+- **[FIX]** Reglas de atribución PEER/TOOL en `distiller_v3_voice.txt` (MODE B) y en
+  el fragmento `voice_distiller.txt` (MODE A, el que usa `granite_8b`).
+- **[FINDING]** Caso real en el archivo (2026-10-27): el sobre decía «no es del
+  Operador» y se guardó como «Usuario». `granite_8b` corre con `distiller_v3.txt`,
+  que **no tenía ni una mención a `USER:`**: la tercera persona en los enmemas no
+  era desobediencia, era un prompt sin reglas de hablante.
+- **[TEST]** `tests/test_speaker_role.py` (21 casos: sobres reales, ancho completo,
+  comillas, falso positivo por cita, integración Qdrant y vista de fragmento).
+- **[DOCS]** E2E con los dos modelos sobre mensajes reales: ninguno atribuye el peer
+  al Operador (4/4); k2 respeta el formato 2/2 y nombra al peer, granite rompe JSON 1/2.
+- **[NOTE]** La prueba de textura del 2026-10-29 usó MODE B para los dos modelos;
+  `granite_8b` corre MODE A, así que esa comparación no fue fiel a producción para
+  granite. Repetir antes de cualquier decisión de sustitución.
+
 ### 🧠 Base de conocimiento de modelos — límites por cuantización de KV
 
 - **[NEW]** `docs/MODELS/`: una carpeta por modelo (id de perfil como nombre) con
