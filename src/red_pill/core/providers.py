@@ -1,6 +1,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -852,3 +853,258 @@ if os.environ.get("REDPILL_TESTING") != "1":
 			logger.info(f"[NPU] FastFlowLM provider registered: {_flm_url} ({_flm_model})")
 	except Exception:
 		pass
+
+
+class ForkServerInferenceProvider(BaseInferenceProvider):
+	"""Sirve un modelo con el ``llama-server`` de un fork (PTQ1_0, PQ2_0, i2_s…).
+
+	`llama-cpp-python` no conoce los formatos de cuantización de los forks, así que
+	esos modelos **no pueden cargarse en proceso**. Este provider lanza el binario
+	declarado en `runtimes.yaml` y habla con él por la API OpenAI-compatible.
+
+	Caso que lo motiva (2026-10-29): `bonsai_2_27b` es PTQ1_0; el venv no tiene ni
+	una constante PTQ y el daemon carga con `llama_cpp.Llama`, así que el modelo no
+	entraba en producción aunque estuviera medido y aprobado.
+
+	Un solo modelo por tarjeta: si ya hay un servidor vivo con la misma huella
+	(modelo + conducta), se reutiliza en vez de relanzarlo.
+	"""
+
+	# Servidores vivos en este proceso, por huella. La GPU es una: sirve para no
+	# arrancar dos y morir por OOM en el segundo.
+	_LIVE: Dict[str, "ForkServerInferenceProvider"] = {}
+
+	def __init__(
+		self,
+		model_path: str,
+		*,
+		runtime_id: str = "llama_cpp_prism",
+		n_ctx: int = 16384,
+		n_gpu_layers: int = -1,
+		cache_type_k: str = "f16",
+		cache_type_v: str = "f16",
+		flash_attn: bool = True,
+		extra_args: Optional[List[str]] = None,
+		host: str = "127.0.0.1",
+		log_dir: Optional[str] = None,
+		startup_timeout: float = 180.0,
+		request_timeout: float = 600.0,
+	):
+		self.model_path = model_path
+		self.runtime_id = runtime_id
+		self.n_ctx = int(n_ctx)
+		self.n_gpu_layers = int(n_gpu_layers)
+		self.cache_type_k = cache_type_k
+		self.cache_type_v = cache_type_v
+		self.flash_attn = bool(flash_attn)
+		self.extra_args = list(extra_args or [])
+		self.host = host
+		self.log_dir = log_dir
+		self.startup_timeout = startup_timeout
+		self.request_timeout = request_timeout
+		self._process: Optional[Any] = None
+		self._port: Optional[int] = None
+		self._fingerprint = self._build_fingerprint()
+
+	# ── ciclo de vida ──────────────────────────────────────────────────────
+
+	def _build_fingerprint(self) -> str:
+		return "|".join([
+			self.runtime_id, str(Path(self.model_path).expanduser()), str(self.n_ctx),
+			str(self.n_gpu_layers), f"{self.cache_type_k}/{self.cache_type_v}",
+			"fa1" if self.flash_attn else "fa0", ",".join(self.extra_args),
+		])
+
+	def _server_binary(self) -> str:
+		from red_pill.core.runtime_registry import RuntimeRegistry
+
+		rt = RuntimeRegistry.require(self.runtime_id)
+		server = rt.get("server") or rt.get("binary")
+		if not server:
+			raise RuntimeError(f"runtime '{self.runtime_id}' no declara 'server' ni 'binary' en runtimes.yaml")
+		path = Path(server).expanduser()
+		if not path.exists():
+			raise RuntimeError(f"binario del runtime '{self.runtime_id}' no encontrado: {path}")
+		return str(path)
+
+	@staticmethod
+	def _free_port() -> int:
+		import socket
+
+		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+			s.bind(("127.0.0.1", 0))
+			return int(s.getsockname()[1])
+
+	def _command(self, port: int) -> List[str]:
+		cmd = [
+			self._server_binary(),
+			"--model", str(Path(self.model_path).expanduser()),
+			"--alias", "local",
+			"--host", self.host,
+			"--port", str(port),
+			"-c", str(self.n_ctx),
+			"-ngl", str(self.n_gpu_layers),
+			"-ctk", self.cache_type_k,
+			"-ctv", self.cache_type_v,
+			"-fa", "on" if self.flash_attn else "off",
+			"--parallel", "1",
+			"--jinja",
+		]
+		return cmd + self.extra_args
+
+	def _is_ready(self) -> bool:
+		import httpx
+
+		try:
+			with httpx.Client(timeout=2.0) as client:
+				return client.get(f"http://{self.host}:{self._port}/health").status_code == 200
+		except Exception:
+			return False
+
+	def ensure_server(self) -> None:
+		"""Arranca el servidor si no está vivo. Idempotente."""
+		if self._process is not None and self._process.poll() is None and self._is_ready():
+			return
+		# Reutilizar un servidor idéntico ya arrancado en este proceso.
+		reusable = self._LIVE.get(self._fingerprint)
+		if reusable is not None and reusable is not self and reusable._is_ready():
+			self._process, self._port = reusable._process, reusable._port
+			return
+
+		import subprocess
+		import time
+
+		self.stop()
+		self._port = self._free_port()
+		cmd = self._command(self._port)
+		log_path = None
+		if self.log_dir:
+			log_dir = Path(self.log_dir).expanduser()
+			log_dir.mkdir(parents=True, exist_ok=True)
+			log_path = log_dir / f"fork_server_{self._port}.log"
+		logger.info(f"[FORK-SERVER] arrancando {self.runtime_id}: {' '.join(cmd[:4])} … -c {self.n_ctx}")
+		stdout = open(log_path, "ab") if log_path else subprocess.DEVNULL
+		self._process = subprocess.Popen(cmd, stdout=stdout, stderr=subprocess.STDOUT)
+		self._LIVE[self._fingerprint] = self
+
+		deadline = time.time() + self.startup_timeout
+		while time.time() < deadline:
+			if self._process.poll() is not None:
+				raise RuntimeError(
+					f"el servidor del fork murió al arrancar (rc={self._process.returncode}); "
+					f"log: {log_path}"
+				)
+			if self._is_ready():
+				logger.info(f"[FORK-SERVER] listo en {self.host}:{self._port}")
+				return
+			time.sleep(0.5)
+		self.stop()
+		raise RuntimeError(f"el servidor del fork no respondió en {self.startup_timeout}s (log: {log_path})")
+
+	def stop(self) -> None:
+		"""Para el servidor y libera la VRAM."""
+		proc = self._process
+		self._process = None
+		if self._LIVE.get(self._fingerprint) is self:
+			self._LIVE.pop(self._fingerprint, None)
+		if proc is None or proc.poll() is not None:
+			return
+		try:
+			proc.terminate()
+			proc.wait(timeout=15)
+		except Exception:
+			try:
+				proc.kill()
+			except Exception:
+				pass
+
+	def is_available(self) -> bool:
+		try:
+			self.ensure_server()
+			return True
+		except Exception as e:
+			logger.warning(f"[FORK-SERVER] no disponible: {e}")
+			return False
+
+	# ── inferencia ─────────────────────────────────────────────────────────
+
+	def generate(self, prompt: str, **kwargs) -> str:
+		messages = kwargs.get("messages")
+		if not messages:
+			messages = []
+			system_prompt = kwargs.get("system_prompt")
+			if system_prompt:
+				messages.append({"role": "system", "content": system_prompt})
+			messages.append({"role": "user", "content": prompt})
+		message = self.chat(
+			messages,
+			temperature=float(kwargs.get("temperature", 0.3)),
+			max_tokens=int(kwargs.get("max_tokens", 1024)),
+		)
+		return str(message.get("content") or "")
+
+	def stream(self, prompt: str, **kwargs) -> Iterator[str]:  # pragma: no cover - no usado aún
+		yield self.generate(prompt, **kwargs)
+
+	def chat(
+		self,
+		messages: List[Dict[str, Any]],
+		*,
+		tools: Optional[List[Dict[str, Any]]] = None,
+		tool_choice: Optional[str] = None,
+		temperature: float = 0.3,
+		max_tokens: int = 1024,
+		response_format: Optional[Dict[str, Any]] = None,
+		timeout: int = 600,
+	) -> Dict[str, Any]:
+		import httpx
+
+		self.ensure_server()
+		payload: Dict[str, Any] = {
+			"model": "local",
+			"messages": messages,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+		}
+		if tools:
+			payload["tools"] = tools
+		if tool_choice:
+			payload["tool_choice"] = tool_choice
+		if response_format:
+			payload["response_format"] = response_format
+
+		with httpx.Client(timeout=httpx.Timeout(max(self.request_timeout, timeout), connect=10.0)) as client:
+			resp = client.post(f"http://{self.host}:{self._port}/v1/chat/completions", json=payload)
+			resp.raise_for_status()
+			data = resp.json()
+		choices = data.get("choices") or [{}]
+		return choices[0].get("message") or {}
+
+
+def provider_for_profile(resolved: Any) -> Optional[BaseInferenceProvider]:
+	"""Devuelve el provider que corresponde al runtime declarado en el perfil.
+
+	Un perfil con `runtime: llama_cpp_fork` (PTQ1_0, PQ2_0, i2_s) no puede servirse
+	en proceso: devuelve el provider del binario del fork. El resto devuelve `None`
+	y sigue por el camino stock (llama-cpp-python en proceso, como hasta ahora).
+	"""
+	from red_pill.core.runtime_registry import RuntimeRegistry
+
+	runtime_id = getattr(resolved, "runtime", None) or RuntimeRegistry.default_id()
+	entry = RuntimeRegistry.get(runtime_id) or {}
+	if entry.get("kind") != "llama_cpp_fork":
+		# Camino stock: el daemon carga en proceso con llama-cpp-python. No hay
+		# provider que construir; devolver None evita inventar uno distinto.
+		return None
+	cache = getattr(resolved, "kv_cache_type", None) or "f16"
+	return ForkServerInferenceProvider(
+		str(getattr(resolved, "model_path", "")),
+		runtime_id=runtime_id,
+		n_ctx=int(getattr(resolved, "resolved_n_ctx", lambda: 4096)() or 4096),
+		n_gpu_layers=int(getattr(resolved, "n_gpu_layers", -1)),
+		cache_type_k=cache,
+		cache_type_v=cache,
+		flash_attn=bool(getattr(resolved, "flash_attn", "auto") in (True, "auto", "true")),
+		extra_args=getattr(resolved, "extra_server_args", None) or [],
+		log_dir=str(Path.home() / ".local/share/red-pill/daemon/logs"),
+	)
