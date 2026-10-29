@@ -1,5 +1,27 @@
 ## Unreleased
 
+### 🧠 Base de conocimiento de modelos — límites por cuantización de KV
+
+- **[NEW]** `docs/MODELS/`: una carpeta por modelo (id de perfil como nombre) con
+  `INDEX.md` y `PROCEDURE.md`. Nace de la auditoría K2-Horizon vs Granite (2026-10-29).
+- **[NEW]** `scripts/gguf_info.py`: specs declaradas y coste de KV por token leídos
+  de la cabecera GGUF, sin servidor ni GPU.
+- **[FIX]** Hueco de procedimiento: la cascada de contexto sólo se medía en `f16`.
+  Medido por cuantización — Granite 12.288 / 24.576 / 49.152 y K2-Horizon
+  32.768 / 49.152 / 98.304 (f16 / q8_0 / q4_0). La ventana servible es el 9-19% de
+  la declarada y el perfil sólo guarda el peor caso.
+- **[FINDING]** `model_runtime` y `model_registry` no pasan `type_k`/`type_v`, aunque
+  el `llama_cpp` del venv los acepta y `scripts/bakeoff_granite_42.py` ya los usaba
+  (AD-033). Duplicar la ventana de `granite_8b` es una línea de runtime.
+- **[FINDING]** `_KNOWN_LICENSES["apache-2.0"]` marca `attribution_required: False`;
+  Apache-2.0 §4(b) exige conservar el NOTICE al redistribuir.
+- **[DOCS]** Calidad medida con higiene: `finish_reason`, n>=5, `sd` y orden
+  declarado. Concluido que el test de calidad a distancia **no** rankea precisiones
+  de KV: el fallo dominante es selección de documento, no pérdida de precisión.
+- **[DOCS]** `k2_horizon_3_7b` entra como **candidato**, no sustituto: su defecto de
+  deixis pasa de 2/5 a 5/5 con un refuerzo de prompt; falta la prueba de textura
+  sobre recuerdos reales.
+
 ### 🪝 B-01h — write-ahead en arneses externos
 
 - **[NEW]** Journal JSON atómico por turno antes del modelo en Claude/opencode/Pi;
