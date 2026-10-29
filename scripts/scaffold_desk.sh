@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
 # Scaffold/refresh del desk desde seeds/desk (DESK-001 / RFC-ENLACES-001).
 #
-# DOS DUEÑOS:
-#   - PUESTO  (contenido del Operador/agente): copy-if-absent — el seed NUNCA lo pisa.
-#   - GERMEN  (tools/plantillas del runtime): el seed lo ACTUALIZA, con guard de hash.
-# El manifiesto `seeds/desk/.germ` declara qué es germen.
+# TRES DUEÑOS, no dos (2026-10-29):
+#   PUESTO   contenido del Operador/agente (`INDEX.md`, familias, notas).
+#            copy-if-absent: el seed NUNCA lo pisa.
+#   GERMEN   código del runtime (`.germ`: `planner/tools/*.py`, hooks).
+#            El seed manda: se alinea. Si no consta que el desk esté intacto, se
+#            respalda antes y se avisa — un parche local invisible es un fork.
+#   BLOQUE   prosa compartida (`.blocks`: READMEs de fase, plantillas).
+#            El seed mantiene sólo su región marcada (`<!-- REDPILL:BEGIN desk -->`)
+#            y el desk conserva frontmatter y lo de fuera. Lo fusiona
+#            `scripts/desk_block.py` con merge de 3 vías; si hay conflicto NO se
+#            escribe y la versión del seed queda al lado como `*.seed-new`.
 #
-# GERMEN: DOS POLÍTICAS (código / prosa), TRES HASHES (base / desk / seed)
-# Comparar sólo desk-vs-seed_nuevo (como se hacía) revertía ediciones locales aunque
-# el seed no hubiera cambiado nada. La decisión necesita TRES: base (lo que
-# sembramos), cur (lo que hay), new (lo que traemos).
+# La decisión del germen se toma con TRES hashes, no dos: base (lo que sembramos),
+# cur (lo que hay), new (lo que traemos). Comparar sólo cur contra new revertía
+# ediciones locales aunque el seed no hubiera cambiado nada.
 #
-#   CÓDIGO (tools/**, *.py, *.sh…) — el seed manda SIEMPRE.
-#     Diverge → se alinea con el seed. Si no se puede demostrar que el desk no lo
-#     tocó (base ausente o distinta), se respalda primero y se dice en voz alta:
-#     un parche local invisible es un fork que nadie sabe que existe.
-#
-#   PROSA (README, plantillas…) — el desk manda.
-#     Diverge → NO se toca nunca. Si además hay novedad del seed, se deja al lado
-#     como `*.seed-new` y se avisa: decide el agente. Sólo cuando el seed no ha
-#     cambiado (base == new) se calla, porque no hay nada que ofrecer.
-#
+# Uso: REPO_ROOT=<repo> AGENT_CORE_DIR=<desk> scripts/scaffold_desk.sh
 # Uso: REPO_ROOT=<repo> AGENT_CORE_DIR=<desk> scripts/scaffold_desk.sh
 set -uo pipefail
 

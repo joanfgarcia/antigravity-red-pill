@@ -2,7 +2,7 @@
 <!-- REDPILL:BEGIN desk v=1 -->
 # Frontmatter Template — Agent_Core Desk & Memory Banks
 
-Every Markdown document in the desk (`${AGENT_CORE_DIR}`) or in a memory bank
+Every Markdown document in the desk or in a memory bank
 (`.red-pill/memory/`, distilled memory docs) starts with a YAML metadata header
 (Obsidian-compatible), delimited by `---` at the top of the file. It lets a
 newcomer (or the Operator after months away) know at a glance **what the doc is,

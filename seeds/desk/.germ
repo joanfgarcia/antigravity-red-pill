@@ -11,4 +11,7 @@
 #   PUESTO           todo lo demás: `INDEX.md` del desk, familias, notas.
 #
 # Un glob por línea (sintaxis `case`: * y ** equivalen a cualquier secuencia).
-planner/tools/**
+# Sólo CÓDIGO: la prosa de `planner/tools/README.md` es un BLOQUE (ver `.blocks`),
+# y dejarla caer bajo este glob la convertía en código sin querer.
+planner/tools/*.py
+planner/tools/hooks/**
