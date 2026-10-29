@@ -13,7 +13,10 @@ Procedimiento de medición: [`PROCEDURE.md`](PROCEDURE.md)
 | Perfil | Modelo | Veredicto | Ventana útil | Ficha |
 | --- | --- | --- | ---: | --- |
 | `granite_8b` | Granite-4.1-8B | **Titular** (destilador) | 12.288 (24.576 con KV `q8_0`) | [README](granite_8b/README.md) |
+| `bonsai_2_27b` | Ternary Bonsai 2 27B | **Se queda** — destilador alternativo y lector largo | 65.536 (`q4_0`) | [README](bonsai_2_27b/README.md) |
 | `k2_horizon_3_7b` | K2-Horizon-3.7B | **Candidato** | 98.304 (`q4_0`), uso fiable ≤40K | [README](k2_horizon_3_7b/README.md) |
+
+Inventario y purgas: [`INVENTORY.md`](INVENTORY.md).
 
 Regla de nomenclatura: la carpeta lleva el **id del perfil** en
 `model_profiles.yaml`, no el nombre comercial. Así el documento y el runtime hablan
@@ -72,3 +75,5 @@ signo al releerlos, no había veredicto: había preferencia.
 - [ ] Batería completa de `k2_horizon_3_7b` con n≥5 y refuerzo de deixis.
 - [ ] Prueba de textura (12 fragmentos reales, ciega).
 - [ ] Corregir `attribution_required` de `apache-2.0` en `model_license.py`.
+- [ ] Carril para `bonsai_2_27b` (destilador con `reasoning off`, o lector largo).
+- [ ] Calidad de lectura de `bonsai_2_27b` a ventana llena (~60K), sin medir.
