@@ -26,6 +26,8 @@ Corresponde al estado `matured` del dossier de ideación + al ciclo de vida del
 Reglas:
 
 - Cada familia es una carpeta (`<familia>/`); dentro, los RFCs y sus planes.
+- Para ver **todas** las familias y su estado de un vistazo, regenera el índice:
+  `python3 planner/tools/families.py -o planner/design/INDEX.md`.
 - `status` según el RFC_FLUJO: `draft` (decisiones abiertas), `in-design`
   (iterando), `ratified` (decisiones cerradas, listo para implementar).
 - Al ratificar y arrancar la implementación, **la familia se queda junta**: el RFC
