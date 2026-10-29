@@ -262,6 +262,12 @@ caso de AD-037 fue un OOM en el scratch de prefill que parecía «contenido vene
 
 ### GP-3 · Conducta: medir con y sin razonamiento
 
+**Presupuesto de salida acorde a la conducta.** Los `max_tokens` del BENCHSET están
+calibrados para modelos sin razonamiento. Con thinking activo, el modelo se gasta el
+presupuesto entero razonando y el JSON no llega: `Spark-X2.6-4B` generó 2.547 tokens
+en una sola petición de contrato y hubo que abortar la tanda (2026-10-30). Antes de
+medir con thinking: subir `max_tokens` (×2-3) o acotar con `--reasoning-budget`.
+
 Un modelo de razonamiento sin `reasoning off` multiplica la latencia. `bonsai_2_27b`:
 misma puntuación con y sin thinking, **7× más lento con él**. Declarar en el perfil qué
 conducta usa el carril, no la que trae el template.
