@@ -176,3 +176,38 @@ class TestSuperficieMCP:
 		props = tool.inputSchema["properties"]["payload"]["properties"]
 		assert {"to", "verb", "body", "scope", "subject"} <= set(props)
 		assert props["verb"]["enum"] == ["notify", "ask", "reply", "park"]
+
+
+class TestElDespertarEnElTablon:
+	"""El despertar deja de depender solo del desk: lee y anota en el tablón.
+
+	Por qué importa: el log del desk es un fichero que solo se lee si el siguiente
+	despertar se acuerda de abrirlo. El acta es el puntero que sale en el digest de
+	todas las almas — el 2026-10-29 un fix quedó varado una hora en una rama porque
+	nadie supo que existía.
+	"""
+
+	def test_el_prompt_le_pide_leer_y_anotar_con_reglas(self):
+		from red_pill.core.agent_worker import AWAKENING_THEATRE_INSTRUCTIONS as block
+
+		assert '"scope": "teatro"' in block, "tiene que leer las actas"
+		assert '"type": "notice"' in block, "y escribir su handoff como acta"
+		assert "task:awakening" in block, "una suspensión activa lo para aunque ya esté corriendo"
+		assert "not a diary" in block, "sin esto, cada despertar inunda el digest"
+		assert "awakening/<your log file>" in block, "el acta apunta al log: no lo duplica"
+
+	async def test_el_acta_del_despertar_es_legible_por_cualquier_alma(self, db):
+		from red_pill.coro import service
+
+		acta = await service.post(
+			_session("01a00000-0000-7000-8000-00000000000f"),
+			{
+				"scope": "teatro",
+				"type": "notice",
+				"summary": "ruff verde en gguf_info; commit 5f8ef28 en awaken/20261029-2000",
+				"ref": "awakening/20261029_2000.log",
+			},
+		)
+		assert "CORO teatro" in acta
+		visto = await service.fetch(_session("01a00000-0000-7000-8000-0000000000aa"), {"scope": "teatro"})
+		assert "5f8ef28" in visto, "otra alma lo ve sin abrir el desk"

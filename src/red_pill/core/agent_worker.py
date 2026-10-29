@@ -47,6 +47,23 @@ DB_PATH = Path(os.environ.get("NEON_LINK_DB_PATH", default_db))
 # Budget guard defaults
 MAX_AWAKENINGS_PER_DAY = 8
 AWAKENING_MAX_TOOL_CALLS = 40
+
+# Tablón general para el despertar (AD-095 §teatro). Vive aquí, como constante, para
+# poder probarlo: es la única parte del prompt que enlaza el despertar con el acta.
+# Regla de oro: el acta es un PUNTERO para la siguiente alma, no un diario.
+AWAKENING_THEATRE_INSTRUCTIONS = (
+	"TEATRO (the theatre's book of acts): at the start, call `coro_api` action `fetch` "
+	'with payload {"scope": "teatro"} — it carries suspensions, decisions and notices from '
+	"other souls (including previous awakenings). An active `suspension` with subject "
+	"`task:awakening` means you must not be running: stop and answer with the Silence line. "
+	"At the END, if you did work that someone must land (a branch/commit) or you need an "
+	"operator decision, write EXACTLY ONE acta: `coro_api` action `post` with payload "
+	'{"scope": "teatro", "type": "notice", "summary": "<what and where, <=800 chars>", '
+	'"ref": "awakening/<your log file>"}. The desk log is the FULL record; the acta is the '
+	"pointer the next soul sees without opening the desk. If you did nothing worth landing, "
+	"do NOT write an acta — the board is not a diary, and every acta shows up in everyone's digest."
+)
+
 # AWAKENING_TIMEOUT es configurable (A-5): cfg.get_config().AWAKENING_TIMEOUT
 
 # Derecho al Silencio (AWAKEN-002): la directiva del despertar pide responder
@@ -1513,6 +1530,7 @@ class IDEWorker:
 			f"RECORD-WHERE-YOU-WORKED (HARD): every time you start or resume work in a worktree, write in your "
 			f"awakening log AND in the RFC/note owning that work: the branch, the worktree path, and the last commit. "
 			f"This is the handoff — without it the next awakening cannot find the work.\n"
+			f"{AWAKENING_THEATRE_INSTRUCTIONS}\n"
 			f"WORK OVERLAP GUARD: BEFORE submitting any `job_manager_api job_submit` (especially a dag_job), "
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
