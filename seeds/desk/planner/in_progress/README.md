@@ -21,6 +21,9 @@ Reglas:
 - Cada tarea es una carpeta con su `README.md` como entrada y su checklist
   actualizado.
 - `status: in-progress` (en marcha) o `implemented` (implementado, verificado).
+- **No** entran aquí las piezas de una familia de `design/` sólo porque estén
+  implementadas: eso convertiría esta bandeja en un cementerio. La familia se queda
+  en su expediente y aquí sólo vive lo que de verdad se está trabajando.
 - Campo `priority: High | Medium | Low` obligatorio.
 - Al terminar la tarea → `git mv` a `archive/<proyecto>/` (finalizada) con
   `status: archived`.

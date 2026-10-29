@@ -29,28 +29,53 @@ herramienta que genera el panel de seguimiento on-demand (`tools/panel.py`).
 > despacho los tiene (`design/governance/`), mandan ellos; si no, este README
 > resume lo esencial (fases, estados y ciclo de vida).
 
-## Modelo: la fase es una carpeta
+> **Fuente canónica**: estas convenciones viven en `seeds/desk/` del repo red-pill
+> y se siembran en cada instalación. Este `planner/` es la **instancia** de esta
+> máquina. Lo que hay entre las marcas `REDPILL:BEGIN/END` es del seed; el
+> frontmatter y lo que quede fuera es de este desk.
 
-Un ítem (tarea, RFC, idea) es **una carpeta**. Su ubicación en el árbol dice su
-fase; cambiar de fase es mover la carpeta:
+## Modelo: la bandeja dice la fase; el DOSSIER no se desmiembra
 
-```
-planner/ideas/        → spark/llama, ni analizada
-planner/research/     → maturing, se investiga sin decidir
-planner/design/       → aprobada, diseñando el plan (RFCs)
-planner/pending/      → tarea comprometida, sin arrancar
-planner/in_progress/  → implementando
-archive/<proyecto>/   → finalizado (cerrado/archivado)
-```
+Un ítem vive en la bandeja de su fase, y cambiar de fase es mover la carpeta. Pero
+cuando llega a `design/` se convierte en **familia**: una carpeta que es el
+expediente completo de un tema y que **no se parte** aunque algunas de sus piezas
+estén ya implementadas.
 
-El movimiento se hace con `git mv` (preserva historia):
+Por qué: un `B01_TURNO_WRITE_AHEAD.md` fuera de `alma_y_coro/` pierde su contexto
+(qué problema resolvía, con qué otras piezas convivía). El expediente se lee entero
+o no se entiende. Un `in_progress/` con las piezas sueltas de diez familias es un
+cementerio, no una bandeja de trabajo.
+
+| Bandeja | Qué se guarda | Estados que acepta |
+|---|---|---|
+| `ideas/` | chispas sin analizar | `spark`, `llama` |
+| `research/` | investigación sin decisión | `maturing`, `awaiting_operator`, `parked`, `dead`, `superseded` |
+| `design/<familia>/` | **el expediente**: su RFC y todas sus piezas | `draft`, `in-design`, `ratified` **y también** `in-progress` / `implemented` / `active` dentro de la familia |
+| `pending/` | tarea comprometida, sin arrancar | `pending` |
+| `in_progress/` | **2-3 tareas vivas**: lo que se está haciendo | `in-progress`, `implemented`, `blocked`, `paused` |
+| `archive/<proyecto>/` | terminado y cerrado | `archived`, `closed` |
+
+**La ruta dice la bandeja; el `status` dice el estado.** Para ver el estado sin
+abrir un solo documento:
 
 ```bash
-git mv planner/ideas/MI_IDEA planner/research/
-git mv planner/research/MI_IDEA planner/design/<familia>/
-git mv planner/pending/MI_TAREA planner/in_progress/
-git mv planner/in_progress/MI_TAREA archive/<proyecto>/
+python3 planner/tools/panel.py                          # todo, con ⚠️ donde no cuadre
+python3 planner/tools/panel.py --status implemented     # lo terminado
+python3 planner/tools/state.py -o STATE.md              # entrada en frío
 ```
+
+Cuándo se mueve algo (con `git mv`, que preserva la historia):
+
+```bash
+git mv planner/ideas/MI_IDEA planner/research/                  # madura la idea
+git mv planner/research/MI_IDEA planner/design/<familia>/       # nace el RFC
+git mv planner/pending/MI_TAREA planner/in_progress/            # arranca
+git mv planner/in_progress/MI_TAREA archive/<proyecto>/         # termina y se cierra
+git mv planner/design/<familia> archive/<proyecto>/             # termina la familia ENTERA
+```
+
+Lo que **no** se hace: sacar de una familia viva una pieza ya implementada. Su
+estado se lee en su `status`, y si la familia entera cierra, se archiva completa.
 
 ## Flujo blando (no es un pipeline duro)
 
