@@ -110,6 +110,60 @@ planner/
   Ciclo de vida: `draft → ratified → implemented → closed → archived`
   (detallado en `design/governance/RFC_FLUJO_RFCS.md` si tu despacho lo tiene).
 
+## Tamaño de documento (guardarraíl medible)
+
+Un documento que no se asimila no se lee: se hojea. Y se carga en contexto, así
+que además **desplaza** lo demás. Los umbrales están calibrados para que un
+**modelo local pequeño (7B-9B)** pueda leer un documento de una sentada y, con
+dos, compararlos.
+
+| Umbral | Regla | En folios A4 técnicos |
+|---|---|---|
+| **> 10 KB** | El documento **debe** llevar un índice de secciones al principio | ~3-4 páginas |
+| **> 30 KB** | **Señal de dividir**: sub-carpeta + `INDEX.md` que resuma y enlace | ~10 páginas |
+
+**El índice es la pieza, no la fusión.** Un directorio con muchos documentos
+pequeños **no** se fusiona: se le pone un `INDEX.md` con un resumen general del
+tema y 1-2 líneas por documento enlazado. Eso escala recursivamente (sub-carpeta
+con su propio índice) sin crear monolitos. Sólo se fusiona lo que está
+**duplicado**.
+
+### Procedimiento al reorganizar (checklist)
+
+1. Si el fichero se llama `README`/`INDEX` pero **es** un documento → **renombrar**
+   a su nombre real (`git mv`).
+2. Carpeta con **varios** documentos → `INDEX.md` como puerta (resumen del tema en
+   2 frases + tabla con 1-2 líneas por documento + "cómo leerlo").
+3. Carpeta con **un** documento → **TOC interno** al principio; un índice de un
+   solo elemento no aporta nada.
+4. Supera el umbral duro → **partir** por secciones temáticas.
+5. **Actualizar TODAS las referencias**, incluida la que se olvida siempre: los
+   `related: ./README.md` **relativos dentro de la misma carpeta**. Un `grep` de
+   la ruta completa no los ve; el hook de `links.py` sí. Correr `links.py` **antes**
+   de commitear, no después.
+6. Regenerar `STATE.md` (`tools/state.py`).
+
+**Es una hipótesis fechada, no una ley.** Los números viven en
+`tools/check_doc_size.py` como dos constantes (`SOFT_LIMIT_KB`, `HARD_LIMIT_KB`)
+con fecha de calibración. Cuando los modelos objetivo crezcan —un 12B o 27B donde
+hoy hay un 9B, o una técnica de lectura por partes— se suben ahí y se anota el
+nuevo objetivo. Nunca se cambia un número disperso por el código.
+
+```bash
+python3 planner/tools/check_doc_size.py            # el desk
+python3 planner/tools/check_doc_size.py --strict   # falla también el blando
+```
+
+**La deuda no se escribe aquí, se mide.** Un número copiado en un README se queda
+viejo el día siguiente y nadie lo nota; el script sí sabe la verdad:
+
+```bash
+python3 planner/tools/check_doc_size.py | sed -n '4p'   # documentos · > blando · > duro
+```
+
+Los que superan el umbral duro son la cola de trabajo de índices, y se ataca de
+uno en uno con el procedimiento de arriba.
+
 ## Panel
 
 `tools/panel.py` recorre el árbol, lee el frontmatter y genera el panel en
