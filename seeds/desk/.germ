@@ -1,23 +1,14 @@
 # Manifiesto del GERMEN (DESK-001). Ficheros del runtime red-pill que el seed
-# ACTUALIZA en cada instalación (con guard de hash: si divergieron en el desk →
-# backup + actualizar). Todo lo que NO esté aquí es contenido del PUESTO:
-# copy-if-absent, el seed NUNCA lo pisa.
+# ACTUALIZA en cada instalación. Todo lo que NO esté aquí (ni en `.blocks`) es
+# contenido del PUESTO: copy-if-absent, el seed NUNCA lo pisa.
+#
+# Tres niveles de propiedad (2026-10-29):
+#   GERMEN (aquí)    código: si diverge, la herramienta se comporta distinto.
+#                    El seed manda: se alinea, con copia y aviso si no consta que
+#                    el desk esté intacto.
+#   BLOQUE (.blocks) prosa compartida: el seed mantiene sólo su región marcada;
+#                    el desk conserva frontmatter y lo de fuera. Merge de 3 vías.
+#   PUESTO           todo lo demás: `INDEX.md` del desk, familias, notas.
 #
 # Un glob por línea (sintaxis `case`: * y ** equivalen a cualquier secuencia).
-#
-# OJO — `INDEX.md` NO está aquí a propósito (2026-10-29). El índice de la raíz es
-# 100% contenido del desk: es el mapa de ESE despacho (qué familias tiene, qué
-# proyectos, en qué estado). El del seed es sólo un esqueleto. Tenerlo en el
-# germen significaba que la primera instalación lo respaldaría y lo sustituiría
-# por ese esqueleto: pérdida silenciosa del mapa. Es PUESTO.
-AGENTS.md
-README.md
-FRONTMATTER_TEMPLATE.md
-archive/README.md
-planner/README.md
-planner/ideas/README.md
-planner/research/README.md
-planner/design/README.md
-planner/pending/README.md
-planner/in_progress/README.md
 planner/tools/**

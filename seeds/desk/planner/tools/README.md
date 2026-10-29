@@ -9,6 +9,7 @@ project: aleth-core
 tags: [desk, tools, seed, germen, enlaces]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # planner/tools — herramientas del desk
 
 Las herramientas **generales** del desk. Su fuente canónica es el **germen** en el
@@ -73,3 +74,4 @@ planner/tools/hooks/install.sh
 
 Al **añadir / mover / renombrar / actualizar** docs del desk: corre `links.py` y
 deja que el hook avise. Toda tool general nueva → al germen (`seeds/desk/`).
+<!-- REDPILL:END desk -->

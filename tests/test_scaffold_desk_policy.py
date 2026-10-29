@@ -197,3 +197,46 @@ def test_el_readme_del_seed_no_se_siembra(tmp_path: Path) -> None:
 	res = _run(tmp_path)
 	assert not (tmp_path / "desk" / "README.md").exists()
 	assert "nuevos=3" in res.stdout  # los tres del árbol de prueba, ninguno más
+
+
+BLOCK_DOC = "planner/NORM.md"
+
+
+def _seed_tree_block(tmp_path: Path) -> Path:
+	"""Seed con un único fichero de BLOQUE gestionado (prosa compartida)."""
+	seed = tmp_path / "repo" / "seeds" / "desk"
+	p = seed / BLOCK_DOC
+	p.parent.mkdir(parents=True, exist_ok=True)
+	p.write_text("# Norm\n\nregla uno\nregla dos\n", encoding="utf-8")
+	(seed / ".blocks").write_text(f"{BLOCK_DOC}\n", encoding="utf-8")
+	(seed / ".germ").write_text("", encoding="utf-8")
+	return seed
+
+
+def test_bloque_se_actualiza_cuando_el_desk_no_lo_toco(tmp_path: Path) -> None:
+	seed = _seed_tree_block(tmp_path)
+	_run(tmp_path)
+	desk = tmp_path / "desk"
+	assert "REDPILL:BEGIN desk" in (desk / BLOCK_DOC).read_text(encoding="utf-8")
+
+	_write(seed / BLOCK_DOC, "# Norm\n\nregla uno\nregla dos\nregla tres\n")
+	res = _run(tmp_path)
+	assert "regla tres" in (desk / BLOCK_DOC).read_text(encoding="utf-8")
+	assert "actualizados=1" in res.stdout
+	assert not (desk / ".germ.bak").exists(), "un bloque no necesita backup"
+
+
+def test_bloque_en_conflicto_no_se_escribe_y_avisa(tmp_path: Path) -> None:
+	seed = _seed_tree_block(tmp_path)
+	_run(tmp_path)
+	desk = tmp_path / "desk"
+	# El desk añade su excepción dentro del bloque; el seed cambia la misma zona.
+	doc = desk / BLOCK_DOC
+	doc.write_text(doc.read_text(encoding="utf-8").replace("regla uno\n", "regla uno del desk\n"), encoding="utf-8")
+	_write(seed / BLOCK_DOC, "# Norm\n\nregla uno del seed\nregla dos\n")
+	antes = doc.read_text(encoding="utf-8")
+	res = _run(tmp_path)
+	assert doc.read_text(encoding="utf-8") == antes, "el bloque del desk no se toca"
+	assert (desk / f"{BLOCK_DOC}.seed-new").exists()
+	assert "conflictos=1" in res.stdout
+	assert "se ha tocado nada" in res.stderr.lower()

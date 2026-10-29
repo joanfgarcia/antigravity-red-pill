@@ -12,6 +12,7 @@ related:
 tags: [planner, fases, panel, prioridad]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Planner — sistema de planificación
 
 Carpeta del despacho que centraliza **todo el sistema de planificación**: las
@@ -201,3 +202,4 @@ python3 tools/panel.py -o /tmp/panel.md
 
 El panel ordena por prioridad y respeta `depends_on` (topológico). No es un
 fichero físico: se genera cuando se pide.
+<!-- REDPILL:END desk -->

@@ -7,3 +7,5 @@ __pycache__/
 .germ.state
 .germ.bak/
 *.seed-new
+
+.germ.baseline/

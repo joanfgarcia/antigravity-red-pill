@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, design]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: design
 
 Tercer paso del flujo: **la idea está aprobada y se está diseñando un plan** —
@@ -29,3 +30,4 @@ Reglas:
   (según `RFC_FLUJO_RFCS.md` §2.1).
 - Al cerrar → `git mv` a `archive/<proyecto>/`.
 - Este README es genérico; no lista familias por nombre.
+<!-- REDPILL:END desk -->

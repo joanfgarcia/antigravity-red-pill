@@ -7,9 +7,13 @@ uno:
 
 | Nivel | Qué | Si el desk lo ha tocado |
 |---|---|---|
-| **Germen** (`.germ`) | código (`planner/tools/**`, hooks) y plantillas | **Código**: manda el seed → se alinea, con copia y aviso. **Prosa**: manda el desk → no se pisa; si además hay novedad del seed, se deja al lado como `*.seed-new` |
+| **Germen** (`.germ`) | código (`planner/tools/**`, hooks) | manda el seed: se alinea, con copia y aviso si no consta que esté intacto |
+| **Bloque** (`.blocks`) | prosa compartida: los README de fase, `AGENTS.md`, plantillas | manda el desk **dentro de su región**: el seed sólo toca lo que hay entre `<!-- REDPILL:BEGIN desk -->` y `<!-- REDPILL:END desk -->`; si ambos cambian, merge de 3 vías; si hay conflicto, no se escribe nada y el del seed queda al lado `*.seed-new` |
 | **Puesto** (todo lo demás) | contenido del operador (`INDEX.md`, notas, familias) | `copy-if-absent`: el seed nunca lo pisa |
-| **Del seed, no del desk** | este `README.md`, `.germ` | nunca se siembran: documentan el seed, no la mesa del agente |
+| **Del seed, no del desk** | este `README.md`, `.germ`, `.blocks` | nunca se siembran: documentan el seed, no la mesa del agente |
+
+En un fichero de bloque, el **frontmatter y todo lo que quede fuera de las marcas
+es del desk** (title, author, related, secciones propias). Lo de dentro es del seed.
 
 La decisión de germen se toma con **tres** hashes (base sembrada / lo que hay /
 lo que trae el seed), no con dos: comparar sólo "lo que hay" con "lo que trae"

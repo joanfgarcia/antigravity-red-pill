@@ -29,7 +29,10 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$HERE/.." && pwd)}"
 AGENT_CORE_DIR="${AGENT_CORE_DIR:?AGENT_CORE_DIR no definido}"
 SEED="$REPO_ROOT/seeds/desk"
 GERM_LIST="$SEED/.germ"
+BLOCK_LIST="$SEED/.blocks"
+BLOCK_TOOL="$HERE/desk_block.py"  # junto a este script, no en REPO_ROOT
 STATE="$AGENT_CORE_DIR/.germ.state"
+BASELINE="$AGENT_CORE_DIR/.germ.baseline"
 
 if [ ! -d "$SEED" ]; then
 	echo "[scaffold_desk] no existe $SEED" >&2
@@ -67,6 +70,21 @@ is_code() { [[ "$1" =~ $CODE_RE ]]; }
 SEED_ONLY_RE='^(README\.md|\.germ|\.blocks)$'
 is_seed_only() { [[ "$1" =~ $SEED_ONLY_RE ]]; }
 
+# Bloque gestionado: el seed mantiene SÓLO su región marcada y el desk el resto.
+# Es el nivel para prosa compartida (convenciones que deben poder actualizarse
+# sin pisar la identidad ni las excepciones de cada desk). Ver scripts/desk_block.py.
+is_block() {
+	local rel="$1" pat
+	[ -f "$BLOCK_LIST" ] || return 1
+	while IFS= read -r pat || [ -n "$pat" ]; do
+		[ -z "$pat" ] && continue
+		case "$rel" in
+			$pat) return 0 ;;
+		esac
+	done < "$BLOCK_LIST"
+	return 1
+}
+
 say() { echo "[scaffold_desk] $*"; }
 warn() { echo "[scaffold_desk] AVISO: $*" >&2; }
 
@@ -81,7 +99,7 @@ STATE_NEW="$(mktemp)"
 done
 
 # 2) Ficheros.
-n_new=0 n_upd=0 n_same=0 n_local=0 n_rev=0 n_conf=0 n_unknown=0 n_keep=0 n_bk=0
+n_new=0 n_upd=0 n_same=0 n_local=0 n_rev=0 n_conf=0 n_unknown=0 n_keep=0 n_bk=0 n_merged=0
 while IFS= read -r rel; do
 	[ -z "$rel" ] && continue
 	is_seed_only "$rel" && continue
@@ -89,6 +107,22 @@ while IFS= read -r rel; do
 	dst="$AGENT_CORE_DIR/$rel"
 	newh="$(hash_of "$src")"
 	[ -z "$newh" ] && continue
+
+	# ── BLOQUE GESTIONADO: decide y fusiona scripts/desk_block.py.
+	if is_block "$rel"; then
+		res="$(python3 "$BLOCK_TOOL" splice --seed "$src" --desk "$dst" --baseline "$BASELINE/$rel")"
+		res="${res#RESULT: }"
+		case "$res" in
+			created) n_new=$((n_new + 1)) ;;
+			unchanged) n_same=$((n_same + 1)) ;;
+			updated | appended) n_upd=$((n_upd + 1)) ;;
+			merged) n_upd=$((n_upd + 1)); n_merged=$((n_merged + 1)) ;;
+			local) n_local=$((n_local + 1)) ;;
+			conflict) n_conf=$((n_conf + 1)) ;;
+			*) warn "$rel: resultado inesperado del bloque ('$res'); no se toca nada." ;;
+		esac
+		continue
+	fi
 
 	# ── PUESTO: copy-if-absent. El seed nunca lo pisa.
 	if ! is_germ "$rel"; then
@@ -161,7 +195,7 @@ done < <(cd "$SEED" && find . -type f ! -path './.git*' ! -path '*/__pycache__/*
 	! -name '*.pyc' ! -name '*.pyo' ! -name '.DS_Store' | sed 's|^\./||' | sort)
 
 mv "$STATE_NEW" "$STATE"
-say "nuevos=$n_new actualizados=$n_upd intactos=$((n_same + n_keep)) locales=$n_local revertidos=$n_rev conflictos=$n_conf sin_registro=$n_unknown backups=$n_bk → $AGENT_CORE_DIR"
+say "nuevos=$n_new actualizados=$n_upd fusionados=$n_merged intactos=$((n_same + n_keep)) locales=$n_local revertidos=$n_rev conflictos=$n_conf sin_registro=$n_unknown backups=$n_bk → $AGENT_CORE_DIR"
 [ "$n_conf" -gt 0 ] && say "$n_conf conflicto(s) de prosa: la versión del seed queda al lado como *.seed-new (no se ha perdido nada)"
 [ "$n_bk" -gt 0 ] && say "lo revertido/divergido está en $BK"
 

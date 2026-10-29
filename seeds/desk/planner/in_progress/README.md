@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, in-progress]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: in_progress
 
 Último paso del flujo: **se está implementando**. Corresponde al estado
@@ -24,3 +25,4 @@ Reglas:
 - Al terminar la tarea → `git mv` a `archive/<proyecto>/` (finalizada) con
   `status: archived`.
 - Este README es genérico; no lista tareas por nombre.
+<!-- REDPILL:END desk -->

@@ -1,0 +1,19 @@
+# Manifiesto de BLOQUES GESTIONADOS (desk_block.py). Ficheros que son DE LOS DOS:
+# el seed mantiene su región marcada (<!-- REDPILL:BEGIN desk v=N --> …
+# <!-- REDPILL:END desk -->) y el desk conserva el frontmatter y todo lo que quede
+# fuera. Se funden con merge de 3 vías cuando ambos cambian.
+#
+# Un glob por línea (sintaxis `case`), igual que `.germ`.
+# Regla para decidir: si el fichero es prosa que debe poder ACTUALIZARSE pero no
+# puede pisar la identidad ni las excepciones de cada desk → bloque.
+# Si es código → germen. Si es contenido del operador → puesto (ni aquí ni allí).
+AGENTS.md
+FRONTMATTER_TEMPLATE.md
+archive/README.md
+planner/README.md
+planner/ideas/README.md
+planner/research/README.md
+planner/design/README.md
+planner/pending/README.md
+planner/in_progress/README.md
+planner/tools/README.md

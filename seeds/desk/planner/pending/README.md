@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, pending]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: pending
 
 Carril de **tareas concretas comprometidas y aún sin arrancar** (equivalente al
@@ -30,3 +31,4 @@ Reglas:
   antes. El panel respeta este orden.
 - Al arrancar una tarea → `git mv` a `../in_progress/`.
 - Este README es genérico; no lista tareas por nombre.
+<!-- REDPILL:END desk -->
