@@ -4,9 +4,14 @@
 # copy-if-absent, el seed NUNCA lo pisa.
 #
 # Un glob por línea (sintaxis `case`: * y ** equivalen a cualquier secuencia).
+#
+# OJO — `INDEX.md` NO está aquí a propósito (2026-10-29). El índice de la raíz es
+# 100% contenido del desk: es el mapa de ESE despacho (qué familias tiene, qué
+# proyectos, en qué estado). El del seed es sólo un esqueleto. Tenerlo en el
+# germen significaba que la primera instalación lo respaldaría y lo sustituiría
+# por ese esqueleto: pérdida silenciosa del mapa. Es PUESTO.
 AGENTS.md
 README.md
-INDEX.md
 FRONTMATTER_TEMPLATE.md
 archive/README.md
 planner/README.md
