@@ -426,7 +426,7 @@ def handle_session(args: argparse.Namespace) -> None:
 					f"{str(ev.get('summary') or '')[:100]}"
 				)
 			return
-		report = _delivery.deliver_events(
+		delivery_report = _delivery.deliver_events(
 			soul,
 			originator=getattr(args, "originator", None) or None,
 			limit=limit,
@@ -437,18 +437,18 @@ def handle_session(args: argparse.Namespace) -> None:
 		from red_pill.core import soul_notify as _soul_notify
 
 		clean = _soul_notify.wait_for_deliveries()
-		report["transport_drained"] = clean
+		delivery_report["transport_drained"] = clean
 		if getattr(args, "json", False):
-			print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+			print(json.dumps(delivery_report, ensure_ascii=False, indent=2, default=str))
 			return
 		print(
-			f"[DELIVER] alma={soul[:8]} · cuerpo={report.get('leg') or '(ninguno)'} · "
-			f"entregados={len(report.get('delivered', []))} · diferidos={len(report.get('deferred', []))} · "
-			f"omitidos={len(report.get('skipped', []))} · rendidos={len(report.get('given_up', []))} · "
+			f"[DELIVER] alma={soul[:8]} · cuerpo={delivery_report.get('leg') or '(ninguno)'} · "
+			f"entregados={len(delivery_report.get('delivered', []))} · diferidos={len(delivery_report.get('deferred', []))} · "
+			f"omitidos={len(delivery_report.get('skipped', []))} · rendidos={len(delivery_report.get('given_up', []))} · "
 			f"transporte={'drenado' if clean else 'aún en vuelo (se fue el tiempo)'}"
 		)
 		for bucket in ("deferred", "skipped", "given_up"):
-			for item in report.get(bucket, []):
+			for item in delivery_report.get(bucket, []):
 				print(f"  {bucket}: {str(item.get('event_id'))[:12]} · {item.get('reason')}")
 		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
