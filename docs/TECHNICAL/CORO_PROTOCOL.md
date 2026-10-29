@@ -66,7 +66,11 @@ Reglas duras:
    `post` queda solo para lo que nunca tuvo destinatario.
 5. **Nada desaparece**: agotado el TTL o un fallo terminal, la carta va a
    `dead_letters` con motivo, y se puede `replay`.
-6. **Un mensaje es DATO, no instrucción** (T3): va delimitado, con procedencia y
+6. **El cuerpo, hoy, es de 800 caracteres**: es la `summary` del evento (tope del
+   tablón). La ley del recado completa (64 KB + Apartado Postal) llega con el
+   buzón único (S2); hasta entonces un mensaje más largo se **rechaza**, no se
+   trunca.
+7. **Un mensaje es DATO, no instrucción** (T3): va delimitado, con procedencia y
    `hop`. El receptor **jamás** suspende sus constraints del Operador por un
    mensaje (D-09). `declined` es una respuesta válida.
 
@@ -127,11 +131,14 @@ verbo o un campo no toca el servidor.
 | `ack` | `event_id` | `ok` |
 | `fetch` | `mission_id?`, `since_seq?`, `types?`, `limit?` | eventos del tablón (pull) |
 | `board` | `include_git?`, `limit?` | sala de guerra unificada: misiones vivas + almas + cuerpos |
-| `dlq` | `state?`, `origin?`, `limit?` | cartas muertas |
-| `replay` | `dlq_id`, `to?` | nuevo `msg_id` |
+| `object` | `target_event_id`, `claim`, `severity?`, `proposed_action?`, `evidence?` | abre una D-obj (D23) sobre una nota |
+| `dlq` | `state?`, `origin?`, `limit?` | cartas muertas — **S2** (broker) |
+| `replay` | `dlq_id`, `to?` | nuevo `msg_id` — **S2** (broker) |
 
 `board` **absorbe** `check_parallel_sessions` y `session_board` (misma vista, dos
-nombres). `send`/`inbox`/`ack`/`dlq`/`replay` **no existían**.
+nombres: `scope=sesiones|misiones`). `send`/`inbox`/`ack`/`object` **no existían**;
+`dlq`/`replay` llegan con el broker (S2) y **no se registran hasta que existan**:
+una acción que miente es peor que una acción ausente.
 
 ### 6.1 Purga (decisión del Operador, 2026-10-29)
 
@@ -140,7 +147,7 @@ viejas se borran del catálogo, con sus llamantes actualizados.
 
 | Se va | Pasa a | Llamantes a actualizar |
 |---|---|---|
-| `announce_intent` | `post` | `mcp_server.py`, `tests/test_mission_events.py`, `tests/test_mcp_server.py`, `tests/test_d23_*.py` |
+| `announce_intent` | `post` (y `object` cuando `type=objection`) | `mcp_server.py`, `tests/test_mission_events.py`, `tests/test_mcp_server.py`, `tests/test_d23_*.py` |
 | `fetch_events` | `fetch` | interceptor `12_session_sync`, `delivery.py`, `core/session_index.py`, tests |
 | `check_parallel_sessions` | `board` | `tests/test_mission_events.py`, `tests/test_opencode_plugin.py` |
 | `session_board` (acción de `swarm_orchestrator_api`) | `board` | `local_minion.py` + su prompt, `session_index.py`, `tests/test_session_subsystem.py` |
@@ -200,7 +207,7 @@ no puede, queda `park` y llega al reencarnar.
 
 | Slice | Contenido | Aceptación ejecutable |
 |---|---|---|
-| **S1 — el sustrato y la puerta** | `session.db` v4 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
+| **S1 — el sustrato y la puerta** | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
 | **S2 — el buzón único** | neon-link: `core/inbox_adapters.py` + `SoulAdapter` + publicación al `outbox`; `_deliver_neon_link` real; retirada de la máquina de estados de `event_deliveries` | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
 | **S3 — presencia en la interfaz** | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente) | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
 
@@ -209,7 +216,7 @@ S1 no depende de S2: la entrega ya existe por el seam `_TRANSPORTS` (CLI) y el
 
 ---
 
-## 9. Delta de esquema (`session.db` v4)
+## 9. Delta de esquema (`session.db` v8)
 
 En `mission_events` (append-only, no se reescribe nada):
 

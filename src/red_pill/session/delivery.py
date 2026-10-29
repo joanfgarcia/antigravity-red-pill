@@ -85,7 +85,10 @@ STATE_DELIVERED = "delivered"
 STATE_PULLED = "pulled"
 STATE_GIVEN_UP = "given_up"
 STATE_SKIPPED = "skipped"
-TERMINAL_STATES = frozenset({STATE_DELIVERED, STATE_PULLED, STATE_GIVEN_UP, STATE_SKIPPED})
+# v8 (AD-095): el ack del destinatario. `delivered` es un hecho del transporte;
+# `read` es lo que el alma dice haber visto. No hay `replied`: se sabe por el hilo.
+STATE_READ = "read"
+TERMINAL_STATES = frozenset({STATE_DELIVERED, STATE_READ, STATE_PULLED, STATE_GIVEN_UP, STATE_SKIPPED})
 
 # Ventana en la que un `in_flight` se considera en curso y no se reclama. Ha de
 # cubrir el hilo daemon del transporte (`soul_notify.DELIVERY_TIMEOUT_S` = 120 s)
@@ -173,18 +176,20 @@ def pending_for_soul(continuity_id: str, *, limit: int = 20, db_path: Optional[s
 	sql = (
 		"SELECT e.event_seq, e.event_id, e.type, e.mission_id, e.summary, e.ref,"
 		" e.originator, e.continuity_id, e.created_at,"
+		" e.verb, e.thread_id, e.hop, e.hop_max, e.expects_reply, e.value_class, e.expires_at,"
 		" d.state AS delivery_state, d.attempts AS delivery_attempts"
 		" FROM mission_events e"
 		" LEFT JOIN event_deliveries d ON d.event_id = e.event_id AND d.continuity_id = ?"
 		" LEFT JOIN note_status ns ON ns.event_id = e.event_id"
-		" WHERE e.continuity_id = ? AND e.sealed = 0"
+		" WHERE e.to_continuity = ? AND e.sealed = 0"
 		f" AND e.type NOT IN ({placeholders})"
 		" AND COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted')"
+		" AND (e.expires_at IS NULL OR e.expires_at > ?)"
 		f" AND {_soul_cursor_cond()}"
 		" AND (d.event_id IS NULL OR d.state IN ('pending', 'in_flight'))"
 		" ORDER BY e.event_seq ASC LIMIT ?"
 	)
-	params = [soul, soul, *internal, soul, max(1, min(int(limit or 20), 200))]
+	params = [soul, soul, *internal, time.time(), soul, max(1, min(int(limit or 20), 200))]
 	try:
 		with _connect(db_path) as conn:
 			conn.execute(_TABLE_DDL)
@@ -280,6 +285,7 @@ def set_delivery_state(
 		STATE_PULLED,
 		STATE_GIVEN_UP,
 		STATE_SKIPPED,
+		STATE_READ,
 	}:
 		return False
 	stamp = float(now) if now is not None else time.time()
@@ -301,6 +307,22 @@ def set_delivery_state(
 	except Exception as e:
 		logger.warning(f"[delivery] no se pudo fijar estado {state} para {str(event_id)[:12]}: {e}")
 		return False
+
+
+def mark_read(event_id: str, continuity_id: str, *, db_path: Optional[str] = None, now: Optional[float] = None) -> bool:
+	"""El alma declara leído un mensaje suyo (AD-095 §5). Detiene su vida útil.
+
+	Idempotente: si no había fila (nunca se empujó) nace ya en `read`; el `inbox`
+	lo mostraba como `queued`, así que el ack sin push es legítimo.
+	"""
+	return set_delivery_state(
+		event_id=str(event_id or ""),
+		continuity_id=str(continuity_id or ""),
+		state=STATE_READ,
+		reason="ack",
+		db_path=db_path,
+		now=now,
+	)
 
 
 def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[str] = None, now: Optional[float] = None) -> int:
@@ -328,7 +350,7 @@ def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[st
 			conn.execute(
 				"INSERT OR IGNORE INTO event_deliveries (event_id, continuity_id, state, attempts, holder, claimed_at, reason, updated_at)"
 				" SELECT e.event_id, ?, 'pulled', 0, '', 0, 'cursor_del_digest', ?"
-				" FROM mission_events e WHERE e.continuity_id = ? AND e.event_seq <= ?",
+				" FROM mission_events e WHERE e.to_continuity = ? AND e.event_seq <= ?",
 				(soul, stamp, soul, ceiling),
 			)
 			# 2) Los que tenían fila abierta (pending/in_flight).
@@ -350,17 +372,40 @@ def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[st
 
 
 def build_event_nudge(event: dict) -> str:
-	"""Texto del nudge. Es **dato, no orden** (D-09): informa, no manda."""
-	summary = sanitize_inline(event.get("summary"), 400)
+	"""Texto del nudge: el **sobre del protocolo** (AD-095). Dato, no orden (D-09).
+
+	Si el evento es una nota del tablón (sin destinatario) se avisa como tal; si es
+	un mensaje (`to_continuity`), se envuelve con verbo, hilo, salto y
+	`respuesta: SÍ|NO` en la primera línea (D-13: el silencio debe ser visible).
+	"""
+	from red_pill.coro import protocol
+
 	kind = sanitize_inline(event.get("type"), 40)
 	mission = sanitize_inline(event.get("mission_id"), 120)
+	summary = sanitize_inline(event.get("summary"), 400)
 	ref = event.get("ref")
-	suffix = f"\n[ref: {sanitize_inline(ref, 200)}]" if ref else ""
-	return (
-		"[AVISO AUTOMATICO · tablón · DATO, no orden]\n"
-		f"{kind} · {mission} · seq={event.get('event_seq')}: {summary}{suffix}\n"
-		"No requiere respuesta. Detalle y contexto: fetch_events / session_board."
+	verb = str(event.get("verb") or "")
+	if not verb:
+		suffix = f"\n[ref: {sanitize_inline(ref, 200)}]" if ref else ""
+		return (
+			"[AVISO AUTOMATICO · tablón · DATO, no orden]\n"
+			f"{kind} · {mission} · seq={event.get('event_seq')}: {summary}{suffix}\n"
+			"No requiere respuesta. Detalle y contexto: coro_api.fetch / coro_api.inbox."
+		)
+	header = protocol.envelope(
+		verb=verb,
+		thread_id=event.get("thread_id"),
+		hop=event.get("hop"),
+		hop_max_value=event.get("hop_max"),
+		expects_reply=event.get("expects_reply"),
+		value=event.get("value_class"),
+		from_mark=protocol.soul_mark(event.get("continuity_id")),
+		mission_id=mission,
+		expires_at=event.get("expires_at"),
 	)
+	body = summary + (f"\n[ref: {sanitize_inline(ref, 200)}]" if ref else "")
+	body += f"\n(event_id {event.get('event_id')} · contesta con coro_api.send verb=reply reply_to=… )"
+	return protocol.wrap_body(header, body)
 
 
 # ── El adaptador ─────────────────────────────────────────────────────────────
@@ -432,23 +477,24 @@ def deliver_events(
 			)
 			report["skipped"].append({"event_id": event_id, "reason": "self_authored"})
 			continue
-		blocked = wake_policy.inbound_blocked(soul, originator=leg, db_path=db_path)
-		if blocked == wake_policy.REASON_INBOUND_REFUSE:
+		blocked = _wake_verdict(ev, soul, leg, db_path=db_path)
+		if blocked is not None and blocked.terminal:
 			# El destinatario dijo «no»: terminal. Reintentarlo sería desobedecerlo.
 			set_delivery_state(
 				event_id=event_id,
 				continuity_id=soul,
 				state=STATE_SKIPPED,
-				reason=blocked,
+				reason=blocked.reason,
 				db_path=db_path,
 				now=now,
 			)
-			report["skipped"].append({"event_id": event_id, "reason": blocked})
+			report["skipped"].append({"event_id": event_id, "reason": blocked.reason})
 			continue
-		if blocked:
-			# `hold` (o estado ilegible, fail-closed): difiere. No se toca el estado
-			# porque el evento sigue pendiente y el pull del siguiente turno lo ve.
-			report["deferred"].append({"event_id": event_id, "reason": blocked})
+		if blocked is not None:
+			# `hold`, matriz de roles que no casa, o sin fila en el registro: difiere.
+			# El mensaje NO se pierde: sigue pendiente y el pull lo recoge al
+			# reencarnar (AD-095: `park` es el camino barato y siempre funciona).
+			report["deferred"].append({"event_id": event_id, "reason": blocked.reason})
 			continue
 		if not claim_delivery(event_id=event_id, continuity_id=soul, holder=holder, db_path=db_path, now=now):
 			report["deferred"].append({"event_id": event_id, "reason": "claimed_by_other"})
@@ -495,6 +541,38 @@ def deliver_events(
 			)
 			report["deferred"].append({"event_id": event_id, "reason": "transport_refused"})
 	return report
+
+
+def _actor_for(conn, continuity_id: str, *, originator: str = "") -> "wake_policy.Actor":
+	"""Actor desde `session_registry` (read-only). Sin fila = actor vacío."""
+	row = None
+	soul = str(continuity_id or "").strip()
+	if soul:
+		try:
+			row = conn.execute(
+				"SELECT * FROM session_registry WHERE continuity_id = ? ORDER BY updated_at DESC LIMIT 1",
+				(soul,),
+			).fetchone()
+		except Exception:
+			row = None
+	return wake_policy.Actor.from_row(dict(row) if row else None, originator=originator)
+
+
+def _wake_verdict(ev: dict, soul: str, leg: str, *, db_path: Optional[str] = None):
+	"""¿Puede este mensaje DESPERTAR a `soul`? (D-07 + controles de entrada).
+
+	Devuelve `None` si puede, o el motivo del veto. Un mensaje de un alma que no
+	está en el registro no casa con ninguna relación → pull (fail-closed).
+	"""
+	try:
+		with _connect(db_path) as conn:
+			recipient = _actor_for(conn, soul, originator=leg)
+			sender = _actor_for(conn, str(ev.get("continuity_id") or ""), originator=str(ev.get("originator") or ""))
+		decision = wake_policy.decide_wake(sender=sender, recipient=recipient, db_path=db_path)
+	except Exception as e:
+		# No saber no es permiso: se difiere.
+		return wake_policy.Decision(False, f"wake_undecidable:{e}")
+	return None if decision.allow else decision
 
 
 def delivery_summary(continuity_id: str, *, db_path: Optional[str] = None) -> dict:
