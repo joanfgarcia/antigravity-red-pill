@@ -236,6 +236,24 @@ Un modelo en formato de fork exige:
 Precedentes: `BitNetInferenceProvider`, `FastFlowLMInferenceProvider`. Falta el de
 binarios de fork (`llama_cpp_prism`, `llama_cpp_xdna`).
 
+### Formatos: el binario de producción decide, no la moda
+
+| Formato | Contenedor | Lo sirve | Cuándo tiene sentido |
+| --- | --- | --- | --- |
+| `GGUF` Q4/Q5/Q6/Q8 | GGUF | llama.cpp (stock o fork) | **Por defecto en este puesto**: KV cuantizable, control de contexto, tool parsing por jinja |
+| `GGUF` `PTQ1_0` / `PQ2_0` / `i2_s` | GGUF | solo el fork del fabricante | Ternarios: mucho parámetro por byte. Exige provider de binario (AD-049) |
+| `FP8` | safetensors | vLLM / SGLang | Datacenter. Mismo tamaño que `Q8_0` en un 4B; aquí no aporta |
+| `INT8` `compressed-tensors` | safetensors | vLLM / transformers | W8A8: también cuantiza **activaciones**. Ventaja de velocidad con tensor cores INT8, pero solo en vLLM |
+| `AWQ` / `GPTQ` | safetensors | vLLM / exllama | 4 bits con calibración. Sin ventaja frente a `Q4_K_M` aquí |
+
+**Regla:** comparar formatos **con la misma VRAM y el mismo modelo**, y descontar el
+runtime. Un `INT8` de 4,45 GB y un `Q8_0` de 4,38 GB ocupan lo mismo; la diferencia
+está en si el binario de producción sabe cargarlos.
+
+Caso real (2026-10-30): `Spark-X2.6-4B` tiene GGUF, FP8 e INT8. Se usa GGUF porque es
+el único que sirve llama.cpp, que es lo que corre en producción; FP8 e INT8 exigirían
+vLLM, que no está desplegado en un portátil de 8 GB.
+
 ### GP-2 · `flash_attn` declarado (AD-037)
 
 Sin `flash_attn: true` **y** `fa_capable: true` en el perfil, el daemon lo resuelve a
