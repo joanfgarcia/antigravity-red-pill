@@ -970,7 +970,8 @@ def provider_for_profile(resolved: Any) -> Optional[BaseInferenceProvider]:
 	"""
 	from red_pill.core.runtime_registry import RuntimeRegistry
 
-	runtime_id = getattr(resolved, "runtime", None) or RuntimeRegistry.default_id()
+	# `runtime` es el dict ya resuelto; el id es `runtime_id` (str).
+	runtime_id = getattr(resolved, "runtime_id", None) or RuntimeRegistry.default_id()
 	entry = RuntimeRegistry.get(runtime_id) or {}
 	if entry.get("kind") != "llama_cpp_fork":
 		return None

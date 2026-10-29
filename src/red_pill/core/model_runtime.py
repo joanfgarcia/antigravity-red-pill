@@ -99,6 +99,10 @@ class ResolvedModel:
 	reasoning_effort: Optional[str] = None  # AD-049: esfuerzo declarado (medium/xhigh...)
 	reasoning_budget: Optional[int] = None  # tope DURO de tokens de thinking (no toca el contexto: acota la traza)
 	sampling: Dict[str, Any] = field(default_factory=dict)  # receta de samplers del modelo (top_p, top_k, min_p...)
+	# Args extra para el `llama-server` de un runtime de fork (AD-049). Config, no
+	# código: las peculiaridades de un modelo (p.ej. forzar `--reasoning off` porque
+	# su template razona y deja `content` vacío) se declaran en el perfil.
+	extra_server_args: List[str] = field(default_factory=list)
 
 	def resolved_n_ctx(self) -> int:
 		"""n_ctx efectivo del perfil resuelto (vram_tiers aplicado)."""
@@ -237,6 +241,7 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		reasoning_effort=profile.get("reasoning_effort"),
 		reasoning_budget=int(profile["reasoning_budget"]) if profile.get("reasoning_budget") else None,
 		sampling=dict(profile.get("sampling") or {}),
+		extra_server_args=[str(a) for a in (profile.get("extra_server_args") or [])],
 		extra={"tier": tier, "thinking_supported": thinking != "off", "fa_capable": bool(profile.get("fa_capable"))},
 	)
 

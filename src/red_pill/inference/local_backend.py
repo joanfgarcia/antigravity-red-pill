@@ -142,7 +142,8 @@ def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None) 
 	"""
 	from red_pill.core.runtime_registry import RuntimeRegistry
 
-	runtime_id = getattr(resolved, "runtime", None) or RuntimeRegistry.default_id()
+	# `runtime` es el dict ya resuelto; el id es `runtime_id` (str).
+	runtime_id = getattr(resolved, "runtime_id", None) or RuntimeRegistry.default_id()
 	entry = RuntimeRegistry.get(runtime_id) or {}
 
 	if entry.get("kind") == "llama_cpp_fork":
@@ -153,11 +154,22 @@ def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None) 
 			from red_pill.inference.runtime_server import RuntimeServer
 
 			server_factory = RuntimeServer
+		extra = list(getattr(resolved, "extra_server_args", None) or [])
+		# Red de seguridad, no mecanismo: el sitio correcto para las peculiaridades
+		# de un modelo es `extra_server_args` en su perfil. Si el perfil declara
+		# thinking off y NO declara el flag, se inyecta y se avisa — porque sin él
+		# el template razona, se come el presupuesto y `content` vuelve vacío.
+		if str(getattr(resolved, "thinking", "off") or "off").lower() == "off" and "--reasoning" not in extra:
+			logger.warning(
+				f"[LOCAL-BACKEND] '{profile_name}' declara thinking off sin `extra_server_args`: "
+				"inyectando --reasoning off (decláralo en el perfil para no depender de esto)"
+			)
+			extra += ["--reasoning", "off", "--reasoning-budget", "0"]
 		server = server_factory(
 			profile_name,
 			ctx=getattr(resolved, "n_ctx", None),
 			kv_type=getattr(resolved, "kv_cache_type", None),
-			extra_args=getattr(resolved, "extra_server_args", None) or [],
+			extra_args=extra,
 		).start()
 		logger.info(f"[LOCAL-BACKEND] '{profile_name}' servido por el binario de '{runtime_id}'")
 		return ForkChatBackend(server)

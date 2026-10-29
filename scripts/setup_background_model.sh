@@ -265,16 +265,13 @@ class ModelManager:
 			f"GPU layers: {n_gpu_layers}, Context: {n_ctx}")
 		if not os.path.exists(resolved.model_path):
 			raise BackendUnavailable(f"model file not found: {resolved.model_path}")
-		from llama_cpp import Llama
+		# Motor agnóstico: el daemon no sabe si el modelo se carga en proceso
+		# (llama-cpp-python) o lo sirve el binario de un fork (PTQ1_0/PQ2_0/i2_s).
+		# Ver red_pill/inference/local_backend.py. La interfaz que sigue usando
+		# aquí abajo es la misma: tokenize() + create_chat_completion().
+		from red_pill.inference.local_backend import build_local_backend
 		flash_attn = mr.effective_flash_attn(resolved, "cpu" if IS_CPU_WORKER else "gpu")
-		self.model = Llama(
-			model_path=resolved.model_path,
-			chat_format=resolved.chat_format,
-			n_ctx=n_ctx,
-			n_gpu_layers=n_gpu_layers,
-			flash_attn=flash_attn,
-			verbose=False,
-		)
+		self.model = build_local_backend(resolved)
 		self.flash_attn = flash_attn
 		_register_thinking_handlers(self.model, resolved)
 		self.mode = "cpu" if IS_CPU_WORKER else "gpu"

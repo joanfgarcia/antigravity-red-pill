@@ -122,3 +122,54 @@ def test_perfil_fork_sin_nombre_falla(monkeypatch):
 	monkeypatch.setattr(rr.RuntimeRegistry, "get", classmethod(lambda cls, rid, variant=None: {"kind": "llama_cpp_fork"}))
 	with pytest.raises(RuntimeError):
 		build_local_backend(SimpleNamespace(runtime="llama_cpp_prism", n_ctx=4096), server_factory=lambda *a, **k: None)
+
+
+# ── extra_server_args: configuración, no código ─────────────────────────────
+
+
+def test_extra_server_args_del_perfil_llegan_al_servidor(monkeypatch):
+	"""Las peculiaridades de un modelo se declaran en el perfil, no en el código."""
+	from red_pill.core import runtime_registry as rr
+
+	monkeypatch.setattr(rr.RuntimeRegistry, "get", classmethod(lambda cls, rid, variant=None: {"kind": "llama_cpp_fork"}))
+	creados = []
+
+	class _Srv:
+		base_url = "http://x:1"
+
+		def __init__(self, profile_name, **kw):
+			creados.append(kw)
+
+		def start(self):
+			return self
+
+	resolved = SimpleNamespace(
+		profile_name="bonsai_2_27b", runtime_id="llama_cpp_prism", n_ctx=4096,
+		thinking="off",
+		extra_server_args=["--reasoning", "off", "--reasoning-budget", "0", "--kv-mean-center", "x.gguf"],
+	)
+	build_local_backend(resolved, server_factory=_Srv)
+	assert creados[0]["extra_args"] == [
+		"--reasoning", "off", "--reasoning-budget", "0", "--kv-mean-center", "x.gguf"
+	]
+
+
+def test_sin_extra_server_args_inyecta_y_avisa(monkeypatch):
+	"""Red de seguridad: perfil con thinking off y sin flags → se inyecta."""
+	from red_pill.core import runtime_registry as rr
+
+	monkeypatch.setattr(rr.RuntimeRegistry, "get", classmethod(lambda cls, rid, variant=None: {"kind": "llama_cpp_fork"}))
+	creados = []
+
+	class _Srv:
+		base_url = "http://x:1"
+
+		def __init__(self, profile_name, **kw):
+			creados.append(kw)
+
+		def start(self):
+			return self
+
+	resolved = SimpleNamespace(profile_name="olvidado", runtime_id="llama_cpp_prism", n_ctx=4096, thinking="off")
+	build_local_backend(resolved, server_factory=_Srv)
+	assert "--reasoning" in creados[0]["extra_args"]
