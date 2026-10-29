@@ -1309,6 +1309,35 @@ Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a 
 ### 4. Open Questions
 Network-MCP support in Antigravity / Claude Desktop (Claude Code is fine); **security** — the RedPill-Kernel MCP runs subprocess/heal effectors, so it must NOT be exposed on an unauthenticated TCP port (prefer UDS file-perms, or localhost + token).
 
+### 5. Operación — recargar el kernel cuando cambia el CATÁLOGO de tools (2026-10-29)
+§3 vale para **datos** (roots, grafos, memoria): cambian dentro del servidor y el
+cliente no se entera. El caso contrario es **código**: si se añade, se purga o se
+renombra una tool, hay **tres** capas y hay que recorrer las tres, en este orden.
+
+| # | Capa | Qué se queda viejo | Cómo se refresca |
+|---|---|---|---|
+| 1 | **Backend** `redpill-mcp.service` (UDS) | importa `mcp_server` una vez y sirve para siempre: el `ToolRegistry` vive en su memoria | `systemctl --user restart redpill-mcp.service` (o `scripts/install_mcp_service.sh`) |
+| 2 | **Proxy** `mcp_proxy` (uno por instancia del IDE) | nada relevante: abre conexión **nueva por petición** y reintenta una vez | se refresca solo al recargar el cliente |
+| 3 | **Catálogo del cliente** (el que ve el modelo) | se inyecta al abrir la sesión y **se restaura al reanudarla** | `/reload`, o sesión nueva si se reanudó |
+
+El backend es *stateless* y el proxy no reutiliza conexión, así que el paso 1 **no
+orfana ni corta** a las sesiones vivas (verificado el 2026-10-27 y otra vez el
+2026-10-29 con cuatro sesiones concurrentes).
+
+**Síntoma según el paso que falte** — así se diagnostica sin adivinar:
+
+- Falta el 1: la tool nueva no existe para nadie y una tool **purgada sigue
+  respondiendo** (el backend viejo aún la tiene).
+- Falta el 2: el handshake o la tool devuelven texto viejo (el backend nuevo no se
+  está usando).
+- Falta el 3: el **backend sirve la tool** pero el modelo no la encuentra en su
+  catálogo; al llamar una purgada, el error viene del **backend**
+  (`Unknown tool: …`), no del cliente.
+
+Prueba barata y sin coste de modelo: hablar el protocolo por el mismo proxy que usa
+el IDE y pedir `tools/list`. El snippet vive en
+`scripts/check_mcp_tools.py` (lista las tools que ve un cliente nuevo).
+
 ### 5. Spike 2026-10-25 — validado (UDS + streamable HTTP + proxy stdio)
 **Host corregido**: el `SovereignDaemon` actual es **monitor-only** (`DaemonPlugin`: “nunca ejecutar tareas pesadas”). El backend del MCP irá en un **servicio systemd dedicado** (`redpill-mcp.service` + `redpill-mcp.socket`, UDS 0600, socket-activated); los clientes usan un **proxy stdio ligero** por instancia que reenvía al backend por UDS. La idea original (un MCP, N clientes) se mantiene; cambia el host.
 

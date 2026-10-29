@@ -71,6 +71,30 @@ Keeping these inside `APP_ROOT/storage` ensures that if a user clones Red-Pill m
 ### 3.4 Qdrant Vector Database
 Qdrant operates as a decoupled microservice (typically `localhost:6333`). The physical `.qdrant` files are typically managed by the host OS (e.g. Docker volumes or Podman mounts), not by `WORKSPACE_ROOT` or `APP_ROOT`.
 
+### 3.5 The Kernel MCP Service (`redpill-mcp.service`, AD-018)
+The kernel's MCP is **not** an IDE subprocess: it is a shared, **stateless** backend over a Unix socket (`~/.local/share/red-pill/state/mcp.sock`), with one `mcp_proxy` per IDE instance. The **tool catalogue lives in the backend's memory**, imported once when the process starts — so editing `src/` changes nothing until that process is replaced.
+
+**When a tool is added, purged or renamed, three layers must be refreshed, in this order:**
+
+| # | Layer | How it refreshes |
+|---|---|---|
+| 1 | **Backend** `redpill-mcp.service` | `systemctl --user restart redpill-mcp.service` |
+| 2 | **Proxy** (one per IDE instance) | reloading the client — it opens a new connection per request and retries once |
+| 3 | **Client tool catalogue** (what the model sees) | `/reload`, or a **new session** if the old one was resumed (resuming restores the old list) |
+
+Restarting the backend **does not orphan or cut** live sessions (stateless + per-request connections; verified 2026-10-27 and again 2026-10-29 with four concurrent sessions).
+
+**Diagnosis, by the layer that is stale:**
+
+- New tool missing everywhere **and** a purged tool still answering → layer **1**.
+- Backend serves the tool but the model cannot see it (and calling a purged one fails with `Unknown tool` *from the backend*) → layer **3**.
+
+Cheap check, no model turn spent: `python scripts/check_mcp_tools.py coro_api` (it speaks MCP through the same proxy the IDE uses and lists `tools/list`).
+
+> [!WARNING]
+> Never restart the sovereign daemon (`redpill.service`) for this. It is far more invasive (heartbeat, plugins, timers) and holds nothing the tool catalogue needs.
+
+
 ---
 
 ## 4. Environment Variables (`.env`)
