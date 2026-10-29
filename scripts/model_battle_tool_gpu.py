@@ -95,7 +95,7 @@ def _run_model(model_name: str, gguf: str) -> list[BattleResult]:
 			"127.0.0.1",
 			"--port",
 			str(PORT),
-			"--no-mmap",
+
 		]
 		logf = open(log_path, "w")
 		server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT)
