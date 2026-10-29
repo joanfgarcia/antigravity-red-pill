@@ -13,7 +13,10 @@ tags: [planner, fase, design]
 # Fase: design
 
 Tercer paso del flujo: **la idea está aprobada y se está diseñando un plan** —
-aquí viven los RFCs y las decisiones de diseño. Puede venir de `research/`
+aquí viven los RFCs y las decisiones de diseño.
+
+Es también una bandeja de **residencia**: el documento se queda aquí aunque su
+`status` avance a `implemented`. No hay que moverlo (y el panel no lo pide). Puede venir de `research/`
 (dossier madurado → nace el RFC) o **directo de `ideas/`** (idea clara que no
 necesita investigación).
 

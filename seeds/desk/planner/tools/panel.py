@@ -36,36 +36,21 @@ PHASE_DIRS = {
 	"archive": "🗄️ Finalizado (archive)",
 }
 
-# Estados que cada bandeja ACEPTA (carpeta vs frontmatter). Solo se avisa si el
-# ítem vive en el planner y su status no es de los suyos.
+# Qué bandejas se revisan contra el `status` (carpeta vs frontmatter).
 #
-# Modelo (2026-10-29, decisión del Operador): **el DOSSIER manda**. Una familia de
-# `design/<familia>/` es el expediente completo de un tema y no se desmiembra
-# aunque algunas piezas estén ya implementadas: fuera de su familia pierden el
-# contexto, y `in_progress/` debe seguir siendo corto (lo que se está haciendo),
-# no el cementerio de todo lo terminado. La ruta dice la bandeja; el `status` dice
-# el estado. Se avisa solo cuando uno de los dos miente de verdad.
-PHASE_STATUSES = {
-	"planner/ideas": {"spark", "llama"},
-	"planner/research": {
-		"maturing",
-		"awaiting_operator",
-		"parked",
-		"dead",
-		"superseded",
-		"active",
-	},
-	"planner/design": {
-		"draft",
-		"in-design",
-		"ratified",
-		"in-progress",
-		"implemented",
-		"active",
-		"blocked",
-		"paused",
-	},
-	"planner/pending": {"pending"},
+# Modelo (2026-10-29, decisión del Operador): **la bandeja dice dónde vive el
+# documento, no en qué estado está.** `ideas/`, `research/` y `design/` son
+# residencia: el documento se queda donde entró y su estado lo dice el `status`.
+# Con 120+ documentos, mover cada uno al cambiar de estado no ha pasado nunca y no
+# va a pasar: una bandeja que promete ciclo de vida y no lo cumple miente.
+#
+# Las dos bandejas de EJECUCIÓN sí se mantienen al día, porque son una cola de
+# trabajo y son pocas: si `pending/` no es lo que está pendiente, no sirve.
+# `archive/` es la única salida y también se respeta.
+#
+# Una bandeja que no aparece aquí no se revisa: puede tener cualquier estado.
+STRICT_PHASE_STATUSES = {
+	"planner/pending": {"pending", "blocked", "paused"},
 	"planner/in_progress": {"in-progress", "implemented", "blocked", "paused"},
 }
 
@@ -292,7 +277,7 @@ def _render_table(out: list[str], docs: list[Doc]) -> None:
 		link = f"[{d.rel}]({d.rel})"
 		phase = PHASE_DIRS.get(d.phase, d.phase)
 		mismatch = ""
-		allowed = PHASE_STATUSES.get(d.phase) if d.rel.startswith("planner/") else None
+		allowed = STRICT_PHASE_STATUSES.get(d.phase) if d.rel.startswith("planner/") else None
 		if allowed is not None and d.status not in allowed:
 			mismatch = " ⚠️"
 		out.append(f"| {phase} | `{d.status}`{mismatch} | {d.priority} | {title} | {link} | {d.project} |")

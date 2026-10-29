@@ -34,48 +34,49 @@ herramienta que genera el panel de seguimiento on-demand (`tools/panel.py`).
 > máquina. Lo que hay entre las marcas `REDPILL:BEGIN/END` es del seed; el
 > frontmatter y lo que quede fuera es de este desk.
 
-## Modelo: la bandeja dice la fase; el DOSSIER no se desmiembra
+## Modelo: la bandeja dice dónde vive; el `status` dice en qué está
 
-Un ítem vive en la bandeja de su fase, y cambiar de fase es mover la carpeta. Pero
-cuando llega a `design/` se convierte en **familia**: una carpeta que es el
-expediente completo de un tema y que **no se parte** aunque algunas de sus piezas
-estén ya implementadas.
+Las bandejas **no son un ciclo de vida que se recorre**. Con 120 documentos, mover
+cada uno al cambiar de estado no ha pasado nunca y no va a pasar: una bandeja que
+promete ciclo de vida y no lo cumple miente, y obliga a desmembrar familias para
+cumplirla. Así que cada bandeja dice una cosa distinta:
 
-Por qué: un `B01_TURNO_WRITE_AHEAD.md` fuera de `alma_y_coro/` pierde su contexto
-(qué problema resolvía, con qué otras piezas convivía). El expediente se lee entero
-o no se entiende. Un `in_progress/` con las piezas sueltas de diez familias es un
-cementerio, no una bandeja de trabajo.
-
-| Bandeja | Qué se guarda | Estados que acepta |
+| Bandeja | Qué significa | Se mantiene al día |
 |---|---|---|
-| `ideas/` | chispas sin analizar | `spark`, `llama` |
-| `research/` | investigación sin decisión | `maturing`, `awaiting_operator`, `parked`, `dead`, `superseded` |
-| `design/<familia>/` | **el expediente**: su RFC y todas sus piezas | `draft`, `in-design`, `ratified` **y también** `in-progress` / `implemented` / `active` dentro de la familia |
-| `pending/` | tarea comprometida, sin arrancar | `pending` |
-| `in_progress/` | **2-3 tareas vivas**: lo que se está haciendo | `in-progress`, `implemented`, `blocked`, `paused` |
-| `archive/<proyecto>/` | terminado y cerrado | `archived`, `closed` |
+| `ideas/` | de aquí entró: chispa sin analizar | no hace falta |
+| `research/` | de aquí entró: se investigó antes de decidir | no hace falta |
+| `design/<familia>/` | **el expediente** de un tema, con todas sus piezas | no hace falta |
+| `pending/` | **cola**: lo comprometido y sin arrancar | **sí, siempre** |
+| `in_progress/` | **cola**: lo que se está haciendo (2-3 cosas) | **sí, siempre** |
+| `archive/<proyecto>/` | terminado o consumido | **sí, es la única salida** |
 
-**La ruta dice la bandeja; el `status` dice el estado.** Para ver el estado sin
-abrir un solo documento:
+Reglas que se pueden cumplir:
+
+- **Un documento no se mueve al cambiar de estado.** Su estado se lee en el
+  `status` del frontmatter, no en la ruta.
+- **La familia no se desmiembra.** `design/<familia>/` guarda el RFC y sus piezas
+  aunque algunas estén implementadas: fuera de su familia pierden el contexto.
+  La familia entera se archiva cuando **todas** sus piezas están cerradas.
+- **`pending/` e `in_progress/` sí se mueven**, y son las únicas que el panel
+  revisa: son una cola, y una cola que no refleja la realidad no sirve. Ahí sí
+  avisa `⚠️` si el `status` no cuadra con la bandeja.
+- **`archive/` es la salida**, con `status: archived`/`closed` y su `archive_reason`.
+
+Para ver el estado sin abrir un solo documento (la ruta no lo dice, el panel sí):
 
 ```bash
-python3 planner/tools/panel.py                          # todo, con ⚠️ donde no cuadre
-python3 planner/tools/panel.py --status implemented     # lo terminado
-python3 planner/tools/state.py -o STATE.md              # entrada en frío
+python3 planner/tools/panel.py                      # todo, con ⚠️ donde la cola no cuadre
+python3 planner/tools/panel.py --status implemented  # lo terminado
+python3 planner/tools/state.py -o STATE.md           # entrada en frío
 ```
 
-Cuándo se mueve algo (con `git mv`, que preserva la historia):
+Los movimientos que sí existen, y son pocos:
 
 ```bash
-git mv planner/ideas/MI_IDEA planner/research/                  # madura la idea
-git mv planner/research/MI_IDEA planner/design/<familia>/       # nace el RFC
-git mv planner/pending/MI_TAREA planner/in_progress/            # arranca
-git mv planner/in_progress/MI_TAREA archive/<proyecto>/         # termina y se cierra
-git mv planner/design/<familia> archive/<proyecto>/             # termina la familia ENTERA
+git mv planner/pending/MI_TAREA planner/in_progress/        # arranca
+git mv planner/in_progress/MI_TAREA archive/<proyecto>/     # termina
+git mv planner/design/<familia> archive/<proyecto>/         # cierra la familia entera
 ```
-
-Lo que **no** se hace: sacar de una familia viva una pieza ya implementada. Su
-estado se lee en su `status`, y si la familia entera cierra, se archiva completa.
 
 ## Flujo blando (no es un pipeline duro)
 

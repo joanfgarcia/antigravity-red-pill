@@ -20,6 +20,10 @@ espera a que arranque su implementación).
 
 Lo que está aquí, se hace — solo falta decidir cuándo.
 
+**Esta bandeja es una cola y se mantiene al día**: si algo ya arrancó, está en
+`../in_progress/`; si se cerró o se consumió, en `archive/`. Es una de las dos
+únicas bandejas que el panel revisa contra el `status` (⚠️ si no cuadra).
+
 Reglas:
 
 - Cada tarea es una carpeta con su `README.md` como entrada (descripción,
