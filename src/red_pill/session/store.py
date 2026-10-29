@@ -85,7 +85,6 @@ expires_at REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_mission ON mission_events(mission_id, event_seq);
-CREATE INDEX IF NOT EXISTS idx_events_inbox ON mission_events(to_continuity, event_seq);
 CREATE INDEX IF NOT EXISTS idx_events_type ON mission_events(type, created_at);
 
 CREATE TRIGGER IF NOT EXISTS mission_events_no_update BEFORE UPDATE ON mission_events

@@ -272,3 +272,51 @@ class TestMCP:
 			"board",
 			"object",
 		}
+
+
+# ── Migración (la BD real no nace fresca) ────────────────────────────────────
+
+
+class TestMigracionV8:
+	async def test_una_bd_v7_gana_el_destinatario_sin_perder_eventos(self, tmp_path):
+		"""La migración se prueba sobre una BD v7 REAL, no sobre una recién creada.
+
+		El fallo que esto cierra: el índice del destinatario vivía en `_SCHEMA`,
+		que se ejecuta **antes** de los `ALTER`. En una BD existente la tabla no
+		tiene la columna todavía → `no such column: to_continuity`, y el registro
+		ni siquiera abría. Los tests con BD fresca no podían verlo.
+		"""
+		import sqlite3
+
+		path = str(tmp_path / "v7.db")
+		con = sqlite3.connect(path)
+		con.executescript(
+			"""
+			CREATE TABLE mission_events (
+				event_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_id TEXT NOT NULL UNIQUE,
+				type TEXT NOT NULL,
+				mission_id TEXT NOT NULL,
+				campaign_id TEXT,
+				continuity_id TEXT,
+				originator TEXT,
+				global_turn INTEGER NOT NULL DEFAULT 0,
+				summary TEXT NOT NULL,
+				ref TEXT,
+				sealed INTEGER NOT NULL DEFAULT 0,
+				created_at REAL NOT NULL
+			);
+			INSERT INTO mission_events (event_id, type, mission_id, summary, created_at)
+				VALUES ('viejo', 'phase_done', 'repo:next', 'nota de antes de v8', 1.0);
+			PRAGMA user_version=7;
+			"""
+		)
+		con.commit()
+		con.close()
+
+		reg = SessionRegistry(path)
+		cols = {row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(mission_events)")}
+		assert {"to_continuity", "verb", "thread_id", "hop", "expects_reply", "value_class", "expires_at"} <= cols
+		assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 8
+		assert reg.fetch_inbox(A) == [], "ningún evento viejo se convierte en mensaje"
+		assert [e["summary"] for e in reg.fetch_events("repo:next")] == ["nota de antes de v8"]
