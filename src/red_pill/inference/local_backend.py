@@ -60,6 +60,13 @@ class ForkChatBackend:
 		# servidor (--jinja), así que el valor es informativo.
 		self.chat_format: Optional[str] = None
 
+	def stop(self) -> None:
+		"""Suelta el servidor del fork (libera VRAM). El daemon lo llama al desmontar."""
+		try:
+			self.server.stop()
+		except Exception as e:  # pragma: no cover - defensivo
+			logger.warning(f"[FORK-BACKEND] fallo al parar el servidor: {e}")
+
 	# ── tokenize ───────────────────────────────────────────────────────────
 
 	def tokenize(self, text: Any, **_: Any) -> List[int]:
@@ -132,7 +139,8 @@ class ForkChatBackend:
 				yield evento
 
 
-def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None) -> Any:
+def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None,
+                        unload_daemon: bool = False) -> Any:
 	"""Devuelve el objeto de modelo para un perfil resuelto.
 
 	- runtime de fork → `ForkChatBackend` sobre su `RuntimeServer`.
@@ -170,6 +178,7 @@ def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None) 
 			ctx=getattr(resolved, "n_ctx", None),
 			kv_type=getattr(resolved, "kv_cache_type", None),
 			extra_args=extra,
+			unload_daemon=unload_daemon,
 		).start()
 		logger.info(f"[LOCAL-BACKEND] '{profile_name}' servido por el binario de '{runtime_id}'")
 		return ForkChatBackend(server)

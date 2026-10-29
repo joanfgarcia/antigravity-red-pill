@@ -329,7 +329,15 @@ class ModelManager:
 	def unload_under_lock(self):
 		if self.model is not None:
 			name = getattr(self.current, "profile_name", "?")
-			logger.info(f"Unloading in-process model {name}...")
+			logger.info(f"Unloading model {name}...")
+			# Backend agnóstico: si sabe soltarse (p.ej. servidor de un fork),
+			# que lo haga; si no, basta con soltar la referencia y recolectar.
+			_release = getattr(self.model, "stop", None)
+			if callable(_release):
+				try:
+					_release()
+				except Exception as e:
+					logger.warning(f"release del backend falló: {e!r}")
 			self.model = None
 			gc.collect()
 		if self.worker is not None:
