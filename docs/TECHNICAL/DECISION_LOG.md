@@ -2677,3 +2677,64 @@ reabre una segunda vía de transporte. Suite del worktree: 3786 passed.
   la sesión, así que también cae con el proveedor. **Esto convierte el «fallback de
   proveedores» de idea futura en necesidad operativa**: hoy no existe, y la única
   ruta viva era `opencode-go`.
+
+## [AD-095] El coro tiene una sola puerta: `coro_api`, tablón + correspondencia + buzón
+
+**Date**: 2026-10-29
+**Status**: ACEPTADO (contrato). **S1 pendiente de implementar.** Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md`.
+
+### 1. The Problem
+El protocolo entre almas estaba **firmado** (D-01…D-13 del hilo E-001/E-002/E-003) pero
+repartido en cinco sitios, y **el sustrato no podía expresar un mensaje**: `mission_events`
+no tiene destinatario y `delivery.pending_for_soul` empuja solo los eventos cuyo autor es
+el alma (`WHERE e.continuity_id = ?`, `session/delivery.py:178-180`). Por la superficie,
+diez tools sueltas más dos acciones dentro de `swarm_orchestrator_api`, con
+`check_parallel_sessions` y `session_board` devolviendo la misma vista. Resultado: el
+Operador no tenía "un verbo para hablar con mi hermana", y la entrega de Fase 5 solo
+servía para el aviso de fin de job.
+
+### 2. The Decision
+1. **Una tool consolidada `coro_api`** (lectura y escritura), registrada por el
+   `ToolRegistry` como **módulo** (`src/red_pill/coro/`), no cableada en `mcp_server.py`.
+   Acciones: `post`, `send(verb)`, `inbox`, `ack`, `fetch`, `board`, `dlq`, `replay`.
+   El verbo (`notify`/`ask`/`reply`/`park`) es **enum de `send`**, no una tool.
+2. **Purga, no deprecación** (Operador, 2026-10-29): `announce_intent` → `post`,
+   `fetch_events` → `fetch`, `check_parallel_sessions` y `session_board` → `board`.
+   Se borran del catálogo con sus llamantes actualizados; sin alias de compatibilidad.
+3. **El destinatario se añade al evento, no se inventa un buzón paralelo**:
+   `session.db` v4 con `to_continuity`, `verb`, `thread_id`, `hop`/`hop_max`,
+   `expects_reply`, `value_class` (`now`/`seed`) y `expires_at`; `EVENT_TYPES += "message"`.
+4. **Un solo dueño del estado de entrega: `neon-link`**. `outbox` con
+   `channel='soul'` (`channel_user_id = continuity_id`) y payload = **sobre**, nunca
+   cuerpo. Se retira `event_deliveries` como máquina de estados; se añade el
+   `core/inbox_adapters.py` que AD-094 midió inexistente.
+5. **Rebote → `park`, no `post`** (refina D-12): el destinatario se conserva y el
+   mensaje se entrega al reencarnar. `post` queda solo para lo que nunca tuvo
+   destinatario.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| `agent_bus_api` de RFC-INTEROP-001 con su propia `agent_bus.db` | rechazada | tercera fuente de verdad de estado de entrega; el Operador ya decidió que el buzón es neon-link |
+| Mantener las tools viejas como alias deprecados | rechazada por el Operador | dos superficies para el mismo hecho; el modelo elige mal |
+| Verbos como acciones separadas (`notify`/`ask`/`reply`/`park`) | rechazada | cuatro tools donde cabe un enum; más superficie, mismo poder |
+| Tabla `coro_messages` en `session.db` | rechazada | reconstruye el "segundo tablón" que se mató en Fase 2 |
+| Seguir con `event_deliveries` y que neon-link solo transporte | rechazada | dos máquinas de estado para el mismo mensaje; el `True` optimista de `_deliver_cli` nunca se corrige |
+
+### 4. Rationale
+El registry ya genera tools consolidadas (`registry.py:39-77`), así que la puerta única
+cuesta una línea de registro y cero cambios en el servidor. Poner el destinatario en el
+evento mantiene **una sola verdad** (append-only) y hace que el `pull` funcione gratis:
+si el alma está muerta, el mensaje espera y lo recoge su primer handshake. La purga es
+lo que convierte "el protocolo no está claro" en un hecho verificable: el catálogo MCP
+no puede ofrecer dos caminos.
+
+### 5. Consecuencias y deuda
+- **S1** (sustrato + puerta + purga) no depende de neon-link: la entrega ya existe por
+  el seam `_TRANSPORTS` y `park` cubre el camino barato.
+- **S2** (canal `soul` + `inbox_adapters`) es la durabilidad: broker con backoff, DLQ y
+  `redrive` en vez de un hilo daemon que muere con el proceso.
+- **S3**: el `[CORO]` del handshake cuenta `inbox` pendiente (hoy solo `mission_events`)
+  y el render hace evidente `respuesta: NO` (D-13).
+- Sigue fuera: **D26** (firma real) y la federación entre teatros.
