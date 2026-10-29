@@ -188,3 +188,12 @@ def test_no_siembra_bytecode_ni_basura_de_sistema(tmp_path: Path) -> None:
 	desk = tmp_path / "desk"
 	assert not (desk / "planner" / "tools" / "__pycache__").exists()
 	assert not (desk / ".DS_Store").exists()
+
+
+def test_el_readme_del_seed_no_se_siembra(tmp_path: Path) -> None:
+	"""El `README.md` de la raíz del seed documenta el seed; en el desk sobra."""
+	seed = _seed_tree(tmp_path)
+	(seed / "README.md").write_text("# Desk Scaffold (seeds/desk/)\n\nmanual del instalador\n", encoding="utf-8")
+	res = _run(tmp_path)
+	assert not (tmp_path / "desk" / "README.md").exists()
+	assert "nuevos=3" in res.stdout  # los tres del árbol de prueba, ninguno más

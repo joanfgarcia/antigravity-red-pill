@@ -61,6 +61,13 @@ is_germ() { # rel → 0 si pertenece al germen
 CODE_RE='\.(py|sh|bash|js|mjs|cjs|ts)$'
 is_code() { [[ "$1" =~ $CODE_RE ]]; }
 
+# Ficheros del seed que documentan EL SEED, no el desk: nunca se siembran.
+# `README.md` de la raíz explica cómo está montado `seeds/desk/` — meterlo en el
+# desk sería dejar un manual del instalador en la mesa del agente. Anclado a la
+# raíz a propósito: `planner/ideas/README.md` sí es contenido del desk.
+SEED_ONLY_RE='^(README\.md|\.germ|\.blocks)$'
+is_seed_only() { [[ "$1" =~ $SEED_ONLY_RE ]]; }
+
 say() { echo "[scaffold_desk] $*"; }
 warn() { echo "[scaffold_desk] AVISO: $*" >&2; }
 
@@ -78,7 +85,7 @@ done
 n_new=0 n_upd=0 n_same=0 n_local=0 n_rev=0 n_conf=0 n_unknown=0 n_keep=0 n_bk=0
 while IFS= read -r rel; do
 	[ -z "$rel" ] && continue
-	[ "$rel" = ".germ" ] && continue
+	is_seed_only "$rel" && continue
 	src="$SEED/$rel"
 	dst="$AGENT_CORE_DIR/$rel"
 	newh="$(hash_of "$src")"

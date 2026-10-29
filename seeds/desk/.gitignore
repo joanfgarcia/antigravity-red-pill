@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Contabilidad del instalador del desk (no es contenido): estado del germen,
+# copias de lo divergido y la versión del seed ofrecida al lado (*.seed-new).
+.germ.state
+.germ.bak/
+*.seed-new
