@@ -6,8 +6,7 @@
 #   - GERMEN  (tools/plantillas del runtime): el seed lo ACTUALIZA, con guard de hash.
 # El manifiesto `seeds/desk/.germ` declara qué es germen.
 #
-# GERMEN: DOS POLÍTICAS, TRES HASHES
-# ----------------------------------
+# GERMEN: DOS POLÍTICAS (código / prosa), TRES HASHES (base / desk / seed)
 # Comparar sólo desk-vs-seed_nuevo (como se hacía) revertía ediciones locales aunque
 # el seed no hubiera cambiado nada. La decisión necesita TRES: base (lo que
 # sembramos), cur (lo que hay), new (lo que traemos).
