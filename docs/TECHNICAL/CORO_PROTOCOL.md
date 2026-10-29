@@ -207,7 +207,7 @@ no puede, queda `park` y llega al reencarnar.
 
 | Slice | Contenido | Aceptación ejecutable |
 |---|---|---|
-| **S1 — el sustrato y la puerta** | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
+| **S1 — el sustrato y la puerta** ✅ HECHO (`72c4b09`, migración `f5d1b59`) | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
 | **S2 — el buzón único** | neon-link: `core/inbox_adapters.py` + `SoulAdapter` + publicación al `outbox`; `_deliver_neon_link` real; retirada de la máquina de estados de `event_deliveries` | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
 | **S3 — presencia en la interfaz** | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente) | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
 
