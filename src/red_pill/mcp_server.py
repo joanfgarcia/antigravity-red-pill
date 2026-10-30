@@ -1854,7 +1854,11 @@ def _bridge_entry(data: Any, prov: str, now: float, ttl: float) -> Optional[Dict
 	entry_prov = str(data.get("provider") or prov).strip() or prov
 	originator = f"{entry_prov}:{session_id}" if session_id else ""
 	if originator or workdir:
-		return {"originator": originator, "workdir": workdir}
+		entry = {"originator": originator, "workdir": workdir}
+		project_dir = str(data.get("project_dir") or "").strip()
+		if project_dir:
+			entry["project_dir"] = project_dir
+		return entry
 	return None
 
 
@@ -1994,10 +1998,16 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# adhoc (AD-099: la rama y el worktree son atributos, no la misión; si no,
 	# cada worktree abría una misión y el coro se fragmentaba). El argumento del
 	# modelo NO la declara (evita spoofing y params innecesarios).
+	# La raíz del proyecto que declara el arnés (`project_dir`, Claude:
+	# CLAUDE_PROJECT_DIR) manda sobre el cwd para la MISIÓN: el cwd sigue a los
+	# `cd` del agente (al desk, a la memoria) y la misión no debe irse con él. La
+	# rama y el worktree siguen saliendo del cwd: son dónde trabaja AHORA.
+	project_dir = str((shared or {}).get("project_dir") or bridge.get("project_dir") or "").strip()
+	project_repo = (await asyncio.to_thread(_git_mirror, project_dir)).get("repo") if project_dir else None
 	mission_id = resolve_default_mission(
 		os.getenv("REDPILL_MISSION_ID") or None,
 		branch=branch,
-		repo=(mirror or {}).get("repo"),
+		repo=project_repo or (mirror or {}).get("repo"),
 	)
 	if shared and str(shared.get("mission_id") or "").strip():
 		mission_id = str(shared["mission_id"]).strip()

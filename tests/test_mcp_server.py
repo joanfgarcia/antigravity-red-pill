@@ -992,6 +992,36 @@ class TestSession0b:
 		assert wt_row["branch"] == "feat/wt"
 		assert wt_row["worktree"] == str(wt.resolve()), "el worktree se sigue sabiendo (claims)"
 
+	async def test_la_mision_sigue_al_proyecto_y_la_rama_al_cwd(self, tmp_path):
+		"""`project_dir` (Claude: CLAUDE_PROJECT_DIR) decide la misión; el cwd, la rama.
+
+		2026-10-30: el agente hizo `cd` a otro repo (el desk) y la misión se fue con
+		él; fijar el workdir a la raíz arreglaba la misión pero la rama pasaba a
+		decir la del árbol principal dentro de un worktree.
+		"""
+		import subprocess
+
+		from red_pill.session.store import SessionRegistry
+
+		def _repo(path, branch):
+			path.mkdir()
+			for args in (["init", "-q", "-b", branch], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+				subprocess.run(["git", *args], cwd=path, check=True)
+			(path / "f").write_text("x")
+			subprocess.run(["git", "add", "."], cwd=path, check=True)
+			subprocess.run(["git", "commit", "-qm", "init"], cwd=path, check=True)
+
+		proj, desk = tmp_path / "proj", tmp_path / "desk"
+		_repo(proj, "next")
+		_repo(desk, "main")
+		bridge = {"originator": "claude_code:pd1", "workdir": str(desk), "project_dir": str(proj)}
+		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
+			await self._handshake({"user_prompt": "x"})
+		row = SessionRegistry().get_by_originator("claude_code:pd1")
+		assert row["mission_id"] == "repo:proj", "la misión no se va con el cd"
+		assert row["branch"] == "main", "la rama es la de donde trabaja ahora"
+		assert row["worktree"] == str(desk.resolve())
+
 	async def test_mision_por_repo_tocado_f3(self):
 		from red_pill.session.store import SessionRegistry
 
