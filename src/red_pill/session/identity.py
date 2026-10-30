@@ -57,7 +57,7 @@ def resolve_default_mission(
 	`repo:<rama>` (compatibilidad: quien solo conoce la rama) →
 	`mission:adhoc-<fecha>` (sin repo).
 
-	**Misión = proyecto, no rama** (AD-099, 2026-10-30). Las ramas y los worktrees
+	**Misión = proyecto, no rama** (AD-101, 2026-10-30). Las ramas y los worktrees
 	son unidades de TRABAJO, no equipos: dos sesiones de `repo:next` y
 	`feat/algo` del mismo repositorio son el par que tiene que verse y poder
 	despertarse. Con `repo:<rama>` cada worktree abría una misión y el coro se

@@ -947,14 +947,14 @@ class TestSession0b:
 		assert row["branch"] == "feat/mirror"
 		assert row["worktree"] == str(repo.resolve())
 		assert row["head_commit"] == head
-		# AD-099: la misión es el REPOSITORIO (`proj`), no la rama; la rama sigue en
+		# AD-101: la misión es el REPOSITORIO (`proj`), no la rama; la rama sigue en
 		# su columna. Con `repo:<rama>` cada worktree abría una misión y el coro se
 		# fragmentaba: dos sesiones del mismo proyecto no se veían ni se despertaban.
 		assert row["mission_id"] == "repo:proj"
 		assert row["branch"] == "feat/mirror", "la rama no desaparece: pasa a atributo"
 
 	async def test_dos_worktrees_del_mismo_repo_comparten_mision(self, tmp_path):
-		"""AD-099: la misión es el proyecto; la rama y el worktree son atributos.
+		"""AD-101: la misión es el proyecto; la rama y el worktree son atributos.
 
 		El caso real (2026-10-30): una sesión trabajaba en un git worktree y quedaba
 		en OTRA misión (`repo:feat/...`), así que el coro no la veía y D-07 no le

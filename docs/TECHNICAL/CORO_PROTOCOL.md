@@ -399,7 +399,7 @@ Regla 8: **una unión nunca estrecha.** Los `enum` se unen; si los tipos discrep
 quita el tipo. Un schema que impide una llamada legítima no es una restricción: es un
 fallo que se disfraza de contrato.
 
-## 13. Misión, rama y worktree — qué es cada cosa (AD-099)
+## 13. Misión, rama y worktree — qué es cada cosa (AD-101)
 
 Estas tres palabras se confundían, y la confusión fragmentaba el coro. Definición corta
 y quién usa cada una:

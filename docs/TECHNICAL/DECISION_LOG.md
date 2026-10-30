@@ -3033,11 +3033,13 @@ que el mensaje salió, pero no si llegó a un cuerpo que lo viera.
 - El fantasma `ses_doesnotexist…` (alma `01a18d66`) es una sesión real y no se toca. Si
   sobra, lo cierra el Operador.
 
-## [AD-099] La misión es el repositorio; la rama y el worktree son atributos
+## [AD-101] La misión es el repositorio; la rama y el worktree son atributos
 
 **Date**: 2026-10-30
 **Status**: IMPLEMENTADO. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md` §13. Reabre y
 precisa **F6/D22** ("la rama es la misión de facto").
+**Numeración**: se publicó como «AD-099» (`b357e21`, también en su mensaje de commit),
+pero ese número ya era el acuse por hook. Se renumeró a AD-101 el mismo día.
 
 ### 1. The Problem
 El primer E2E entre tres ámbitos (opencode, Claude Code y un worktree) devolvió un
