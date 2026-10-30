@@ -83,6 +83,12 @@ signo al releerlos, no había veredicto: había preferencia.
 
 Ver **[VOICE_2026-10-30.md](VOICE_2026-10-30.md)** — las mismas 20 sesiones destiladas por granite y por bonsai: la voz, el detalle y el precio de la noche.
 
+Ver **[TEXTURE_2026-10-29.md](TEXTURE_2026-10-29.md)** — prueba de textura a ciegas (jersey rojo): qué modelo conserva el dato y cuál lo inventa.
+
+Ver **[CATA_2026-10-30.md](CATA_2026-10-30.md)** — cata de 25 notas del juez K2+v3: qué aguanta sola y qué confabula.
+
+Ver **[AWAKENING_LOCAL_2026-10-30.md](AWAKENING_LOCAL_2026-10-30.md)** — despertar autónomo limitado con un 7B local: alcance, guardia de anclas y lo que no resuelve.
+
 Ver **[PREFILL_2026-10-30.md](PREFILL_2026-10-30.md)** — el cuello del sueño no era el prefill sino la KV en f16 (2,5× de decode), el runtime `llama_cpp_k2`, y el prompt de anotar elegido por modelo.
 
 ## Estado del elenco (2026-10-30)

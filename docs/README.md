@@ -185,6 +185,7 @@ Project-level rules and standards. These govern how the project itself is built 
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
 | [MEDIA_MODELS.md](CORE/MEDIA_MODELS.md) | Media models & runtimes — how the harness discovers models and how to add one |
 | [MODEL_STORAGE.md](CORE/MODEL_STORAGE.md) | Model storage layout & anti-duplication policy (HF blob store + uv hardlinks) |
+| [MODELS/INDEX.md](MODELS/INDEX.md) | **El elenco**: fichas por modelo, inventario, procedimiento de medida (GP-1..GP-6) y comparativas de voz, prefill y cata |
 
 ---
 
