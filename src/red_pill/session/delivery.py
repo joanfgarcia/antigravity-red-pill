@@ -47,14 +47,14 @@ Medida en este repo, 2026-10-28. Sin maquillar: lo que no existe, no existe.
 
 Dos limitaciones de los caminos que sí existen, dichas en la cara:
 
-1. **El seam es optimista.** `_deliver_claude_socket` devuelve `True` cuando el
-	socket acepta los bytes: no hay acuse y el receptor aún puede retenerlo.
-	`_deliver_cli` devuelve `True` al **lanzar** el
-	proceso en un hilo daemon; el `rc != 0` se registra pero ya no vuelve. Así que
-	`delivered` significa «entregado al transporte», no «leído». Además, el hilo
-	vive lo que vive el proceso: un llamante efímero (la CLI) debe drenar con
-	`wait_for_deliveries()` antes de salir — si no, el nudge se va con el proceso y
-	el estado miente. La confirmación real necesitará el canal `soul` (C4), no esto.
+1. **Ningún seam confirma.** `_deliver_claude_socket` devuelve `True` cuando el
+	socket acepta los bytes (el receptor aún puede retenerlo) y `_deliver_cli`
+	cuando el hijo `opencode run` **arranca** (y `run --session <id desconocido>`
+	no falla: abre otra sesión). Por eso el push cierra como **`handed_off`**
+	(«en manos del transporte»), no como `delivered`: `delivered` queda reservado
+	para un transporte que confirme que el arnés aceptó el turno (canal `soul`,
+	C4). El motivo lleva el rastro del CLI (`rastro=<fichero>`) para que el
+	emisor pueda ver qué pasó aunque el llamante ya no exista.
 2. **La política decide, este módulo ejecuta.** Cada evento dirigido pasa primero
 	por el control de entrada del destinatario (`wake_policy.inbound_blocked`):
 	`refuse` cierra el empuje (`skipped`, terminal — lo dijo el destinatario),
@@ -84,13 +84,16 @@ logger = logging.getLogger(__name__)
 STATE_PENDING = "pending"
 STATE_IN_FLIGHT = "in_flight"
 STATE_DELIVERED = "delivered"
+# El push salió por el transporte, sin acuse del arnés (ver la tabla). Terminal
+# para el push: reempujarlo duplicaría el turno.
+STATE_HANDED_OFF = "handed_off"
 STATE_PULLED = "pulled"
 STATE_GIVEN_UP = "given_up"
 STATE_SKIPPED = "skipped"
 # v8 (AD-095): el ack del destinatario. `delivered` es un hecho del transporte;
 # `read` es lo que el alma dice haber visto. No hay `replied`: se sabe por el hilo.
 STATE_READ = "read"
-TERMINAL_STATES = frozenset({STATE_DELIVERED, STATE_READ, STATE_PULLED, STATE_GIVEN_UP, STATE_SKIPPED})
+TERMINAL_STATES = frozenset({STATE_DELIVERED, STATE_HANDED_OFF, STATE_READ, STATE_PULLED, STATE_GIVEN_UP, STATE_SKIPPED})
 
 # Ventana en la que un `in_flight` se considera en curso y no se reclama. Ha de
 # cubrir el hilo daemon del transporte (`soul_notify.DELIVERY_TIMEOUT_S` = 120 s)
@@ -284,6 +287,7 @@ def set_delivery_state(
 		STATE_PENDING,
 		STATE_IN_FLIGHT,
 		STATE_DELIVERED,
+		STATE_HANDED_OFF,
 		STATE_PULLED,
 		STATE_GIVEN_UP,
 		STATE_SKIPPED,
@@ -426,7 +430,7 @@ def deliver_events(
 ) -> dict:
 	"""Empuja los eventos pendientes del alma a su cuerpo vivo.
 
-	Devuelve un informe honesto — `{delivered, deferred, skipped, given_up}`— con
+	Devuelve un informe honesto — `{handed_off, deferred, skipped, given_up}`— con
 	el motivo de cada evento. **Nunca** lanza un turno a ciegas: si no hay cuerpo,
 	si el arnés no tiene punto de inyección o si el transporte falla, el evento se
 	queda donde estaba y el próximo turno (pull) lo recoge.
@@ -437,7 +441,7 @@ def deliver_events(
 	from red_pill.core import soul_notify
 
 	soul = str(continuity_id or "").strip()
-	report: Dict[str, Any] = {"continuity_id": soul, "leg": "", "delivered": [], "deferred": [], "skipped": [], "given_up": []}
+	report: Dict[str, Any] = {"continuity_id": soul, "leg": "", "handed_off": [], "deferred": [], "skipped": [], "given_up": []}
 	if not soul:
 		return report
 	if soul_notify.notify_disabled():
@@ -510,16 +514,17 @@ def deliver_events(
 			logger.warning(f"[delivery] transporte lanzó excepción en {event_id[:12]}: {e}")
 			ok = False
 		if ok:
+			trace = soul_notify.last_trace()
 			set_delivery_state(
 				event_id=event_id,
 				continuity_id=soul,
-				state=STATE_DELIVERED,
-				reason=f"handed_to_transport:{INJECTION_POINTS[provider]}",
+				state=STATE_HANDED_OFF,
+				reason=f"handed_to_transport:{INJECTION_POINTS[provider]}" + (f" rastro={trace}" if trace else ""),
 				attempts_delta=1,
 				db_path=db_path,
 				now=now,
 			)
-			report["delivered"].append({"event_id": event_id, "type": ev.get("type"), "seq": ev.get("event_seq")})
+			report["handed_off"].append({"event_id": event_id, "type": ev.get("type"), "seq": ev.get("event_seq"), "trace": trace})
 			continue
 		# El motivo real del transporte, no un genérico: "no salió" sin porqué fue lo
 		# que dejó al Operador yendo a decírselo a mano (incidente 2026-10-30).

@@ -40,11 +40,11 @@ Reglas que respeta (no las salta)
 - **D-09**: el aviso es **dato**, nunca una orden; no pide nada al receptor.
 - **D-11**: `opencode run --session` **inyecta**; `api POST` fallaría cerrado
 	y el mensaje desaparecería. Por eso se usa `run --session`.
-- **No bloquea al worker**: la entrega corre en un hilo daemon con timeout. Un
-	job NUNCA debe quedarse colgado esperando a que otro turno termine. Excepción
-	que es en realidad una corrección: un llamante **efímero** (la CLI) sí debe
-	esperar con `wait_for_deliveries()` antes de salir, porque el hilo daemon
-	muere con el proceso y el nudge se perdería en silencio.
+- **No bloquea al worker ni hereda su vida**: el CLI se lanza como hijo en su
+	propia sesión de procesos y sin timeout. Ni el llamante espera al turno del
+	receptor, ni el turno muere si el llamante (un MCP directo, la CLI) sale antes.
+	Antes era un hilo daemon con `timeout=120 s`: con un llamante efímero el turno
+	moría a medias y el estado ya decía «entregado» (2026-10-30).
 
 Non-fatal por diseño: cualquier fallo se registra y se ignora. Perder un aviso
 es malo; tumbar el runner por un aviso, peor.
@@ -58,6 +58,7 @@ import re
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -66,8 +67,6 @@ logger = logging.getLogger(__name__)
 ENV_DISABLE = "REDPILL_SOUL_NOTIFY_DISABLE"
 # Env para forzar transporte: "cli" (MVP) | "neon_link" (futuro).
 ENV_TRANSPORT = "REDPILL_SOUL_NOTIFY_TRANSPORT"
-# Timeout de la entrega (segundos). Acota el hilo daemon.
-DELIVERY_TIMEOUT_S = 120.0
 # NOTA (2026-10-28): aquí vivía un TTL de frescura en HORAS para decidir si un
 # leg era despertable. Se retiró: la alcanzabilidad del alma la gobierna
 # `ttl_state` (presencia), no la edad. Detalle en `resolve_live_leg`.
@@ -139,41 +138,6 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 
 # ── Transportes (SEAM ÚNICO PARA EL REPUNTE A NEON-LINK) ─────────────────────
 
-# Hilos de entrega en vuelo. Un llamante EFÍMERO (la CLI, un job de un solo paso
-# que termina nada más avisar) se llevaría el nudge por delante al salir: los
-# hilos daemon mueren con el proceso y el estado de entrega diría "entregado" en
-# falso. Se guardan aquí para que ese llamante pueda `wait_for_deliveries()`.
-_inflight: set = set()
-_inflight_lock = threading.Lock()
-
-
-def pending_deliveries() -> int:
-	"""Cuántas entregas siguen en vuelo (diagnóstico y espera de llamantes cortos)."""
-	with _inflight_lock:
-		return len(_inflight)
-
-
-def wait_for_deliveries(timeout_s: float = DELIVERY_TIMEOUT_S) -> bool:
-	"""Espera a que las entregas en vuelo terminen. True si quedó limpio.
-
-	No la llama el worker (que vive y no debe bloquearse); la llama quien sí es
-	efímero — hoy, `red-pill session deliver`. Con `timeout_s` se acota: si el
-	receptor no contesta, se sale y se registra el aviso pendiente, que es lo que
-	pasaba de todos modos con el hilo daemon, pero ahora sin mentirle al que mira.
-	"""
-	deadline = time.monotonic() + max(0.0, float(timeout_s))
-	while True:
-		with _inflight_lock:
-			threads = list(_inflight)
-		if not threads:
-			return True
-		budget = deadline - time.monotonic()
-		if budget <= 0:
-			logger.warning(f"[soul-notify] {len(threads)} entrega(s) siguen en vuelo; se abandona la espera")
-			return False
-		threads[0].join(min(budget, 5.0))
-
-
 # Último fallo del transporte, para que el emisor sepa POR QUÉ no salió (antes se
 # perdía: `send` decía "park (transport_refused)" y nadie sabía más).
 _last_error: str = ""
@@ -189,6 +153,20 @@ def last_error() -> str:
 	return _last_error
 
 
+# Rastro de la última entrega que lo tenga (ruta del fichero de salida del CLI).
+_last_trace: str = ""
+
+
+def _set_last_trace(value: str) -> None:
+	global _last_trace
+	_last_trace = str(value or "")
+
+
+def last_trace() -> str:
+	"""Dónde mirar qué pasó con la última entrega (cadena vacía si no deja fichero)."""
+	return _last_trace
+
+
 # Rutas donde vive el binario cuando el PATH no lo trae (systemd, jobs, cron).
 def opencode_binary() -> Optional[str]:
 	"""Ruta del CLI de opencode. Delegado en `core.paths` (CONVENTIONS §7).
@@ -201,17 +179,45 @@ def opencode_binary() -> Optional[str]:
 	return find_harness_binary("opencode") or None
 
 
+def _new_trace(session_id: str) -> Path:
+	"""Fichero de rastro de UNA entrega por CLI: lo que el emisor puede abrir después."""
+	from red_pill.core.paths import get_log_dir
+
+	directory = get_log_dir() / "soul_notify"
+	directory.mkdir(parents=True, exist_ok=True)
+	safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:40]
+	return directory / f"{time.strftime('%Y%m%d-%H%M%S')}_{safe}.log"
+
+
+def _watch_cli(proc: "subprocess.Popen", session_id: str, trace: Path) -> None:
+	"""Recoge el `rc` del hijo para el log y evita el zombi. Nunca lo mata."""
+	try:
+		rc = proc.wait()
+	except Exception as e:
+		logger.warning(f"[soul-notify] no se pudo esperar la entrega a {session_id[:16]}: {e}")
+		return
+	if rc != 0:
+		logger.warning(f"[soul-notify] la entrega a {session_id[:16]} acabó con rc={rc}; rastro en {trace}")
+
+
 def _deliver_cli(session_id: str, text: str) -> bool:
 	"""Transporte MVP: inyecta un turno con el CLI del arnés.
 
-	`opencode run --session` es la ruta que **inyecta** (D-11). Se lanza en un
-	hilo daemon para no bloquear al worker: la entrega implica un turno del
-	receptor y puede tardar. Quien no pueda permitirse ese hilo vivo hasta el fin
-	(proceso efímero) usa `wait_for_deliveries` antes de salir.
+	`opencode run --session` es la ruta que **inyecta** (D-11). El turno que abre
+	es del RECEPTOR, así que la entrega no puede depender de la vida de quien la
+	lanza (incidente 2026-10-30: con el MCP directo de Claude, el llamante era el
+	proceso del MCP; el hijo y su hilo murieron con él a mitad del turno):
 
-	Devuelve True cuando el proceso de entrega **arrancó**, no cuando el receptor
-	lo leyó: el `rc` se registra pero ya no vuelve al llamante. Esa es la
-	limitación honesta del seam; la confirmación real es terreno del canal `soul`.
+	- El hijo arranca en su **propia sesión de procesos** (`start_new_session`) y
+		**sin timeout**: sobrevive al llamante y nadie corta el turno a medias.
+	- Su salida va a un **fichero de rastro** (`last_trace()`): el log del
+		llamante puede morir con él, el rastro no.
+	- Un hilo daemon solo espera al hijo para anotar el `rc` y no dejar un zombi.
+
+	Devuelve True cuando el hijo **arrancó**, no cuando el receptor lo leyó. Y el
+	`rc` no prueba nada: `run --session <id desconocido>` no falla, abre una
+	sesión nueva y hace un turno en un cuerpo que nadie mira. Por eso delivery
+	lo cierra como `handed_off`, no como `delivered`.
 	"""
 	exe = opencode_binary()
 	if exe is None:
@@ -222,30 +228,25 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 		_set_last_error("opencode_no_encontrado")
 		logger.error("[soul-notify] binario `opencode` no encontrado (¿systemd sin PATH?); aviso NO entregado")
 		return False
-
-	def _run() -> None:
-		try:
-			res = subprocess.run(
+	try:
+		trace = _new_trace(session_id)
+		with open(trace, "ab") as out:
+			out.write(f"# soul-notify cli → opencode:{session_id} · {time.strftime('%Y-%m-%dT%H:%M:%S%z')}\n".encode("utf-8"))
+			out.flush()
+			proc = subprocess.Popen(
 				[exe, "run", "--session", session_id, text],
-				capture_output=True,
-				text=True,
-				timeout=DELIVERY_TIMEOUT_S,
+				stdin=subprocess.DEVNULL,
+				stdout=out,
+				stderr=subprocess.STDOUT,
+				start_new_session=True,
 			)
-			if res.returncode != 0:
-				logger.warning(f"[soul-notify] entrega falló (rc={res.returncode}): {res.stderr[:200]}")
-		except Exception as e:
-			logger.warning(f"[soul-notify] entrega falló: {e}")
-		finally:
-			with _inflight_lock:
-				_inflight.discard(threading.current_thread())
-
-	def _traced() -> None:
-		with _inflight_lock:
-			_inflight.add(threading.current_thread())
-		_run()
-
+	except OSError as e:
+		_set_last_error("opencode_no_arranca")
+		logger.error(f"[soul-notify] no se pudo lanzar la entrega a {session_id[:16]}: {e}")
+		return False
 	_set_last_error("")
-	threading.Thread(target=_traced, name=f"soul-notify-{session_id[:12]}", daemon=True).start()
+	_set_last_trace(str(trace))
+	threading.Thread(target=_watch_cli, args=(proc, session_id, trace), name=f"soul-notify-{session_id[:12]}", daemon=True).start()
 	return True
 
 
@@ -449,6 +450,7 @@ def notify_soul(
 	if fn is None:
 		return False
 	try:
+		_set_last_trace("")
 		return bool(fn(session_id, text))
 	except Exception as e:
 		logger.warning(f"[soul-notify] transporte {transport} falló: {e}")

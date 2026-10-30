@@ -90,8 +90,8 @@ class TestEntregaCorrecta:
 		assert len(push) == 1, "el nudge no llegó al transporte"
 		assert push[0][0] == "ses_a"
 		assert "etapa c2 hecha" in push[0][1]
-		assert report["delivered"][0]["event_id"] == ev["event_id"]
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_DELIVERED
+		assert report["handed_off"][0]["event_id"] == ev["event_id"]
+		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_HANDED_OFF
 
 	def test_el_nudge_es_dato_no_orden(self, reg, db, push):
 		"""D-09: avisar no es mandar. El texto no puede pedir nada al receptor."""
@@ -137,7 +137,7 @@ class TestEntregaCorrecta:
 		assert por_cli == []
 		assert por_socket == ["uuid-c1"]
 		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["reason"] == "handed_to_transport:claude_socket"
-		assert report["delivered"]
+		assert report["handed_off"]
 
 	def test_varios_eventos_en_una_pasada_respetran_el_orden(self, reg, db, push):
 		_event(reg, summary="primero")
@@ -167,7 +167,7 @@ class TestDegradacionPull:
 		for provider in ("pi", "telegram"):
 			report = delivery.deliver_events("alma-1", originator=f"{provider}:ses_x", db_path=db)
 			assert push == []
-			assert report["delivered"] == []
+			assert report["handed_off"] == []
 			assert report["deferred"][0]["reason"] == f"no_injection_point:{provider}"
 		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1, "sigue pendiente por si migra a opencode"
 
@@ -177,7 +177,7 @@ class TestDegradacionPull:
 		assert delivery.reconcile_pulled("alma-1", until_seq=ev["event_seq"], db_path=db) == 1
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_PULLED
 
 	def test_reconcile_no_cierra_lo_que_el_cursor_no_pasa(self, reg, db):
@@ -199,7 +199,7 @@ class TestDegradacionPull:
 		)
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []
 
 	def test_leg_mal_formado_no_empuja(self, reg, db, push):
@@ -215,7 +215,7 @@ class TestNoDuplicado:
 		delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		segunda = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert len(push) == 1, "el mismo evento se empujó dos veces"
-		assert segunda["delivered"] == []
+		assert segunda["handed_off"] == []
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []
 
 	def test_otro_entregador_no_lo_roba(self, reg, db, push):
@@ -233,7 +233,7 @@ class TestNoDuplicado:
 		delivery.claim_delivery(event_id=ev["event_id"], continuity_id="alma-1", holder="muerto", db_path=db, now=t0)
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db, now=t0 + delivery.CLAIM_TTL_S + 1)
 		assert len(push) == 1
-		assert report["delivered"][0]["event_id"] == ev["event_id"]
+		assert report["handed_off"][0]["event_id"] == ev["event_id"]
 
 	def test_el_eco_al_propio_autor_no_se_empuja(self, reg, db, push):
 		"""El cuerpo que publica ya sabe lo que publicó; devolvérselo es un bucle."""
@@ -259,7 +259,7 @@ class TestNoDuplicado:
 				delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 			cuarta = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert len(attempts) == delivery.MAX_PUSH_ATTEMPTS
-		assert cuarta["given_up"] == [] and cuarta["delivered"] == []
+		assert cuarta["given_up"] == [] and cuarta["handed_off"] == []
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []
 		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)
 		assert row["state"] == delivery.STATE_GIVEN_UP
@@ -300,7 +300,7 @@ class TestPoliticaDeEntrada:
 		assert wake_policy.get_inbound("alma-1", originator="opencode:ses_a", db_path=db) == wake_policy.INBOUND_ACCEPT
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert len(push) == 1
-		assert report["delivered"][0]["event_id"] == ev["event_id"]
+		assert report["handed_off"][0]["event_id"] == ev["event_id"]
 
 
 class TestFallos:
@@ -328,7 +328,7 @@ class TestFallos:
 		assert report["deferred"] == [{"event_id": "*", "reason": "kill_switch"}]
 
 	def test_sin_continuity_no_se_busca_nada(self, db):
-		assert delivery.deliver_events("", db_path=db)["delivered"] == []
+		assert delivery.deliver_events("", db_path=db)["handed_off"] == []
 		assert delivery.pending_for_soul("", db_path=db) == []
 
 	def test_bd_inaccesible_es_non_fatal(self, tmp_path, monkeypatch):
@@ -339,10 +339,10 @@ class TestFallos:
 		bad = str(blocker / "session.db")
 		assert delivery.pending_for_soul("alma-1", db_path=bad) == []
 		assert delivery.claim_delivery(event_id="e", continuity_id="a", holder="h", db_path=bad) is False
-		assert delivery.set_delivery_state(event_id="e", continuity_id="a", state=delivery.STATE_DELIVERED, db_path=bad) is False
+		assert delivery.set_delivery_state(event_id="e", continuity_id="a", state=delivery.STATE_HANDED_OFF, db_path=bad) is False
 		assert delivery.reconcile_pulled("alma-1", until_seq=5, db_path=bad) == 0
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=bad)
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 
 	def test_estado_desconocido_no_se_escribe(self, reg, db):
 		assert delivery.set_delivery_state(event_id="x", continuity_id="a", state="inventado", db_path=db) is False
@@ -384,7 +384,7 @@ class TestEsquemaYDiagnostico:
 		_event(reg, summary="uno")
 		_event(reg, summary="dos")
 		delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert delivery.delivery_summary("alma-1", db_path=db) == {delivery.STATE_DELIVERED: 2}
+		assert delivery.delivery_summary("alma-1", db_path=db) == {delivery.STATE_HANDED_OFF: 2}
 
 	def test_tabla_de_honestidad_declarada_y_veraz(self):
 		"""El docstring debe decir qué arneses NO tienen inyección, no solo cuáles sí.
@@ -433,8 +433,8 @@ class TestWiringEnElHandshake:
 
 
 class TestLlamanteEfimero:
-	"""La CLI es un proceso corto: si sale antes de que arranque el hijo, el nudge
-	se va con él y el estado dice "entregado" en falso. Se drena antes de salir."""
+	"""La CLI es un proceso corto: la entrega no puede depender de que siga viva
+	(antes el hilo daemon moría con ella y el estado decía "entregado")."""
 
 	def _args(self, **kw):
 		import argparse
@@ -451,7 +451,9 @@ class TestLlamanteEfimero:
 		base.update(kw)
 		return argparse.Namespace(**base)
 
-	def test_la_cli_espera_a_la_entrega(self, reg, monkeypatch, capsys):
+	def test_la_entrega_no_hereda_la_vida_de_la_cli(self, reg, monkeypatch, capsys):
+		"""El hijo `opencode run` arranca en su propia sesión y sin timeout: la CLI
+		sale enseguida y el turno del receptor sigue vivo. Queda rastro legible."""
 		from pathlib import Path
 
 		from red_pill.cli_services import handle_session
@@ -462,21 +464,28 @@ class TestLlamanteEfimero:
 		ev = _event(reg)
 		launched = []
 
-		def fake_run(cmd, **_kw):
-			launched.append(cmd)
-			time.sleep(0.2)
-			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+		class FakeProc:
+			def __init__(self, cmd, **kw):
+				launched.append((cmd, kw))
+
+			def wait(self):
+				return 0
 
 		with patch("red_pill.core.paths.get_session_db", return_value=Path(reg.db_path)), patch(
-			"red_pill.core.soul_notify.shutil.which", return_value="/usr/bin/true"
-		), patch("red_pill.core.soul_notify.subprocess.run", side_effect=fake_run):
+			"red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"
+		), patch("red_pill.core.soul_notify.subprocess.Popen", FakeProc):
 			handle_session(self._args())
-			assert soul_notify.pending_deliveries() == 0, "la CLI salió con el nudge aún en el hilo"
 		out = capsys.readouterr().out
-		assert launched and launched[0][:3] == ["/usr/bin/true", "run", "--session"]
+		cmd, kw = launched[0]
+		assert cmd[:3] == ["/usr/bin/true", "run", "--session"]
+		assert kw.get("start_new_session") is True, "el hijo debe sobrevivir al llamante"
+		assert "timeout" not in kw, "nadie corta el turno del receptor"
 		assert ev["event_id"][:8] not in out  # el resumen no vuelca ids largos
-		assert "entregados=1" in out
-		assert "transporte=drenado" in out
+		assert "al_transporte=1" in out
+		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=reg.db_path)
+		assert row["state"] == delivery.STATE_HANDED_OFF
+		trace = row["reason"].split("rastro=", 1)[1]
+		assert Path(trace).read_text(encoding="utf-8").startswith("# soul-notify cli → opencode:ses_a")
 
 	def test_la_cli_sin_operador_no_empuja(self, reg, monkeypatch, capsys):
 		from pathlib import Path
@@ -535,7 +544,7 @@ class TestMatrizEnLaEntrega:
 		reg.upsert_session(originator="dag:otra", continuity_id="job-2", mission_id="mission:otra", role="orchestrator")
 		_event(reg, originator="dag:otra")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert [d["reason"] for d in report["deferred"]] == ["no_rule"]
 		# Nada se marca: el evento sigue pendiente y el pull del siguiente turno lo ve.
 		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1
@@ -545,13 +554,13 @@ class TestMatrizEnLaEntrega:
 		reg.upsert_session(originator="dag:job-9", continuity_id="job-9", mission_id="repo:next", role="orchestrator")
 		_event(reg, originator="dag:job-9")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert len(report["delivered"]) == 1
+		assert len(report["handed_off"]) == 1
 		assert len(push) == 1
 
 	def test_emisor_sin_registro_espera_al_pull(self, reg, db, push):
 		_event(reg, originator="dag:fantasma")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert report["deferred"][0]["reason"] == "no_rule"
 		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1
 
@@ -559,14 +568,14 @@ class TestMatrizEnLaEntrega:
 		self._config(monkeypatch, "orchestrator:inventada")
 		_event(reg)
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert report["deferred"][0]["reason"].startswith("rules_invalid")
 
 	def test_any_del_operador_abre_el_circulo_sin_tocar_codigo(self, reg, db, push, monkeypatch):
 		self._config(monkeypatch, "*:any")
 		_event(reg, originator="dag:desconocido")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert len(report["delivered"]) == 1
+		assert len(report["handed_off"]) == 1
 
 	def test_el_refuse_del_destinatario_gana_a_la_matriz(self, reg, db, push, monkeypatch):
 		from red_pill.session import wake_policy
@@ -575,6 +584,6 @@ class TestMatrizEnLaEntrega:
 		wake_policy.set_inbound("alma-1", state=wake_policy.INBOUND_REFUSE, originator="opencode:ses_a", db_path=db)
 		_event(reg, originator="dag:job-9")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert report["delivered"] == []
+		assert report["handed_off"] == []
 		assert [s["reason"] for s in report["skipped"]] == [wake_policy.REASON_INBOUND_REFUSE]
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []

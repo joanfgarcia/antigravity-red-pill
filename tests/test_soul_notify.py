@@ -203,7 +203,7 @@ class TestSafetyNet:
 		spawned = []
 		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
 			"red_pill.core.session_liveness.list_sessions", return_value=[sig]
-		), patch("red_pill.core.soul_notify.subprocess.run", side_effect=lambda *a, **k: spawned.append(a)):
+		), patch("red_pill.core.soul_notify.subprocess.Popen", side_effect=lambda *a, **k: spawned.append(a)):
 			# El fixture autouse ya puso REDPILL_SOUL_NOTIFY_DISABLE=1.
 			assert soul_notify.notify_soul("alma-1", "x") is False
 		assert spawned == [], "la suite no debe lanzar entregas reales"
@@ -293,49 +293,73 @@ class TestIdleSeDespierta:
 			assert soul_notify.resolve_live_leg("alma-2") == "opencode:ses_activo"
 
 
-class TestEfimeroDrena:
-	"""Un llamante efímero (la CLI) se llevaría el hilo daemon por delante al salir.
+class TestEntregaDesacoplada:
+	"""El turno que abre `opencode run` es del receptor: la entrega no hereda la
+	vida del llamante ni se corta por tiempo (incidente 2026-10-30: con el MCP
+	directo de Claude, el hijo murió a mitad del turno y el estado ya decía
+	«entregado»)."""
 
-	El seam reporta `True` al lanzar; si el proceso muere antes de que el hijo
-	arranque, el aviso se perdió y el estado de entrega mintió. `wait_for_deliveries`
-	existe para esos llamantes, con presupuesto, para que nadie cuelgue.
-	"""
+	def _deliver(self, popen):
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
+			soul_notify.subprocess, "Popen", popen
+		):
+			return soul_notify._deliver_cli("ses_a", "hola")
 
-	def test_el_hilo_se_cuenta_mientras_vive(self):
-		started = threading.Event()
+	def test_el_hijo_va_en_su_propia_sesion_y_sin_timeout(self):
+		launched = []
+
+		class FakeProc:
+			def __init__(self, cmd, **kw):
+				launched.append((cmd, kw))
+
+			def wait(self):
+				return 0
+
+		assert self._deliver(FakeProc) is True
+		cmd, kw = launched[0]
+		assert cmd == ["/usr/bin/true", "run", "--session", "ses_a", "hola"]
+		assert kw["start_new_session"] is True
+		assert "timeout" not in kw
+		assert kw["stdin"] is soul_notify.subprocess.DEVNULL
+
+	def test_deja_rastro_legible(self):
+		class FakeProc:
+			def __init__(self, cmd, **kw):
+				kw["stdout"].write(b"cli starting\n")
+
+			def wait(self):
+				return 0
+
+		assert self._deliver(FakeProc) is True
+		trace = Path(soul_notify.last_trace())
+		text = trace.read_text(encoding="utf-8")
+		assert text.startswith("# soul-notify cli → opencode:ses_a")
+		assert "cli starting" in text
+
+	def test_no_espera_al_turno_del_receptor(self):
 		release = threading.Event()
 
-		def fake_run(cmd, **_kw):
-			started.set()
-			release.wait(5.0)
-			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+		class SlowProc:
+			def __init__(self, cmd, **kw):
+				pass
 
-		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
-			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
-		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
-			assert soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a") is True
-			assert started.wait(2.0)
-			assert soul_notify.pending_deliveries() == 1, "la entrega no se registra como en vuelo"
+			def wait(self):
+				release.wait(5.0)
+				return 0
+
+		start = time.monotonic()
+		try:
+			assert self._deliver(SlowProc) is True
+			assert time.monotonic() - start < 1.0, "el llamante no debe esperar al turno"
+		finally:
 			release.set()
-			assert soul_notify.wait_for_deliveries(5.0) is True
-			assert soul_notify.pending_deliveries() == 0
 
-	def test_la_espera_se_acota_y_no_cuelga_al_llamante(self):
-		release = threading.Event()
+	def test_si_no_arranca_lo_dice(self):
+		def boom(*_a, **_kw):
+			raise OSError("exec format error")
 
-		def fake_run(cmd, **_kw):
-			release.wait(5.0)
-			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
-
-		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
-			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
-		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
-			soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a")
-			start = time.monotonic()
-			assert soul_notify.wait_for_deliveries(0.3) is False
-			assert time.monotonic() - start < 2.0
-			release.set()
-			assert soul_notify.wait_for_deliveries(5.0) is True
+		assert self._deliver(boom) is False
+		assert soul_notify.last_error() == "opencode_no_arranca"
 
 
 class TestWarningNoDespierta:
