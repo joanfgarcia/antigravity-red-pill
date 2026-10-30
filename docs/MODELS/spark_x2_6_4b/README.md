@@ -96,3 +96,27 @@ perfecta, pero en nuestro runtime el encadenado no ocurre.
 
 **Pendiente:** `multi_step` con más repeticiones (un intento no basta), calidad de
 síntesis a ventana llena, y `synthesis_es` con thinking (falla 1 de 3 por cobertura).
+
+## Por qué NO es el destilador de esta noche (2026-10-30)
+
+Medido en los tres probes de contrato, que es la forma de la tarea de destilado:
+
+| Modelo | tok generados | seg | tok/s |
+| --- | ---: | ---: | ---: |
+| `granite_8b` (titular) | 258 | 4,6 | 55,6 |
+| `bonsai_2_27b` (off) | 265 | 6,2 | 42,5 |
+| **`spark` (off)** | 295 | **3,7** | **79,0** |
+| **`spark` (thinking 4096)** | **4.276** | **50,4** | 84,8 |
+
+**El thinking no lo hace lento: lo hace verboso.** Es el más rápido en tok/s de los
+cuatro y aun así tarda 11× más, porque escribe **14× más tokens** para la misma
+respuesta. Con el ciclo nocturno a ~5 s por fragmento, eso convierte una noche en once.
+
+Sin thinking es **más rápido que granite** (3,7 s vs 4,6 s), pero falla un desliz de
+deixis (2/3).
+
+### Palanca pendiente
+
+`--reasoning-budget 4096` fue el techo: escribió 4.276. Con budgets de **512 / 1.024 /
+2.048** el coste bajaría a 12-15 s por fragmento. **Falta medir si mantiene la deixis
+3/3 a ese precio** — es la prueba que decide si Spark puede destilar de noche.
