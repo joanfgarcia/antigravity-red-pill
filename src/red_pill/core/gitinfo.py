@@ -69,7 +69,7 @@ def git_snapshot(workdir: Optional[str] = None, *, use_cache: bool = True) -> Di
 	`repo` es el nombre del **repositorio** (el del `--git-common-dir`, o sea el
 	principal): en un worktree enlazado devuelve el mismo que en el árbol principal.
 	Es lo que identifica al proyecto cuando varios worktrees trabajan en paralelo
-	(AD-099: la misión es el repo; la rama es un atributo). Todos `None` si
+	(AD-101: la misión es el repo; la rama es un atributo). Todos `None` si
 	`workdir` no es un directorio o no vive en un repo git.
 	"""
 	if not workdir:

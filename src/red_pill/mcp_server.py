@@ -1995,7 +1995,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				if inferred.get("worktree"):
 					mirror = inferred
 	# La misión sale del manifiesto (env de confianza) → **repo:<repositorio>** →
-	# adhoc (AD-099: la rama y el worktree son atributos, no la misión; si no,
+	# adhoc (AD-101: la rama y el worktree son atributos, no la misión; si no,
 	# cada worktree abría una misión y el coro se fragmentaba). El argumento del
 	# modelo NO la declara (evita spoofing y params innecesarios).
 	# La raíz del proyecto que declara el arnés (`project_dir`, Claude:
