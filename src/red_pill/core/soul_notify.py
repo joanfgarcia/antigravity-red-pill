@@ -49,11 +49,9 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -186,31 +184,15 @@ def last_error() -> str:
 
 
 # Rutas donde vive el binario cuando el PATH no lo trae (systemd, jobs, cron).
-_OPENCODE_CANDIDATES = (
-	"~/.opencode/bin/opencode",
-	"~/.local/bin/opencode",
-	"/usr/local/bin/opencode",
-	"/opt/opencode/bin/opencode",
-	"/snap/bin/opencode",
-)
-
-
 def opencode_binary() -> Optional[str]:
-	"""Ruta del CLI de opencode, sin depender del PATH del proceso.
+	"""Ruta del CLI de opencode. Delegado en `core.paths` (CONVENTIONS §7).
 
-	Bajo systemd el PATH es `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:…` y
-	el binario vive en `~/.opencode/bin/opencode`: `shutil.which` lo perdía y el
-	aviso "no entregado" parecía culpa del mensaje. Primero PATH (lo normal
-	interactivo), después las rutas conocidas.
+	Bajo systemd el PATH es mínimo y el binario vive en el HOME del usuario: aquí
+	solo se envuelve el resolutor canónico y se normaliza el "no está".
 	"""
-	found = shutil.which("opencode")
-	if found:
-		return found
-	for candidate in _OPENCODE_CANDIDATES:
-		path = Path(os.path.expanduser(candidate))
-		if path.is_file() and os.access(path, os.X_OK):
-			return str(path)
-	return None
+	from red_pill.core.paths import find_harness_binary
+
+	return find_harness_binary("opencode") or None
 
 
 def _deliver_cli(session_id: str, text: str) -> bool:

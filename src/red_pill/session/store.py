@@ -1070,6 +1070,24 @@ class SessionRegistry:
 		return int(row["n"]) if row else 0
 
 	# ── D23-SCORE: objeciones y decisiones dinámicas (D-obj) ────────────────
+	def find_events_by_prefix(self, prefix: str, *, limit: int = 5) -> List[dict]:
+		"""Eventos cuyo `event_id` empieza por `prefix` (para responder citando el id).
+
+		El tablón renderiza un id corto legible; exigir los 32 hex para contestar es
+		la diferencia entre un protocolo y un acertijo. La resolución exacta sigue
+		mandando: quien llama decide si un prefijo es suficiente (y rechaza si es
+		ambiguo). Mínimo 4 caracteres, para no resolver "a" contra todo.
+		"""
+		key = str(prefix or "").strip().lower()
+		if len(key) < 4:
+			return []
+		with self._connect() as conn:
+			rows = conn.execute(
+				"SELECT * FROM mission_events WHERE event_id LIKE ? ORDER BY event_seq DESC LIMIT ?",
+				(key + "%", max(1, min(int(limit), 20))),
+			).fetchall()
+		return [dict(r) for r in rows]
+
 	def get_event(self, event_id: str) -> Optional[dict]:
 		"""Evento por `event_id` (para validar el objetivo de una objeción)."""
 		with self._connect() as conn:

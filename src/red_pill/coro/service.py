@@ -79,6 +79,47 @@ def _require_soul(session: Dict[str, Any]) -> str:
 	return soul
 
 
+def _resolve_soul(registry: SessionRegistry, value: str) -> str:
+	"""`continuity_id` completo, o prefijo único (mínimo 8) → id completo.
+
+	El tablón y `board` renderizan formas cortas: exigir 32 hex para responder es
+	la diferencia entre un protocolo y un acertijo (K2, 2026-10-30). Un prefijo
+	ambiguo se rechaza: adivinar a quién se escribe es peor que no escribir.
+	"""
+	raw = str(value or "").strip()
+	if not raw:
+		raise CoroError("falta el alma destinataria (`to`).")
+	if registry.get_by_continuity(raw):
+		return raw
+	if len(raw) < 8:
+		raise CoroError(f"referencia de alma demasiado corta ({len(raw)}): usa al menos 8 caracteres o el id completo.")
+	matches = sorted({str(r.get("continuity_id")) for r in registry.list_sessions(limit=1000) if str(r.get("continuity_id") or "").startswith(raw)})
+	if len(matches) == 1:
+		return matches[0]
+	if len(matches) > 1:
+		raise CoroError(f"prefijo ambiguo ({raw}): casa con {len(matches)} almas; usa más caracteres.")
+	raise CoroError(
+		f"alma desconocida: no hay ningún cuerpo registrado que empiece por {raw!r} "
+		"(fail-closed: no se adivina a quién iba). Mira `board` para ver los ids completos."
+	)
+
+
+def _resolve_event(registry: SessionRegistry, value: str) -> Optional[dict]:
+	"""Mensaje por `event_id` completo o por prefijo único (el que pinta el tablón)."""
+	raw = str(value or "").strip()
+	if not raw:
+		return None
+	exact = registry.get_event(raw)
+	if exact:
+		return exact
+	found = registry.find_events_by_prefix(raw)
+	if len(found) == 1:
+		return found[0]
+	if len(found) > 1:
+		raise CoroError(f"`reply_to` ambiguo ({raw}): casa con {len(found)} eventos; usa más caracteres.")
+	return None
+
+
 def _new_thread() -> str:
 	return "E-" + uuid.uuid4().hex[:6]
 
@@ -162,24 +203,16 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	reply_to = str(payload.get("reply_to") or "").strip()
 	parent: Optional[dict] = None
 	if reply_to:
-		parent = registry.get_event(reply_to)
+		parent = _resolve_event(registry, reply_to)
 		if not parent or parent.get("type") != "message":
 			raise CoroError(f"`reply_to` no apunta a un mensaje: {reply_to!r}.")
 	if verb == protocol.VERB_REPLY and not parent:
 		raise CoroError("`reply` requiere `reply_to` (el mensaje que contestas).")
 	if parent and parent.get("to_continuity") and parent.get("to_continuity") != me:
 		raise CoroError("ese mensaje no era para ti: no puedes contestarlo.")
-	target = str(payload.get("to") or (parent or {}).get("continuity_id") or "").strip()
-	if not target:
-		raise CoroError("`to` requerido (continuity_id del alma destinataria).")
+	target = _resolve_soul(registry, str(payload.get("to") or (parent or {}).get("continuity_id") or ""))
 	if target == me:
 		raise CoroError("te estarías escribiendo a ti misma; usa `post` para tu tablón.")
-	known = registry.get_by_continuity(target)
-	if not known:
-		raise CoroError(
-			"alma desconocida: no hay ningún cuerpo registrado con ese continuity_id "
-			"(fail-closed: no se adivina a quién iba). Mira `board` para ver las almas vivas."
-		)
 
 	# Salto: la réplica NO consume (D-02); solo salta el mensaje iniciado.
 	ceiling = protocol.hop_max()
@@ -189,11 +222,12 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	expects = payload.get("expects_reply")
 	if expects is None:
 		expects = verb == protocol.VERB_ASK
+	thread_hint = payload.get("thread_id") or payload.get("thread")
 	if parent:
-		thread = str(parent.get("thread_id") or payload.get("thread_id") or _new_thread())
+		thread = str(parent.get("thread_id") or thread_hint or _new_thread())
 		hop = int(parent.get("hop") or 0)
 	else:
-		thread = str(payload.get("thread_id") or _new_thread())
+		thread = str(thread_hint or _new_thread())
 		hop = int(payload.get("hop") or 0)
 		if hop > ceiling:
 			raise CoroError(f"techo de saltos alcanzado ({hop} > {ceiling}): usa `post` o cierra el hilo.")
@@ -279,6 +313,9 @@ async def inbox(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		)
 		lines.append(f"[{ev.get('event_seq')}] {header}")
 		lines.append(f"  estado={state} · {sanitize_inline(ev.get('summary'), 800)}")
+		# Sin el id completo no se puede contestar ni acusar: el `seq` es un cursor,
+		# no una dirección (K2 lo intentó con el seq y con el id truncado, 2026-10-30).
+		lines.append(f"  msg={ev.get('event_id')} · contesta: send verb=reply reply_to={ev.get('event_id')}")
 		if ev.get("ref"):
 			lines.append(f"  re: {sanitize_inline(ev.get('ref'), 120)}")
 	return "\n".join(lines)
@@ -301,9 +338,11 @@ async def ack(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	event_id = str(payload.get("event_id") or "").strip()
 	if not event_id:
 		raise CoroError("`event_id` requerido.")
-	event = SessionRegistry().get_event(event_id)
+	registry = SessionRegistry()
+	event = _resolve_event(registry, event_id)
 	if not event or event.get("to_continuity") != me:
 		raise CoroError("ese mensaje no está en tu inbox.")
+	event_id = str(event["event_id"])
 	from red_pill.session import delivery
 
 	ok = delivery.mark_read(event_id, me)
@@ -339,7 +378,8 @@ async def fetch(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		open_decisions = int(event.get("open_decisions") or 0)
 		if open_decisions > 0:
 			tag += f" [disputed:{open_decisions}]"
-		lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}")
+		ident = f" · msg={event['event_id']}" if event.get("type") == "message" else ""
+		lines.append(f"[{event.get('event_seq', 0)}] {event['type']}{tag}: {event['summary']}{ref}{seal}{ident}")
 	return "\n".join(lines)
 
 
@@ -407,7 +447,9 @@ def _board_sessions(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		last = int(row.get("last_seen_global_turn") or 0)
 		parts = [
 			f"[{sanitize_inline(row.get('provider'), 40)}] {sanitize_inline(row.get('session_id'), 60)}",
-			f"alma={sanitize_inline(row.get('continuity_id'), 12)}",
+			# Id COMPLETO: el tablón es el directorio al que se escribe. Truncarlo
+			# deja al destinatario sin forma de responder (incidente 2026-10-30).
+			f"alma={sanitize_inline(row.get('continuity_id'), 40)}",
 			f"misión={sanitize_inline(row.get('mission_id'), 80)}",
 		]
 		if row.get("campaign_id"):

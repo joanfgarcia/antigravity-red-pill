@@ -304,7 +304,7 @@ class TestEfimeroDrena:
 			release.wait(5.0)
 			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
 
-		with patch.object(soul_notify, "shutil", types.SimpleNamespace(which=lambda _n: "/usr/bin/true")), patch.object(
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
 			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
 		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
 			assert soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a") is True
@@ -321,7 +321,7 @@ class TestEfimeroDrena:
 			release.wait(5.0)
 			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
 
-		with patch.object(soul_notify, "shutil", types.SimpleNamespace(which=lambda _n: "/usr/bin/true")), patch.object(
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
 			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
 		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
 			soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a")

@@ -27,9 +27,11 @@ from red_pill.core import soul_notify
 from red_pill.session import delivery
 from red_pill.session.store import SessionRegistry
 
-A = "01a00000-0000-7000-8000-00000000000a"
-B = "01a00000-0000-7000-8000-00000000000b"
-C = "01a00000-0000-7000-8000-00000000000c"
+# UUIDv7 realistas: se distinguen pronto, como los de verdad (los sintéticos que
+# compartían 20 caracteres hacían imposible probar la resolución por prefijo).
+A = "01a187ba-a9f6-718d-b9e1-d531b8d7a947"
+B = "01a186e6-f48d-7491-a1d0-7ec130fa1a68"
+C = "01a186ac-e466-7449-b463-eace57555982"
 
 
 @pytest.fixture
@@ -320,3 +322,59 @@ class TestMigracionV8:
 		assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == 8
 		assert reg.fetch_inbox(A) == [], "ningún evento viejo se convierte en mensaje"
 		assert [e["summary"] for e in reg.fetch_events("repo:next")] == ["nota de antes de v8"]
+
+
+class TestDireccionesQueSePuedenCopiar:
+	"""Un protocolo que no deja contestar es un acertijo (incidente 2026-10-30).
+
+	Medido en campo: K2 recibió un mensaje y no pudo responder — el `board` le daba
+	el alma truncada a 11 caracteres y el `inbox` le daba el `seq`, no el id.
+	"""
+
+	async def test_se_puede_escribir_con_un_prefijo_unico(self, reg, push):
+		from red_pill.coro import service
+
+		out = await service.send(_session(A, "opencode:ses_a"), {"to": B[:12], "verb": "park", "body": "hola"})
+		assert "estado=queued" in out
+		assert reg.fetch_inbox(B)[0]["to_continuity"] == B
+
+	async def test_un_prefijo_ambiguo_se_rechaza(self, reg):
+		from red_pill.coro import service
+
+		# Un alma gemela que comparte los 8 primeros caracteres con B.
+		reg.upsert_session(originator="opencode:ses_gemela", continuity_id=B[:8] + "-dead-beef-0000-000000000000", mission_id="repo:next")
+		with pytest.raises(service.CoroError, match="ambiguo"):
+			await service.send(_session(A, "opencode:ses_a"), {"to": B[:8], "verb": "park", "body": "x"})
+
+	async def test_un_prefijo_corto_se_rechaza(self, reg):
+		from red_pill.coro import service
+
+		with pytest.raises(service.CoroError, match="demasiado corta"):
+			await service.send(_session(A, "opencode:ses_a"), {"to": "01a0", "verb": "park", "body": "x"})
+
+	async def test_reply_acepta_el_prefijo_del_evento(self, reg, push):
+		from red_pill.coro import service
+
+		out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "ask", "body": "¿sigues?"})
+		event_id = out.split("msg=")[1].split()[0].strip()
+		reply = await service.send(_session(B, "opencode:ses_b"), {"verb": "reply", "reply_to": event_id[:12], "body": "sigo"})
+		assert "estado=delivered" in reply, "el prefijo del id resuelve al mensaje"
+
+	async def test_thread_es_alias_de_thread_id(self, reg):
+		from red_pill.coro import service
+
+		out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "park", "body": "x", "thread": "E-777"})
+		assert "hilo E-777" in out
+
+	async def test_el_inbox_da_el_id_y_como_contestar(self, reg):
+		from red_pill.coro import service
+
+		await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "park", "body": "leeme"})
+		visto = await service.inbox(_session(B, "opencode:ses_b"), {})
+		assert "msg=" in visto and "reply_to=" in visto
+
+	async def test_el_board_muestra_el_alma_completa(self, reg):
+		from red_pill.coro import service
+
+		tabla = await service.board(_session(A, "opencode:ses_a"), {"scope": "sesiones"})
+		assert B in tabla, "sin el id completo no hay a quién contestar"

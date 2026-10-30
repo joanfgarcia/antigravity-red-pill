@@ -382,7 +382,9 @@ def build_event_nudge(event: dict) -> str:
 
 	kind = sanitize_inline(event.get("type"), 40)
 	mission = sanitize_inline(event.get("mission_id"), 120)
-	summary = sanitize_inline(event.get("summary"), 400)
+	# El tope del store es 800; recortar el nudge a 400 partía los mensajes por la
+	# mitad sin avisar (K2 lo vio cortado en «reply_to ace…», 2026-10-30).
+	summary = sanitize_inline(event.get("summary"), 800)
 	ref = event.get("ref")
 	verb = str(event.get("verb") or "")
 	if not verb:

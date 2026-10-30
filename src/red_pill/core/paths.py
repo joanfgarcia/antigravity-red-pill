@@ -658,6 +658,30 @@ def get_antigravity_conversations_export_dir() -> Path:
 	return get_antigravity_root() / "conversations_export"
 
 
+def find_harness_binary(name: str) -> str:
+	"""Ruta del binario de un arnés (`opencode`, …), sin depender del PATH.
+
+	Un proceso bajo systemd arranca con `PATH=/usr/local/sbin:/usr/local/bin:…` y
+	los arneses se instalan en el HOME del usuario (`~/.opencode/bin/opencode`):
+	`shutil.which` devolvía None y la entrega moría en silencio (incidente
+	2026-10-30). Resolver aquí es lo que manda CONVENTIONS §7: ninguna otra pieza
+	cablea rutas del HOME.
+	"""
+	found = shutil.which(name)
+	if found:
+		return found
+	home = Path.home()
+	relatives = (Path(".opencode") / "bin" / name, Path(".local") / "bin" / name)
+	for rel in relatives:
+		candidate = home / rel
+		if candidate.is_file() and os.access(candidate, os.X_OK):
+			return str(candidate)
+	for absolute in (Path("/usr/local/bin") / name, Path("/opt") / name / "bin" / name, Path("/snap/bin") / name):
+		if absolute.is_file() and os.access(absolute, os.X_OK):
+			return str(absolute)
+	return ""
+
+
 def get_swarm_config_path() -> Path:
 	"""Resuelve la ruta del archivo de comunidades swarm ($XDG_CONFIG_HOME/red-pill/swarm_communities.json)."""
 	return get_config_dir() / "swarm_communities.json"
