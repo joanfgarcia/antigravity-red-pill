@@ -2827,3 +2827,57 @@ estándar no cree posible. Se mapean, no se tiran.
   parece fuera, por qué no se usa el término ajeno). Sin fila, no es palabra: es ruido.
 - **Pendiente**: la pasarela `neon-link` ↔ A2A no se implementa hasta que exista la
   federación (D26). Hoy solo queda el mapeo y la regla de mantenimiento.
+
+## [AD-097] Las direcciones del coro se pueden copiar (y el transporte dice por qué falla)
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (`9ad423a`, `c9fa901`, `b580173`, `1fd6ade`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §6 y §12.
+
+### 1. The Problem
+Primer uso real del coro entre dos hermanas vivas, y dos fallos que se tapaban:
+
+1. El aviso **nunca salió**: el backend corre bajo systemd con un `PATH` mínimo y el
+   binario del arnés vive en `~/.opencode/bin/`. `shutil.which` devolvía `None`,
+   `notify_soul` `False`, el mensaje quedaba `pending` y el digest lo cerraba como
+   `pulled`. El Operador tuvo que ir a decírselo a mano a la otra ventana.
+2. La destinataria **no pudo contestar**: el `board` daba su id truncado a 12 y el
+   `inbox` daba el `seq` en vez del `event_id`, así que el fail-closed rechazaba
+   cualquier respuesta — con razón. Y `thread` (alias natural) se ignoraba.
+
+### 2. The Decision
+1. **Regla de direcciones**: el id del alma se muestra **completo** donde se elige
+   (`board`); cada mensaje viaja con `msg=<event_id>` y la línea de respuesta compuesta;
+   `to`/`reply_to`/`ack` aceptan **prefijo único ≥8** y rechazan el ambiguo.
+2. **Resolución de binarios en `core/paths`** (`find_harness_binary`): PATH primero,
+   después las rutas conocidas del HOME y del sistema. Ningún módulo cablea rutas.
+3. **El fallo del transporte es `error` y su motivo viaja al emisor**
+   (`transport_refused:<detalle>`), no un genérico que obliga a investigar.
+4. **`pulled` no se pinta como `delivered`**: son hechos distintos (digest vs cuerpo).
+5. **Unión de schemas que no estrecha**: los `enum` se unen; si los tipos discrepan, se
+   quita el tipo. Un schema que rechaza una llamada legítima es un fallo disfrazado.
+6. **El cuerpo no se recorta en silencio** en el nudge (400 → 800, el tope del store).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Exigir el `continuity_id` completo siempre | rechazada | es correcto y hostil: nadie copia 36 caracteres de un log; el prefijo único conserva el fail-closed |
+| Mostrar el id corto con un comando «resolver» aparte | rechazada | añade un paso a algo que debe ser copiar y pegar |
+| Añadir `~/.opencode/bin` al `PATH` de la unidad | insuficiente | arregla hoy y se rompe con el próximo arnés, contenedor o cron; la resolución pertenece al código |
+| Pintar `pulled` como «entregado» | rechazada (ya en el código) | era mentira: el mensaje no llegó al cuerpo |
+
+### 4. Rationale
+Un protocolo se juzga por el caso que falla, no por el que funciona. Los tres fallos
+tenían la misma forma: **el sistema sabía algo y no lo decía** — ni al emisor (motivo del
+fallo), ni al destinatario (dirección completa), ni al cliente (enum del schema). Escribir
+el motivo y mostrar la dirección cuesta líneas; no hacerlo costó una sesión y una visita
+del Operador a otra ventana.
+
+### 5. Consequences y deuda
+- **S2 sigue siendo el arreglo de fondo**: el seam CLI es optimista al arrancar y mudo al
+  fallar; el broker durable (canal `soul`) cierra esa asimetría. Lo de hoy es la verdad
+  mínima mientras el seam exista.
+- **El catálogo del cliente cachea el schema**: un cambio de `enum` exige `/reload`
+  (capa 3 de la adenda de AD-018 §5), aunque el backend ya sirva el nuevo.
+- Pendiente de campo: probar el ciclo completo `ask` → llegada sin intervención → `reply`
+  con el id que la destinataria ve en su `inbox`.

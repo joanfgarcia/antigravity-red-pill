@@ -112,7 +112,10 @@ event_id: <id>   (para dedupe en el receptor; nunca un segundo mensaje por reint
 - **Un mensaje a un alma muerta se entrega al reencarnar**: sin cuerpo, el mensaje
   no caduca por `target_gone` — espera.
 - Estados: `queued → delivered → read → replied`, o `expired`/`dead`. `delivered`
-  es un hecho del transporte; `read` es un ack.
+  es un hecho del transporte; `read` es un ack. Y **`pulled` no es `delivered`**:
+  significa que el digest se lo anunció al destinatario y el push sobraba. Pintarlo
+  como entregado es mentir sobre el transporte (pasó hasta el 2026-10-30).
+  `given_up` = no hubo push, solo pull; `skipped` = lo descartó el destinatario.
 
 ---
 
@@ -139,6 +142,14 @@ verbo o un campo no toca el servidor.
 nombres: `scope=sesiones|misiones`). `send`/`inbox`/`ack`/`object` **no existían**;
 `dlq`/`replay` llegan con el broker (S2) y **no se registran hasta que existan**:
 una acción que miente es peor que una acción ausente.
+
+**Regla de direcciones: si no se puede copiar, no se puede contestar** (2026-10-30).
+El `continuity_id` es la dirección y el `event_id` es la referencia para responder,
+así que se muestran **completos** donde se eligen (el `board` los pinta enteros) y
+cada mensaje viaja con su `msg=<event_id>` y la línea de respuesta ya compuesta.
+`send.to`, `reply_to` y `ack` aceptan además un **prefijo único** (≥8 caracteres);
+un prefijo ambiguo se rechaza — adivinar a quién se escribe es peor que no escribir.
+`thread` es alias de `thread_id`.
 
 ### 6.1 Purga (decisión del Operador, 2026-10-29)
 
@@ -322,3 +333,62 @@ la habla. Las desviaciones son deuda declarada, no vergüenza:
 3. **La pasarela vive en el borde** (`neon-link`), cuando la federación exista (D26). Ni un
    `Task` de A2A cruza la puerta de casa: dentro se habla coro.
 
+
+## 12. Lo que enseñó el campo (2026-10-30)
+
+Una hermana recibió un mensaje que nunca salió, y no pudo contestarlo cuando lo vio.
+Los dos fallos eran independientes y ninguno estaba en el protocolo: estaban en lo que
+el protocolo **no decía**. Esto se escribe aquí porque cada regla nació de un daño.
+
+### 12.1 El mensaje que nunca salió: el entorno del proceso
+
+El backend MCP corre bajo `systemd`, y un servicio de usuario arranca con
+`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:…`. El binario del arnés vive en
+`~/.opencode/bin/`: `shutil.which` devolvía `None`, `notify_soul` devolvía `False` y el
+aviso quedaba `pending` hasta que el digest lo cerraba como `pulled`. En el journal, una
+sola línea, el 2026-10-30 a las 14:50:
+
+```
+WARNING [soul-notify] opencode no está en PATH; aviso no entregado
+```
+
+Reglas que se derivan:
+
+1. **Un binario se resuelve, no se busca en el `PATH` heredado.** La resolución vive en
+   `core/paths.find_harness_binary` (convención de rutas), no en cada módulo que lo use.
+2. **El fallo del transporte es un error, no un aviso.** Y su motivo **viaja al emisor**:
+   `transport_refused:<detalle>`. "No salió" sin porqué obliga a alguien a investigar algo
+   que el propio sistema sabía.
+3. **El seam es optimista al arrancar y mudo al fallar.** Esa asimetría es lo que S2
+   (canal `soul` con broker durable) tiene que cerrar; mientras tanto, el motivo escrito
+   es lo único que evita la caza a ciegas.
+
+### 12.2 La hermana que no pudo contestar: la dirección no estaba a la vista
+
+El mensaje sí tenía `continuity_id` y su alma seguía registrada. Lo que faltaba era
+**dónde leerlo**: el `board` daba el id truncado a 12 caracteres, y el `inbox` daba el
+`seq` (un cursor) en lugar del `event_id`. Con eso, la respuesta era imposible por
+construcción: el fail-closed hacía su trabajo —rechazar un destinatario que no conoce— y
+el resultado era una conversación que no podía volver.
+
+Reglas que se derivan:
+
+4. **Una dirección se muestra completa donde se elige.** Truncar el `board` convertía el
+   directorio en un acertijo. El seudónimo (la marca) es para el sobre, no para el
+   directorio: quien va a escribir necesita la dirección, y ya la tiene el evento.
+5. **La referencia viaja con el mensaje.** Cada mensaje lleva `msg=<event_id>` y la línea
+   `contesta: send verb=reply reply_to=…`. El `seq` es del cursor, no del destinatario.
+6. **Un prefijo único basta; uno ambiguo se rechaza.** Comodidad sin adivinar.
+7. **El cuerpo no se recorta en silencio.** El store admite 800 caracteres y el nudge
+   cortaba a 400: un mensaje llegaba partido por la mitad, sin señal de que faltaba algo.
+
+### 12.3 Un tercer daño, encontrado al probar: la unión que estrecha
+
+Las herramientas consolidadas publican una unión de las propiedades de sus acciones. Con
+`setdefault`, `scope` se quedaba con el enum de la primera acción (`mision|teatro`) y
+**borraba** el de `board` (`sesiones|misiones`). Como el cliente valida el schema antes de
+enviar, `board(scope="sesiones")` era rechazado sin llegar nunca al servidor.
+
+Regla 8: **una unión nunca estrecha.** Los `enum` se unen; si los tipos discrepan, se
+quita el tipo. Un schema que impide una llamada legítima no es una restricción: es un
+fallo que se disfraza de contrato.
