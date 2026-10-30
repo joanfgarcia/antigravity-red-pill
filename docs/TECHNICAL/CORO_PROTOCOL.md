@@ -423,6 +423,20 @@ Y el corolario, que es lo que se rompió el 2026-10-30:
 Cascada de la misión: `REDPILL_MISSION_ID` (env de confianza) → **`repo:<repositorio>`** →
 `repo:<rama>` (sólo para llamantes que no conocen el repo) → `mission:adhoc-<fecha>`.
 
+**De qué directorio sale cada cosa.** El arnés puede declarar dos rutas en su bridge:
+
+- **`project_dir`**: la raíz del proyecto de la sesión (Claude: `CLAUDE_PROJECT_DIR`).
+  No se mueve con los `cd` del agente. Si existe y es un repo, de ella sale el
+  `repositorio`, y por tanto la **misión**.
+- **`workdir`**: el cwd del turno. De él salen la **rama** y el **worktree**, es decir,
+  dónde trabaja ahora.
+
+Sin `project_dir` (opencode hoy), las dos cosas salen del `workdir`. Con solo `workdir`,
+un agente que hacía `cd` al desk o a la carpeta de memoria se llevaba la misión con él
+(`repo:main`, `mission:adhoc`). Con solo la raíz, la rama decía `next` dentro de un
+worktree de `feat/x`, y los claims, que se keyan por rama + worktree, mirarían el sitio
+equivocado.
+
 ### 13.2 Por qué (el daño medido)
 
 Con `repo:<rama>`, cada worktree abría **su propia misión**. Medido ese día: una sesión en

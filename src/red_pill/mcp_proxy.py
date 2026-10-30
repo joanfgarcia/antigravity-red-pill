@@ -60,6 +60,7 @@ def identity_payload(harness: str | None = None) -> dict:
 	provider = (harness or os.getenv("REDPILL_HARNESS") or "opencode").strip() or "opencode"
 	originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip()
 	workdir = str(os.getenv("REDPILL_WORKSPACE") or "").strip()
+	project_dir = ""
 	continuity = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip()
 	mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip()
 	role = str(os.getenv("REDPILL_ROLE") or "task").strip() or "task"
@@ -93,9 +94,11 @@ def identity_payload(harness: str | None = None) -> dict:
 			if session_id:
 				originator = f"{bridge_provider}:{session_id}"
 			workdir = workdir or str(raw.get("workdir") or "")
+			project_dir = str(raw.get("project_dir") or "")
 	return {
 		"originator": originator,
 		"workdir": workdir,
+		"project_dir": project_dir,
 		"harness": provider,
 		"continuity_id": continuity,
 		"mission_id": mission,
