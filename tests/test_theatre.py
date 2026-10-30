@@ -211,3 +211,23 @@ class TestElDespertarEnElTablon:
 		assert "CORO teatro" in acta
 		visto = await service.fetch(_session("01a00000-0000-7000-8000-0000000000aa"), {"scope": "teatro"})
 		assert "5f8ef28" in visto, "otra alma lo ve sin abrir el desk"
+
+	def test_el_schema_no_rechaza_una_accion_legitima(self):
+		"""Un enum que se queda con el primero rompe las demás acciones.
+
+		Pasó de verdad: `scope` es `mision|teatro` en `post`/`fetch` y
+		`sesiones|misiones` en `board`; publicar solo el primero hacía que el cliente
+		rechazara `board(scope="sesiones")` antes de llegar al servidor (2026-10-30).
+		"""
+		from red_pill.coro import register_coro
+		from red_pill.registry import ToolRegistry
+
+		registry = ToolRegistry()
+
+		async def _caller(_args):
+			return {}
+
+		register_coro(registry, caller_session=_caller)
+		tool = [t for t in registry.get_tools() if t.name == "coro_api"][0]
+		scope = tool.inputSchema["properties"]["payload"]["properties"]["scope"]
+		assert {"mision", "teatro", "sesiones", "misiones"} <= set(scope["enum"])
