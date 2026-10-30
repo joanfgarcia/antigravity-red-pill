@@ -66,7 +66,32 @@ prompt de 117.676 tokens (449.540 chars), dato enterrado al 50% de profundidad
 Comparado con el K2-3.7B, que tiene 98K de ventana pero **resume otro documento** a
 partir de ~46K de relleno. Aquí la recuperación aguanta a 117K.
 
-## Herramientas: 4/5
+## Herramientas: el multiturno SÍ funciona (el que fallaba era el arnés)
+
+**Corrección del 2026-10-30.** El `multi_step` del bake-off pedía **dos llamadas
+en UNA respuesta** (`_validate_multi_step`: `len(set(calls)) >= 2`) y **nunca
+devolvía el resultado de la herramienta** al modelo. Eso no mide multiturno, mide
+paralelismo. Spark llamaba `list_dir`, esperaba y paraba — que es exactamente lo
+correcto — y el arnés lo contaba como fallo.
+
+Con un bucle de verdad (`scripts/tool_loop_probe.py`: `tools` → `tool_calls` →
+`role: tool` con el resultado → repetir):
+
+| Escenario | Pasos | Responde | ¿Usa el resultado devuelto? |
+|---|:-:|:-:|:-:|
+| Buscar los `async` de `src/` | 2 (`list_dir` → `grep`) | sí | **sí** (`foo`, `bar`) |
+| "¿cuántas funciones async hay?" | 2 | sí | **sí** |
+| "mira `src/a.py`" | 1 (`read_file`) | sí | **sí** |
+
+0,2-0,4 s por vuelta. **Encadena, usa el contenido que se le devuelve y cierra.**
+Ni era el modelo ni era el template de llama.cpp (que renderiza `role: tool` bien
+y parsea su `<tool_call>` con `<arg_key>`/`<arg_value>` sin ayuda).
+
+Lo del "formato" era real pero de otra capa: el fabricante valida en vLLM con
+`--tool-call-parser spark25`, que llama.cpp no tiene; el parser genérico basta,
+como demuestra la tabla.
+
+## Herramientas (bake-off original, para el registro histórico): 4/5
 
 | Probe | Resultado |
 | --- | --- |
