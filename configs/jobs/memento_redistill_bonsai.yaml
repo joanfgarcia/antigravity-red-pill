@@ -21,7 +21,7 @@ priority: 4
 title: Memento re-destilado de una ronda (modelo de la task distill)
 mission_id: memento-redistill-round
 step_command: scripts/memento_redistill_one.sh
-elements_file: /home/joan/.local/share/red-pill/state/memento_redistill_bonsai_elements.json
+elements_file: state/memento_redistill_elements.json
 defer_exit_code: 77
 pause_exit_code: 78
 llm:

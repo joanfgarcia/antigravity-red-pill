@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def pending_agentic(
-	registry: Any, root: Optional[Path] = None, force: bool = False, redistill_since: Optional[str] = None
+	registry: Any,
+	root: Optional[Path] = None,
+	force: bool = False,
+	redistill_since: Optional[str] = None,
+	*,
+	phase: Optional[str] = None,
 ) -> List[Tuple[str, str, str]]:
 	"""[(source, session_id, reason)] — sesiones renderizadas sin pase agéntico o con distill stale (§4.5.1).
 
@@ -58,6 +63,18 @@ def pending_agentic(
 			agentic = entry.get("agentic")
 			if agentic and redistill_since and str(agentic.get("distilled_at") or "") >= redistill_since:
 				continue  # ya re-procesada en esta ronda
+			if phase == "annotate":
+				# Fase de notas: solo interesan las destiladas a las que les faltan
+				# (o están viejas). Nunca re-destilar desde aquí.
+				if not agentic:
+					continue
+				if force:
+					pending.append((source, session_id, "annotate"))
+				elif agentic.get("annotate_pending"):
+					pending.append((source, session_id, "annotate"))
+				elif annotate_version is not None and root is not None and not _annotate_fresh(root, entry["dir"], annotate_version):
+					pending.append((source, session_id, "annotate"))
+				continue
 			if not agentic:
 				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
 					continue  # ya destilada en disco, pero el marcado se perdió (crash)
@@ -145,6 +162,21 @@ def _is_llm_connection_error(exc: Exception) -> bool:
 	return False
 
 
+# Fases del pase. Cada una puede servirse de un modelo distinto (task `distill`
+# y task `annotate` en task_profiles.yaml), y cambiar de modelo en el daemon
+# cuesta una carga: ~1,4 s a ~9 s según el modelo. Intercalar distill+annotate
+# por sesión son DOS swaps por sesión (40 en una noche de 20); correr el pase
+# por fases son dos por corrida.
+PHASES = ("distill", "annotate")
+
+
+def _distill_current(root: Path, entry: Dict[str, Any]) -> bool:
+	"""¿La sesión ya tiene polariods de la versión de hash vigente?"""
+	agentic = entry.get("agentic") or {}
+	distill_ok = bool(agentic.get("distill_hash")) and agentic.get("distill_hash") == entry.get("memento_hash")
+	return distill_ok or (bool(agentic) and agentic.get("hash") == entry.get("memento_hash"))
+
+
 def run_agentic(
 	root: Path,
 	registry: Any,
@@ -152,8 +184,25 @@ def run_agentic(
 	transport: Transport,
 	checkpoint_path: Optional[Path] = None,
 	redistill_since: Optional[str] = None,
+	*,
+	phase: Optional[str] = None,
 ) -> Dict[str, int]:
 	"""Distill → Refine → sello de significance + decisión shadow del gate, por sesión.
+
+	`phase` (2026-10-30) parte el pase como lo hace el sueño REAL: una corrida
+	dedicada a las polaroids y otra a las notas. Intercaladas, cada sesión
+	obliga al daemon a cambiar de modelo dos veces (distill y annotate sirven
+	modelos distintos); por fases, dos veces por CORRIDA.
+
+	- `phase="distill"`: solo `distill_session`. No sella `agentic` (lo hace
+	  annotate, que es quien conoce la significance) pero sí `agentic.distill_hash`
+	  — el marcador honesto de "estas polaroids son de este hash".
+	- `phase="annotate"`: solo `annotate_session`, y SOLO sobre sesiones cuyas
+	  polaroids ya están al día. Si faltan, la sesión se salta y se cuenta en
+	  `stats["skipped_distill"]` (en producción el DAG ya encadena annotate
+	  detrás de distill, así que es una red de seguridad, no el camino).
+	- `phase=None`: comportamiento histórico, por sesión. Se conserva para el
+	  fan-out por sesión (`--target`) y para los tests existentes.
 
 	Si `checkpoint_path` se da (modo bounded del script_job), se escribe un
 	checkpoint JSON `{"processed": N, "total": T}` tras CADA sesión — la cuenta
@@ -185,8 +234,35 @@ def run_agentic(
 		entry = registry.get(source, session_id)
 		if not entry or not entry.get("dir"):
 			continue
+		if phase == "annotate" and not _distill_current(root, entry):
+			# Fase de notas sin polaroids al día: no anotar sobre material viejo.
+			# No es un fallo — la fase de distill lo resolverá en su corrida.
+			stats["skipped_distill"] = stats.get("skipped_distill", 0) + 1
+			logger.info(f"[phase annotate] {session_id}: sin polaroids al día — saltada")
+			continue
 		try:
-			sections = distill_session(root, entry["dir"], session_id, source, transport)
+			sections = None
+			if phase in (None, "distill"):
+				sections = distill_session(root, entry["dir"], session_id, source, transport)
+			if phase == "distill":
+				# Solo polaroids: la significance la pone la fase de notas. Se deja
+				# el marcador de hash para que annotate sepa que el material es éste.
+				prev = entry.get("agentic") or {}
+				entry["agentic"] = {
+					**prev,
+					"distill_hash": entry.get("memento_hash"),
+					"distilled_at": datetime.now(timezone.utc).isoformat(),
+					"sections": len(sections or []),
+					"engine": runtime.engine_id(),
+					"distill_prompt_version": runtime.distill_prompt_version(),
+					"annotate_pending": True,
+				}
+				stats["processed"] += 1
+				if hasattr(registry, "save"):
+					registry.save()
+				if checkpoint_path is not None:
+					_advance_checkpoint(checkpoint_path, registry, len(targets), redistill_since=redistill_since)
+				continue
 			if use_annotate:
 				max_significance = annotate_session(root, entry["dir"], session_id, source, transport)
 			else:
@@ -231,15 +307,29 @@ def run_agentic(
 				stats["failed"] += 1
 				consecutive_failures = 0
 				continue
+		prev_agentic = entry.get("agentic") or {}
 		entry["agentic"] = {
 			"distilled_at": datetime.now(timezone.utc).isoformat(),
 			"hash": entry.get("memento_hash"),
-			"sections": len(sections),
+			"distill_hash": entry.get("memento_hash"),
+			# En la fase de notas no hay `sections` en memoria: se conserva la
+			# cuenta de la fase de polaroids (o 0 si el marcado se perdió).
+			"sections": len(sections) if sections is not None else int(prev_agentic.get("sections") or 0),
 			"max_significance": round(max_significance, 2),
 			"gate_would_ingest": would_ingest,
-			"engine": runtime.engine_id(),
-			"distill_prompt_version": runtime.distill_prompt_version(),
+			# `engine` es quien puso la voz. En la fase de notas el modelo cargado
+			# es el juez, no el destilador: se conserva el de la fase de polaroids.
+			"engine": (prev_agentic.get("engine") or runtime.engine_id()) if phase == "annotate" else runtime.engine_id(),
+			"distill_prompt_version": (
+				(prev_agentic.get("distill_prompt_version") or runtime.distill_prompt_version())
+				if phase == "annotate"
+				else runtime.distill_prompt_version()
+			),
 			"refine_prompt_version": runtime.refine_prompt_version(),
+			# Quién juzgó. Con el pase por fases puede NO ser quien puso la voz —
+			# es justo el dato que hace falta para decidir si K2-7B es mejor juez.
+			"engine_annotate": runtime.engine_id() if use_annotate else prev_agentic.get("engine_annotate"),
+			"annotate_pending": False,
 		}
 		if use_annotate:
 			# Trazabilidad del pase real (MEM-006): versión de prompt y notas del

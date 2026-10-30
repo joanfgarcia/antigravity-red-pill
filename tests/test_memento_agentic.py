@@ -881,3 +881,97 @@ def _pin_instance_identity(monkeypatch):
 	c = cfg.get_config()
 	monkeypatch.setattr(c, "MEMENTO_AGENT_LABEL", "Aleth", raising=False)
 	monkeypatch.setattr(c, "MEMENTO_OPERATOR_LABEL", "Joan", raising=False)
+
+
+def test_pase_por_fases_polaroids_y_notas(tmp_path, monkeypatch):
+	"""2026-10-30: el sueño se corre por FASES, no por sesión.
+
+	Distill y annotate sirven modelos distintos (task distill vs task annotate),
+	así que intercalarlos por sesión cuesta dos cambios de modelo por sesión.
+	Por fases son dos por corrida. Este test fija el contrato:
+
+	  1. Fase `distill`: escribe polaroids y marca `distill_hash` + `annotate_pending`,
+	     pero NO anota ni sella significance.
+	  2. Fase `annotate`: anota y sella, conserva `engine` del destilador y limpia
+	     `annotate_pending`.
+	  3. La fase `annotate` NO destila: si faltan polaroids, la sesión se salta.
+	"""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	monkeypatch.setattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)
+	llamadas = []
+
+	def transport(system, user, max_tokens):
+		llamadas.append(system)
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(
+				[
+					{
+						"title": "Fix del endpoint",
+						"text": "Joan me pide el fix del endpoint y le explico el plan.",
+						"significance": 0.9,
+						"emotion": "cyan",
+						"intensity": 0.6,
+						"theme": "fix",
+						"relics": [],
+					}
+				]
+			)
+		if system == ANNOTATE_SOCIAL_SYSTEM:
+			return "[]"
+		if system == DUAL_SCORE_SYSTEM:
+			return json.dumps([{"i": 0, "work_score": 0.9, "social_score": 0.1}])
+		return json.dumps({"title": "Sección de prueba", "summary": "Resumen denso.", "keywords": ["memento"]})
+
+	root, registry, rendered = _tree_with_session(tmp_path)
+	session_dir = root / rendered.dir_rel
+
+	# (1) Fase polaroids: NADA de notas.
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], transport, phase="distill")
+	assert stats["processed"] == 1
+	assert list((session_dir / "distill").glob("*.md"))
+	assert list((session_dir / "annotate").glob("*.md")) == []
+	entry = registry.get("opencode", "opencode:s1")["agentic"]
+	assert entry["distill_hash"] == rendered.memento_hash
+	assert entry["annotate_pending"] is True
+	assert "max_significance" not in entry
+	engine_destilador = entry["engine"]
+	assert not any(s in (ANNOTATE_WORK_SYSTEM, DUAL_SCORE_SYSTEM) for s in llamadas)
+
+	# (2) Fase notas: sobre polaroids ya hechas, anota y sella.
+	llamadas.clear()
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], transport, phase="annotate")
+	assert stats["processed"] == 1 and stats.get("skipped_distill", 0) == 0
+	assert ANNOTATE_WORK_SYSTEM in llamadas
+	assert len(list((session_dir / "annotate").glob("*.md"))) == 1
+	entry = registry.get("opencode", "opencode:s1")["agentic"]
+	assert entry["annotate_pending"] is False
+	assert entry["max_significance"] == 0.9
+	assert entry["engine"] == engine_destilador  # el motor no cambia al anotar
+	body = extract_body((session_dir / "memento" / "index.md").read_text(encoding="utf-8"))
+	assert compute_hash(body) == rendered.memento_hash  # §4.5.1: el sello no movió el cuerpo
+
+	# (3) Fase notas sin polaroids: no inventa, se salta.
+	root2, registry2, rendered2 = _tree_with_session(tmp_path / "otro")
+	stats = run_agentic(root2, registry2, [("opencode", "opencode:s1")], transport, phase="annotate")
+	assert stats["processed"] == 0 and stats["skipped_distill"] == 1
+	assert list((root2 / rendered2.dir_rel / "annotate").glob("*.md")) == []
+
+
+def test_pending_agentic_fase_annotate_solo_pide_notas(tmp_path, monkeypatch):
+	"""La fase annotate selecciona destiladas sin notas frescas — nunca despide
+	una fase de distill sobre material ya al día."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	root, registry, rendered = _tree_with_session(tmp_path)
+
+	assert [r for _s, _i, r in pending_agentic(registry, root=root, phase="annotate")] == []
+
+	registry.upsert("opencode", "opencode:s1", {"agentic": {"distill_hash": rendered.memento_hash, "annotate_pending": True}})
+	assert len(pending_agentic(registry, root=root, phase="annotate")) == 1
+
+	# Sin `agentic` no hay nada que anotar (falta la fase de polaroids).
+	root2, registry2, _ = _tree_with_session(tmp_path / "otro")
+	assert pending_agentic(registry2, root=root2, phase="annotate") == []
