@@ -80,3 +80,5 @@ signo al releerlos, no había veredicto: había preferencia.
 - [ ] Calidad de lectura de `bonsai_2_27b` a ventana llena (~60K), sin medir.
 - [ ] `spark_x2_6_4b`: `multi_step` con n≥5 antes de descartarlo para `minion_tool`.
 - [ ] Elenco objetivo: bonsai (destilador) + spark (lector) = 9,4 GB; retirar granite y el 7B.
+
+Ver **[VOICE_2026-10-30.md](VOICE_2026-10-30.md)** — las mismas 20 sesiones destiladas por granite y por bonsai: la voz, el detalle y el precio de la noche.
