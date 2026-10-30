@@ -1,0 +1,98 @@
+# spark_x2_6_4b — Spark-X2.6-4B (candidato)
+
+> 4B real de XHToken, orientado a agentes on-device. **Es el mejor lector de contexto
+> largo de la casa**: 262.144 de ventana con `q4_0` (y 117.676 verificados con
+> recuperación correcta) en 3,5 GB. No es destilador: sin razonamiento falla un desliz
+> de deixis. No es de herramientas: llama bien a una, no encadena.
+
+Perfil propuesto: `spark_x2_6_4b` · Fichero: `Spark-X2.6-4B-Q4_K_M.gguf` (3,54 GB)
+Runtime: **llama.cpp stock** (arch `spark2_5`) · Medido: 2026-10-30
+
+---
+
+## Specs
+
+| Campo | Valor |
+| --- | --- |
+| Arquitectura | `Spark2_5ForCausalLM` (`spark2_5`) |
+| Capas / heads / kv_heads / head_dim | 36 / 16 / **4** / **256** |
+| Hidden / ffn | 2560 / 10240 |
+| Vocabulario | 131.072 (con `tie_word_embeddings`) |
+| Parámetros calculados | **~4,1 B** reales (sin el truco de embeddings de K2) |
+| Contexto declarado | **1.048.576** |
+| Licencia | Apache-2.0, sin gating (179K descargas en 11 días) |
+| Thinking | 3 niveles: `none` / `low` / `high` |
+
+**Runtime:** llama.cpp master lo soporta (`spark2_5` en `libllama.so`), pero
+**`llama-cpp-python` 0.3.31 del venv no** → va por el camino de binario (AD-049), con
+el provider de fork ya construido. No necesita el fork prism: el stock basta.
+
+## Límites reales (RTX 5070 Laptop 8 GB) — sondeado **hasta el OOM**
+
+| KV | Último que arranca | Primero que falla | VRAM al último |
+| --- | ---: | ---: | ---: |
+| f16 | **114.688** | 131.072 | 7.341 MiB |
+| q8_0 | **163.840** | 196.608 | 6.979 MiB |
+| q4_0 | **262.144** | 327.680 | 6.965 MiB |
+
+**KV real: ~13-14 KiB por token.** Calculado desde el `config.json` daba **144 KiB**
+— diez veces más. La arquitectura usa un esquema de atención mucho más barato de lo
+que sugieren `kv_heads × head_dim`, y el config no lo declara. Lección: el KV se mide
+por consumo de VRAM, no se deduce del config.
+
+## Calidad (BENCHSET, `q4_0` @ 16.384, n=3)
+
+| Probe | reasoning OFF | reasoning ON (budget 4096) |
+| --- | :-: | :-: |
+| `contract_entidades` | **2/3** | **3/3** |
+| `contract_decision` | 3/3 | 3/3 |
+| `contract_genero` | 3/3 | 3/3 |
+| `needle_8k` | 3/3 | 3/3 |
+| `synthesis_es` | 3/3 | 2/3 |
+| **Total** | **14/15** | **14/15** |
+| Latencia media | **~3 s** | **~58 s** |
+
+**El razonamiento arregla la deixis** (2/3 → 3/3) y cuesta **~10×** de latencia.
+Misma puntuación total; lo que cambia es dónde falla.
+
+## Contexto largo (lo que lo hace único aquí)
+
+```
+prompt de 117.676 tokens (449.540 chars), dato enterrado al 50% de profundidad
+→ 56,9 s de prefill, respuesta correcta: '774219'
+→ 5 GB de VRAM en total
+```
+
+Comparado con el K2-3.7B, que tiene 98K de ventana pero **resume otro documento** a
+partir de ~46K de relleno. Aquí la recuperación aguanta a 117K.
+
+## Herramientas: 4/5
+
+| Probe | Resultado |
+| --- | --- |
+| `simple` | ✅ 0,7 s |
+| `multi_sel` | ✅ 0,6 s |
+| `json_args` | ✅ 22,0 s (49,6 s con thinking) |
+| `no_tool` | ✅ 11,1 s |
+| **`multi_step`** | ❌ **no encadena** |
+
+Llama bien a **una** herramienta, con nombre y argumentos correctos. Falla al
+encadenar: pide `list_dir` y se para. **Con y sin thinking, mismo fallo.**
+
+No es problema de parser: llama.cpp lee su formato `<tool_call>` con argumentos
+etiquetados sin problema (de ahí los 4 aciertos). El fabricante valida en vLLM con
+`--tool-call-parser spark25`, que llama.cpp no tiene — así que la comparación no es
+perfecta, pero en nuestro runtime el encadenado no ocurre.
+
+## Veredicto
+
+**Se queda como lector de contexto largo. No como destilador ni como minion_tool.**
+
+| Papel | Veredicto |
+| --- | --- |
+| Lector de contexto largo | **Mejor de la casa** (262K, 13 KiB/token, 117K verificados) |
+| `distill` (Memento) | No: empata a 14/15 con bonsai pero falla deixis sin thinking, y la voz la decide bonsai |
+| `minion_tool` | No todavía: falla el encadenado |
+
+**Pendiente:** `multi_step` con más repeticiones (un intento no basta), calidad de
+síntesis a ventana llena, y `synthesis_es` con thinking (falla 1 de 3 por cobertura).

@@ -14,6 +14,7 @@ Procedimiento de medición: [`PROCEDURE.md`](PROCEDURE.md)
 | --- | --- | --- | ---: | --- |
 | `granite_8b` | Granite-4.1-8B | **Titular** (destilador) | 12.288 (24.576 con KV `q8_0`) | [README](granite_8b/README.md) |
 | `bonsai_2_27b` | Ternary Bonsai 2 27B | **Se queda** — destilador alternativo y lector largo | 65.536 (`q4_0`) | [README](bonsai_2_27b/README.md) |
+| `spark_x2_6_4b` | Spark-X2.6-4B | **Se queda** — lector de contexto largo | **262.144** (`q4_0`), 117K verificados | [README](spark_x2_6_4b/README.md) |
 | `k2_horizon_3_7b` | K2-Horizon-3.7B | **Candidato** | 98.304 (`q4_0`), uso fiable ≤40K | [README](k2_horizon_3_7b/README.md) |
 
 Inventario y purgas: [`INVENTORY.md`](INVENTORY.md).
@@ -77,3 +78,5 @@ signo al releerlos, no había veredicto: había preferencia.
 - [ ] Corregir `attribution_required` de `apache-2.0` en `model_license.py`.
 - [ ] Carril para `bonsai_2_27b` (destilador con `reasoning off`, o lector largo).
 - [ ] Calidad de lectura de `bonsai_2_27b` a ventana llena (~60K), sin medir.
+- [ ] `spark_x2_6_4b`: `multi_step` con n≥5 antes de descartarlo para `minion_tool`.
+- [ ] Elenco objetivo: bonsai (destilador) + spark (lector) = 9,4 GB; retirar granite y el 7B.
