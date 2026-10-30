@@ -145,3 +145,51 @@ deixis (2/3).
 `--reasoning-budget 4096` fue el techo: escribió 4.276. Con budgets de **512 / 1.024 /
 2.048** el coste bajaría a 12-15 s por fragmento. **Falta medir si mantiene la deixis
 3/3 a ese precio** — es la prueba que decide si Spark puede destilar de noche.
+
+## El presupuesto de razonamiento: 15/15 a 7 s (2026-10-30)
+
+El modelo "rumiaba" demasiado: con thinking libre escribía **19.571 caracteres de
+traza** y **no dejaba sitio a la respuesta** (contenido vacío, `finish_reason=length`).
+La tarjeta documenta tres niveles (`none` / `low` / `high`) con dos variables de
+plantilla, `enable_thinking` y `reasoning_effort`. Probadas, con el mismo probe y
+6.144 tokens de presupuesto:
+
+| Ajuste | Latencia | Traza | Respuesta |
+|---|---:|---:|---|
+| `enable_thinking: false` | 5,1 s | 0 chars | válida (387 tok) |
+| **`reasoning_effort: low`** | 74,8 s | 19.571 chars | **vacía** |
+| `reasoning_effort: high` | 76,1 s | 19.648 chars | **vacía** |
+
+**`reasoning_effort` es un no-op en este runtime**: `low` y `high` dan exactamente
+lo mismo. Lo que sí muerde es el **tope duro de traza** de llama.cpp
+(`--reasoning-budget`):
+
+| `--reasoning-budget` | Latencia | Traza | Válido |
+|---:|---:|---:|:-:|
+| (sin tope) | 75 s | 19,6 KB | **no** |
+| 256 | **8,5 s** | 876 chars | sí |
+| 512 | 12,0 s | 1,8 KB | sí |
+| 1024 | 17,2 s | 3,6 KB | sí |
+| 2048 | 35,5 s | 6,6 KB | sí |
+
+Y con **256**, el BENCHSET completo (n=3):
+
+| Probe | Resultado | Latencia |
+|---|:-:|---:|
+| `contract_entidades` | **3/3** | 7,9 s |
+| `contract_decision` | **3/3** | 6,8 s |
+| `contract_genero` | **3/3** | 6,6 s |
+| `needle_8k` | **3/3** | 2,8 s |
+| `synthesis_es` | **3/3** | 5,6 s |
+| **TOTAL** | **15/15** | **~7 s** |
+
+**El mejor resultado de la casa**, empatado con K2-7B y a la mitad de su coste de
+memoria (3,5 GB), con la deixis arreglada: el 2/3 de "sin thinking" era el modelo
+rumiando en plaza. Configuración, no código:
+
+```yaml
+extra_server_args: ["--reasoning", "on", "--reasoning-budget", "256"]
+```
+
+Cautela: n=3 por probe y una sola configuración medida. El 15/15 es firme como
+medida de hoy; el *óptimo* de budget (256 vs 1024) no está sondeado.
