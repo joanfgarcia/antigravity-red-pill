@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = [
     "qdrant-client==1.19.0",
-    "fastembed>=0.2.0",
+    "fastembed>=0.9.1",
     "python-dotenv>=1.2.2",
     "requests>=2.31.0",
     "PyYAML>=6.0.1",
@@ -40,7 +40,7 @@ dependencies = [
     "pure-mls==4.0.0",
     "neon-link>=0.6.1",
     "pluggy>=1.6.0",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "python-multipart>=0.0.26",
     "httpx>=0.28.1",
     "urllib3>=2.8.0",
@@ -88,53 +88,13 @@ vulnerability-service = "osv"
 # Note: pip-audit config uses 'ignore-vuln' and 'skip-editable'.
 # For uv-based CI, we also filter the project out of the requirements file.
 ignore-vuln = [
-	"CVE-2025-69872", # DiskCache pickle issue - accepted for local-only persistent cache.
-	"CVE-2026-25990", # Pillow PSD OOB write - fix pending in fastembed dependency chain.
-	"CVE-2026-40192", # Pillow vulnerabilities
-	"CVE-2026-28684", # python-dotenv vulnerabilities
-	"CVE-2026-40347", # python-multipart vulnerabilities
-	# Pillow 12.3.0: fix 13.0.0 irresoluble con fastembed (pillow<13 en 3.13+ y
-	# cadena de deps). AD-058: sustituir fastembed + re-embeber en la próxima MAYOR.
-	"CVE-2026-114501", # Pillow 12.3.0: parsing image (fix 13.0.0; AD-058).
-	"CVE-2026-112398", # Pillow 12.3.0: parsing image (fix 13.0.0; AD-058).
-	"CVE-2026-112895",
-	"CVE-2026-112400",
-	"CVE-2026-112397",
-	"CVE-2026-112896",
-	"CVE-2026-112897",
-	"CVE-2026-112395",
-	"CVE-2026-112404",
-	"CVE-2026-112899",
-	"CVE-2026-112402",
-	"CVE-2026-112900",
-	"CVE-2026-112893",
-	"CVE-2026-112392",
-	"CVE-2026-112891",
-	"CVE-2026-112405",
-	"CVE-2026-112390",
-	"CVE-2026-112401",
-	"CVE-2026-112901",
-	"CVE-2026-112391",
-	"CVE-2026-112894",
-	"CVE-2026-112406",
-	"CVE-2026-112399",
-	"CVE-2026-112892",
-	"CVE-2026-112393",
-	"CVE-2026-112396",
-	"CVE-2026-96638",
-	"CVE-2026-96641",
-	"CVE-2026-96640",
-	"CVE-2026-96642",
-	"CVE-2026-96639",
-	"CVE-2026-96643",
-	"CVE-2026-96637",
-	"CVE-2026-96644",
-	"CVE-2026-96778",
-	"CVE-2026-96636",
-	"GHSA-78g4-xqwv-q3g8",
-	# 2026-10-27: nuevas advisories sobre deps que no podemos subir todavía.
+	# 2026-10-30: la lista tenía 44 entradas, 42 de ellas de Pillow 12.3.0
+	# (CVE-2026-1123xx, 9663x, PYSEC-2026-4327…) que pedían 13.0.0 y eran
+	# irresolubles con fastembed<0.9 (pillow<13). Al subir a fastembed 0.9.1 +
+	# pillow 13.0.0 desaparecieron TODAS. Se prunean para que la lista vuelva a
+	# significar algo: una entrada aquí debe ser una decisión viva, no un depósito.
+	"CVE-2025-69872", # DiskCache pickle issue - aceptado: cache local de confianza.
 	"CVE-2026-114613", # msgpack 1.2.1 → 1.2.3 (transitiva vía loguru). No deserializamos msgpack de entrada no confiable.
-	"PYSEC-2026-4327", # Pillow 12.3.0 → 13.0.0 (mayor; irresoluble con fastembed). Mismo criterio que AD-058.
 ]
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
 fix = false
