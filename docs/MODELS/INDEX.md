@@ -74,11 +74,22 @@ signo al releerlos, no había veredicto: había preferencia.
 
 - [ ] `type_k`/`type_v` en el runtime: duplica la ventana de granite sin coste.
 - [ ] Batería completa de `k2_horizon_3_7b` con n≥5 y refuerzo de deixis.
-- [ ] Prueba de textura (12 fragmentos reales, ciega).
+- [x] Prueba de textura (12 fragmentos reales) — veredicto bonsai, ver `TEXTURE_2026-10-29.md`.
 - [ ] Corregir `attribution_required` de `apache-2.0` en `model_license.py`.
-- [ ] Carril para `bonsai_2_27b` (destilador con `reasoning off`, o lector largo).
+- [x] Carril para `bonsai_2_27b` — **es el destilador** desde 2026-10-30 (`task distill`).
 - [ ] Calidad de lectura de `bonsai_2_27b` a ventana llena (~60K), sin medir.
 - [ ] `spark_x2_6_4b`: `multi_step` con n≥5 antes de descartarlo para `minion_tool`.
-- [ ] Elenco objetivo: bonsai (destilador) + spark (lector) = 9,4 GB; retirar granite y el 7B.
+- [ ] Retirar `granite_8b` del carril de voz (ya no destila) y decidir si el 7B se queda como reserva.
 
 Ver **[VOICE_2026-10-30.md](VOICE_2026-10-30.md)** — las mismas 20 sesiones destiladas por granite y por bonsai: la voz, el detalle y el precio de la noche.
+
+Ver **[PREFILL_2026-10-30.md](PREFILL_2026-10-30.md)** — el cuello del sueño no era el prefill sino la KV en f16 (2,5× de decode), el runtime `llama_cpp_k2`, y el prompt de anotar elegido por modelo.
+
+## Estado del elenco (2026-10-30)
+
+| Papel | Modelo | Runtime | KV |
+|---|---|---|---|
+| Voz de los recuerdos (`distill`) | `bonsai_2_27b` | `llama_cpp_prism` | **q8_0** (f16 es 2,5× más lento) |
+| Juez de las notas (`annotate`) | `k2_horizon_7b` | `llama_cpp_k2` | q8_0 · prompt **v3** |
+| Lector de contexto largo | `spark_x2_6_4b` | stock | 262.144 (`q4_0`) |
+| Reserva / control | `granite_8b` | stock | — |

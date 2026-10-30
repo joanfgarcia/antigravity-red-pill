@@ -1,5 +1,77 @@
 ## Unreleased
 
+### 🔁 Memento por fases — una corrida de modelo por etapa, no un swap por sesión
+
+- **[NEW]** `run_agentic(..., phase="distill"|"annotate")` y
+  `pending_agentic(phase=)` (`memento_agentic.py --phase`). `distill` escribe
+  polaroids y marca `distill_hash` + `annotate_pending`; `annotate` sella la
+  significance y **se niega a destilar** (si faltan polaroids, salta la sesión y
+  lo cuenta en `skipped_distill`). `phase=None` conserva el camino histórico.
+- **[NEW]** `chronicle.yaml`: la etapa `memento-agentic` se parte en
+  `memento-distill` (task `distill`) y `memento-annotate` (task `annotate`),
+  ambas fan-out de `discover` y serializadas por `depends_on`.
+- **[WHY]** Medido en la corrida real: 41 cargas de modelo en una noche de 20
+  sesiones (102 s de swap puro). Con un juez de 6 GB o un lector de 262K, esas
+  40 cargas dejan de ser minuto y medio y son 15-20 minutos.
+- **[NEW]** `registry.agentic.engine_annotate`: quién juzgó, distinto de
+  `engine` (quién puso la voz). Sin ese campo, cambiar de juez es invisible.
+- **[NEW]** `configs/jobs/memento_redistill_bonsai.yaml` +
+  `scripts/memento_redistill_one.sh`: repetir una ronda con un modelo concreto
+  sobre una lista congelada de sesiones, sin tocar el delta nocturno.
+
+### 📉 El cuello del sueño no era el prefill: era la KV en f16
+
+- **[FIX]** `bonsai_2_27b`: `kv_cache.preferred` f16 → **q8_0**. A ventana fija
+  de 16.384 y mismo binario: f16 **18,7 tok/s** de decode, q8_0 **46,4**,
+  q4_0 46,6 — con 94 MiB de diferencia de VRAM. No es presión de memoria: es el
+  kernel de atención en f16 del build prism, y empeora con la ventana (12,7 tok/s
+  a 24K). End-to-end sobre la sesión más pesada: **280 s → 165 s**.
+- **[WHY]** El perfil pedía f16 porque *cabía*. Cabía y era 2,5× más lento. La
+  noche de bonsai (61,7 min vs 29,7 de granite) medía el perfil, no el modelo.
+- **[NEW]** `llama_cpp_k2` como runtime de primera clase (`runtimes.yaml`) y
+  perfil `k2_horizon_7b`: prefill **2.217 tok/s** y decode **58 tok/s**, el más
+  rápido de la casa en ambas. El daemon lo sirve sin tocar código.
+- **[DOC]** `docs/MODELS/PREFILL_2026-10-30.md`: curva `n_ctx × KV`, hipótesis
+  descartadas (ubatch plano 128→2048, `Nice=19` sin efecto, throttling descartado)
+  y la trampa de medir con el daemon vivo (`out of memory` por coexistencia).
+
+### ⚖️ El juez también tiene prompt, y lo elige el modelo
+
+- **[NEW]** `annotate_prompt_set` en el perfil del modelo (gemelo de
+  `prompt_file` de destilación) → `ResolvedModel.annotate_prompt_set` →
+  `runtime.annotate_prompt_set()`, con override `MEMENTO_ANNOTATE_PROMPT`. Entra
+  en `annotate_prompt_version()`, así que cambiar de juez invalida la frescura y
+  re-anota (correcto: notas de otro contrato no son comparables).
+- **[NEW]** `prompts/annotate_{work,social}_user_v3.txt`: pide el **acto**, no la
+  escena (título = hallazgo; cuerpo = hecho; prohibido inventar la manera).
+  Con la v2 —la de granite— K2 titulaba **45 %** de sus notas "Joan me pide/
+  cuenta…"; granite, 0 %. Medido en dos sesiones: 12→5→**13** y 0→7→**12**
+  (granite / K2+v2 / K2+v3).
+- **[FIX]** El presupuesto de extracción estaba **clavado en 1024 en el código**.
+  Con K2 el array se cortaba (`finish_reason=length`), el parser no encontraba el
+  cierre y la sesión salía con **0 notas**: indistinguible de "no hay nada que
+  anotar". Ahora sale de la task (`annotate.max_tokens: 2048`) y el truncado
+  emite warning.
+- **[FIX]** `engine_id()` mentía en los cambios de modelo: cacheaba `/v1/models`
+  por proceso y, si la primera llamada caía con el modelo anterior cargado, toda
+  la sesión se sellaba mal (K2 juzgando, `engine: granite_8b`). Ahora
+  `served_engine()` lee el campo `model` de la propia respuesta.
+
+### 🩹 Auditoría de cicatrices y cola de arreglo a mano
+
+- **[NEW]** `scripts/memento_audit.py`: read-only, sin LLM, 12 patrones con score
+  ponderado y cita textual (deixis, tono inventado, 3ª persona, meta-narración,
+  episódico, sin notas, ref roto, duplicado, inglés, título largo, cuerpo corto,
+  fuga de plantilla). Determinista a propósito: un listado que cambia en cada
+  pasada no sirve para decidir una noche.
+- **[NEW]** `scripts/memento_fix_queue.py` + `configs/jobs/memento_fix_slow.yaml`:
+  N=2 sesiones por tirada, **lanzadas a mano**. Recalcula la auditoría y propone
+  las peores aún no procesadas; el libro `state/memento_fix_done.jsonl` evita el
+  bucle. Reprocesar memoria es una decisión, no mantenimiento.
+- **[DATA]** Inventario inicial (1.222 sesiones): 5.209 meta-narraciones en 774,
+  3.357 deixis en 615, 1.309 de 3ª persona, 1.291 de tono inventado y **493
+  sesiones con polaroids y cero notas** — hueco de memoria, no estilo.
+
 ### 🔌 Motor de inferencia agnóstico — un modelo ternario servido por el daemon
 
 - **[NEW]** `red_pill/inference/local_backend.py`: `build_local_backend(resolved)`
