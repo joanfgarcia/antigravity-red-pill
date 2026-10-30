@@ -543,16 +543,26 @@ def deliver_events(
 	return report
 
 
-def _actor_for(conn, continuity_id: str, *, originator: str = "") -> "wake_policy.Actor":
-	"""Actor desde `session_registry` (read-only). Sin fila = actor vacío."""
+_SQL_ACTOR_BY_SOUL = "SELECT * FROM session_registry WHERE continuity_id = ? ORDER BY updated_at DESC LIMIT 1"
+_SQL_ACTOR_BY_LEG = "SELECT * FROM session_registry WHERE originator = ? ORDER BY updated_at DESC LIMIT 1"
+
+
+def _actor_for(conn, continuity_id: str, *, originator: str = "", by_leg: bool = False) -> "wake_policy.Actor":
+	"""Actor desde `session_registry` (read-only). Sin fila = actor vacío.
+
+	`by_leg=True` resuelve por el CUERPO (`originator`), no por el alma. Es lo que
+	hace falta para el emisor: en un evento, `continuity_id` es el **destinatario**
+	(D-05), así que buscar ahí al emisor devolvía su propia fila y la matriz
+	casaba siempre consigo misma (`self`) — un agujero silencioso, no un permiso.
+	"""
 	row = None
-	soul = str(continuity_id or "").strip()
-	if soul:
+	if by_leg:
+		sql, value = _SQL_ACTOR_BY_LEG, str(originator or "").strip()
+	else:
+		sql, value = _SQL_ACTOR_BY_SOUL, str(continuity_id or "").strip()
+	if value:
 		try:
-			row = conn.execute(
-				"SELECT * FROM session_registry WHERE continuity_id = ? ORDER BY updated_at DESC LIMIT 1",
-				(soul,),
-			).fetchone()
+			row = conn.execute(sql, (value,)).fetchone()
 		except Exception:
 			row = None
 	return wake_policy.Actor.from_row(dict(row) if row else None, originator=originator)
@@ -567,7 +577,7 @@ def _wake_verdict(ev: dict, soul: str, leg: str, *, db_path: Optional[str] = Non
 	try:
 		with _connect(db_path) as conn:
 			recipient = _actor_for(conn, soul, originator=leg)
-			sender = _actor_for(conn, str(ev.get("continuity_id") or ""), originator=str(ev.get("originator") or ""))
+			sender = _actor_for(conn, "", originator=str(ev.get("originator") or ""), by_leg=True)
 		decision = wake_policy.decide_wake(sender=sender, recipient=recipient, db_path=db_path)
 	except Exception as e:
 		# No saber no es permiso: se difiere.
