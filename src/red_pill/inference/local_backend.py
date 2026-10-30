@@ -139,13 +139,26 @@ class ForkChatBackend:
 				yield evento
 
 
-def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None, unload_daemon: bool = False) -> Any:
+def build_local_backend(
+	resolved: Any,
+	*,
+	server_factory: Optional[Any] = None,
+	unload_daemon: bool = False,
+	n_ctx: Optional[int] = None,
+	n_gpu_layers: Optional[int] = None,
+	flash_attn: Optional[bool] = None,
+) -> Any:
 	"""Devuelve el objeto de modelo para un perfil resuelto.
 
 	- runtime de fork → `ForkChatBackend` sobre su `RuntimeServer`.
 	- runtime stock → `llama_cpp.Llama` cargado en proceso, como siempre.
 
 	La firma es la que el daemon ya espera: `tokenize` + `create_chat_completion`.
+
+	`n_ctx`, `n_gpu_layers` y `flash_attn` son los que decide la cascada de
+	dispositivos del daemon. El worker de CPU carga con 0 capas, `cpu_n_ctx` y sin
+	FA, que no son los valores del perfil. Sin ellos se usan los del perfil y el FA
+	de GPU. (Regresión de 8d78450: el daemon los calculaba y aquí se perdían.)
 	"""
 	from red_pill.core.runtime_registry import RuntimeRegistry
 
@@ -186,12 +199,18 @@ def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None, 
 
 	from red_pill.core import model_runtime as mr
 
-	flash_attn = mr.effective_flash_attn(resolved, "gpu")
+	if flash_attn is None:
+		flash_attn = mr.effective_flash_attn(resolved, "gpu")
+	if n_ctx is None:
+		n_ctx = int(getattr(resolved, "n_ctx", 4096) or 4096)
+	if n_gpu_layers is None:
+		n_gpu_layers = int(getattr(resolved, "n_gpu_layers", -1))
 	logger.info(f"[LOCAL-BACKEND] '{getattr(resolved, 'profile_name', '?')}' en proceso (llama-cpp-python)")
 	return Llama(
 		model_path=resolved.model_path,
 		chat_format=getattr(resolved, "chat_format", None),
-		n_ctx=int(getattr(resolved, "n_ctx", 4096) or 4096),
-		n_gpu_layers=int(getattr(resolved, "n_gpu_layers", -1)),
+		n_ctx=int(n_ctx),
+		n_gpu_layers=int(n_gpu_layers),
+		flash_attn=bool(flash_attn),
 		verbose=False,
 	)

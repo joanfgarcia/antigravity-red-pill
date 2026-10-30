@@ -271,7 +271,7 @@ class ModelManager:
 		# aquí abajo es la misma: tokenize() + create_chat_completion().
 		from red_pill.inference.local_backend import build_local_backend
 		flash_attn = mr.effective_flash_attn(resolved, "cpu" if IS_CPU_WORKER else "gpu")
-		self.model = build_local_backend(resolved)
+		self.model = build_local_backend(resolved, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, flash_attn=flash_attn)
 		self.flash_attn = flash_attn
 		_register_thinking_handlers(self.model, resolved)
 		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
