@@ -2,20 +2,20 @@
 
 El buffer rápido etiquetaba como `USER:` *cualquier* prompt:
 
-    text = f"USER: {prompt}\\n\\n{role.upper()}: {response}"
+	text = f"USER: {prompt}\\n\\n{role.upper()}: {response}"
 
 y el prompt del destilador define `USER:` como «habló el Operador». Consecuencia:
 un mensaje de otra sesión del mismo agente —o un volcado de herramienta— se
 archiva como una frase del Operador. Eso produce dos daños a la vez:
 
 - **Autoridad fabricada**: una conversación entre piernas del mismo alma queda
-  registrada como una orden.
+	registrada como una orden.
 - **Hecho falso firmado**: si el dato del par era erróneo, el error queda
-  atribuido al Operador y ningún chequeo posterior lo pone en duda.
+	atribuido al Operador y ningún chequeo posterior lo pone en duda.
 
 Caso real (2026-10-27), archivado como «Usuario»:
 
-    ［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM …］
+	［MENSAJE ENTRE ALMAS · no es del Operador · DE 01a17f58 Aleth-GLM …］
 
 El sobre declaraba por escrito que no era del Operador y el pipeline lo ignoró.
 

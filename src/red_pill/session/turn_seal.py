@@ -10,13 +10,13 @@ no podía leer nada porque no había nada escrito.
 DOS IDENTIFICADORES, DOS TRABAJOS
 ---------------------------------
 - **`global_turn`**: número del reloj. Local, monótono y comparable — `Δ = actual −
-  last_seen` sólo significa "turnos paralelos" si es un contador. **No** es un id
-  universal: si algún día hay federación, la clave pasa a `(instalación, turno)`.
+	last_seen` sólo significa "turnos paralelos" si es un contador. **No** es un id
+	universal: si algún día hay federación, la clave pasa a `(instalación, turno)`.
 - **`turn_id`**: identidad del turno. **Nuestro**, no del arnés: 48 bits de tiempo
-  en ms + 80 bits aleatorios (base32, 26 caracteres). Ordenable como un timestamp
-  y sin ciclo — un contador reiniciaría, un UUIDv4 perdería el orden. El id que
-  trae el arnés se guarda como **procedencia** (`request_id`), que es lo que es.
-  La vía inversa es un `SELECT ... WHERE request_id = ?`, sin tabla NAT.
+	en ms + 80 bits aleatorios (base32, 26 caracteres). Ordenable como un timestamp
+	y sin ciclo — un contador reiniciaría, un UUIDv4 perdería el orden. El id que
+	trae el arnés se guarda como **procedencia** (`request_id`), que es lo que es.
+	La vía inversa es un `SELECT ... WHERE request_id = ?`, sin tabla NAT.
 
 CONCURRENCIA
 ------------
