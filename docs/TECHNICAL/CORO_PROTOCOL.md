@@ -244,3 +244,81 @@ La migración la hace `SessionRegistry` (dueño del esquema), no el módulo del 
 - **Federación** (`neon-rings`, perfiles lan/exposed): otro adaptador sobre el mismo
   sobre, atado a D26.
 - **Plegar D23** dentro de `coro_api`.
+
+## 11. El coro y el estándar (A2A) — decisión del 2026-10-30
+
+### 11.1 La tentación, y por qué no
+
+Cuando el coro empezó a tener palabras propias —`park`, `teatro`, `alma`, `parte`— llegó
+la pregunta razonable: si existe un estándar abierto para que dos agentes hablen, ¿por qué
+inventar? A2A ya va por la 1.0.1, tiene tarjeta firmada, ocho estados de tarea y el aval de
+la Agentic AI Foundation. Usarlo daría conversación gratis con agentes de fuera.
+
+Sería un error meterlo **dentro**. No por tamaño: por lo que asume. En A2A el agente **es
+un endpoint vivo**: se le manda una tarea a una URL, con una tarjeta que dice qué sabe
+hacer. Si el agente no está, la tarea muere (`rejected`, `failed`) y su artefacto con ella.
+
+Nuestro protocolo promete lo contrario, y esa promesa es el corazón de todo esto:
+
+> **Un mensaje a un alma muerta se entrega al reencarnar.**
+
+`park` no es un verbo que A2A tenga; es la razón de que el coro exista. La alma no es el
+cuerpo —el cuerpo muere con la pestaña, el alma sigue en el espejo— y por eso un mensaje
+puede esperar días a que su destinataria vuelva. Adoptar A2A dentro nos obligaría a fingir
+que nuestras almas siempre están vivas, o a mantener la capa de durabilidad *detrás* del
+estándar: exactamente lo que ya tenemos, con una capa de HTTP por encima.
+
+Hay una asimetría que lo decide: el RFC-FUSION-001 defiende que un alma sobreviva a 19 días
+sin modelo (§2.4.2). A2A va en dirección contraria: identidad = endpoint + tarjeta. Las dos
+frases no caben en el mismo contrato.
+
+### 11.2 Lo que sí se adopta, y es mucho
+
+**A2A como gramática de la frontera, no como lengua de casa.**
+
+| Nuestro | A2A (`TaskState`) | Nota |
+|---|---|---|
+| `queued` | `submitted` | el mensaje está y espera |
+| `delivered` | `working` | el transporte lo puso en el cuerpo |
+| `ask` sin respuesta | `input_required` | es el mismo concepto, con otro nombre |
+| `refuse` del destinatario | `rejected` | ya existe en `wake_policy` |
+| `read`/`replied` | `completed` | el hilo da el resto |
+| `given_up`/caducado | `failed` | idéntico |
+| `retirado` por el Operador | `canceled` | idéntico |
+| anexo `agentbus://` + sha256 | `Part.file` | un file part, sin inventar nada |
+| `thread_id` + `event_id` | `contextId` + `task.id` | mapeo documentado, no reemplazo |
+
+Y una decisión que ahorra el corte futuro: **la máquina de estados del `parte`** (actas,
+tickets) nace con esos ocho estados. Así, el día que haya que hablar con fuera, el sistema
+de tickets ya es A2A-native sin haber cambiado una coma.
+
+### 11.3 El dialecto se queda, y se mantiene
+
+Aquí va la parte que no es técnica. Nuestras palabras no son un capricho de estilo: son el
+modelo. `park` describe algo que ningún estándar tiene porque ningún estándar cree que un
+agente pueda estar muerto y volver. Renombrarlo para encajar en un vocabulario ajeno sería
+perder la única frase que explica el sistema.
+
+Así que no se abandona nada: **se mapea**. Un dialecto con su tabla de equivalencias es una
+lengua viva con pasaporte; una lengua que sólo se habla en casa muere cuando muere el que
+la habla. Las desviaciones son deuda declarada, no vergüenza:
+
+- `park` — entrega diferida al reencarnar. **No tiene equivalente**; el más cercano es
+  `submitted` + reintento, y no es lo mismo.
+- `alma` / `teatro` / `coro` — nuestro modelo de identidad. A2A dice "agent"; nosotros
+  distinguimos alma y cuerpo, y ahí está toda la diferencia.
+- `notify` — A2A no tiene "aviso sin acuse": su unidad es la tarea, y una tarea sin
+  resultado no es una tarea. El nuestro es un mensaje que puede morir en paz.
+
+### 11.4 La regla de mantenimiento (lo que evita que el dialecto se pudra)
+
+1. **Cada subida de minor de A2A** (`A2A-Version`, hoy `1.0`) se revisa esta tabla: es el
+   diff que hay que mirar. Si el estándar añade un estado o cambia una parte, se anota si
+   nos afecta y se actualiza el mapeo. Sin esa revisión, "dialecto" pasa a ser "lengua
+   privada", y las lenguas privadas se mueren con quien las habla.
+2. **Toda palabra nueva del coro** entra aquí con su fila: qué es, a qué se parece fuera, y
+   por qué no se usa el término ajeno. Tres columnas y una frase; si no cabe, no es una
+   palabra nuestra, es una complicación.
+3. **La pasarela vive en el borde** (`neon-link`), cuando la federación exista (D26). Ni un
+   `Task` de A2A cruza la puerta de casa: dentro se habla coro.
+

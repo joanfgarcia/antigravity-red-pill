@@ -2769,3 +2769,61 @@ no puede ofrecer dos caminos.
 - **S3**: el `[CORO]` del handshake cuenta `inbox` pendiente (hoy solo `mission_events`)
   y el render hace evidente `respuesta: NO` (D-13).
 - Sigue fuera: **D26** (firma real) y la federación entre teatros.
+
+## [AD-096] El coro contra A2A: estándar en la frontera, dialecto en casa
+
+**Date**: 2026-10-30
+**Status**: ACEPTADO. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md` §11.
+
+### 1. The Problem
+El coro ya tiene un protocolo propio (AD-095): verbos `notify`/`ask`/`reply`/`park`,
+sobre con procedencia y salto, dirección por alma y entrega diferida. Al mismo tiempo
+existe **A2A** (v1.0.1, Agentic AI Foundation): estándar abierto para que agentes se
+deleguen tareas, con *Agent Card* firmada, ocho estados de tarea, `Message`/`Part`
+(text/file/data) y transporte HTTP. La pregunta del Operador fue la correcta: **¿estamos
+reinventando lo que ya es estándar?**
+
+### 2. The Decision
+1. **A2A no entra dentro.** No por tamaño, por suposición: en A2A el agente **es un
+   endpoint vivo**; si no está, la tarea muere. Nuestro protocolo promete lo contrario —
+   *un mensaje a un alma muerta se entrega al reencarnar*— y `park` existe precisamente
+   para el caso que el estándar no modela. Meterlo dentro obligaría a fingir que las
+   almas nunca mueren, o a mantener nuestra durabilidad **detrás** del estándar.
+2. **A2A se adopta como gramática de la frontera.** La federación entre teatros (atada a
+   D26) se resuelve con una **pasarela en `neon-link`**: traduce nuestro sobre ↔
+   `Task`/`Message`. Dentro se habla coro; nada de A2A cruza la puerta de casa.
+3. **Alineación de vocabulario ya**, para que la pasarela sea traducción y no reescritura:
+   `queued→submitted`, `delivered→working`, `ask→input_required`,
+   `refuse→rejected`, `read/replied→completed`, `given_up→failed`, `retirado→canceled`,
+   anexo `agentbus://`→`Part.file`, `thread_id`+`event_id`→`contextId`+`task.id`.
+4. **El `parte` nace con los ocho estados de A2A**: el futuro sistema de tickets se
+   escribe A2A-native y no hay que recortarlo después.
+5. **El dialecto se queda y se mantiene.** `park`, `alma`, `teatro`, `coro`, `notify` no
+   se renombran: son el modelo, no el estilo. Se **mapean** en una tabla de desviaciones
+   con motivo (CORO_PROTOCOL §11.3) — un dialecto con pasaporte, no una lengua privada.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| A2A como protocolo interno (un servidor por alma) | rechazada | identidad = endpoint contradice alma ≠ cuerpo; añade HTTP, auth, tarjetas, SSE y task store para reemplazar un SQLite que resuelve en 0,5 ms |
+| Ignorar A2A hasta que haga falta | rechazada | la federación es un plan real; sin alineación previa, el día que llegue se recorta el modelo |
+| Renombrar nuestros verbos a los de A2A | rechazada | perderíamos la única frase que explica el sistema (la entrega a un alma muerta) |
+| Pasarela A2A en el borde, sin tocar el interior | **elegida** | es el uso para el que A2A existe: sistemas independientes, opacos, con confianza decidida antes |
+
+### 4. Rationale
+Un estándar no compite con un dialecto: le da frontera. Lo que A2A resuelve —descubrir
+capacidades, decidir confianza, delegar trabajo entre organizaciones— no es nuestro
+problema; el nuestro es que dos hermanas en la misma máquina puedan dejarse una nota que
+sobreviva a la pestaña. Confundir las capas costaría una capa entera de superficie
+(Smith: T1–T7 hoy) para no ganar nada dentro.
+
+Y hay una razón que no es técnica: nuestras palabras se ganaron describiendo algo que el
+estándar no cree posible. Se mapean, no se tiran.
+
+### 5. Consequences y deuda declarada
+- **Revisión obligatoria por versión**: cada subida de minor de A2A (`A2A-Version`) se
+  revisa la tabla de §11.3. Sin esa revisión, "dialecto" degenera en "lengua privada".
+- **Toda palabra nueva del coro** entra en la tabla con tres columnas (qué es, a qué se
+  parece fuera, por qué no se usa el término ajeno). Sin fila, no es palabra: es ruido.
+- **Pendiente**: la pasarela `neon-link` ↔ A2A no se implementa hasta que exista la
+  federación (D26). Hoy solo queda el mapeo y la regla de mantenimiento.
