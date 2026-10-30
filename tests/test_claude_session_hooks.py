@@ -19,8 +19,13 @@ HOOKS_DIR = REPO_ROOT / "seeds" / "settings" / "hooks"
 HOOKS = ("redpill_turn_start.py", "redpill_scribe.py")
 
 
-def _run_hook(script: str, stdin: str, data_home: Path) -> subprocess.CompletedProcess:
-	env = {**os.environ, "XDG_DATA_HOME": str(data_home)}
+_MESSAGING_ENV = ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN")
+
+
+def _run_hook(script: str, stdin: str, data_home: Path, extra_env: dict | None = None) -> subprocess.CompletedProcess:
+	# El entorno de la sesión que corre la suite puede traer su socket real: fuera.
+	base = {k: v for k, v in os.environ.items() if k not in _MESSAGING_ENV}
+	env = {**base, "XDG_DATA_HOME": str(data_home), **(extra_env or {})}
 	return subprocess.run(
 		[sys.executable, str(HOOKS_DIR / script)],
 		input=stdin,
@@ -150,6 +155,33 @@ def test_turn_start_writes_bridge(tmp_path):
 	assert data["session_id"] == "uuid-h1"
 	assert data["workdir"] == "/ws/proj"
 	assert data["provider"] == "claude_code"
+
+
+def _session_bridge(data_home: Path, session_id: str) -> dict:
+	path = data_home / "red-pill" / "state" / "sessions" / "bridge" / f"claude_code__{session_id}.json"
+	return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_turn_start_writes_session_bridge_with_messaging_socket(tmp_path):
+	# F6: el bridge por sesión lleva el socket de mensajería (punto de inyección
+	# del tablón); el token NO se guarda.
+	payload = {"session_id": "uuid-h2", "hook_event_name": "UserPromptSubmit", "cwd": "/ws/proj"}
+	env = {"CLAUDE_CODE_MESSAGING_SOCKET": "/run/user/1000/cc-socks/42.sock", "CLAUDE_CODE_MESSAGING_TOKEN": "secreto"}
+	res = _run_hook("redpill_turn_start.py", json.dumps(payload), tmp_path, env)
+	assert res.returncode == 0, res.stderr
+	data = _session_bridge(tmp_path, "uuid-h2")
+	assert data["session_id"] == "uuid-h2"
+	assert data["workdir"] == "/ws/proj"
+	assert data["messaging_socket"] == "/run/user/1000/cc-socks/42.sock"
+	bridge_dir = tmp_path / "red-pill" / "state"
+	assert not any("secreto" in f.read_text(encoding="utf-8") for f in bridge_dir.rglob("*.json"))
+
+
+def test_turn_start_session_bridge_without_socket(tmp_path):
+	payload = {"session_id": "uuid-h3", "hook_event_name": "UserPromptSubmit", "cwd": "/ws/proj"}
+	res = _run_hook("redpill_turn_start.py", json.dumps(payload), tmp_path)
+	assert res.returncode == 0, res.stderr
+	assert "messaging_socket" not in _session_bridge(tmp_path, "uuid-h3")
 
 
 def test_scribe_does_not_write_bridge(tmp_path):

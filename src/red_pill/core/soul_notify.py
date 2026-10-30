@@ -28,6 +28,11 @@ Segundo consumidor del seam (Fase 5, 2026-10-28): `session/delivery.py` — el
 adaptador que convierte un evento del tablón dirigido a un alma en un nudge.
 Reutiliza `resolve_live_leg` y `notify_soul`; no abre otro canal.
 
+Segundo transporte (F6, 2026-10-30): `claude_socket`, el socket de mensajería
+por sesión de Claude Code. El transporte se elige por el arnés del cuerpo
+(`_PROVIDER_TRANSPORT`): opencode sigue en `cli` y claude_code va por su socket.
+`REDPILL_SOUL_NOTIFY_TRANSPORT` sigue forzando uno para todos.
+
 Reglas que respeta (no las salta)
 ---------------------------------
 - **D-07 (quién puede despertar a quién)**: un job es hijo del alma que lo
@@ -49,6 +54,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -243,6 +249,83 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 	return True
 
 
+# Directorios donde Claude Code crea sus sockets de mensajería (los mismos que
+# acepta el propio binario: `/run/user/<uid>/cc-socks`, `/tmp/cc-socks[-<uid>]`).
+_CLAUDE_SOCKET_DIR = re.compile(r"^(/run/user/\d+/cc-socks|/tmp/cc-socks(-\d+)?|/private/tmp/cc-socks(-\d+)?)$")
+CLAUDE_SOCKET_TIMEOUT_S = 5.0
+
+
+def claude_messaging_socket(session_id: str) -> Optional[str]:
+	"""Socket de mensajería de la sesión Claude Code `session_id`, validado, o None.
+
+	La ruta la deja el hook `redpill_turn_start.py` en el bridge por sesión. Solo
+	se acepta un socket de verdad, del mismo UID y dentro de un directorio
+	`cc-socks`: el bridge es un fichero de estado y no debe poder apuntar el
+	transporte a cualquier socket del sistema. El motivo del rechazo queda en
+	`last_error()`.
+	"""
+	import stat
+
+	from red_pill.core.bridge import read_session_bridge
+
+	entry = read_session_bridge("claude_code", session_id) or {}
+	path = str(entry.get("messaging_socket") or "").strip()
+	if not path:
+		_set_last_error("claude_sin_socket_en_bridge")
+		return None
+	if not _CLAUDE_SOCKET_DIR.match(os.path.dirname(path)) or not path.endswith(".sock"):
+		_set_last_error("claude_socket_fuera_de_cc_socks")
+		return None
+	try:
+		st = os.stat(path)
+	except OSError:
+		# La sesión que lo abrió ya no vive (o reanudó con otro proceso y aún no
+		# ha empezado turno para reescribir el bridge).
+		_set_last_error("claude_socket_ausente")
+		return None
+	if not stat.S_ISSOCK(st.st_mode) or st.st_uid != os.getuid():
+		_set_last_error("claude_socket_no_valido")
+		return None
+	return path
+
+
+def _deliver_claude_socket(session_id: str, text: str) -> bool:
+	"""Inyecta un turno en una sesión de Claude Code por su socket de mensajería (F6).
+
+	Es la vía oficial de mensajería entre sesiones de Claude Code: una línea
+	NDJSON `{"type":"user",...}` por el socket UDS de la sesión. Si la sesión
+	está en un turno, el mensaje entra en ese turno; si está idle, Claude abre uno
+	nuevo (verificado 2026-10-30 en el desktop, CLI 2.1.309). El arnés lo
+	enmarca como mensaje de otra sesión, no del Operador, y no concede permisos:
+	encaja con D-09 sin hacer nada.
+
+	Síncrono, sin hilo: escribir en un socket local no espera al turno del
+	receptor. Como en `cli`, True significa que el socket **aceptó los bytes**, no
+	que se leyera; la política de entrada del receptor (`crossSessionInbound`)
+	todavía puede retenerlo.
+	"""
+	import json
+	import socket
+
+	path = claude_messaging_socket(session_id)
+	if path is None:
+		logger.info(f"[soul-notify] claude {session_id[:8]}: {last_error()}; queda en el inbox (pull)")
+		return False
+	line = json.dumps({"type": "user", "message": {"role": "user", "content": text}}, ensure_ascii=False) + "\n"
+	try:
+		with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+			sock.settimeout(CLAUDE_SOCKET_TIMEOUT_S)
+			sock.connect(path)
+			sock.sendall(line.encode("utf-8"))
+			sock.shutdown(socket.SHUT_WR)
+	except OSError as e:
+		_set_last_error("claude_socket_rechazo")
+		logger.warning(f"[soul-notify] socket de claude {session_id[:8]} rechazó la entrega: {e}")
+		return False
+	_set_last_error("")
+	return True
+
+
 def _deliver_neon_link(session_id: str, text: str) -> bool:
 	"""Transporte FUTURO: canal `soul` de neon-link (D-06).
 
@@ -257,16 +340,24 @@ def _deliver_neon_link(session_id: str, text: str) -> bool:
 # El repunte a neon-link es cambiar cuál de estos es el DEFAULT.
 _TRANSPORTS = {
 	"cli": _deliver_cli,
+	"claude_socket": _deliver_claude_socket,
 	"neon_link": _deliver_neon_link,
 }
 _DEFAULT_TRANSPORT = "cli"  # ← TEMPORAL (ver AD-090); pasará a "neon_link"
+# Transporte propio de un arnés cuando no hay override: cada cuerpo se entrega
+# por el punto de inyección que su arnés tiene de verdad.
+_PROVIDER_TRANSPORT = {"claude_code": "claude_socket"}
 
 
-def _resolve_transport() -> str:
+def _resolve_transport(provider: str = "") -> str:
 	forced = str(os.getenv(ENV_TRANSPORT) or "").strip().lower()
 	if forced in _TRANSPORTS:
 		return forced
-	return _DEFAULT_TRANSPORT
+	return _PROVIDER_TRANSPORT.get(str(provider or ""), _DEFAULT_TRANSPORT)
+
+
+def _leg_provider(leg: Optional[str]) -> str:
+	return str(leg or "").partition(":")[0]
 
 
 # ── API pública ─────────────────────────────────────────────────────────────
@@ -277,6 +368,7 @@ def _resolve_transport() -> str:
 # o de otro arnés NO es entregable por esta vía.
 _DELIVERABLE_BY_TRANSPORT = {
 	"cli": frozenset({"opencode"}),
+	"claude_socket": frozenset({"claude_code"}),
 	"neon_link": frozenset({"opencode", "claude_code", "pi", "telegram"}),
 }
 
@@ -333,10 +425,6 @@ def notify_soul(
 		return False
 	if notify_disabled():
 		return False
-	transport = _resolve_transport()
-	fn = _TRANSPORTS.get(transport)
-	if fn is None:
-		return False
 	# El `originator` que llega puede ser el leg del JOB (`dag:<uuid>`), no el
 	# cuerpo de un arnés. Pasarlo tal cual a `opencode run --session` reventaba
 	# con `Expected a string starting with "ses"` y el aviso se perdía en
@@ -344,16 +432,21 @@ def notify_soul(
 	# `leg_originator` en el checkpoint y `job_identity` lo devuelve).
 	# Solo se acepta como cuerpo un provider que el transporte sepa entregar;
 	# en cualquier otro caso se resuelve por alma, que es la dirección real.
-	leg = originator if _is_deliverable_leg(originator, transport) else None
+	# El transporte depende del arnés del cuerpo, así que se decide por leg.
+	leg = originator if _is_deliverable_leg(originator, _resolve_transport(_leg_provider(originator))) else None
 	if leg is None:
 		leg = resolve_live_leg(continuity_id)
-		if leg is not None and not _is_deliverable_leg(leg, transport):
+		if leg is not None and not _is_deliverable_leg(leg, _resolve_transport(_leg_provider(leg))):
 			leg = None
 	if not leg or ":" not in leg:
 		logger.debug(f"[soul-notify] alma {continuity_id[:8]} sin cuerpo entregable; queda en el inbox (pull)")
 		return False
-	_, _, session_id = leg.partition(":")
+	provider, _, session_id = leg.partition(":")
 	if not session_id:
+		return False
+	transport = _resolve_transport(provider)
+	fn = _TRANSPORTS.get(transport)
+	if fn is None:
 		return False
 	try:
 		return bool(fn(session_id, text))

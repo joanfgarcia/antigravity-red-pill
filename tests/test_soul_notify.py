@@ -12,11 +12,17 @@ por env, y que la entrega NO bloquea.
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import socket
 import threading
 import time
 import types
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from red_pill.core import soul_notify
 from red_pill.core.session_liveness import SessionSignal
@@ -416,3 +422,106 @@ class TestLegNoEntregable:
 		assert soul_notify._is_deliverable_leg("claude_code:c1", "neon_link")
 		assert not soul_notify._is_deliverable_leg("", "cli")
 		assert not soul_notify._is_deliverable_leg("opencode", "cli"), "sin id no hay cuerpo"
+
+
+class TestClaudeSocket:
+	"""F6: el socket de mensajería de Claude Code como punto de inyección."""
+
+	@pytest.fixture
+	def cc_socks(self, short_socket_dir, monkeypatch):
+		# Dentro del sandbox de la suite y con ruta corta (un UDS admite ~104 bytes).
+		sock_dir = os.path.join(str(short_socket_dir), "cc-socks")
+		os.mkdir(sock_dir, 0o700)
+		monkeypatch.setattr(soul_notify, "_CLAUDE_SOCKET_DIR", re.compile(re.escape(sock_dir) + "$"))
+		return sock_dir
+
+	@staticmethod
+	def _bridge(path):
+		return patch("red_pill.core.bridge.read_session_bridge", return_value={"messaging_socket": path} if path else {})
+
+	def test_cada_arnes_tiene_su_transporte(self, monkeypatch):
+		monkeypatch.delenv(soul_notify.ENV_TRANSPORT, raising=False)
+		assert soul_notify._resolve_transport("claude_code") == "claude_socket"
+		assert soul_notify._resolve_transport("opencode") == "cli"
+		assert soul_notify._resolve_transport() == "cli"
+
+	def test_el_override_manda_sobre_el_arnes(self, monkeypatch):
+		monkeypatch.setenv(soul_notify.ENV_TRANSPORT, "neon_link")
+		assert soul_notify._resolve_transport("claude_code") == "neon_link"
+
+	def test_entregabilidad(self):
+		assert soul_notify._is_deliverable_leg("claude_code:c1", "claude_socket")
+		assert not soul_notify._is_deliverable_leg("opencode:ses_x", "claude_socket")
+
+	def test_notify_soul_enruta_claude_por_su_socket(self, monkeypatch):
+		monkeypatch.delenv(soul_notify.ENV_TRANSPORT, raising=False)
+		por_cli, por_socket = [], []
+		with patch.dict(
+			soul_notify._TRANSPORTS,
+			{"cli": lambda sid, txt: por_cli.append(sid) or True, "claude_socket": lambda sid, txt: por_socket.append(sid) or True},
+		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
+			assert soul_notify.notify_soul("alma-1", "hola", originator="claude_code:uuid-c1") is True
+			assert soul_notify.notify_soul("alma-2", "hola", originator="opencode:ses_a") is True
+		assert por_socket == ["uuid-c1"]
+		assert por_cli == ["ses_a"]
+
+	def test_entrega_una_linea_user_por_el_socket(self, cc_socks):
+		path = os.path.join(cc_socks, "4242.sock")
+		server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		server.bind(path)
+		server.listen(1)
+		received = []
+
+		def _accept():
+			conn, _ = server.accept()
+			with conn:
+				chunks = []
+				while chunk := conn.recv(4096):
+					chunks.append(chunk)
+			received.append(b"".join(chunks).decode("utf-8"))
+
+		server.settimeout(5)
+		t = threading.Thread(target=_accept, daemon=True)
+		t.start()
+		try:
+			with self._bridge(path):
+				assert soul_notify._deliver_claude_socket("uuid-c1", "aviso del tablón ñ") is True
+			t.join(timeout=5)
+		finally:
+			server.close()
+		assert len(received) == 1 and received[0].endswith("\n")
+		msg = json.loads(received[0])
+		assert msg == {"type": "user", "message": {"role": "user", "content": "aviso del tablón ñ"}}
+		assert "token" not in received[0], "el token del socket no viaja ni se guarda"
+		assert soul_notify.last_error() == ""
+
+	def test_sin_socket_en_el_bridge_no_entrega(self):
+		with self._bridge(""):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_sin_socket_en_bridge"
+
+	def test_socket_fuera_de_cc_socks_se_rechaza(self, cc_socks):
+		with self._bridge("/run/dbus/system_bus_socket"):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_fuera_de_cc_socks"
+
+	def test_sesion_muerta_degrada_a_pull(self, cc_socks):
+		with self._bridge(os.path.join(cc_socks, "9999.sock")):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_ausente"
+
+	def test_un_fichero_que_no_es_socket_se_rechaza(self, cc_socks):
+		path = os.path.join(cc_socks, "falso.sock")
+		Path(path).write_text("no soy un socket")
+		with self._bridge(path):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_no_valido"
+
+	def test_socket_sin_escucha_no_lanza(self, cc_socks):
+		path = os.path.join(cc_socks, "huerfano.sock")
+		orphan = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		orphan.bind(path)
+		orphan.close()
+		with self._bridge(path):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_rechazo"

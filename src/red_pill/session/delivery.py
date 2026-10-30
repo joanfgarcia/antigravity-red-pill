@@ -41,13 +41,15 @@ Medida en este repo, 2026-10-28. Sin maquillar: lo que no existe, no existe.
 | arnés        | ¿punto de inyección? | cómo                                              | degradación                                        |
 |--------------|----------------------|---------------------------------------------------|----------------------------------------------------|
 | `opencode`   | SÍ                   | seam `cli` de `soul_notify`: `opencode run --session <id>` — inyecta turno o despierta el cuerpo idle | n/a (este módulo)                                   |
-| `claude_code`| NO (aquí)            | existe `claude --resume <id> -p` (`swarm/bridges/claude.py:164`) pero es **headless**: abre un turno en otro proceso, no interrumpe ni despierta la sesión que el Operador tiene delante; los bridges son sustrato de `run_agent_task`, no canal de aviso | pull (digest del siguiente turno)                   |
+| `claude_code`| SÍ (F6, 2026-10-30)  | seam `claude_socket` de `soul_notify`: una línea NDJSON por el socket de mensajería de la sesión (`CLAUDE_CODE_MESSAGING_SOCKET`, que el hook deja en el bridge por sesión). Entra en el turno en curso o despierta la sesión idle. NO sirve `claude --resume <id> -p`: es headless y abre el turno en otro proceso | pull si el bridge no tiene socket o la sesión ya no vive; el receptor puede retenerlo (`crossSessionInbound`) |
 | `pi`         | NO (aquí)            | mismo caso: resume por cabecera de sesión (`swarm/bridges/pi.py`), headless | pull                                                |
 | `telegram`   | NO (aquí)            | tiene bandeja (el chat del Operador) pero la salida vive **fuera** del repo (neon-link/gateway); lo de dentro es `notify_os`, que no es un turno | pull + señal de dolor del metabolismo                |
 
-Dos limitaciones del único camino que sí existe, dichas en la cara:
+Dos limitaciones de los caminos que sí existen, dichas en la cara:
 
-1. **El seam es optimista.** `_deliver_cli` devuelve `True` al **lanzar** el
+1. **El seam es optimista.** `_deliver_claude_socket` devuelve `True` cuando el
+	socket acepta los bytes: no hay acuse y el receptor aún puede retenerlo.
+	`_deliver_cli` devuelve `True` al **lanzar** el
 	proceso en un hilo daemon; el `rc != 0` se registra pero ya no vuelve. Así que
 	`delivered` significa «entregado al transporte», no «leído». Además, el hilo
 	vive lo que vive el proceso: un llamante efímero (la CLI) debe drenar con
@@ -98,10 +100,10 @@ CLAIM_TTL_S = 300.0
 # push es un lujo, el pull es la entrega real.
 MAX_PUSH_ATTEMPTS = 3
 
-# Arnés → nombre del seam en `soul_notify._TRANSPORTS`. Solo opencode tiene punto
-# de inyección hoy (ver la tabla del docstring): añadir otro arnés aquí exige
-# añadir antes su transporte al seam, no lo contrario.
-INJECTION_POINTS: Dict[str, str] = {"opencode": "cli"}
+# Arnés → nombre del seam en `soul_notify._TRANSPORTS` (ver la tabla del
+# docstring): añadir otro arnés aquí exige añadir antes su transporte al seam, no
+# lo contrario.
+INJECTION_POINTS: Dict[str, str] = {"opencode": "cli", "claude_code": "claude_socket"}
 
 _TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS event_deliveries (

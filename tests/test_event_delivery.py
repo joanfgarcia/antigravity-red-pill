@@ -123,6 +123,22 @@ class TestEntregaCorrecta:
 		"""El adaptador solo usa seams que existen en `soul_notify` (AD-090)."""
 		assert set(delivery.INJECTION_POINTS.values()) <= set(soul_notify._TRANSPORTS)
 
+	def test_claude_code_se_empuja_por_su_socket(self, reg, db, monkeypatch):
+		"""F6: un cuerpo claude_code va por `claude_socket`, no por el CLI de opencode."""
+		monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")
+		monkeypatch.delenv(soul_notify.ENV_TRANSPORT, raising=False)
+		por_cli, por_socket = [], []
+		ev = _event(reg)
+		with patch.dict(
+			soul_notify._TRANSPORTS,
+			{"cli": lambda sid, txt: por_cli.append(sid) or True, "claude_socket": lambda sid, txt: por_socket.append(sid) or True},
+		):
+			report = delivery.deliver_events("alma-1", originator="claude_code:uuid-c1", db_path=db)
+		assert por_cli == []
+		assert por_socket == ["uuid-c1"]
+		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["reason"] == "handed_to_transport:claude_socket"
+		assert report["delivered"]
+
 	def test_varios_eventos_en_una_pasada_respetran_el_orden(self, reg, db, push):
 		_event(reg, summary="primero")
 		_event(reg, summary="segundo")
@@ -146,9 +162,9 @@ class TestDegradacionPull:
 		assert reg.get_event(ev["event_id"]) is not None, "el tablón no se toca"
 
 	def test_arnes_sin_punto_de_inyeccion_degrada_a_pull(self, reg, db, push):
-		"""claude_code/pi/telegram no tienen inyección aquí: no se empuja nada."""
+		"""pi/telegram no tienen inyección aquí: no se empuja nada."""
 		_event(reg)
-		for provider in ("claude_code", "pi", "telegram"):
+		for provider in ("pi", "telegram"):
 			report = delivery.deliver_events("alma-1", originator=f"{provider}:ses_x", db_path=db)
 			assert push == []
 			assert report["delivered"] == []
@@ -380,8 +396,8 @@ class TestEsquemaYDiagnostico:
 		assert "TABLA DE HONESTIDAD" in doc
 		for harness in ("opencode", "claude_code", "pi", "telegram"):
 			assert harness in doc, f"el arnés {harness} no está en la tabla de honestidad"
-		# Lo único que inyecta hoy es opencode, y lo hace por el seam de AD-090.
-		assert delivery.INJECTION_POINTS == {"opencode": "cli"}
+		# Inyectan opencode (seam de AD-090) y claude_code (socket de mensajería, F6).
+		assert delivery.INJECTION_POINTS == {"opencode": "cli", "claude_code": "claude_socket"}
 		assert set(delivery.INJECTION_POINTS.values()) <= set(soul_notify._TRANSPORTS)
 
 	def test_el_estado_entregado_significa_entregado_al_transporte(self, reg, db, monkeypatch):
