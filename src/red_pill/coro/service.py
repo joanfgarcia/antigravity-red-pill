@@ -322,14 +322,25 @@ async def inbox(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
 
 def _friendly_state(raw: str) -> str:
-	"""Estados del protocolo (§5) sobre los del registro de entrega."""
+	"""Estados del protocolo (§5) sobre los del registro de entrega.
+
+	Sin maquillar: `pulled` NO es `delivered` — significa que el digest se lo
+	anunció y el push sobraba. Decir "delivered" ahí fue mentir en el inbox durante
+	un día (2026-10-30).
+	"""
 	if raw == "read":
-		return "read"
+		return "leído"
 	if raw == "delivered":
-		return "delivered"
-	if raw in {"pulled", "in_flight"}:
-		return "delivered" if raw == "pulled" else "queued"
-	return "queued"
+		return "entregado al cuerpo"
+	if raw == "pulled":
+		return "visto en el digest"
+	if raw == "in_flight":
+		return "en curso"
+	if raw == "given_up":
+		return "sin push (solo pull)"
+	if raw == "skipped":
+		return "descartado por la destinataria"
+	return "en cola"
 
 
 async def ack(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
