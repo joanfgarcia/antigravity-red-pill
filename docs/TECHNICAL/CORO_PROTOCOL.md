@@ -114,8 +114,10 @@ event_id: <id>   (para dedupe en el receptor; nunca un segundo mensaje por reint
 - Estados: `queued → handed_off | delivered → read → replied`, o `expired`/`dead`.
   `handed_off` = el push salió por el transporte **sin acuse** (el socket de Claude
   aceptó los bytes, o el hijo `opencode run` arrancó; ninguno prueba que el arnés
-  aceptara el turno). `delivered` queda reservado para un transporte que lo confirme
-  (AD-098). `read` es un ack. Y **`pulled` no es `delivered`**:
+  aceptara el turno). `delivered` = **el arnés receptor lo confirmó**: su hook de
+  inicio de turno vio el marcador `msg=<event_id>` del nudge en el prompt, y la
+  sesión es del alma destinataria (AD-099). Un nudge que entra a mitad de turno en
+  Claude no dispara el hook y se queda en `handed_off`. `read` es un ack del alma. Y **`pulled` no es `delivered`**:
   significa que el digest se lo anunció al destinatario y el push sobraba. Pintarlo
   como entregado es mentir sobre el transporte (pasó hasta el 2026-10-30).
   `given_up` = no hubo push, solo pull; `skipped` = lo descartó el destinatario.
@@ -294,7 +296,7 @@ frases no caben en el mismo contrato.
 |---|---|---|
 | `queued` | `submitted` | el mensaje está y espera |
 | `handed_off` | `submitted` | salió por el transporte, sin acuse del cuerpo |
-| `delivered` | `working` | el transporte confirmó que lo puso en el cuerpo |
+| `delivered` | `working` | el arnés receptor acusó el nudge en el prompt del turno |
 | `ask` sin respuesta | `input_required` | es el mismo concepto, con otro nombre |
 | `refuse` del destinatario | `rejected` | ya existe en `wake_policy` |
 | `read`/`replied` | `completed` | el hilo da el resto |

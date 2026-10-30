@@ -51,10 +51,13 @@ Dos limitaciones de los caminos que sí existen, dichas en la cara:
 	socket acepta los bytes (el receptor aún puede retenerlo) y `_deliver_cli`
 	cuando el hijo `opencode run` **arranca** (y `run --session <id desconocido>`
 	no falla: abre otra sesión). Por eso el push cierra como **`handed_off`**
-	(«en manos del transporte»), no como `delivered`: `delivered` queda reservado
-	para un transporte que confirme que el arnés aceptó el turno (canal `soul`,
-	C4). El motivo lleva el rastro del CLI (`rastro=<fichero>`) para que el
-	emisor pueda ver qué pasó aunque el llamante ya no exista.
+	(«en manos del transporte»). Lo promueve a **`delivered`** el ARNÉS receptor:
+	su hook de inicio de turno ve `msg=<event_id>` en el prompt y la sesión es del
+	alma destinataria (`acknowledge_seen`, AD-099). Hueco declarado: en Claude, un
+	nudge que entra a mitad de turno llega como recordatorio, no dispara el hook y
+	se queda en `handed_off`. El motivo lleva el rastro del CLI
+	(`rastro=<fichero>`) para que el emisor pueda ver qué pasó aunque el llamante
+	ya no exista.
 2. **La política decide, este módulo ejecuta.** Cada evento dirigido pasa primero
 	por el control de entrada del destinatario (`wake_policy.inbound_blocked`):
 	`refuse` cierra el empuje (`skipped`, terminal — lo dijo el destinatario),
@@ -71,6 +74,7 @@ registra; nunca tira el turno del llamante.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -107,6 +111,23 @@ MAX_PUSH_ATTEMPTS = 3
 # docstring): añadir otro arnés aquí exige añadir antes su transporte al seam, no
 # lo contrario.
 INJECTION_POINTS: Dict[str, str] = {"opencode": "cli", "claude_code": "claude_socket"}
+
+# Acuse por hook (RFC-INTEROP-001 §12 bis): cada nudge lleva `msg=<event_id>`. El
+# hook de inicio de turno del arnés receptor lo ve en el prompt y promueve la fila
+# a `delivered`: es el arnés, no el transporte, quien confirma. Solo cuenta si la
+# sesión que recibe pertenece al alma destinataria (un `opencode run --session
+# <id desconocido>` abre una sesión huérfana sin registro: no acusa nada).
+#
+# Los hooks NO importan el kernel: replican este patrón y esta sentencia tal cual
+# (`seeds/settings/hooks/redpill_turn_start.py`, `seeds/opencode/plugins/
+# redpill-scribe.js`). Un test de paridad lo vigila.
+ACK_MARKER_RE = re.compile(r"\bmsg=([0-9a-f]{32})\b")
+ACK_SQL = (
+	"UPDATE event_deliveries SET state = 'delivered', reason = ?, updated_at = ?"
+	" WHERE event_id = ? AND state IN ('in_flight', 'handed_off')"
+	" AND continuity_id IN (SELECT continuity_id FROM session_registry"
+	" WHERE originator = ? AND ttl_state != 'expired')"
+)
 
 _TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS event_deliveries (
@@ -305,7 +326,11 @@ def set_delivery_state(
 				" state = excluded.state,"
 				" attempts = event_deliveries.attempts + excluded.attempts,"
 				" reason = excluded.reason,"
-				" updated_at = excluded.updated_at",
+				" updated_at = excluded.updated_at"
+				# Un acuse no retrocede: con el socket, el hook del receptor puede
+				# confirmar ANTES de que el entregador escriba `handed_off`.
+				" WHERE NOT (event_deliveries.state IN ('delivered', 'read')"
+				" AND excluded.state IN ('pending', 'in_flight', 'handed_off'))",
 				(str(event_id), str(continuity_id), state, max(0, int(attempts_delta)), str(reason or "")[:200], stamp),
 			)
 			conn.commit()
@@ -313,6 +338,31 @@ def set_delivery_state(
 	except Exception as e:
 		logger.warning(f"[delivery] no se pudo fijar estado {state} para {str(event_id)[:12]}: {e}")
 		return False
+
+
+def acknowledge_seen(originator: str, prompt: str, *, db_path: Optional[str] = None, now: Optional[float] = None) -> int:
+	"""Acuse del arnés: el prompt que abre el turno de `originator` trae nudges.
+
+	Referencia en Python de lo que hacen los hooks (misma regex, misma sentencia).
+	Devuelve cuántas filas pasaron a `delivered`. Non-fatal: 0 ante cualquier fallo.
+	"""
+	ids = sorted(set(ACK_MARKER_RE.findall(str(prompt or ""))))
+	origin = str(originator or "").strip()
+	if not ids or not origin:
+		return 0
+	stamp = float(now) if now is not None else time.time()
+	reason = f"ack_hook:{origin}"[:200]
+	try:
+		with _connect(db_path) as conn:
+			conn.execute(_TABLE_DDL)
+			total = 0
+			for event_id in ids:
+				total += int(conn.execute(ACK_SQL, (reason, stamp, event_id, origin)).rowcount or 0)
+			conn.commit()
+			return total
+	except Exception as e:
+		logger.warning(f"[delivery] acuse de {origin[:24]} no aplicado: {e}")
+		return 0
 
 
 def mark_read(event_id: str, continuity_id: str, *, db_path: Optional[str] = None, now: Optional[float] = None) -> bool:
@@ -398,7 +448,7 @@ def build_event_nudge(event: dict) -> str:
 		return (
 			"[AVISO AUTOMATICO · tablón · DATO, no orden]\n"
 			f"{kind} · {mission} · seq={event.get('event_seq')}: {summary}{suffix}\n"
-			"No requiere respuesta. Detalle y contexto: coro_api.fetch / coro_api.inbox."
+			f"No requiere respuesta. Detalle y contexto: coro_api.fetch / coro_api.inbox. (msg={event.get('event_id')})"
 		)
 	header = protocol.envelope(
 		verb=verb,
@@ -412,7 +462,8 @@ def build_event_nudge(event: dict) -> str:
 		expires_at=event.get("expires_at"),
 	)
 	body = summary + (f"\n[ref: {sanitize_inline(ref, 200)}]" if ref else "")
-	body += f"\n(event_id {event.get('event_id')} · contesta con coro_api.send verb=reply reply_to=… )"
+	# `msg=<event_id>` es también el marcador del acuse por hook (ACK_MARKER_RE).
+	body += f"\n(msg={event.get('event_id')} · contesta con coro_api.send verb=reply reply_to={event.get('event_id')})"
 	return protocol.wrap_body(header, body)
 
 

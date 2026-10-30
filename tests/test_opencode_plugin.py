@@ -23,6 +23,7 @@ import os
 import sqlite3
 from pathlib import Path
 
+from red_pill.session.store import SessionRegistry
 from tests._js_runtime import find_js_runtime, needs_js_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -326,3 +327,59 @@ def test_recordatorio_nombra_la_forma_correcta_de_code_mode():
 	assert "code-mode calls do not count" not in reminder_block, (
 		"la afirmación falsa sobre Code Mode no debe reaparecer en el recordatorio (incidente 2026-10-28)"
 	)
+
+
+# ── Acuse por hook (AD-099): el prompt con `msg=<event_id>` promueve la fila ──
+_HARNESS_ACK = """
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const sessionHooks = {};
+const ctx = {
+  session: { hook: async (name, cb) => { (sessionHooks[name] ||= []).push(cb); } },
+  tool: { hook: async () => {} },
+  event: { subscribe: async function* () {} },
+  location: { directory: "/ws/proj" },
+};
+await plugin.setup(ctx);
+const fire = async (name, event) => {
+  for (const cb of sessionHooks[name] || []) await cb(event);
+};
+await fire("prompt", { sessionID: "ses_huerfana", prompt: { text: process.env.NUDGE_ORPHAN } });
+await fire("prompt", { sessionID: "ses_a", prompt: { text: process.env.NUDGE } });
+await new Promise((r) => setTimeout(r, 300));
+console.log(JSON.stringify({ ok: true }));
+"""
+
+
+@_runtime
+def test_plugin_acusa_el_nudge_solo_para_su_alma(tmp_path):
+	from red_pill.session import delivery
+
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	reg.upsert_session(originator="opencode:ses_a", continuity_id="alma-1", mission_id="repo:next")
+	events = []
+	for _ in range(2):
+		ev = reg.add_event(
+			event_type="message", mission_id="repo:next", summary="¿llega?", continuity_id="alma-2",
+			originator="opencode:ses_b", global_turn=1, to_continuity="alma-1", verb="ask",
+		)
+		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
+		events.append(ev)
+	mine, orphan = events
+	state = tmp_path / "state"
+	state.mkdir()
+	plugin = tmp_path / "redpill-scribe.js"
+	src = SEED.read_text(encoding="utf-8")
+	src = src.replace("${QUEUE_DB}", str(tmp_path / "bunker_queue.db")).replace("${STATE_DIR}", str(state))
+	plugin.write_text(src, encoding="utf-8")
+	harness = tmp_path / "harness.mjs"
+	harness.write_text(_HARNESS_ACK, encoding="utf-8")
+	env = {
+		**os.environ,
+		"PLUGIN_PATH": str(plugin),
+		"NUDGE": delivery.build_event_nudge(reg.get_event(mine["event_id"])),
+		"NUDGE_ORPHAN": delivery.build_event_nudge(reg.get_event(orphan["event_id"])),
+	}
+	res = _BUN.run(str(harness), capture_output=True, text=True, env=env, timeout=60)
+	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
+	assert delivery.get_delivery(mine["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_DELIVERED
+	assert delivery.get_delivery(orphan["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_HANDED_OFF

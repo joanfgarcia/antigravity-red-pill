@@ -333,7 +333,7 @@ def _friendly_state(raw: str) -> str:
 	if raw == "read":
 		return "leído"
 	if raw == "delivered":
-		return "entregado al cuerpo"
+		return "acusado por el cuerpo"
 	if raw == "handed_off":
 		return "en el transporte (sin acuse)"
 	if raw == "pulled":
