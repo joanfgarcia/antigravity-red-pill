@@ -129,7 +129,7 @@ class ForkChatBackend:
 				texto = linea.decode("utf-8", errors="replace").strip()
 				if not texto.startswith("data:"):
 					continue
-				carga = texto[len("data:"):].strip()
+				carga = texto[len("data:") :].strip()
 				if carga == "[DONE]":
 					return
 				try:
@@ -139,8 +139,7 @@ class ForkChatBackend:
 				yield evento
 
 
-def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None,
-                        unload_daemon: bool = False) -> Any:
+def build_local_backend(resolved: Any, *, server_factory: Optional[Any] = None, unload_daemon: bool = False) -> Any:
 	"""Devuelve el objeto de modelo para un perfil resuelto.
 
 	- runtime de fork → `ForkChatBackend` sobre su `RuntimeServer`.
