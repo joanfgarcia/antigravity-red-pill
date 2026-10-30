@@ -77,7 +77,7 @@
  * Runtime: Bun — uses bun:sqlite.
  */
 
-import { mkdirSync, writeFileSync, renameSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync, readFileSync, unlinkSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 const QUEUE_DB = "${QUEUE_DB}";
@@ -359,22 +359,54 @@ function compatDb(raw) {
   };
 }
 
-async function openDatabase() {
+async function openDatabase(path = QUEUE_DB) {
   try {
     const { Database } = await import("bun:sqlite");
-    return compatDb(new Database(QUEUE_DB));
+    return compatDb(new Database(path));
   } catch (_) {}
   try {
     const { DatabaseSync } = await import("node:sqlite");
-    return compatDb(new DatabaseSync(QUEUE_DB));
+    return compatDb(new DatabaseSync(path));
   } catch (_) {}
   try {
     const { createRequire } = await import("node:module");
     const require = createRequire(import.meta.url);
     const Database = require("better-sqlite3");
-    return compatDb(new Database(QUEUE_DB));
+    return compatDb(new Database(path));
   } catch (_) {}
   return null;
+}
+
+// ── ACUSE POR HOOK (RFC-INTEROP-001 §12 bis) ────────────────────────────────
+// Cada nudge del tablón lleva `msg=<event_id>`. Si el prompt que abre el turno lo
+// trae, ESTE arnés confirma la entrega (`handed_off` → `delivered`), siempre que
+// la sesión pertenezca al alma destinataria: un `opencode run --session <id
+// desconocido>` abre una sesión huérfana sin registro y no acusa nada.
+// COPIA LITERAL de `ACK_MARKER_RE`/`ACK_SQL` de `red_pill/session/delivery.py`
+// (el plugin no importa el kernel); el test de paridad vigila que no diverjan.
+const ACK_MARKER_RE = /\bmsg=([0-9a-f]{32})\b/g;
+const ACK_SQL = "UPDATE event_deliveries SET state = 'delivered', reason = ?, updated_at = ? WHERE event_id = ? AND state IN ('in_flight', 'handed_off') AND continuity_id IN (SELECT continuity_id FROM session_registry WHERE originator = ? AND ttl_state != 'expired')";
+// session.db vive junto a bunker_queue.db (`core.paths.get_session_db`).
+const SESSION_DB = QUEUE_DB.replace(/[^/]*$/, "session.db");
+
+async function ackNudges(sessionId, text) {
+  if (!sessionId || !text || childSessions.has(sessionId)) return;
+  const ids = [...new Set([...String(text).matchAll(ACK_MARKER_RE)].map((m) => m[1]))];
+  // Sin marcador no se abre la BD; y no se crea si no existe.
+  if (!ids.length || SESSION_DB.includes("${") || !existsSync(SESSION_DB)) return;
+  let db = null;
+  try {
+    db = await openDatabase(SESSION_DB);
+    if (!db) return;
+    const origin = compositeOriginator(sessionId);
+    const stmt = db.query(ACK_SQL);
+    for (const id of ids) stmt.run(`ack_hook:${origin}`.slice(0, 200), Date.now() / 1000, id, origin);
+  } catch (_) {
+  } finally {
+    try {
+      db?.close();
+    } catch (_) {}
+  }
 }
 
 async function initStore() {
@@ -530,6 +562,7 @@ export default {
         touchLiveness(sessionId, "start");
         writeBridge(sessionId, resolveCwd(sessionId, instanceCwd, event, event?.data));
       }
+      if (sessionId && text) ackNudges(sessionId, text);
       if (sessionId && text && !CAPTURE_DISABLED) {
         beginExternalTurn(sessionId, text, resolveCwd(sessionId, instanceCwd, event, event?.data));
         const prev = sessions.get(sessionId);
@@ -683,6 +716,7 @@ export default {
           .map((p) => p.text)
           .join("\n");
         if (textParts) {
+          await ackNudges(sessionID, textParts);
           beginExternalTurn(sessionID, textParts, resolveCwd(sessionID, instanceCwd, input, output));
           sessions.set(sessionID, {
             prompt: textParts,

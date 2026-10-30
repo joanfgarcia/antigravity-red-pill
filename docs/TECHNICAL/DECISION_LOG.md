@@ -2939,3 +2939,49 @@ verdadero es «salió por el transporte» y dónde mirar si algo fue mal.
 - `claude_socket` es local (mismo host y UID). El receptor puede retener el mensaje
   (`crossSessionInbound` y la paridad de modo de permisos) sin que el emisor lo sepa.
 - Para que Claude reciba, hay que resembrar el hook (`inject_settings.py`).
+
+---
+
+## [AD-099] El arnés receptor acusa el nudge: `handed_off` → `delivered` por hook
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/coro-ack-hook`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §5. Origen: RFC-INTEROP-001 §12 bis, recomendación 1.
+
+### 1. The Problem
+AD-098 dejó la entrega en `handed_off`: ningún transporte confirma. El emisor sabía
+que el mensaje salió, pero no si llegó a un cuerpo que lo viera.
+
+### 2. The Decision
+1. **Marcador estable**: todo nudge (`build_event_nudge`) lleva `msg=<event_id>`, tanto
+   en las notas como en los mensajes, que ya lo usaban para el `reply_to`.
+2. **Acusa el arnés, no el transporte**: el hook de inicio de turno (Claude:
+   `redpill_turn_start.py` en `UserPromptSubmit`; opencode: `session.hook("prompt")` del
+   scribe) busca el marcador en el prompt y promueve la fila a **`delivered`**
+   (`reason=ack_hook:<cuerpo>`). Sin marcador no abre la BD; si `session.db` no existe,
+   no la crea.
+3. **Solo acusa el alma destinataria**: la sentencia exige que el cuerpo que recibe esté
+   en `session_registry` con el `continuity_id` de la fila. La sesión huérfana que abre
+   `opencode run --session <id desconocido>` no tiene registro, así que no acusa.
+4. **Un acuse no retrocede**: `set_delivery_state` no baja de `delivered`/`read` a
+   `pending`/`in_flight`/`handed_off`. Con el socket, el hook del receptor puede
+   confirmar antes de que el entregador escriba `handed_off`.
+5. **Sin estado nuevo**: `delivered` era justo el hueco que AD-098 reservó para «el
+   arnés lo aceptó». Un `seen` aparte habría sido un sinónimo.
+6. **Una sola fuente**: `ACK_MARKER_RE` y `ACK_SQL` viven en `session/delivery.py` y los
+   hooks los copian tal cual (no importan el kernel). Un test de paridad lo vigila.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Estado `seen` nuevo por encima de `handed_off` | rechazada | duplica `delivered`, que ya significaba «confirmado» y estaba vacío |
+| CLI ligero (`red-pill …`) desde el hook | rechazada | arrancar el CLI cuesta ~2 s; un `UPDATE` directo cuesta milisegundos |
+| Acusar sin mirar el registro | rechazada | daría por entregado el turno huérfano de un id desconocido |
+
+### 4. Consequences y deuda
+- **Hueco en Claude a mitad de turno**: un mensaje que llega por el socket mientras la
+  sesión trabaja entra como recordatorio de sistema y no dispara `UserPromptSubmit`; se
+  queda en `handed_off`. Cubrirlo exigiría leer el transcript en `Stop`.
+- Pegar a mano un nudge en el prompt también acusa. Es benigno: el texto sí llegó al
+  cuerpo, y solo vale para el alma destinataria.
+- Para que actúe hay que resembrar el hook de Claude y el plugin de opencode.
