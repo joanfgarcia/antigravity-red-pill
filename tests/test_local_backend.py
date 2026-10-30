@@ -173,3 +173,46 @@ def test_sin_extra_server_args_inyecta_y_avisa(monkeypatch):
 	resolved = SimpleNamespace(profile_name="olvidado", runtime_id="llama_cpp_prism", n_ctx=4096, thinking="off")
 	build_local_backend(resolved, server_factory=_Srv)
 	assert "--reasoning" in creados[0]["extra_args"]
+
+
+class _FakeLlama:
+	creados: list = []
+
+	def __init__(self, **kw):
+		_FakeLlama.creados.append(kw)
+
+
+def _en_proceso(monkeypatch):
+	import sys
+	import types
+
+	from red_pill.core import runtime_registry as rr
+
+	monkeypatch.setattr(rr.RuntimeRegistry, "get", classmethod(lambda cls, rid, variant=None: {"kind": "llama_cpp"}))
+	monkeypatch.setitem(sys.modules, "llama_cpp", types.SimpleNamespace(Llama=_FakeLlama))
+	_FakeLlama.creados = []
+	return SimpleNamespace(
+		profile_name="granite_8b",
+		model_path="/m.gguf",
+		chat_format=None,
+		n_ctx=8192,
+		n_gpu_layers=-1,
+		flash_attn="true",
+		extra={},
+	)
+
+
+def test_en_proceso_respeta_lo_que_decide_el_daemon(monkeypatch):
+	"""Regresión de 8d78450: el worker de CPU cargaba con las capas y el contexto
+	del perfil de GPU, y el `flash_attn` del perfil no llegaba a `Llama()`."""
+	resolved = _en_proceso(monkeypatch)
+	build_local_backend(resolved, n_ctx=2048, n_gpu_layers=0, flash_attn=False)
+	kw = _FakeLlama.creados[0]
+	assert (kw["n_ctx"], kw["n_gpu_layers"], kw["flash_attn"]) == (2048, 0, False)
+
+
+def test_en_proceso_sin_argumentos_usa_el_perfil(monkeypatch):
+	resolved = _en_proceso(monkeypatch)
+	build_local_backend(resolved)
+	kw = _FakeLlama.creados[0]
+	assert (kw["n_ctx"], kw["n_gpu_layers"], kw["flash_attn"]) == (8192, -1, True), "flash_attn: true del perfil en GPU"
