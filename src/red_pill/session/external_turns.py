@@ -11,6 +11,7 @@ turno `pending`/`aborted`, nunca un `completed` inventado.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -183,16 +184,38 @@ def import_external_turns(
 		prompt = str(data.get("prompt") or "")
 		status = str(data.get("status") or "pending")
 		try:
+			# Sellado del turno: UNA vez por turno, aquí, que es el punto donde el
+			# turno entra de verdad en el kernel. El `request_id` del arnés viaja
+			# como procedencia: si viene vacío o se repite, no identifica nada y
+			# no puede tragarse el turno (la identidad la pone el sello).
+			from red_pill.session.turn_seal import seal_turn
+
+			sealed = seal_turn(
+				originator=originator,
+				requested_id=request,
+				role="user",
+				prompt=prompt,
+				response=str(data.get("response") or ""),
+				affinity=[f"mission:{mission}"] if mission else None,
+			)
+			request_key = request or sealed["turn_id"]
+			# La clave de fila lleva hash del contenido: si un arnés REPITE su
+			# `request_id` para dos turnos distintos, el segundo no se pierde por
+			# chocar con el `source_ref` del primero (el `INSERT OR IGNORE` lo
+			# habría tirado en silencio).
+			content_key = hashlib.sha256(prompt.encode("utf-8", "replace")).hexdigest()[:10]
 			mirror.begin_turn(
 				continuity_id=continuity,
 				mission_id=mission,
-				request_id=request,
+				request_id=request_key,
 				content=prompt,
 				originator=originator,
 				source="external_hook",
 				model=str(data.get("model") or "") or None,
 				ts=float(data.get("started_at") or _now()),
-				source_ref=f"{request}:user",
+				source_ref=f"{request_key}:{content_key}:user",
+				global_turn=sealed["global_turn"],
+				turn_id=sealed["turn_id"],
 			)
 			response = str(data.get("response") or "")
 			if status == "completed":
@@ -204,11 +227,13 @@ def import_external_turns(
 						content=response,
 						originator=originator,
 						source="external_hook",
-						source_ref=f"{request}:response",
-						request_id=request,
+						source_ref=f"{request_key}:{content_key}:response",
+						request_id=request_key,
 						status="completed",
+						global_turn=sealed["global_turn"],
+						turn_id=sealed["turn_id"],
 					)
-				mirror.complete_turn(continuity_id=continuity, request_id=request)
+				mirror.complete_turn(continuity_id=continuity, request_id=request_key, turn_id=sealed["turn_id"])
 				counts["completed"] += 1
 				from red_pill.session.compaction_hook import maybe_start_after_turn
 
@@ -222,7 +247,7 @@ def import_external_turns(
 			elif status == "aborted":
 				mirror.abort_turn(
 					continuity_id=continuity,
-					request_id=request,
+					request_id=request_key,
 					reason=str(data.get("reason") or "external_aborted"),
 					partial_response=response or None,
 					mission_id=mission,

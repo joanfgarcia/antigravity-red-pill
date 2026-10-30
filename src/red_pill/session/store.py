@@ -119,6 +119,9 @@ ts REAL NOT NULL DEFAULT 0,
 originator TEXT NOT NULL DEFAULT '',
 source TEXT NOT NULL DEFAULT '',
 source_ref TEXT,
+-- turn_id: identidad PROPIA del turno (sellada por el kernel, no por el arnés).
+-- `request_id` se conserva como procedencia (de dónde vino), no como identidad.
+turn_id TEXT,
 status TEXT NOT NULL DEFAULT 'completed',
 request_id TEXT,
 status_reason TEXT
@@ -371,6 +374,10 @@ class SessionRegistry:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN request_id TEXT")
 			if "status_reason" not in mirror_cols:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN status_reason TEXT")
+			try:
+				conn.execute("ALTER TABLE session_mirror ADD COLUMN turn_id TEXT")
+			except sqlite3.OperationalError:
+				pass  # ya existe
 			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_request ON session_mirror(continuity_id, request_id)")
 			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_status ON session_mirror(continuity_id, status)")
 			registry_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_registry)").fetchall()}
@@ -638,15 +645,16 @@ class SessionRegistry:
 			conn.commit()
 
 	def next_global_turn(self, originator: str, affinity: Any = None) -> int:
-		"""Inserta un turno en el reloj y devuelve su `global_turn` monotónico."""
-		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
-		with self._connect() as conn:
-			cur = conn.execute(
-				"INSERT INTO global_turn_seq (created_at, originator, affinity_json) VALUES (?, ?, ?)",
-				(time.time(), originator, affinity_json),
-			)
-			conn.commit()
-			return int(cur.lastrowid or 0)
+		"""Inserta un turno en el reloj y devuelve su `global_turn` monotónico.
+
+		Delega en `session.turn_seal`, que es el **único** punto que avanza el
+		reloj: `BEGIN IMMEDIATE` (lock de escritura antes de leer) + relectura del
+		máximo, para que dos escritores concurrentes no repartan el mismo número ni
+		hagan retroceder el contador en WAL.
+		"""
+		from red_pill.session.turn_seal import next_global_turn as _next
+
+		return _next(str(originator or ""), affinity, db_path=self.db_path)
 
 	def get_max_global_turn(self) -> int:
 		with self._connect() as conn:

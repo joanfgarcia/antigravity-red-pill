@@ -71,6 +71,12 @@ class MemoryQueueManager:
 				cursor.execute("ALTER TABLE memory_queue ADD COLUMN affinity TEXT")
 			except sqlite3.OperationalError:
 				pass
+			# Trazabilidad del turno (D2/§4.1): el número lo pone `session.turn_seal`,
+			# que es el único dueño del reloj. Aquí sólo se guarda.
+			try:
+				cursor.execute("ALTER TABLE memory_queue ADD COLUMN global_turn INTEGER DEFAULT 0")
+			except sqlite3.OperationalError:
+				pass
 			# Index for fast lookup of pending items
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON memory_queue (status)")
 			# Idempotency: the same turn can arrive from the deterministic hook AND
@@ -90,6 +96,7 @@ class MemoryQueueManager:
 		session_id: Optional[str] = None,
 		affinity: Optional[Any] = None,
 		dedup_window_hours: Optional[float] = 12.0,
+		global_turn: int = 0,
 	) -> int:
 		"""Push a fast memory into the queue. Returns row ID (existing one if duplicate).
 
@@ -108,6 +115,11 @@ class MemoryQueueManager:
 		"""
 		if category not in ("work", "social", "mixed"):
 			category = "mixed"
+		# Filtro D2: un turno sin contenido no es un turno. Se descarta aquí y no
+		# entra a la cola de memoria (ruido que luego el sueño tiene que drenar).
+		if not (prompt or "").strip() and not (response or "").strip() and not affinity:
+			logger.debug("Turno vacío descartado (filtro D2)")
+			return 0
 		content_hash = hashlib.sha256(f"{prompt}\x00{response}".encode("utf-8", errors="replace")).hexdigest()
 		try:
 			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
@@ -124,8 +136,8 @@ class MemoryQueueManager:
 						return int(existing[0])
 				affinity_json = json.dumps(affinity, ensure_ascii=False) if affinity else None
 				cursor.execute(
-					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash, session_id, affinity) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)",
-					(prompt, response, role, time.time(), category, originator, model, content_hash, session_id, affinity_json),
+					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash, session_id, affinity, global_turn) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
+					(prompt, response, role, time.time(), category, originator, model, content_hash, session_id, affinity_json, int(global_turn or 0)),
 				)
 				conn.commit()
 				return cursor.lastrowid or 0

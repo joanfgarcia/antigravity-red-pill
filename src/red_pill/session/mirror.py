@@ -68,6 +68,17 @@ def _max_turn_bytes() -> int:
 		return 262144
 
 
+def _turn_id_or_new(value: Optional[str]) -> str:
+	"""Identidad del turno: la que venga si es válida, si no una nuestra.
+
+	Un `turn_id` mal formado (o ausente) no puede tumbar la escritura del turno:
+	se genera uno. El id del arnés nunca es identidad, sólo procedencia.
+	"""
+	from red_pill.session.turn_seal import is_valid_turn_id, new_turn_id
+
+	return value if is_valid_turn_id(value or "") else new_turn_id()
+
+
 def _cap_text(value: Optional[str], cap: int) -> Optional[str]:
 	if value is None:
 		return None
@@ -150,6 +161,7 @@ class SessionMirror:
 		request_id: Optional[str] = None,
 		status: str = "completed",
 		status_reason: Optional[str] = None,
+		turn_id: Optional[str] = None,
 	) -> bool:
 		if status not in _TURN_STATUSES:
 			raise ValueError(f"estado de turno desconocido: {status!r}")
@@ -159,8 +171,8 @@ class SessionMirror:
 			INSERT OR IGNORE INTO session_mirror (
 				continuity_id, mission_id, global_turn, seq, role, content, tool_calls,
 				tool_call_id, model, ts, originator, source, source_ref,
-				request_id, status, status_reason
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				request_id, status, status_reason, turn_id
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			""",
 			(
 				continuity_id,
@@ -179,6 +191,7 @@ class SessionMirror:
 				request_id,
 				status,
 				status_reason,
+				_turn_id_or_new(turn_id),
 			),
 		)
 		return bool(cur.rowcount)
@@ -201,6 +214,7 @@ class SessionMirror:
 		request_id: Optional[str] = None,
 		status: str = "completed",
 		status_reason: Optional[str] = None,
+		turn_id: Optional[str] = None,
 	) -> Optional[dict]:
 		"""Añade UN turno al espejo; `None` si ya existía (`source_ref` repetido)."""
 		continuity = str(continuity_id or "").strip()
@@ -238,6 +252,7 @@ class SessionMirror:
 				request_id=request_id,
 				status=status,
 				status_reason=status_reason,
+				turn_id=turn_id,
 			)
 			conn.commit()
 		if not inserted:
@@ -339,6 +354,7 @@ class SessionMirror:
 		global_turn: int = 0,
 		source_ref: Optional[str] = None,
 		ts: Optional[float] = None,
+		turn_id: Optional[str] = None,
 	) -> dict:
 		"""Escribe el user en `pending` o devuelve el turno ya existente."""
 		request = str(request_id or "").strip()
@@ -358,6 +374,7 @@ class SessionMirror:
 			source_ref=ref,
 			request_id=request,
 			status="pending",
+			turn_id=turn_id,
 		)
 		if created is not None:
 			return created
@@ -366,18 +383,26 @@ class SessionMirror:
 			raise RuntimeError("begin_turn: no se pudo leer el turno existente")
 		return existing
 
-	def complete_turn(self, *, continuity_id: str, request_id: str) -> int:
-		"""Marca completed todo el grupo del turno; no reabre un aborted."""
+	def complete_turn(self, *, continuity_id: str, request_id: str, turn_id: Optional[str] = None) -> int:
+		"""Marca completed todo el grupo del turno; no reabre un aborted.
+
+		`turn_id` acota el cierre a NUESTRO turno: si un arnés repite su
+		`request_id`, cerrar por él cerraría también el turno ajeno.
+		"""
 		continuity = str(continuity_id or "").strip()
 		request = str(request_id or "").strip()
 		if not continuity or not request:
 			return 0
+		sql = (
+			"UPDATE session_mirror SET status='completed', status_reason=NULL "
+			"WHERE continuity_id=? AND request_id=? AND status!='aborted'"
+		)
+		params: tuple = (continuity, request)
+		if turn_id:
+			sql += " AND turn_id=?"
+			params += (str(turn_id),)
 		with connect_session_db(self.db_path) as conn:
-			cur = conn.execute(
-				"UPDATE session_mirror SET status='completed', status_reason=NULL "
-				"WHERE continuity_id=? AND request_id=? AND status!='aborted'",
-				(continuity, request),
-			)
+			cur = conn.execute(sql, params)
 			conn.commit()
 			return int(cur.rowcount or 0)
 
