@@ -432,21 +432,17 @@ def handle_session(args: argparse.Namespace) -> None:
 			limit=limit,
 			holder="cli-operator",
 		)
-		# La CLI es un proceso efímero: el hilo daemon de entrega moriría con él y
-		# el evento quedaría marcado como entregado sin haber salido. Se espera.
-		from red_pill.core import soul_notify as _soul_notify
-
-		clean = _soul_notify.wait_for_deliveries()
-		delivery_report["transport_drained"] = clean
 		if getattr(args, "json", False):
 			print(json.dumps(delivery_report, ensure_ascii=False, indent=2, default=str))
 			return
 		print(
 			f"[DELIVER] alma={soul[:8]} · cuerpo={delivery_report.get('leg') or '(ninguno)'} · "
-			f"entregados={len(delivery_report.get('delivered', []))} · diferidos={len(delivery_report.get('deferred', []))} · "
-			f"omitidos={len(delivery_report.get('skipped', []))} · rendidos={len(delivery_report.get('given_up', []))} · "
-			f"transporte={'drenado' if clean else 'aún en vuelo (se fue el tiempo)'}"
+			f"al_transporte={len(delivery_report.get('handed_off', []))} · diferidos={len(delivery_report.get('deferred', []))} · "
+			f"omitidos={len(delivery_report.get('skipped', []))} · rendidos={len(delivery_report.get('given_up', []))}"
 		)
+		for item in delivery_report.get("handed_off", []):
+			if item.get("trace"):
+				print(f"  rastro: {item.get('trace')}")
 		for bucket in ("deferred", "skipped", "given_up"):
 			for item in delivery_report.get(bucket, []):
 				print(f"  {bucket}: {str(item.get('event_id'))[:12]} · {item.get('reason')}")

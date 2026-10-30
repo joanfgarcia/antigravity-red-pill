@@ -28,6 +28,11 @@ Segundo consumidor del seam (Fase 5, 2026-10-28): `session/delivery.py` — el
 adaptador que convierte un evento del tablón dirigido a un alma en un nudge.
 Reutiliza `resolve_live_leg` y `notify_soul`; no abre otro canal.
 
+Segundo transporte (F6, 2026-10-30): `claude_socket`, el socket de mensajería
+por sesión de Claude Code. El transporte se elige por el arnés del cuerpo
+(`_PROVIDER_TRANSPORT`): opencode sigue en `cli` y claude_code va por su socket.
+`REDPILL_SOUL_NOTIFY_TRANSPORT` sigue forzando uno para todos.
+
 Reglas que respeta (no las salta)
 ---------------------------------
 - **D-07 (quién puede despertar a quién)**: un job es hijo del alma que lo
@@ -35,11 +40,11 @@ Reglas que respeta (no las salta)
 - **D-09**: el aviso es **dato**, nunca una orden; no pide nada al receptor.
 - **D-11**: `opencode run --session` **inyecta**; `api POST` fallaría cerrado
 	y el mensaje desaparecería. Por eso se usa `run --session`.
-- **No bloquea al worker**: la entrega corre en un hilo daemon con timeout. Un
-	job NUNCA debe quedarse colgado esperando a que otro turno termine. Excepción
-	que es en realidad una corrección: un llamante **efímero** (la CLI) sí debe
-	esperar con `wait_for_deliveries()` antes de salir, porque el hilo daemon
-	muere con el proceso y el nudge se perdería en silencio.
+- **No bloquea al worker ni hereda su vida**: el CLI se lanza como hijo en su
+	propia sesión de procesos y sin timeout. Ni el llamante espera al turno del
+	receptor, ni el turno muere si el llamante (un MCP directo, la CLI) sale antes.
+	Antes era un hilo daemon con `timeout=120 s`: con un llamante efímero el turno
+	moría a medias y el estado ya decía «entregado» (2026-10-30).
 
 Non-fatal por diseño: cualquier fallo se registra y se ignora. Perder un aviso
 es malo; tumbar el runner por un aviso, peor.
@@ -49,9 +54,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -60,8 +67,6 @@ logger = logging.getLogger(__name__)
 ENV_DISABLE = "REDPILL_SOUL_NOTIFY_DISABLE"
 # Env para forzar transporte: "cli" (MVP) | "neon_link" (futuro).
 ENV_TRANSPORT = "REDPILL_SOUL_NOTIFY_TRANSPORT"
-# Timeout de la entrega (segundos). Acota el hilo daemon.
-DELIVERY_TIMEOUT_S = 120.0
 # NOTA (2026-10-28): aquí vivía un TTL de frescura en HORAS para decidir si un
 # leg era despertable. Se retiró: la alcanzabilidad del alma la gobierna
 # `ttl_state` (presencia), no la edad. Detalle en `resolve_live_leg`.
@@ -133,41 +138,6 @@ def resolve_live_leg(continuity_id: str) -> Optional[str]:
 
 # ── Transportes (SEAM ÚNICO PARA EL REPUNTE A NEON-LINK) ─────────────────────
 
-# Hilos de entrega en vuelo. Un llamante EFÍMERO (la CLI, un job de un solo paso
-# que termina nada más avisar) se llevaría el nudge por delante al salir: los
-# hilos daemon mueren con el proceso y el estado de entrega diría "entregado" en
-# falso. Se guardan aquí para que ese llamante pueda `wait_for_deliveries()`.
-_inflight: set = set()
-_inflight_lock = threading.Lock()
-
-
-def pending_deliveries() -> int:
-	"""Cuántas entregas siguen en vuelo (diagnóstico y espera de llamantes cortos)."""
-	with _inflight_lock:
-		return len(_inflight)
-
-
-def wait_for_deliveries(timeout_s: float = DELIVERY_TIMEOUT_S) -> bool:
-	"""Espera a que las entregas en vuelo terminen. True si quedó limpio.
-
-	No la llama el worker (que vive y no debe bloquearse); la llama quien sí es
-	efímero — hoy, `red-pill session deliver`. Con `timeout_s` se acota: si el
-	receptor no contesta, se sale y se registra el aviso pendiente, que es lo que
-	pasaba de todos modos con el hilo daemon, pero ahora sin mentirle al que mira.
-	"""
-	deadline = time.monotonic() + max(0.0, float(timeout_s))
-	while True:
-		with _inflight_lock:
-			threads = list(_inflight)
-		if not threads:
-			return True
-		budget = deadline - time.monotonic()
-		if budget <= 0:
-			logger.warning(f"[soul-notify] {len(threads)} entrega(s) siguen en vuelo; se abandona la espera")
-			return False
-		threads[0].join(min(budget, 5.0))
-
-
 # Último fallo del transporte, para que el emisor sepa POR QUÉ no salió (antes se
 # perdía: `send` decía "park (transport_refused)" y nadie sabía más).
 _last_error: str = ""
@@ -183,6 +153,20 @@ def last_error() -> str:
 	return _last_error
 
 
+# Rastro de la última entrega que lo tenga (ruta del fichero de salida del CLI).
+_last_trace: str = ""
+
+
+def _set_last_trace(value: str) -> None:
+	global _last_trace
+	_last_trace = str(value or "")
+
+
+def last_trace() -> str:
+	"""Dónde mirar qué pasó con la última entrega (cadena vacía si no deja fichero)."""
+	return _last_trace
+
+
 # Rutas donde vive el binario cuando el PATH no lo trae (systemd, jobs, cron).
 def opencode_binary() -> Optional[str]:
 	"""Ruta del CLI de opencode. Delegado en `core.paths` (CONVENTIONS §7).
@@ -195,17 +179,45 @@ def opencode_binary() -> Optional[str]:
 	return find_harness_binary("opencode") or None
 
 
+def _new_trace(session_id: str) -> Path:
+	"""Fichero de rastro de UNA entrega por CLI: lo que el emisor puede abrir después."""
+	from red_pill.core.paths import get_log_dir
+
+	directory = get_log_dir() / "soul_notify"
+	directory.mkdir(parents=True, exist_ok=True)
+	safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:40]
+	return directory / f"{time.strftime('%Y%m%d-%H%M%S')}_{safe}.log"
+
+
+def _watch_cli(proc: "subprocess.Popen", session_id: str, trace: Path) -> None:
+	"""Recoge el `rc` del hijo para el log y evita el zombi. Nunca lo mata."""
+	try:
+		rc = proc.wait()
+	except Exception as e:
+		logger.warning(f"[soul-notify] no se pudo esperar la entrega a {session_id[:16]}: {e}")
+		return
+	if rc != 0:
+		logger.warning(f"[soul-notify] la entrega a {session_id[:16]} acabó con rc={rc}; rastro en {trace}")
+
+
 def _deliver_cli(session_id: str, text: str) -> bool:
 	"""Transporte MVP: inyecta un turno con el CLI del arnés.
 
-	`opencode run --session` es la ruta que **inyecta** (D-11). Se lanza en un
-	hilo daemon para no bloquear al worker: la entrega implica un turno del
-	receptor y puede tardar. Quien no pueda permitirse ese hilo vivo hasta el fin
-	(proceso efímero) usa `wait_for_deliveries` antes de salir.
+	`opencode run --session` es la ruta que **inyecta** (D-11). El turno que abre
+	es del RECEPTOR, así que la entrega no puede depender de la vida de quien la
+	lanza (incidente 2026-10-30: con el MCP directo de Claude, el llamante era el
+	proceso del MCP; el hijo y su hilo murieron con él a mitad del turno):
 
-	Devuelve True cuando el proceso de entrega **arrancó**, no cuando el receptor
-	lo leyó: el `rc` se registra pero ya no vuelve al llamante. Esa es la
-	limitación honesta del seam; la confirmación real es terreno del canal `soul`.
+	- El hijo arranca en su **propia sesión de procesos** (`start_new_session`) y
+		**sin timeout**: sobrevive al llamante y nadie corta el turno a medias.
+	- Su salida va a un **fichero de rastro** (`last_trace()`): el log del
+		llamante puede morir con él, el rastro no.
+	- Un hilo daemon solo espera al hijo para anotar el `rc` y no dejar un zombi.
+
+	Devuelve True cuando el hijo **arrancó**, no cuando el receptor lo leyó. Y el
+	`rc` no prueba nada: `run --session <id desconocido>` no falla, abre una
+	sesión nueva y hace un turno en un cuerpo que nadie mira. Por eso delivery
+	lo cierra como `handed_off`, no como `delivered`.
 	"""
 	exe = opencode_binary()
 	if exe is None:
@@ -216,30 +228,102 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 		_set_last_error("opencode_no_encontrado")
 		logger.error("[soul-notify] binario `opencode` no encontrado (¿systemd sin PATH?); aviso NO entregado")
 		return False
-
-	def _run() -> None:
-		try:
-			res = subprocess.run(
+	try:
+		trace = _new_trace(session_id)
+		with open(trace, "ab") as out:
+			out.write(f"# soul-notify cli → opencode:{session_id} · {time.strftime('%Y-%m-%dT%H:%M:%S%z')}\n".encode("utf-8"))
+			out.flush()
+			proc = subprocess.Popen(
 				[exe, "run", "--session", session_id, text],
-				capture_output=True,
-				text=True,
-				timeout=DELIVERY_TIMEOUT_S,
+				stdin=subprocess.DEVNULL,
+				stdout=out,
+				stderr=subprocess.STDOUT,
+				start_new_session=True,
 			)
-			if res.returncode != 0:
-				logger.warning(f"[soul-notify] entrega falló (rc={res.returncode}): {res.stderr[:200]}")
-		except Exception as e:
-			logger.warning(f"[soul-notify] entrega falló: {e}")
-		finally:
-			with _inflight_lock:
-				_inflight.discard(threading.current_thread())
-
-	def _traced() -> None:
-		with _inflight_lock:
-			_inflight.add(threading.current_thread())
-		_run()
-
+	except OSError as e:
+		_set_last_error("opencode_no_arranca")
+		logger.error(f"[soul-notify] no se pudo lanzar la entrega a {session_id[:16]}: {e}")
+		return False
 	_set_last_error("")
-	threading.Thread(target=_traced, name=f"soul-notify-{session_id[:12]}", daemon=True).start()
+	_set_last_trace(str(trace))
+	threading.Thread(target=_watch_cli, args=(proc, session_id, trace), name=f"soul-notify-{session_id[:12]}", daemon=True).start()
+	return True
+
+
+# Directorios donde Claude Code crea sus sockets de mensajería (los mismos que
+# acepta el propio binario: `/run/user/<uid>/cc-socks`, `/tmp/cc-socks[-<uid>]`).
+_CLAUDE_SOCKET_DIR = re.compile(r"^(/run/user/\d+/cc-socks|/tmp/cc-socks(-\d+)?|/private/tmp/cc-socks(-\d+)?)$")
+CLAUDE_SOCKET_TIMEOUT_S = 5.0
+
+
+def claude_messaging_socket(session_id: str) -> Optional[str]:
+	"""Socket de mensajería de la sesión Claude Code `session_id`, validado, o None.
+
+	La ruta la deja el hook `redpill_turn_start.py` en el bridge por sesión. Solo
+	se acepta un socket de verdad, del mismo UID y dentro de un directorio
+	`cc-socks`: el bridge es un fichero de estado y no debe poder apuntar el
+	transporte a cualquier socket del sistema. El motivo del rechazo queda en
+	`last_error()`.
+	"""
+	import stat
+
+	from red_pill.core.bridge import read_session_bridge
+
+	entry = read_session_bridge("claude_code", session_id) or {}
+	path = str(entry.get("messaging_socket") or "").strip()
+	if not path:
+		_set_last_error("claude_sin_socket_en_bridge")
+		return None
+	if not _CLAUDE_SOCKET_DIR.match(os.path.dirname(path)) or not path.endswith(".sock"):
+		_set_last_error("claude_socket_fuera_de_cc_socks")
+		return None
+	try:
+		st = os.stat(path)
+	except OSError:
+		# La sesión que lo abrió ya no vive (o reanudó con otro proceso y aún no
+		# ha empezado turno para reescribir el bridge).
+		_set_last_error("claude_socket_ausente")
+		return None
+	if not stat.S_ISSOCK(st.st_mode) or st.st_uid != os.getuid():
+		_set_last_error("claude_socket_no_valido")
+		return None
+	return path
+
+
+def _deliver_claude_socket(session_id: str, text: str) -> bool:
+	"""Inyecta un turno en una sesión de Claude Code por su socket de mensajería (F6).
+
+	Es la vía oficial de mensajería entre sesiones de Claude Code: una línea
+	NDJSON `{"type":"user",...}` por el socket UDS de la sesión. Si la sesión
+	está en un turno, el mensaje entra en ese turno; si está idle, Claude abre uno
+	nuevo (verificado 2026-10-30 en el desktop, CLI 2.1.309). El arnés lo
+	enmarca como mensaje de otra sesión, no del Operador, y no concede permisos:
+	encaja con D-09 sin hacer nada.
+
+	Síncrono, sin hilo: escribir en un socket local no espera al turno del
+	receptor. Como en `cli`, True significa que el socket **aceptó los bytes**, no
+	que se leyera; la política de entrada del receptor (`crossSessionInbound`)
+	todavía puede retenerlo.
+	"""
+	import json
+	import socket
+
+	path = claude_messaging_socket(session_id)
+	if path is None:
+		logger.info(f"[soul-notify] claude {session_id[:8]}: {last_error()}; queda en el inbox (pull)")
+		return False
+	line = json.dumps({"type": "user", "message": {"role": "user", "content": text}}, ensure_ascii=False) + "\n"
+	try:
+		with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+			sock.settimeout(CLAUDE_SOCKET_TIMEOUT_S)
+			sock.connect(path)
+			sock.sendall(line.encode("utf-8"))
+			sock.shutdown(socket.SHUT_WR)
+	except OSError as e:
+		_set_last_error("claude_socket_rechazo")
+		logger.warning(f"[soul-notify] socket de claude {session_id[:8]} rechazó la entrega: {e}")
+		return False
+	_set_last_error("")
 	return True
 
 
@@ -257,16 +341,24 @@ def _deliver_neon_link(session_id: str, text: str) -> bool:
 # El repunte a neon-link es cambiar cuál de estos es el DEFAULT.
 _TRANSPORTS = {
 	"cli": _deliver_cli,
+	"claude_socket": _deliver_claude_socket,
 	"neon_link": _deliver_neon_link,
 }
 _DEFAULT_TRANSPORT = "cli"  # ← TEMPORAL (ver AD-090); pasará a "neon_link"
+# Transporte propio de un arnés cuando no hay override: cada cuerpo se entrega
+# por el punto de inyección que su arnés tiene de verdad.
+_PROVIDER_TRANSPORT = {"claude_code": "claude_socket"}
 
 
-def _resolve_transport() -> str:
+def _resolve_transport(provider: str = "") -> str:
 	forced = str(os.getenv(ENV_TRANSPORT) or "").strip().lower()
 	if forced in _TRANSPORTS:
 		return forced
-	return _DEFAULT_TRANSPORT
+	return _PROVIDER_TRANSPORT.get(str(provider or ""), _DEFAULT_TRANSPORT)
+
+
+def _leg_provider(leg: Optional[str]) -> str:
+	return str(leg or "").partition(":")[0]
 
 
 # ── API pública ─────────────────────────────────────────────────────────────
@@ -277,6 +369,7 @@ def _resolve_transport() -> str:
 # o de otro arnés NO es entregable por esta vía.
 _DELIVERABLE_BY_TRANSPORT = {
 	"cli": frozenset({"opencode"}),
+	"claude_socket": frozenset({"claude_code"}),
 	"neon_link": frozenset({"opencode", "claude_code", "pi", "telegram"}),
 }
 
@@ -333,10 +426,6 @@ def notify_soul(
 		return False
 	if notify_disabled():
 		return False
-	transport = _resolve_transport()
-	fn = _TRANSPORTS.get(transport)
-	if fn is None:
-		return False
 	# El `originator` que llega puede ser el leg del JOB (`dag:<uuid>`), no el
 	# cuerpo de un arnés. Pasarlo tal cual a `opencode run --session` reventaba
 	# con `Expected a string starting with "ses"` y el aviso se perdía en
@@ -344,18 +433,24 @@ def notify_soul(
 	# `leg_originator` en el checkpoint y `job_identity` lo devuelve).
 	# Solo se acepta como cuerpo un provider que el transporte sepa entregar;
 	# en cualquier otro caso se resuelve por alma, que es la dirección real.
-	leg = originator if _is_deliverable_leg(originator, transport) else None
+	# El transporte depende del arnés del cuerpo, así que se decide por leg.
+	leg = originator if _is_deliverable_leg(originator, _resolve_transport(_leg_provider(originator))) else None
 	if leg is None:
 		leg = resolve_live_leg(continuity_id)
-		if leg is not None and not _is_deliverable_leg(leg, transport):
+		if leg is not None and not _is_deliverable_leg(leg, _resolve_transport(_leg_provider(leg))):
 			leg = None
 	if not leg or ":" not in leg:
 		logger.debug(f"[soul-notify] alma {continuity_id[:8]} sin cuerpo entregable; queda en el inbox (pull)")
 		return False
-	_, _, session_id = leg.partition(":")
+	provider, _, session_id = leg.partition(":")
 	if not session_id:
 		return False
+	transport = _resolve_transport(provider)
+	fn = _TRANSPORTS.get(transport)
+	if fn is None:
+		return False
 	try:
+		_set_last_trace("")
 		return bool(fn(session_id, text))
 	except Exception as e:
 		logger.warning(f"[soul-notify] transporte {transport} falló: {e}")

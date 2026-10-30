@@ -2881,3 +2881,61 @@ del Operador a otra ventana.
   (capa 3 de la adenda de AD-018 §5), aunque el backend ya sirva el nuevo.
 - Pendiente de campo: probar el ciclo completo `ask` → llegada sin intervención → `reply`
   con el id que la destinataria ve en su `inbox`.
+
+---
+
+## [AD-098] Claude Code recibe el tablón por su socket, y el push dice `handed_off`, no `delivered`
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/f6-claude-socket`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §5. Cierra F6 de RFC-INTEROP-001 (D-06).
+
+### 1. The Problem
+1. **Claude Code era solo pull.** `INJECTION_POINTS` solo tenía opencode: un mensaje a
+   un alma en Claude esperaba al siguiente turno que abriera el Operador.
+2. **`delivered` mentía.** Un `ask` de Claude a una hermana de opencode quedó
+   `delivered` y nunca llegó. Con el MCP directo, el `send` lanzó `opencode run` como
+   hilo daemon **dentro del MCP de Claude**, con `timeout=120 s`: el turno del receptor
+   murió a medias (su log tiene una línea, `cli starting`) y el estado ya estaba escrito
+   al **arrancar**. Además, `opencode run --session <id desconocido>` no falla: abre una
+   sesión nueva y hace un turno que nadie mira. Ni el `rc` ni el arranque prueban nada.
+3. **El fallo no dejó rastro**: sus logs vivían en un proceso que ya no existe.
+
+### 2. The Decision
+1. **Transporte `claude_socket`**: Claude Code abre un socket UDS por sesión
+   (`CLAUDE_CODE_MESSAGING_SOCKET`). El hook `redpill_turn_start.py` lo deja en el bridge
+   **por sesión** (`sessions/bridge/claude_code__<sid>.json`; el token no se guarda) y
+   el transporte escribe una línea NDJSON `{"type":"user",...}`. Si la sesión está en un
+   turno, el mensaje entra en él; si está idle, Claude abre uno (medido en el desktop,
+   CLI 2.1.309). Solo se conecta a un socket real, del mismo UID y en un `cc-socks`.
+2. **Transporte por arnés** (`_PROVIDER_TRANSPORT`): opencode→`cli`,
+   claude_code→`claude_socket`. `REDPILL_SOUL_NOTIFY_TRANSPORT` sigue forzando uno.
+3. **El CLI no hereda la vida del llamante**: `Popen` con `start_new_session=True` y
+   **sin timeout**. El turno es del receptor; cortarlo es peor que no enterarse. Se
+   retira `wait_for_deliveries` (era el parche del hilo daemon).
+4. **`handed_off` ≠ `delivered`**: el push cierra como `handed_off` («en manos del
+   transporte, sin acuse»). `delivered` queda reservado para un transporte que confirme
+   que el arnés aceptó el turno; hoy ninguno lo hace.
+5. **Rastro legible**: la salida del CLI va a `logs/soul_notify/<ts>_<sid>.log` y el
+   motivo de la entrega lleva `rastro=<fichero>`; `send` lo devuelve al emisor.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Channels MCP (`claude/channel`) | descartada por ahora | exige relanzar con `--dangerously-load-development-channels`, solo CLI de terminal (el desktop no consta), research preview y falla en silencio |
+| Monitor en la sesión | descartada | máximo 30 min y solo mientras la sesión lo tenga armado: no es un canal |
+| `claude --resume <id> -p` | descartada | headless: abre el turno en otro proceso, no en la sesión que se mira |
+| Validar el cuerpo opencode contra `opencode.db` | descartada | en V2 la tabla `session` está obsoleta (la sesión viva no aparece): daría `stale` falsos |
+| Mantener `timeout=120 s` y drenar | descartada | drenar solo sirve si el llamante espera; un MCP que se recicla no espera |
+
+### 4. Rationale
+El emisor no puede prometer lo que no sabe. Hasta que un transporte confirme, lo
+verdadero es «salió por el transporte» y dónde mirar si algo fue mal.
+
+### 5. Consequences y deuda
+- **Sigue sin validarse el cuerpo opencode** antes de inyectar: la fuente fiable es la API
+  del arnés (`GET /api/session`, pide la auth del desktop). Hasta entonces, un leg de una
+  sesión muerta recibe `handed_off` y el rastro muestra el turno huérfano.
+- `claude_socket` es local (mismo host y UID). El receptor puede retener el mensaje
+  (`crossSessionInbound` y la paridad de modo de permisos) sin que el emisor lo sepa.
+- Para que Claude reciba, hay que resembrar el hook (`inject_settings.py`).

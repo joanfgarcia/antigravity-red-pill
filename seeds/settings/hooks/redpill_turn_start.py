@@ -125,25 +125,50 @@ def _phase(payload: dict) -> str:
 	return "end" if payload.get("hook_event_name") in END_EVENTS else "start"
 
 
+def _bridge_token(token: str) -> str:
+	"""Mismo saneo que `core.bridge._safe`: si no casan, el lector no encuentra el fichero."""
+	return str(token).replace("/", "_").replace(":", "_").replace("__", "_")
+
+
+def _session_bridge_path(session_id: str) -> Path:
+	"""${STATE_DIR}/sessions/bridge/claude_code__<sid>.json — el bridge POR SESIÓN (D-BRIDGE)."""
+	return _state_root() / "sessions" / "bridge" / f"{_bridge_token(PROVIDER)}__{_bridge_token(session_id)}.json"
+
+
 def _write_bridge(session_id: str, cwd: str) -> None:
 	"""Escribe el bridge del arnés al INICIO del turno (Alma y Coro A1/A2): el
 	servidor MCP corre con cwd=kernel y necesita session_id + workspace del agente.
 	CRÍTICO que sea en `UserPromptSubmit` (no sólo en Stop): si sólo se escribiera
 	al final, el primer turno de una sesión nueva resolvería el bridge de la
-	sesión anterior. Best-effort (nunca rompe el turno)."""
+	sesión anterior. Best-effort (nunca rompe el turno).
+
+	Dos ficheros, como el plugin de opencode: el global (compat, último que
+	escribe) y el POR SESIÓN, que además lleva el socket de mensajería de Claude
+	Code (`CLAUDE_CODE_MESSAGING_SOCKET`): es el punto de inyección del tablón
+	(transporte `claude_socket` de `core/soul_notify.py`, F6). El token del socket
+	NO se guarda: es un secreto y en Linux la línea de auth es opcional."""
+	data = {
+		"provider": PROVIDER,
+		"session_id": session_id,
+		"workdir": (cwd or "").strip(),
+		"updated_at": time.time(),
+	}
 	try:
-		payload = json.dumps(
-			{
-				"provider": PROVIDER,
-				"session_id": session_id,
-				"workdir": (cwd or "").strip(),
-				"updated_at": time.time(),
-			}
-		)
 		path = _bridge_path()
 		path.parent.mkdir(parents=True, exist_ok=True)
 		tmp = path.with_suffix(".json.tmp")
-		tmp.write_text(payload, encoding="utf-8")
+		tmp.write_text(json.dumps(data), encoding="utf-8")
+		os.replace(tmp, path)
+	except Exception:
+		pass
+	socket_path = (os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or "").strip()
+	if socket_path:
+		data["messaging_socket"] = socket_path
+	try:
+		path = _session_bridge_path(session_id)
+		path.parent.mkdir(parents=True, exist_ok=True)
+		tmp = path.with_suffix(f".{os.getpid()}.tmp")
+		tmp.write_text(json.dumps(data), encoding="utf-8")
 		os.replace(tmp, path)
 	except Exception:
 		pass

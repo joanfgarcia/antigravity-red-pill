@@ -12,11 +12,17 @@ por env, y que la entrega NO bloquea.
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import socket
 import threading
 import time
 import types
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from red_pill.core import soul_notify
 from red_pill.core.session_liveness import SessionSignal
@@ -197,7 +203,7 @@ class TestSafetyNet:
 		spawned = []
 		with patch("red_pill.session.store.SessionRegistry", return_value=reg), patch(
 			"red_pill.core.session_liveness.list_sessions", return_value=[sig]
-		), patch("red_pill.core.soul_notify.subprocess.run", side_effect=lambda *a, **k: spawned.append(a)):
+		), patch("red_pill.core.soul_notify.subprocess.Popen", side_effect=lambda *a, **k: spawned.append(a)):
 			# El fixture autouse ya puso REDPILL_SOUL_NOTIFY_DISABLE=1.
 			assert soul_notify.notify_soul("alma-1", "x") is False
 		assert spawned == [], "la suite no debe lanzar entregas reales"
@@ -287,49 +293,73 @@ class TestIdleSeDespierta:
 			assert soul_notify.resolve_live_leg("alma-2") == "opencode:ses_activo"
 
 
-class TestEfimeroDrena:
-	"""Un llamante efímero (la CLI) se llevaría el hilo daemon por delante al salir.
+class TestEntregaDesacoplada:
+	"""El turno que abre `opencode run` es del receptor: la entrega no hereda la
+	vida del llamante ni se corta por tiempo (incidente 2026-10-30: con el MCP
+	directo de Claude, el hijo murió a mitad del turno y el estado ya decía
+	«entregado»)."""
 
-	El seam reporta `True` al lanzar; si el proceso muere antes de que el hijo
-	arranque, el aviso se perdió y el estado de entrega mintió. `wait_for_deliveries`
-	existe para esos llamantes, con presupuesto, para que nadie cuelgue.
-	"""
+	def _deliver(self, popen):
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
+			soul_notify.subprocess, "Popen", popen
+		):
+			return soul_notify._deliver_cli("ses_a", "hola")
 
-	def test_el_hilo_se_cuenta_mientras_vive(self):
-		started = threading.Event()
+	def test_el_hijo_va_en_su_propia_sesion_y_sin_timeout(self):
+		launched = []
+
+		class FakeProc:
+			def __init__(self, cmd, **kw):
+				launched.append((cmd, kw))
+
+			def wait(self):
+				return 0
+
+		assert self._deliver(FakeProc) is True
+		cmd, kw = launched[0]
+		assert cmd == ["/usr/bin/true", "run", "--session", "ses_a", "hola"]
+		assert kw["start_new_session"] is True
+		assert "timeout" not in kw
+		assert kw["stdin"] is soul_notify.subprocess.DEVNULL
+
+	def test_deja_rastro_legible(self):
+		class FakeProc:
+			def __init__(self, cmd, **kw):
+				kw["stdout"].write(b"cli starting\n")
+
+			def wait(self):
+				return 0
+
+		assert self._deliver(FakeProc) is True
+		trace = Path(soul_notify.last_trace())
+		text = trace.read_text(encoding="utf-8")
+		assert text.startswith("# soul-notify cli → opencode:ses_a")
+		assert "cli starting" in text
+
+	def test_no_espera_al_turno_del_receptor(self):
 		release = threading.Event()
 
-		def fake_run(cmd, **_kw):
-			started.set()
-			release.wait(5.0)
-			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+		class SlowProc:
+			def __init__(self, cmd, **kw):
+				pass
 
-		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
-			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
-		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
-			assert soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a") is True
-			assert started.wait(2.0)
-			assert soul_notify.pending_deliveries() == 1, "la entrega no se registra como en vuelo"
+			def wait(self):
+				release.wait(5.0)
+				return 0
+
+		start = time.monotonic()
+		try:
+			assert self._deliver(SlowProc) is True
+			assert time.monotonic() - start < 1.0, "el llamante no debe esperar al turno"
+		finally:
 			release.set()
-			assert soul_notify.wait_for_deliveries(5.0) is True
-			assert soul_notify.pending_deliveries() == 0
 
-	def test_la_espera_se_acota_y_no_cuelga_al_llamante(self):
-		release = threading.Event()
+	def test_si_no_arranca_lo_dice(self):
+		def boom(*_a, **_kw):
+			raise OSError("exec format error")
 
-		def fake_run(cmd, **_kw):
-			release.wait(5.0)
-			return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
-
-		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
-			soul_notify, "subprocess", types.SimpleNamespace(run=fake_run)
-		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
-			soul_notify.notify_soul("alma-1", "hola", originator="opencode:ses_a")
-			start = time.monotonic()
-			assert soul_notify.wait_for_deliveries(0.3) is False
-			assert time.monotonic() - start < 2.0
-			release.set()
-			assert soul_notify.wait_for_deliveries(5.0) is True
+		assert self._deliver(boom) is False
+		assert soul_notify.last_error() == "opencode_no_arranca"
 
 
 class TestWarningNoDespierta:
@@ -416,3 +446,106 @@ class TestLegNoEntregable:
 		assert soul_notify._is_deliverable_leg("claude_code:c1", "neon_link")
 		assert not soul_notify._is_deliverable_leg("", "cli")
 		assert not soul_notify._is_deliverable_leg("opencode", "cli"), "sin id no hay cuerpo"
+
+
+class TestClaudeSocket:
+	"""F6: el socket de mensajería de Claude Code como punto de inyección."""
+
+	@pytest.fixture
+	def cc_socks(self, short_socket_dir, monkeypatch):
+		# Dentro del sandbox de la suite y con ruta corta (un UDS admite ~104 bytes).
+		sock_dir = os.path.join(str(short_socket_dir), "cc-socks")
+		os.mkdir(sock_dir, 0o700)
+		monkeypatch.setattr(soul_notify, "_CLAUDE_SOCKET_DIR", re.compile(re.escape(sock_dir) + "$"))
+		return sock_dir
+
+	@staticmethod
+	def _bridge(path):
+		return patch("red_pill.core.bridge.read_session_bridge", return_value={"messaging_socket": path} if path else {})
+
+	def test_cada_arnes_tiene_su_transporte(self, monkeypatch):
+		monkeypatch.delenv(soul_notify.ENV_TRANSPORT, raising=False)
+		assert soul_notify._resolve_transport("claude_code") == "claude_socket"
+		assert soul_notify._resolve_transport("opencode") == "cli"
+		assert soul_notify._resolve_transport() == "cli"
+
+	def test_el_override_manda_sobre_el_arnes(self, monkeypatch):
+		monkeypatch.setenv(soul_notify.ENV_TRANSPORT, "neon_link")
+		assert soul_notify._resolve_transport("claude_code") == "neon_link"
+
+	def test_entregabilidad(self):
+		assert soul_notify._is_deliverable_leg("claude_code:c1", "claude_socket")
+		assert not soul_notify._is_deliverable_leg("opencode:ses_x", "claude_socket")
+
+	def test_notify_soul_enruta_claude_por_su_socket(self, monkeypatch):
+		monkeypatch.delenv(soul_notify.ENV_TRANSPORT, raising=False)
+		por_cli, por_socket = [], []
+		with patch.dict(
+			soul_notify._TRANSPORTS,
+			{"cli": lambda sid, txt: por_cli.append(sid) or True, "claude_socket": lambda sid, txt: por_socket.append(sid) or True},
+		), patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
+			assert soul_notify.notify_soul("alma-1", "hola", originator="claude_code:uuid-c1") is True
+			assert soul_notify.notify_soul("alma-2", "hola", originator="opencode:ses_a") is True
+		assert por_socket == ["uuid-c1"]
+		assert por_cli == ["ses_a"]
+
+	def test_entrega_una_linea_user_por_el_socket(self, cc_socks):
+		path = os.path.join(cc_socks, "4242.sock")
+		server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		server.bind(path)
+		server.listen(1)
+		received = []
+
+		def _accept():
+			conn, _ = server.accept()
+			with conn:
+				chunks = []
+				while chunk := conn.recv(4096):
+					chunks.append(chunk)
+			received.append(b"".join(chunks).decode("utf-8"))
+
+		server.settimeout(5)
+		t = threading.Thread(target=_accept, daemon=True)
+		t.start()
+		try:
+			with self._bridge(path):
+				assert soul_notify._deliver_claude_socket("uuid-c1", "aviso del tablón ñ") is True
+			t.join(timeout=5)
+		finally:
+			server.close()
+		assert len(received) == 1 and received[0].endswith("\n")
+		msg = json.loads(received[0])
+		assert msg == {"type": "user", "message": {"role": "user", "content": "aviso del tablón ñ"}}
+		assert "token" not in received[0], "el token del socket no viaja ni se guarda"
+		assert soul_notify.last_error() == ""
+
+	def test_sin_socket_en_el_bridge_no_entrega(self):
+		with self._bridge(""):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_sin_socket_en_bridge"
+
+	def test_socket_fuera_de_cc_socks_se_rechaza(self, cc_socks):
+		with self._bridge("/run/dbus/system_bus_socket"):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_fuera_de_cc_socks"
+
+	def test_sesion_muerta_degrada_a_pull(self, cc_socks):
+		with self._bridge(os.path.join(cc_socks, "9999.sock")):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_ausente"
+
+	def test_un_fichero_que_no_es_socket_se_rechaza(self, cc_socks):
+		path = os.path.join(cc_socks, "falso.sock")
+		Path(path).write_text("no soy un socket")
+		with self._bridge(path):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_no_valido"
+
+	def test_socket_sin_escucha_no_lanza(self, cc_socks):
+		path = os.path.join(cc_socks, "huerfano.sock")
+		orphan = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		orphan.bind(path)
+		orphan.close()
+		with self._bridge(path):
+			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
+		assert soul_notify.last_error() == "claude_socket_rechazo"

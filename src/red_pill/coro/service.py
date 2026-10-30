@@ -274,8 +274,10 @@ def _push(target: str) -> tuple[str, str]:
 		report = delivery.deliver_events(target, holder="coro_send")
 	except Exception as e:  # el push es un lujo; el pull es la entrega real
 		return "queued", f"push_failed: {e}"
-	if report.get("delivered"):
-		return "delivered", ""
+	handed = report.get("handed_off") or []
+	if handed:
+		trace = str(handed[0].get("trace") or "")
+		return "handed_off", f"rastro={trace}" if trace else ""
 	reasons = [
 		str(item.get("reason") or "")
 		for bucket in ("deferred", "skipped", "given_up")
@@ -332,6 +334,8 @@ def _friendly_state(raw: str) -> str:
 		return "leído"
 	if raw == "delivered":
 		return "entregado al cuerpo"
+	if raw == "handed_off":
+		return "en el transporte (sin acuse)"
 	if raw == "pulled":
 		return "visto en el digest"
 	if raw == "in_flight":

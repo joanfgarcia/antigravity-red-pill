@@ -122,7 +122,7 @@ class TestVerbos:
 		from red_pill.coro import service
 
 		out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "notify", "body": "he cerrado X"})
-		assert "estado=delivered" in out
+		assert "estado=handed_off" in out
 		assert len(push) == 1 and push[0][0] == "ses_b"
 		assert "respuesta: NO" in push[0][1], "D-13: el silencio tiene que verse"
 
@@ -358,7 +358,7 @@ class TestDireccionesQueSePuedenCopiar:
 		out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "ask", "body": "¿sigues?"})
 		event_id = out.split("msg=")[1].split()[0].strip()
 		reply = await service.send(_session(B, "opencode:ses_b"), {"verb": "reply", "reply_to": event_id[:12], "body": "sigo"})
-		assert "estado=delivered" in reply, "el prefijo del id resuelve al mensaje"
+		assert "estado=handed_off" in reply, "el prefijo del id resuelve al mensaje"
 
 	async def test_thread_es_alias_de_thread_id(self, reg):
 		from red_pill.coro import service

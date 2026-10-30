@@ -111,8 +111,11 @@ event_id: <id>   (para dedupe en el receptor; nunca un segundo mensaje por reint
   **30 días**, cap duro 90 días. `seed` hereda el TTL largo de `park`; `now` el corto.
 - **Un mensaje a un alma muerta se entrega al reencarnar**: sin cuerpo, el mensaje
   no caduca por `target_gone` — espera.
-- Estados: `queued → delivered → read → replied`, o `expired`/`dead`. `delivered`
-  es un hecho del transporte; `read` es un ack. Y **`pulled` no es `delivered`**:
+- Estados: `queued → handed_off | delivered → read → replied`, o `expired`/`dead`.
+  `handed_off` = el push salió por el transporte **sin acuse** (el socket de Claude
+  aceptó los bytes, o el hijo `opencode run` arrancó; ninguno prueba que el arnés
+  aceptara el turno). `delivered` queda reservado para un transporte que lo confirme
+  (AD-098). `read` es un ack. Y **`pulled` no es `delivered`**:
   significa que el digest se lo anunció al destinatario y el push sobraba. Pintarlo
   como entregado es mentir sobre el transporte (pasó hasta el 2026-10-30).
   `given_up` = no hubo push, solo pull; `skipped` = lo descartó el destinatario.
@@ -290,7 +293,8 @@ frases no caben en el mismo contrato.
 | Nuestro | A2A (`TaskState`) | Nota |
 |---|---|---|
 | `queued` | `submitted` | el mensaje está y espera |
-| `delivered` | `working` | el transporte lo puso en el cuerpo |
+| `handed_off` | `submitted` | salió por el transporte, sin acuse del cuerpo |
+| `delivered` | `working` | el transporte confirmó que lo puso en el cuerpo |
 | `ask` sin respuesta | `input_required` | es el mismo concepto, con otro nombre |
 | `refuse` del destinatario | `rejected` | ya existe en `wake_policy` |
 | `read`/`replied` | `completed` | el hilo da el resto |
