@@ -55,7 +55,11 @@ def main() -> None:
         from red_pill.memento import get_memento_root
 
         root = get_memento_root()
-    ledger = Path(args.ledger) if args.ledger else Path(os.path.expanduser("~/.local/share/red-pill/state/memento_fix_done.jsonl"))
+    # Soberanía de rutas (test_no_hardcoded_paths): nada de `~` cableado. El
+    # libro vive en el state dir del Búnker, resuelto por core/paths.
+    from red_pill.core.paths import get_state_dir
+
+    ledger = Path(args.ledger) if args.ledger else get_state_dir() / "memento_fix_done.jsonl"
     hechas = _libro(ledger)
 
     filas = []
