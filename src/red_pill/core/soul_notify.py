@@ -179,6 +179,55 @@ def opencode_binary() -> Optional[str]:
 	return find_harness_binary("opencode") or None
 
 
+# Errores de transporte que significan «ese cuerpo ya no existe»: el leg se caduca
+# para que el tablón deje de ofrecerlo (si vuelve, su handshake lo reactiva).
+STALE_LEG = "stale_leg"
+_STALE_ERRORS = frozenset({STALE_LEG, "claude_socket_ausente"})
+OPENCODE_PROBE_TIMEOUT_S = 15.0
+
+
+def opencode_session_exists(session_id: str, *, exe: Optional[str] = None) -> Optional[bool]:
+	"""¿Existe la sesión opencode `session_id`? True/False, o None si no se sabe.
+
+	Sonda de solo lectura: `opencode session export <id>` contra el servicio de
+	fondo del arnés (sin la auth del desktop). rc=0 → existe; rc≠0 con «Session not
+	found» → no existe; cualquier otra cosa (timeout, servicio caído) → None. La
+	tabla `session` de `opencode.db` NO sirve: en V2 está obsoleta.
+	"""
+	exe = exe or opencode_binary()
+	if not exe or not session_id:
+		return None
+	try:
+		res = subprocess.run(
+			[exe, "session", "export", session_id],
+			stdin=subprocess.DEVNULL,
+			stdout=subprocess.DEVNULL,
+			stderr=subprocess.PIPE,
+			text=True,
+			timeout=OPENCODE_PROBE_TIMEOUT_S,
+		)
+	except (OSError, subprocess.TimeoutExpired) as e:
+		logger.warning(f"[soul-notify] la sonda de {session_id[:16]} no respondió: {e}")
+		return None
+	if res.returncode == 0:
+		return True
+	if "session not found" in (res.stderr or "").lower():
+		return False
+	logger.warning(f"[soul-notify] sonda de {session_id[:16]} ambigua (rc={res.returncode}): {(res.stderr or '')[:200]}")
+	return None
+
+
+def _expire_stale_leg(leg: str) -> None:
+	"""Caduca el leg de un cuerpo que ya no existe. Non-fatal."""
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		if SessionRegistry().unregister_session(leg):
+			logger.info(f"[soul-notify] leg {leg[:40]} caducado: el cuerpo ya no existe")
+	except Exception as e:
+		logger.warning(f"[soul-notify] no se pudo caducar {leg[:40]}: {e}")
+
+
 def _new_trace(session_id: str) -> Path:
 	"""Fichero de rastro de UNA entrega por CLI: lo que el emisor puede abrir después."""
 	from red_pill.core.paths import get_log_dir
@@ -214,10 +263,14 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 		llamante puede morir con él, el rastro no.
 	- Un hilo daemon solo espera al hijo para anotar el `rc` y no dejar un zombi.
 
-	Devuelve True cuando el hijo **arrancó**, no cuando el receptor lo leyó. Y el
-	`rc` no prueba nada: `run --session <id desconocido>` no falla, abre una
-	sesión nueva y hace un turno en un cuerpo que nadie mira. Por eso delivery
-	lo cierra como `handed_off`, no como `delivered`.
+	Devuelve True cuando el hijo **arrancó**, no cuando el receptor lo leyó, y
+	el `rc` no prueba nada. Por eso delivery lo cierra como `handed_off`, no
+	como `delivered`.
+
+	Antes de inyectar se comprueba que la sesión EXISTE (`opencode_session_exists`):
+	`run --session <id desconocido>` no falla, **crea una sesión con ese id** y le
+	hace un turno que nadie mira (medido 2026-10-30 con `ses_doesnotexist…`).
+	Inyectar a ciegas fabrica fantasmas.
 	"""
 	exe = opencode_binary()
 	if exe is None:
@@ -227,6 +280,16 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 		# como error —no warning— para que el motivo llegue al emisor.
 		_set_last_error("opencode_no_encontrado")
 		logger.error("[soul-notify] binario `opencode` no encontrado (¿systemd sin PATH?); aviso NO entregado")
+		return False
+	exists = opencode_session_exists(session_id, exe=exe)
+	if exists is False:
+		_set_last_error(STALE_LEG)
+		logger.warning(f"[soul-notify] la sesión opencode {session_id[:16]} no existe; no se inyecta")
+		return False
+	if exists is None:
+		# Sin respuesta de la sonda no se sabe si el `run` crearía un fantasma: no
+		# se inyecta, pero tampoco se caduca nada. El pull sigue ahí.
+		_set_last_error("opencode_sonda_fallida")
 		return False
 	try:
 		trace = _new_trace(session_id)
@@ -451,7 +514,10 @@ def notify_soul(
 		return False
 	try:
 		_set_last_trace("")
-		return bool(fn(session_id, text))
+		ok = bool(fn(session_id, text))
 	except Exception as e:
 		logger.warning(f"[soul-notify] transporte {transport} falló: {e}")
 		return False
+	if not ok and last_error() in _STALE_ERRORS:
+		_expire_stale_leg(leg)
+	return ok

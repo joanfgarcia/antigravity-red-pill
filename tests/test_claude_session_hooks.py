@@ -19,7 +19,7 @@ HOOKS_DIR = REPO_ROOT / "seeds" / "settings" / "hooks"
 HOOKS = ("redpill_turn_start.py", "redpill_scribe.py")
 
 
-_MESSAGING_ENV = ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN")
+_MESSAGING_ENV = ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_PROJECT_DIR")
 
 
 def _run_hook(script: str, stdin: str, data_home: Path, extra_env: dict | None = None) -> subprocess.CompletedProcess:
@@ -182,6 +182,17 @@ def test_turn_start_session_bridge_without_socket(tmp_path):
 	res = _run_hook("redpill_turn_start.py", json.dumps(payload), tmp_path)
 	assert res.returncode == 0, res.stderr
 	assert "messaging_socket" not in _session_bridge(tmp_path, "uuid-h3")
+
+
+def test_workdir_is_the_project_root_not_the_current_cwd(tmp_path):
+	# El cwd sigue a los `cd` del agente (p.ej. dentro de un worktree); la misión
+	# se deriva del workdir, así que debe ser la raíz del proyecto.
+	payload = {"session_id": "uuid-h4", "hook_event_name": "UserPromptSubmit", "cwd": "/ws/worktrees/feat-x"}
+	res = _run_hook("redpill_turn_start.py", json.dumps(payload), tmp_path, {"CLAUDE_PROJECT_DIR": "/ws/proj"})
+	assert res.returncode == 0, res.stderr
+	assert _session_bridge(tmp_path, "uuid-h4")["workdir"] == "/ws/proj"
+	glob = json.loads((tmp_path / "red-pill" / "state" / "claude_code_session.json").read_text(encoding="utf-8"))
+	assert glob["workdir"] == "/ws/proj"
 
 
 def test_scribe_does_not_write_bridge(tmp_path):

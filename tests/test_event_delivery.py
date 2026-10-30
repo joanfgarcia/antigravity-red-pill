@@ -473,7 +473,9 @@ class TestLlamanteEfimero:
 
 		with patch("red_pill.core.paths.get_session_db", return_value=Path(reg.db_path)), patch(
 			"red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"
-		), patch("red_pill.core.soul_notify.subprocess.Popen", FakeProc):
+		), patch("red_pill.core.soul_notify.subprocess.Popen", FakeProc), patch(
+			"red_pill.core.soul_notify.opencode_session_exists", return_value=True
+		):
 			handle_session(self._args())
 		out = capsys.readouterr().out
 		cmd, kw = launched[0]
