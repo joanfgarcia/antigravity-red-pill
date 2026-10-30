@@ -195,14 +195,14 @@ def run_agentic(
 	modelos distintos); por fases, dos veces por CORRIDA.
 
 	- `phase="distill"`: solo `distill_session`. No sella `agentic` (lo hace
-	  annotate, que es quien conoce la significance) pero sí `agentic.distill_hash`
-	  — el marcador honesto de "estas polaroids son de este hash".
+	annotate, que es quien conoce la significance) pero sí `agentic.distill_hash`
+	— el marcador honesto de "estas polaroids son de este hash".
 	- `phase="annotate"`: solo `annotate_session`, y SOLO sobre sesiones cuyas
-	  polaroids ya están al día. Si faltan, la sesión se salta y se cuenta en
-	  `stats["skipped_distill"]` (en producción el DAG ya encadena annotate
-	  detrás de distill, así que es una red de seguridad, no el camino).
+	polaroids ya están al día. Si faltan, la sesión se salta y se cuenta en
+	`stats["skipped_distill"]` (en producción el DAG ya encadena annotate
+	detrás de distill, así que es una red de seguridad, no el camino).
 	- `phase=None`: comportamiento histórico, por sesión. Se conserva para el
-	  fan-out por sesión (`--target`) y para los tests existentes.
+	fan-out por sesión (`--target`) y para los tests existentes.
 
 	Si `checkpoint_path` se da (modo bounded del script_job), se escribe un
 	checkpoint JSON `{"processed": N, "total": T}` tras CADA sesión — la cuenta

@@ -5,9 +5,7 @@ Regresión del 2026-10-30: la primera versión marcaba como "inventada" la fecha
 Un guardia que grita en falso se ignora, así que esto queda fijado con tests.
 """
 
-import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 

@@ -195,7 +195,7 @@ def annotate_prompt_set() -> str:
 
 	1. `MEMENTO_ANNOTATE_PROMPT` (override explícito; tests y experimentos).
 	2. `annotate_prompt_set` del PERFIL del modelo que sirve la task `annotate`
-	   — así el prompt viaja con el modelo y no con un `if` en el código.
+	— así el prompt viaja con el modelo y no con un `if` en el código.
 	3. `MEMENTO_ANNOTATE_VOICE_V2` (flag histórico, se conserva por compatibilidad).
 
 	Por qué existe (2026-10-30): la v2 nació alrededor de granite y su ejemplo de

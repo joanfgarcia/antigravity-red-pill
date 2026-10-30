@@ -890,11 +890,11 @@ def test_pase_por_fases_polaroids_y_notas(tmp_path, monkeypatch):
 	así que intercalarlos por sesión cuesta dos cambios de modelo por sesión.
 	Por fases son dos por corrida. Este test fija el contrato:
 
-	  1. Fase `distill`: escribe polaroids y marca `distill_hash` + `annotate_pending`,
-	     pero NO anota ni sella significance.
-	  2. Fase `annotate`: anota y sella, conserva `engine` del destilador y limpia
-	     `annotate_pending`.
-	  3. La fase `annotate` NO destila: si faltan polaroids, la sesión se salta.
+	1. Fase `distill`: escribe polaroids y marca `distill_hash` + `annotate_pending`,
+		pero NO anota ni sella significance.
+	2. Fase `annotate`: anota y sella, conserva `engine` del destilador y limpia
+		`annotate_pending`.
+	3. La fase `annotate` NO destila: si faltan polaroids, la sesión se salta.
 	"""
 	import red_pill.config as cfg
 

@@ -7,8 +7,7 @@ el perfil del modelo declara — no un `if` en el código.
 
 import pytest
 
-from red_pill.memento.agentic import runtime
-from red_pill.memento.agentic import prompts
+from red_pill.memento.agentic import prompts, runtime
 
 
 @pytest.fixture
