@@ -112,7 +112,14 @@ def create() -> Dict[str, Any]:
 				path = Path(root) / name
 				tar.add(path, arcname=str(path.relative_to(staging)))
 		if memento.is_dir():
-			tar.add(memento, arcname="memento")
+			# `.git/` del árbol Memento NO va al backup: es un índice local de
+			# versiones (reconstruible desde los ficheros) y arrastrarlo infla el
+			# kit sin añadir recuperabilidad. El contenido sí viaja completo.
+			tar.add(
+				memento,
+				arcname="memento",
+				filter=lambda ti: None if "/.git/" in ti.name or ti.name.endswith("/.git") else ti,
+			)
 	shutil.rmtree(staging, ignore_errors=True)
 
 	encrypted = SoulCryptographer().encrypt_kit(str(tar_path))
