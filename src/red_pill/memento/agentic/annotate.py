@@ -268,6 +268,7 @@ def annotate_session(
 				("dual_route", route if route else "none"),
 				("quality_flags", flags),
 				("engine", runtime.served_engine()),
+				("trust", runtime.model_trust()),
 				("prompt_version", runtime.annotate_prompt_version()),
 				("ascended", bool(seal.get("ascended", False))),
 				("ascended_at", seal.get("ascended_at")),
@@ -284,6 +285,7 @@ def annotate_session(
 		"source": source,
 		"annotated_at": datetime.now(timezone.utc).isoformat(),
 		"engine": runtime.served_engine(),
+		"trust": runtime.model_trust(),
 		"annotate_prompt_version": runtime.annotate_prompt_version(),
 		# Sanitizado (MEM-009 §3.4): nunca la ruta absoluta del operador.
 		"identity_bio_source": Path(str(prompts.IDENTITY_BIO_SOURCE)).name if prompts.IDENTITY_BIO_SOURCE else prompts.IDENTITY_BIO_SOURCE,

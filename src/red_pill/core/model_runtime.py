@@ -491,6 +491,17 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 	# AD-049: anclaje de runtime del perfil. Informativo aquí; el gate
 	# de disponibilidad es require_runtime() antes de cargar el modelo.
 	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
+	# Niveles estándar de razonamiento (2026-10-30): el perfil declara a qué flags
+	# equivalen en SU runtime; aquí se traducen. `low` = sin thinking, por contrato.
+	niveles = profile.get("reasoning_levels") or {}
+	if niveles:
+		pedido = str(getattr(resolved, "reasoning_effort", None) or profile.get("reasoning_level") or "medium").lower()
+		if pedido not in niveles:
+			pedido = "medium" if "medium" in niveles else next(iter(niveles))
+		flags_nivel = list(niveles.get(pedido) or [])
+		resolved.reasoning_effort = pedido
+		if flags_nivel:
+			resolved.extra_server_args = flags_nivel + [a for a in resolved.extra_server_args if a not in flags_nivel]
 	if profile.get("annotate_prompt_set"):
 		resolved.annotate_prompt_set = str(profile["annotate_prompt_set"])
 	if profile.get("runtime"):

@@ -122,6 +122,52 @@ def annotate_scopes() -> Tuple[str, str]:
 	return str(getattr(cfg, "MEMENTO_WORK_SCOPE", "")), str(getattr(cfg, "MEMENTO_SOCIAL_SCOPE", ""))
 
 
+# Niveles ESTÁNDAR de razonamiento (2026-10-30). El perfil del modelo declara a
+# qué flags equivalen en SU runtime; el código no sabe de `--reasoning-budget`.
+# `low` = sin thinking, por contrato (así lo pidió el Operador y así se documenta).
+REASONING_LEVELS = ("low", "medium", "high", "max")
+DEFAULT_REASONING_LEVEL = "medium"
+
+
+def model_trust() -> str:
+	"""Marca de confianza del modelo que escribe: full | concern | draft.
+
+	Se declara en el perfil (`trust:`); ausente = `full`, que es como se leen los
+	recuerdos anteriores a esta marca. Viaja al frontmatter de la polaroid y de la
+	nota, para que al recordar se sepa con qué cerebro se escribió.
+
+	Autoría (2026-10-30): la escala y la idea de propagarla son de la agente
+	(`full`/`draft`); el nivel intermedio `concern` es aportación del Operador, y
+	es el que impide que un 7B competente caiga en el mismo saco que un 4B al que
+	se le cortó la respuesta. El símil es suyo: "un recuerdo de borrachera" — no
+	es falso, es de cuando no estabas del todo.
+	"""
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		for nombre in (os.getenv("RP_LLM_MODEL", "").strip(), runtime_profile_name()):
+			if not nombre:
+				continue
+			prof = ModelRegistry.get_profile(nombre) or {}
+			valor = str(prof.get("trust") or "").strip().lower()
+			if valor in ("full", "concern", "draft"):
+				return valor
+	except Exception:
+		pass
+	return "full"
+
+
+def runtime_profile_name() -> str:
+	"""Perfil resuelto para la task vigente (RP_LLM_TASK o `annotate`)."""
+	try:
+		from red_pill.core import model_runtime as mr
+
+		task = os.getenv("RP_LLM_TASK", "").strip() or "annotate"
+		return mr.resolve({"task": task}).profile_name
+	except Exception:
+		return ""
+
+
 def annotate_max_tokens(default: int = 1024) -> int:
 	"""Presupuesto de salida de la extracción de notas, según la task `annotate`.
 
