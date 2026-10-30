@@ -103,6 +103,11 @@ class ResolvedModel:
 	# código: las peculiaridades de un modelo (p.ej. forzar `--reasoning off` porque
 	# su template razona y deja `content` vacío) se declaran en el perfil.
 	extra_server_args: List[str] = field(default_factory=list)
+	# Variante de prompts de la etapa `annotate` que este modelo necesita (2026-10-30).
+	# Paralelo a `prompt_file` (que versiona la destilación): un juez no lee como un
+	# escritor, y el prompt que hace buena a granite hace episódica a K2. None =
+	# variante por defecto del carril.
+	annotate_prompt_set: Optional[str] = None
 
 	def resolved_n_ctx(self) -> int:
 		"""n_ctx efectivo del perfil resuelto (vram_tiers aplicado)."""
@@ -486,6 +491,8 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 	# AD-049: anclaje de runtime del perfil. Informativo aquí; el gate
 	# de disponibilidad es require_runtime() antes de cargar el modelo.
 	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
+	if profile.get("annotate_prompt_set"):
+		resolved.annotate_prompt_set = str(profile["annotate_prompt_set"])
 	if profile.get("runtime"):
 		resolved.runtime_id = str(profile["runtime"])
 		resolved.runtime = RuntimeRegistry.for_profile(profile)

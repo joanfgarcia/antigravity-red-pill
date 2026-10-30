@@ -630,7 +630,7 @@ def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	from red_pill.memento import agentic
 	from red_pill.memento.agentic import distill_session, refine_session
 
-	monkeypatch.setattr(agentic.runtime, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
+	monkeypatch.setattr(agentic.runtime, "engine_id", lambda *a, **k: "Granite-4.1-8B-Q4_K_M.gguf")
 	monkeypatch.setattr(agentic.runtime, "distill_prompt_version", lambda: "d123")
 	monkeypatch.setattr(agentic.runtime, "refine_prompt_version", lambda: "r456")
 

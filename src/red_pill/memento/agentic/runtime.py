@@ -64,6 +64,17 @@ def annotate_prompt_version() -> str:
 	work_scope, social_scope = annotate_scopes()
 	view = fragment_view_settings()
 	extra = {"view": "|".join(view)} if view[0] != "raw" else None
+	if annotate_prompt_set() == "v3":
+		return prompts.stage_signature(
+			["annotate_work_user_v3", "annotate_social_user_v3", "voice_rewrite_user_v2", "dual_score_user_v2"],
+			static={
+				"annotate_work_user_v3": {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope},
+				"annotate_social_user_v3": {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope},
+				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
+				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
+			},
+			extra={**(extra or {}), "annotate_set": "v3"},
+		)
 	if voice_v2_enabled():
 		return prompts.stage_signature(
 			["annotate_work_user_v2", "annotate_social_user_v2", "voice_rewrite_user_v2", "dual_score_user_v2"],
@@ -111,6 +122,67 @@ def annotate_scopes() -> Tuple[str, str]:
 	return str(getattr(cfg, "MEMENTO_WORK_SCOPE", "")), str(getattr(cfg, "MEMENTO_SOCIAL_SCOPE", ""))
 
 
+def annotate_max_tokens(default: int = 1024) -> int:
+	"""Presupuesto de salida de la extracción de notas, según la task `annotate`.
+
+	2026-10-30: era un `1024` clavado en el código. Con K2 el array se cortaba a
+	medias (`finish_reason=length`) y la sesión salía con 0 notas: parecía que no
+	había nada que anotar. El presupuesto es configuración de la task, no una
+	constante del pase.
+	"""
+	try:
+		from red_pill.core import model_runtime as mr
+
+		resolved = mr.resolve({"task": "annotate"})
+		val = int(getattr(resolved, "max_tokens", 0) or 0)
+		if val > 0:
+			return val
+	except Exception:
+		pass
+	return default
+
+
+def annotate_prompt_set() -> str:
+	"""Variante de prompts de ANNOTATE que debe usar el juez actual.
+
+	Devuelve "v3", "v2" o "" (v1). Prioridad:
+
+	1. `MEMENTO_ANNOTATE_PROMPT` (override explícito; tests y experimentos).
+	2. `annotate_prompt_set` del PERFIL del modelo que sirve la task `annotate`
+	   — así el prompt viaja con el modelo y no con un `if` en el código.
+	3. `MEMENTO_ANNOTATE_VOICE_V2` (flag histórico, se conserva por compatibilidad).
+
+	Por qué existe (2026-10-30): la v2 nació alrededor de granite y su ejemplo de
+	voz ("Joan me dijo que el daemon perdía VRAM") enseña a narrar el diálogo. Con
+	K2 como juez eso produjo **45% de notas tituladas "Joan me pide/cuenta…"** frente
+	a 0% con granite — el mismo prompt, dos conductas opuestas. La v3 pide el acto,
+	no la escena.
+	"""
+	import os
+
+	raw = os.getenv("MEMENTO_ANNOTATE_PROMPT", "").strip().lower()
+	if raw in ("v3", "annotate_v3"):
+		return "v3"
+	if raw in ("v2", "annotate_v2"):
+		return "v2"
+	if raw in ("", "auto"):
+		try:
+			from red_pill.core import model_runtime as mr
+
+			resolved = mr.resolve({"task": "annotate"})
+			setc = (getattr(resolved, "annotate_prompt_set", None) or "").strip().lower()
+			if setc in ("v3", "v2", "v1", ""):
+				if setc:
+					return "" if setc == "v1" else setc
+		except Exception:  # resolución caída → camino histórico, nunca romper el pase
+			pass
+	if raw in ("v1", "annotate_v1"):
+		return ""
+	import red_pill.config as cfg
+
+	return "v2" if bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", False)) else ""
+
+
 def voice_v2_enabled() -> bool:
 	"""`MEMENTO_ANNOTATE_VOICE_V2` (RULE 4, default OFF): voz v2 de annotate.
 
@@ -118,9 +190,9 @@ def voice_v2_enabled() -> bool:
 	(regla `voice_rule_annotate.txt` + `voice_rewrite_user_v2.txt`), y la re-escritura
 	solo toca notas con bandera `voice`. OFF → voz v1 intacta (fingerprint 07a5c9b529).
 	"""
-	import red_pill.config as cfg
-
-	return bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", False))
+	# 2026-10-30: el set manda. v3 reutiliza la maquinaria de voz v2 (reescritura y
+	# scorer dual intactos); solo cambia el prompt de extracción.
+	return annotate_prompt_set() in ("v2", "v3")
 
 
 # ── MEM-010 F1: manifest estructurado del pipeline annotate ──────────────────
@@ -251,6 +323,46 @@ MODEL_N_CTX = 10240  # fallback solo si model_runtime no puede resolver
 MODEL_PROMPT_BUDGET = MODEL_N_CTX - 4096  # margen: sistema (~600) + salida (512-1024) + colchón
 
 
+_LAST_SERVED: Optional[str] = None
+
+
+def _note_served_model(model: Optional[str]) -> None:
+	"""Guarda el modelo que el daemon dice haber servido en ESTA respuesta.
+
+	2026-10-30: `engine_id()` consulta /v1/models y cachea por proceso. Durante un
+	cambio de modelo la primera consulta puede caer con el modelo VIEJO todavía
+	cargado, y entonces la sesión entera se sella mal (pasó: K2 juzgando y
+	`engine: granite_8b` en la nota y en el `_meta`). La respuesta OpenAI trae el
+	campo `model`: eso no miente y no cuesta una llamada extra.
+	"""
+	global _LAST_SERVED
+	if model:
+		_LAST_SERVED = str(model)
+
+
+def served_engine() -> str:
+	"""Quién sirvió de verdad: el modelo de la última respuesta, si lo hubo.
+
+	Devuelve el NOMBRE DEL PERFIL cuando la ruta corresponde a uno conocido (el
+	registry y las fichas hablan de perfiles, no de ficheros); si no, el nombre
+	del fichero. Cae a `engine_id()` cuando aún no hubo respuesta (tests, primer
+	uso) para no cambiar el contrato existente.
+	"""
+	global _LAST_SERVED
+	if not _LAST_SERVED:
+		return engine_id()
+	path = _LAST_SERVED
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		for name, prof in (ModelRegistry.get_all_profiles() or {}).items():
+			if str(prof.get("model_path") or "") == path:
+				return name
+	except Exception:
+		pass
+	return path.rsplit("/", 1)[-1]
+
+
 def _llm_env() -> dict:
 	"""Demanda de inferencia del job: RP_LLM_TASK / RP_LLM_MODEL / RP_LLM_THINKING.
 
@@ -353,7 +465,18 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 			payload["messages"][1]["content"] = attempt_user
 			continue
 		response.raise_for_status()
-		return str(response.json()["choices"][0]["message"]["content"]).strip()
+		_body = response.json()
+		_note_served_model(_body.get("model"))
+		_choice = (_body.get("choices") or [{}])[0]
+		if _choice.get("finish_reason") == "length":
+			# 2026-10-30: K2 con 1024 tokens truncaba el array a medias → el parser
+			# no encontraba el cierre y la sesión salía con 0 notas. Parecía "no hay
+			# nada que anotar" y era presupuesto. Nunca silencioso.
+			logger.warning(
+				f"LLM truncado (finish_reason=length, max_tokens={max_tokens}, modelo={_body.get('model')}) "
+				"— la respuesta se cortó; si es JSON, el pase la descartará"
+			)
+		return str(_choice.get("message", {}).get("content") or "").strip()
 	# Agotados los reintentos: propagar el error real del último intento.
 	response.raise_for_status()
 	return ""
@@ -378,8 +501,21 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 	return None
 
 
+def _strip_code_fence(text: str) -> str:
+	"""Quita una valla markdown (```json ... ```) si el modelo la metió."""
+	import re
+
+	m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+	return m.group(1) if m else text
+
+
 def _extract_json_array(text: str) -> Optional[List[Dict[str, Any]]]:
-	"""Refine multi-idea (§5.4.2): extrae el primer array JSON del texto (puede ser vacío)."""
+	"""Refine multi-idea (§5.4.2): extrae el primer array JSON del texto (puede ser vacío).
+
+	Tolera vallas markdown: varios modelos (K2 entre ellos) devuelven ```` ```json ````
+	alrededor del array aunque el prompt pida JSON puro (2026-10-30).
+	"""
+	text = _strip_code_fence(text)
 	start = text.find("[")
 	if start < 0:
 		return None

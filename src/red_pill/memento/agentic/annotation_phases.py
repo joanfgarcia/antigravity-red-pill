@@ -22,13 +22,18 @@ _SCORE_BATCH = 20
 
 def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]:
 	ideas: List[Dict[str, Any]] = []
-	v2 = runtime.voice_v2_enabled()
+	# 2026-10-30: la variante la dicta el modelo juez (perfil → annotate_prompt_set).
+	# v3 = mismo contrato de voz que v2, pero pide el ACTO y no la escena.
+	setc = runtime.annotate_prompt_set()
 	work_scope, social_scope = runtime.annotate_scopes()
-	prompt_ids = ("annotate_work_user_v2", "annotate_social_user_v2") if v2 else ("annotate_work_user", "annotate_social_user")
+	prompt_ids = {
+		"v3": ("annotate_work_user_v3", "annotate_social_user_v3"),
+		"v2": ("annotate_work_user_v2", "annotate_social_user_v2"),
+	}.get(setc, ("annotate_work_user", "annotate_social_user"))
 	static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
 	for prompt_id in prompt_ids:
 		prompt = prompts.render(prompt_id, static=static, fragment=content)
-		raw = transport(prompts.system(prompt_id) or "", prompt, 1024)
+		raw = transport(prompts.system(prompt_id) or "", prompt, runtime.annotate_max_tokens())
 		for idea in runtime._extract_json_array(raw) or []:
 			if not isinstance(idea, dict):
 				continue

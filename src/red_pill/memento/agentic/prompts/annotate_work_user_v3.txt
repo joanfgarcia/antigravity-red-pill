@@ -1,0 +1,35 @@
+${identity}
+
+Extract WORK ideas from this RAW conversation fragment. WORK here means: ${work_scope}. Anything outside that scope is NOT work, even if it is serious or formal (it belongs to the SOCIAL pass). Do not manufacture personal/social ideas here; if the fragment mixes both, extract only the work idea.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.6-1.0 if durable work), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
+
+${language}
+
+${emotion_legend}
+
+TITLE — name the THING, not the conversation. The title is what a future reader searches for; "we talked about X" finds nothing.
+- BAD: "${operator_name} me pide revisar el compactor." → GOOD: "El compactor marcaba la compactación sin mensajes nuevos."
+- BAD: "Conversación sobre la migración." → GOOD: "La migración perdía las entradas de plugin en lista."
+- BAD: "Revisión de la configuración." → GOOD: "TELEGRAM_COMPACTOR_CONTEXT_CHARS documentado y nunca leído."
+- Never open a title with "${operator_name} me pide/cuenta/dice/explica/muestra", nor with "Conversación/Revisión/Análisis sobre". If the only thing that happened is that ${operator_name} asked, the durable idea is WHY, and that is the title.
+
+TEXT — the fact first, the dialogue only if the dialogue IS the fact. One idea per note: if the fragment contains six defects, that is six notes, not one summary.
+- Do NOT invent how it was said. "Me lo contó con calma", "con ironía", "como una tarde de charla" are NOT in the fragment: they are yours. Describe what happened, not the manner.
+- If ${operator_name} discovered or decided something, he is the subject: "${operator_name} detectó que el daemon perdía VRAM."
+- If you did it, you are the subject, first person (e.g. "corregí <la pieza>" — but write the REAL action
+  from the fragment, never this example: it is a placeholder, not content).
+
+${voice}
+
+VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
+- "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
+- "${agent_name} creó un branch." → "Creé un branch."
+- "${agent_name} updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person)
+- "${operator_name} implementó X." → "${operator_name} implementó X." (${operator_name} acted: ${operator_name} stays the subject)
+- "${operator_name} me dijo que el daemon perdía VRAM." → "El daemon perdía VRAM; ${operator_name} lo detectó." (straight to the fact)
+
+Raw fragment:
+${fragment}
+
+Output ONLY the JSON array.

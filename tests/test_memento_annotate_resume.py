@@ -182,7 +182,7 @@ def test_contrato_distinto_resetea_el_parcial(tmp_path, monkeypatch):
 	dir_rel = _tree(tmp_path, 3)
 	with pytest.raises(_Killed):
 		_run(tmp_path, dir_rel, _Transport(die_after_extracts=4))
-	monkeypatch.setattr(runtime, "engine_id", lambda: "otro_motor")
+	monkeypatch.setattr(runtime, "engine_id", lambda *a, **k: "otro_motor")
 	retry = _Transport()
 	_run(tmp_path, dir_rel, retry)
 	assert retry.calls["extract"] == 6

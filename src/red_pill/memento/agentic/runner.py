@@ -253,7 +253,7 @@ def run_agentic(
 					"distill_hash": entry.get("memento_hash"),
 					"distilled_at": datetime.now(timezone.utc).isoformat(),
 					"sections": len(sections or []),
-					"engine": runtime.engine_id(),
+					"engine": runtime.served_engine(),
 					"distill_prompt_version": runtime.distill_prompt_version(),
 					"annotate_pending": True,
 				}
@@ -319,7 +319,7 @@ def run_agentic(
 			"gate_would_ingest": would_ingest,
 			# `engine` es quien puso la voz. En la fase de notas el modelo cargado
 			# es el juez, no el destilador: se conserva el de la fase de polaroids.
-			"engine": (prev_agentic.get("engine") or runtime.engine_id()) if phase == "annotate" else runtime.engine_id(),
+			"engine": (prev_agentic.get("engine") or runtime.served_engine()) if phase == "annotate" else runtime.served_engine(),
 			"distill_prompt_version": (
 				(prev_agentic.get("distill_prompt_version") or runtime.distill_prompt_version())
 				if phase == "annotate"
@@ -328,7 +328,7 @@ def run_agentic(
 			"refine_prompt_version": runtime.refine_prompt_version(),
 			# Quién juzgó. Con el pase por fases puede NO ser quien puso la voz —
 			# es justo el dato que hace falta para decidir si K2-7B es mejor juez.
-			"engine_annotate": runtime.engine_id() if use_annotate else prev_agentic.get("engine_annotate"),
+			"engine_annotate": runtime.served_engine() if use_annotate else prev_agentic.get("engine_annotate"),
 			"annotate_pending": False,
 		}
 		if use_annotate:
