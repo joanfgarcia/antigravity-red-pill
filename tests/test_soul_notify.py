@@ -299,10 +299,10 @@ class TestEntregaDesacoplada:
 	directo de Claude, el hijo murió a mitad del turno y el estado ya decía
 	«entregado»)."""
 
-	def _deliver(self, popen):
+	def _deliver(self, popen, exists=True):
 		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
 			soul_notify.subprocess, "Popen", popen
-		):
+		), patch.object(soul_notify, "opencode_session_exists", return_value=exists):
 			return soul_notify._deliver_cli("ses_a", "hola")
 
 	def test_el_hijo_va_en_su_propia_sesion_y_sin_timeout(self):
@@ -360,6 +360,79 @@ class TestEntregaDesacoplada:
 
 		assert self._deliver(boom) is False
 		assert soul_notify.last_error() == "opencode_no_arranca"
+
+
+class TestCuerpoQueNoExiste:
+	"""`opencode run --session <id desconocido>` crea una sesión con ese id: antes
+	de inyectar se sondea, y un cuerpo que ya no existe caduca su leg (2026-10-30)."""
+
+	@staticmethod
+	def _probe(rc, stderr=""):
+		res = types.SimpleNamespace(returncode=rc, stderr=stderr)
+		return patch.object(soul_notify.subprocess, "run", return_value=res)
+
+	def test_la_sonda_distingue_existe_no_existe_y_no_se_sabe(self):
+		with self._probe(0):
+			assert soul_notify.opencode_session_exists("ses_a", exe="/x/opencode") is True
+		with self._probe(1, "Session not found: ses_a"):
+			assert soul_notify.opencode_session_exists("ses_a", exe="/x/opencode") is False
+		with self._probe(1, "connection refused"):
+			assert soul_notify.opencode_session_exists("ses_a", exe="/x/opencode") is None
+
+	def test_la_sonda_es_de_solo_lectura(self):
+		with self._probe(0) as run:
+			soul_notify.opencode_session_exists("ses_a", exe="/x/opencode")
+		assert run.call_args.args[0] == ["/x/opencode", "session", "export", "ses_a"]
+		assert run.call_args.kwargs["timeout"] == soul_notify.OPENCODE_PROBE_TIMEOUT_S
+
+	def test_la_sonda_que_cuelga_no_es_un_no(self):
+		boom = patch.object(soul_notify.subprocess, "run", side_effect=soul_notify.subprocess.TimeoutExpired("x", 1))
+		with boom:
+			assert soul_notify.opencode_session_exists("ses_a", exe="/x/opencode") is None
+
+	def _cli(self, exists):
+		launched = []
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"), patch.object(
+			soul_notify.subprocess, "Popen", side_effect=lambda *a, **k: launched.append(a)
+		), patch.object(soul_notify, "opencode_session_exists", return_value=exists):
+			ok = soul_notify._deliver_cli("ses_a", "hola")
+		return ok, launched
+
+	def test_sesion_inexistente_no_se_inyecta(self):
+		ok, launched = self._cli(False)
+		assert ok is False and launched == [], "inyectar crearía una sesión fantasma"
+		assert soul_notify.last_error() == soul_notify.STALE_LEG
+
+	def test_sonda_fallida_tampoco_inyecta(self):
+		ok, launched = self._cli(None)
+		assert ok is False and launched == []
+		assert soul_notify.last_error() == "opencode_sonda_fallida"
+
+	def _notify(self, error):
+		def transport(_sid, _txt):
+			soul_notify._set_last_error(error)
+			return False
+
+		with patch.dict(soul_notify._TRANSPORTS, {"cli": transport, "claude_socket": transport}), patch.object(
+			soul_notify, "_expire_stale_leg"
+		) as expire, patch.dict(os.environ, {soul_notify.ENV_DISABLE: "0"}):
+			soul_notify.notify_soul("alma-1", "x", originator="opencode:ses_a")
+			soul_notify.notify_soul("alma-1", "x", originator="claude_code:uuid-c1")
+		return [c.args[0] for c in expire.call_args_list]
+
+	def test_cuerpo_muerto_caduca_su_leg(self):
+		assert self._notify(soul_notify.STALE_LEG) == ["opencode:ses_a", "claude_code:uuid-c1"]
+		assert self._notify("claude_socket_ausente") == ["opencode:ses_a", "claude_code:uuid-c1"]
+
+	def test_otros_fallos_no_caducan(self):
+		for error in ("opencode_sonda_fallida", "claude_socket_rechazo", "claude_sin_socket_en_bridge", "opencode_no_arranca"):
+			assert self._notify(error) == [], error
+
+	def test_caducar_expira_el_leg_en_el_registro(self, tmp_path):
+		reg, _sig = _seed_leg(tmp_path, "opencode:ses_a", "alma-1", active=True)
+		with patch("red_pill.session.store.SessionRegistry", return_value=reg):
+			soul_notify._expire_stale_leg("opencode:ses_a")
+		assert reg.get_by_continuity("alma-1")[0]["ttl_state"] == "expired"
 
 
 class TestWarningNoDespierta:

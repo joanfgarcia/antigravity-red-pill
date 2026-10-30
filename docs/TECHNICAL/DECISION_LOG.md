@@ -2985,3 +2985,50 @@ que el mensaje salió, pero no si llegó a un cuerpo que lo viera.
 - Pegar a mano un nudge en el prompt también acusa. Es benigno: el texto sí llegó al
   cuerpo, y solo vale para el alma destinataria.
 - Para que actúe hay que resembrar el hook de Claude y el plugin de opencode.
+
+---
+
+## [AD-100] No se inyecta a un cuerpo que no existe, y su leg caduca
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/coro-stale-leg`). Contrato: tabla de honestidad de
+`session/delivery.py`.
+
+### 1. The Problem
+1. **`opencode run --session <id desconocido>` crea una sesión con ese id** y le hace un
+   turno. Medido con `ses_doesnotexist000000000000`: hoy existe, tiene 6 mensajes y una
+   alma propia registrada. Inyectar a un leg cuyo cuerpo ya no existe no falla: fabrica
+   un fantasma.
+2. El tablón seguía ofreciendo legs `ttl=active` de cuerpos que ya no existían, porque
+   `ttl_state` solo cambia con un `unregister` o con el janitor nocturno.
+
+### 2. The Decision
+1. **Sonda antes de inyectar**: `opencode session export <id>` contra el servicio de fondo
+   del arnés (sin la auth del desktop, unos 70 ms, solo lectura). rc=0 → existe;
+   «Session not found» → no existe; cualquier otra respuesta → no se sabe.
+2. **No existe → `stale_leg`**: no se inyecta y `notify_soul` caduca el leg
+   (`unregister_session`). En Claude cuenta igual el socket desaparecido
+   (`claude_socket_ausente`). Si la sesión vuelve, su handshake reactiva el leg.
+3. **No se sabe → no se inyecta y no se caduca** (`opencode_sonda_fallida`). El evento
+   queda para el pull.
+4. **La existencia se mira en el arnés, no por edad**: se mantiene AD-090 (un alma idle
+   días sigue siendo avisable si su cuerpo existe).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Tabla `session` de `opencode.db` | descartada | en V2 está obsoleta: la sesión viva no aparece |
+| `GET /api/session` del desktop | descartada por ahora | pide la auth del desktop (407 sin ella) |
+| `opencode session list` | descartada | lista solo el proyecto del cwd |
+| Caducar por edad (TTL corto) | descartada | contradice AD-090: castiga el alma pausada legítima |
+| Sondear en cada `board` | descartada | N subprocesos por consulta; la caducidad perezosa en la entrega basta |
+
+### 4. Consequences y deuda
+- La caducidad es **perezosa**: un leg muerto se limpia al primer intento de entrega, no
+  antes. Si se quisiera limpiar el tablón por adelantado, haría falta un janitor que
+  sondee.
+- Tras reiniciar Claude, la sesión reanudada tiene un socket nuevo que el bridge solo
+  conoce al llegar el siguiente prompt. Un envío en ese intervalo caduca el leg, y el
+  handshake lo reactiva en cuanto el Operador escribe. El mensaje queda para el pull.
+- El fantasma `ses_doesnotexist…` (alma `01a18d66`) es una sesión real y no se toca. Si
+  sobra, lo cierra el Operador.
