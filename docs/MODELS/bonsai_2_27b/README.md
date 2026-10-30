@@ -135,3 +135,23 @@ runtime → binario o proceso.
 
 **Pendiente para entrar en un carril:** `minion_tool`. `RuntimeServer.chat` ya
 acepta `tools`; falta medir el function calling del ternario.
+
+## La KV en f16 es una trampa (2026-10-30)
+
+El perfil pedía `kv_cache.preferred: f16` y **cabía** — por eso lo elegía. Cabía y
+era 2,5× más lento. A ventana fija de 16.384, mismo binario, medidas repetidas:
+
+| KV | VRAM | decode |
+| --- | ---: | ---: |
+| **f16** | 6.610 MiB | **18,7 tok/s** |
+| q8_0 | 6.516 MiB | **46,4 tok/s** |
+| q4_0 | 6.260 MiB | 46,6 tok/s |
+
+94 MiB de diferencia y el doble y medio de velocidad: no es presión de memoria, es
+el kernel de atención en f16 de este build de prism. Empeora con la ventana
+(12,7 tok/s a 24K). Corregido en el perfil (`preferred: q8_0`, f16 último
+fallback). Verificado end-to-end: la sesión más pesada de la noche bajó de
+**280 s a 165 s**.
+
+Consecuencia: el «bonsai cuesta el doble de noche» del 2026-10-30 medía el
+perfil, no el modelo. Ver [`../PREFILL_2026-10-30.md`](../PREFILL_2026-10-30.md).
