@@ -517,29 +517,32 @@ def deliver_events(
 			)
 			report["delivered"].append({"event_id": event_id, "type": ev.get("type"), "seq": ev.get("event_seq")})
 			continue
+		# El motivo real del transporte, no un genérico: "no salió" sin porqué fue lo
+		# que dejó al Operador yendo a decírselo a mano (incidente 2026-10-30).
+		why = f"transport_refused:{soul_notify.last_error() or 'desconocido'}"
 		attempts = int(ev.get("delivery_attempts") or 0) + 1
 		if attempts >= MAX_PUSH_ATTEMPTS:
 			set_delivery_state(
 				event_id=event_id,
 				continuity_id=soul,
 				state=STATE_GIVEN_UP,
-				reason="push_attempts_exhausted",
+				reason=f"push_attempts_exhausted:{why}",
 				attempts_delta=1,
 				db_path=db_path,
 				now=now,
 			)
-			report["given_up"].append({"event_id": event_id, "reason": "push_attempts_exhausted"})
+			report["given_up"].append({"event_id": event_id, "reason": why})
 		else:
 			set_delivery_state(
 				event_id=event_id,
 				continuity_id=soul,
 				state=STATE_PENDING,
-				reason="transport_refused",
+				reason=why,
 				attempts_delta=1,
 				db_path=db_path,
 				now=now,
 			)
-			report["deferred"].append({"event_id": event_id, "reason": "transport_refused"})
+			report["deferred"].append({"event_id": event_id, "reason": why})
 	return report
 
 

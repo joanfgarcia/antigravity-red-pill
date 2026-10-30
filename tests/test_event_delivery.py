@@ -297,7 +297,9 @@ class TestFallos:
 		_event(reg)
 		with patch.dict(soul_notify._TRANSPORTS, {"cli": boom}):
 			report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert report["deferred"][0]["reason"] == "transport_refused"
+		# El motivo lleva ahora el porqué del transporte (`transport_refused:<detalle>`):
+		# "no salió" a secas dejó al Operador sin saber qué mirar (2026-10-30).
+		assert report["deferred"][0]["reason"].startswith("transport_refused")
 		assert len(delivery.pending_for_soul("alma-1", db_path=db)) == 1
 
 	def test_kill_switch_no_empuja_nada(self, reg, db, monkeypatch):

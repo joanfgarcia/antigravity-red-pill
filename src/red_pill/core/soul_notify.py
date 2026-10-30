@@ -53,6 +53,7 @@ import shutil
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,49 @@ def wait_for_deliveries(timeout_s: float = DELIVERY_TIMEOUT_S) -> bool:
 		threads[0].join(min(budget, 5.0))
 
 
+# Último fallo del transporte, para que el emisor sepa POR QUÉ no salió (antes se
+# perdía: `send` decía "park (transport_refused)" y nadie sabía más).
+_last_error: str = ""
+
+
+def _set_last_error(value: str) -> None:
+	global _last_error
+	_last_error = str(value or "")
+
+
+def last_error() -> str:
+	"""Motivo del último fallo de entrega (cadena vacía si no hubo)."""
+	return _last_error
+
+
+# Rutas donde vive el binario cuando el PATH no lo trae (systemd, jobs, cron).
+_OPENCODE_CANDIDATES = (
+	"~/.opencode/bin/opencode",
+	"~/.local/bin/opencode",
+	"/usr/local/bin/opencode",
+	"/opt/opencode/bin/opencode",
+	"/snap/bin/opencode",
+)
+
+
+def opencode_binary() -> Optional[str]:
+	"""Ruta del CLI de opencode, sin depender del PATH del proceso.
+
+	Bajo systemd el PATH es `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:…` y
+	el binario vive en `~/.opencode/bin/opencode`: `shutil.which` lo perdía y el
+	aviso "no entregado" parecía culpa del mensaje. Primero PATH (lo normal
+	interactivo), después las rutas conocidas.
+	"""
+	found = shutil.which("opencode")
+	if found:
+		return found
+	for candidate in _OPENCODE_CANDIDATES:
+		path = Path(os.path.expanduser(candidate))
+		if path.is_file() and os.access(path, os.X_OK):
+			return str(path)
+	return None
+
+
 def _deliver_cli(session_id: str, text: str) -> bool:
 	"""Transporte MVP: inyecta un turno con el CLI del arnés.
 
@@ -181,9 +225,14 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 	lo leyó: el `rc` se registra pero ya no vuelve al llamante. Esa es la
 	limitación honesta del seam; la confirmación real es terreno del canal `soul`.
 	"""
-	exe = shutil.which("opencode")
+	exe = opencode_binary()
 	if exe is None:
-		logger.warning("[soul-notify] opencode no está en PATH; aviso no entregado")
+		# No es un fallo del mensaje: es el ENTORNO. Bajo systemd el PATH es mínimo y
+		# `~/.opencode/bin` no está (incidente 2026-10-30: un aviso entre hermanas se
+		# quedó `pending` y el Operador tuvo que ir a decírselo a mano). Se registra
+		# como error —no warning— para que el motivo llegue al emisor.
+		_set_last_error("opencode_no_encontrado")
+		logger.error("[soul-notify] binario `opencode` no encontrado (¿systemd sin PATH?); aviso NO entregado")
 		return False
 
 	def _run() -> None:
@@ -207,6 +256,7 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 			_inflight.add(threading.current_thread())
 		_run()
 
+	_set_last_error("")
 	threading.Thread(target=_traced, name=f"soul-notify-{session_id[:12]}", daemon=True).start()
 	return True
 
