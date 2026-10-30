@@ -193,3 +193,9 @@ extra_server_args: ["--reasoning", "on", "--reasoning-budget", "256"]
 
 Cautela: n=3 por probe y una sola configuración medida. El 15/15 es firme como
 medida de hoy; el *óptimo* de budget (256 vs 1024) no está sondeado.
+
+**Estos valores son de ESTE puesto** (RTX 5070 Laptop, 8 GB, GPU). El tope de
+traza reparte presupuesto entre pensar y responder, y ese reparto cambia con el
+modelo, el prompt y el motor: en otra máquina hay que buscar la curva (ver
+`PROCEDURE.md` GP-3b). El síntoma de un tope demasiado alto es una **respuesta
+vacía**, no un error. En iGPU o CPU no se ha medido y no se publica.

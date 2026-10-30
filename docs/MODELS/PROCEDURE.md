@@ -272,6 +272,40 @@ Un modelo de razonamiento sin `reasoning off` multiplica la latencia. `bonsai_2_
 misma puntuación con y sin thinking, **7× más lento con él**. Declarar en el perfil qué
 conducta usa el carril, no la que trae el template.
 
+### GP-3b · Niveles de razonamiento — calibrar `max` en ESTA máquina
+
+Los perfiles exponen cuatro niveles estándar (`low|medium|high|max`, default
+`medium`; `low` = sin thinking). El perfil **declara a qué flags equivale cada
+nivel en su runtime**; el código solo traduce. Dos cosas que hay que medir aquí,
+no copiar de nadie:
+
+**1. `max` es el que engaña.** Un tope demasiado alto no da "más calidad": deja al
+modelo sin presupuesto y devuelve **`content` vacío con `finish_reason=length`**.
+Medido el 2026-10-30 con Spark-X2.6-4B: sin tope → 19,6 KB de traza, respuesta
+vacía, 75 s. Con 256 → respuesta válida y **15/15** en el BENCHSET a ~7 s.
+
+El valor de `max` se busca con la curva, no a ojo:
+
+| `--reasoning-budget` | Latencia | Traza | Respuesta |
+|---:|---:|---:|:-:|
+| 256 | 8,5 s | 876 chars | válida |
+| 1024 | 17,2 s | 3,6 KB | válida |
+| 2048 | 35,5 s | 6,6 KB | válida |
+| sin tope | 75 s | 19,6 KB | **vacía** |
+
+Se baja hasta que la respuesta vuelve a salir válida y se sube hasta que deja de
+mejorar. **El síntoma de un `max` mal puesto es una respuesta vacía, no un error.**
+
+**2. Los valores de este repo son ORIENTATIVOS.** Están medidos en el puesto del
+operador (RTX 5070 Laptop, 8 GB, 2026-10-30). El reparto entre traza y respuesta
+depende del modelo, del prompt y del motor, no solo de los tokens: **cada máquina
+tiene que buscar su curva** con el método de arriba. Un `max: 4096` copiado de
+aquí puede dejar sin respuesta a un modelo en otro equipo.
+
+**Alcance: GPU.** Estos números se miden y se publican para GPU. En iGPU o CPU el
+reparto cambia por completo —y el driver puede no soportar el modelo— así que
+esos carriles quedan fuera de esta guía hasta que se midan por separado.
+
 ### GP-4 · Latencia en **tok/s**, no en segundos
 
 Los segundos absolutos engañan: dependen de cuánto escriba el modelo. `bonsai_2_27b`
