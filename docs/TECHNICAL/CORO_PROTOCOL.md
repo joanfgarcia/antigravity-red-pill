@@ -398,3 +398,72 @@ enviar, `board(scope="sesiones")` era rechazado sin llegar nunca al servidor.
 Regla 8: **una unión nunca estrecha.** Los `enum` se unen; si los tipos discrepan, se
 quita el tipo. Un schema que impide una llamada legítima no es una restricción: es un
 fallo que se disfraza de contrato.
+
+## 13. Misión, rama y worktree — qué es cada cosa (AD-099)
+
+Estas tres palabras se confundían, y la confusión fragmentaba el coro. Definición corta
+y quién usa cada una:
+
+| Concepto | Qué identifica | Dónde vive | Quién lo usa |
+|---|---|---|---|
+| **Repositorio** (`repo`) | el **proyecto**: el `--git-common-dir` (el `.git` compartido) | `core/gitinfo.git_snapshot()["repo"]` | la **misión** |
+| **Misión** (`mission_id`) | el **equipo**: "estas almas trabajan en el mismo proyecto y se ayudan" | `session_registry.mission_id`, `mission_events.mission_id` | el tablón, el digest, D-07 (a quién puedo despertar), afinidad |
+| **Rama** (`branch`) | la **línea de trabajo** | `session_registry.branch` | claims de etapa, sala de guerra (`board`), relevancia |
+| **Worktree** (`worktree`) | el **directorio** donde esa rama está montada | `session_registry.worktree` | claims de etapa (clave canónica), resolución del cuerpo |
+
+### 13.1 La regla
+
+> **La misión es el repositorio. La rama y el worktree son atributos del cuerpo.**
+
+Y el corolario, que es lo que se rompió el 2026-10-30:
+
+> **Un worktree NO es otra misión.** Es el mismo proyecto, en otro directorio, con otra
+> rama.
+
+Cascada de la misión: `REDPILL_MISSION_ID` (env de confianza) → **`repo:<repositorio>`** →
+`repo:<rama>` (sólo para llamantes que no conocen el repo) → `mission:adhoc-<fecha>`.
+
+### 13.2 Por qué (el daño medido)
+
+Con `repo:<rama>`, cada worktree abría **su propia misión**. Medido ese día: una sesión en
+`repo:feat/coro-stale-leg` con **cero eventos visibles** para nadie. Consecuencias, todas
+silenciosas:
+
+- el tablón de la misión no mostraba a la hermana de la otra rama;
+- el digest no la contaba;
+- D-07 (`*:same_mission`) le negaba el despertar **en ambas direcciones** — el primer E2E
+  cross-árnes acabó en `park (no_rule)` por esto, y parecía un fallo del transporte;
+- la afinidad (`mission:<id>`) dejaba de intersectar entre ramas del mismo proyecto.
+
+Y era el caso normal, no el raro: la casa trabaja en worktrees por norma (la propia regla
+del despertar la obliga). El coro se fragmentaba justo donde más se usa.
+
+### 13.3 Lo que NO se pierde
+
+- **Aislamiento del trabajo**: los claims de etapa ya se keyan por **rama + worktree
+  normalizado**. Dos sesiones del mismo repo en ramas distintas no se pisan porque la
+  misión sea compartida: se protegen por claim.
+- **Saber dónde vive cada uno**: `branch` y `worktree` siguen en el registro y en la sala
+  de guerra (`board`, `include_git_status`).
+- **Trazabilidad histórica de un evento**: la rama del que lo publicó se reconstruye por
+  `originator` → registro. No hace falta columna nueva.
+
+### 13.4 Lo que sí cambia (y hay que decirlo)
+
+- **El id de misión cambia de forma**: hasta el 2026-10-30 los eventos se guardaron bajo
+  `repo:<rama>`; desde ahora, bajo `repo:<repositorio>`. El tablón es append-only, así que
+  **la historia vieja no se reescribe**: vive bajo su id antiguo y no se mezcla. Es una
+  costura conocida, de dos días de trabajo, y se dice en voz alta en vez de disimularla.
+- **La afinidad se recalcula** con el nuevo id (`mission:repo:<repositorio>`).
+- **El `board` agrupa menos**: una sola entrada por proyecto en vez de una por rama. Es lo
+  que se buscaba.
+
+### 13.5 Cómo se comprueba
+
+```
+pytest tests/test_mcp_server.py -k worktrees   # misma misión, ramas distintas
+python scripts/check_mcp_tools.py coro_api     # el kernel sirve la tool
+```
+
+Y en vivo: `coro_api.board` debe mostrar dos sesiones del mismo proyecto con el **mismo**
+`misión=` y distinto `rama=` (con `include_git_status`).

@@ -3032,3 +3032,64 @@ que el mensaje salió, pero no si llegó a un cuerpo que lo viera.
   handshake lo reactiva en cuanto el Operador escribe. El mensaje queda para el pull.
 - El fantasma `ses_doesnotexist…` (alma `01a18d66`) es una sesión real y no se toca. Si
   sobra, lo cierra el Operador.
+
+## [AD-099] La misión es el repositorio; la rama y el worktree son atributos
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md` §13. Reabre y
+precisa **F6/D22** ("la rama es la misión de facto").
+
+### 1. The Problem
+El primer E2E entre tres ámbitos (opencode, Claude Code y un worktree) devolvió un
+`park (no_rule)` donde debía haber una entrega: la destinataria vivía en
+`repo:feat/f6-claude-socket` —o en `mission:adhoc-<fecha>` cuando el bridge no daba
+workdir— y el emisor en `repo:next`. Misiones distintas ⇒ D-07 no ve relación ⇒ no hay
+despertar, en ninguna dirección. Y era silencioso: el `board` la mostraba como una fila
+más, y el fallo parecía del transporte.
+
+Medido: una sesión viva en `repo:feat/coro-stale-leg` con **cero eventos visibles** para
+el resto del coro.
+
+**Causa de diseño, no de código.** F6/D22 eligió `repo:<rama>` pensando en *un PR de
+larga vida por release*. Con worktrees como forma normal de trabajar —la propia regla del
+despertar los exige— cada rama se convirtió en una misión, y el coro se fragmentó justo
+donde más se usa.
+
+### 2. The Decision
+1. **`mission_id = repo:<repositorio>`**, donde el repositorio es el del
+   `--git-common-dir` (el `.git` compartido): el **mismo** desde el árbol principal y
+   desde cualquier worktree enlazado.
+2. **`branch` y `worktree` siguen siendo atributos** del cuerpo en `session_registry`, y
+   siguen siendo la clave de aislamiento de los claims de etapa.
+3. **Cascada**: env (`REDPILL_MISSION_ID`) → `repo:<repo>` → `repo:<rama>` (compatibilidad
+   para llamantes que sólo conocen la rama) → `mission:adhoc-<fecha>`.
+4. **Documentar las tres palabras** (misión / rama / worktree) con su dueño y sus
+   consumidores, porque la confusión fue la causa raíz (CORO_PROTOCOL §13).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Añadir la relación `same_repo` a la matriz de wake | rechazada (parche) | arregla el despertar y deja el tablón y el digest fragmentados; los claims ya dan el aislamiento que la misión intentaba dar |
+| Mantener `repo:<rama>` y ampliar `WAKE_POLICY` a `any` | rechazada | abre el círculo a cualquiera para tapar un problema de identidad |
+| Misión = repo y **campaña** = rama | rechazada | la campaña es un marco estratégico que puede cruzar proyectos; una rama no lo es |
+| Columna `branch` nueva en `mission_events` | rechazada | innecesaria: la rama se reconstruye por `originator` → registro |
+
+### 4. Rationale
+El coro existe para que hermanas **del mismo proyecto** se ayuden. La rama es una unidad
+de *trabajo*, y quien aísla el trabajo son los claims, que ya lo hacen mejor (rama +
+worktree normalizado, TTL, propiedad por alma). Usar la misión para eso era doble
+contabilidad con un coste alto: invisibilidad entre ramas y negación de despertar.
+
+La prueba de que el criterio es el correcto: el síntoma de la misma mañana —un fix de
+lint varado en `awaken/20261029-2000` que nadie aterrizó— se entiende mejor como "dos
+ramas del mismo repo, invisibles entre sí" que como "falta un cartero".
+
+### 5. Consequences y deuda
+- **Costura declarada**: los eventos anteriores al 2026-10-30 viven bajo `repo:<rama>`
+  (append-only: no se reescriben) y no se mezclan con los nuevos. Dos días de historia.
+- **Afinidad recalculada** con el nuevo id; las sesiones viejas no intersectan hasta su
+  próximo turno.
+- **El `board` agrupa por proyecto**, no por rama: menos entradas, más útiles.
+- **Los claims no cambian**: siguen keyados por rama+worktree.
+- **Pendiente**: que el hook de Claude escriba el `cwd` real de la sesión (hoy pone su
+  carpeta de transcripciones), para que `repo:` resuelva en vez de caer a `adhoc`.

@@ -947,7 +947,50 @@ class TestSession0b:
 		assert row["branch"] == "feat/mirror"
 		assert row["worktree"] == str(repo.resolve())
 		assert row["head_commit"] == head
-		assert row["mission_id"] == "repo:feat/mirror"
+		# AD-099: la misión es el REPOSITORIO (`proj`), no la rama; la rama sigue en
+		# su columna. Con `repo:<rama>` cada worktree abría una misión y el coro se
+		# fragmentaba: dos sesiones del mismo proyecto no se veían ni se despertaban.
+		assert row["mission_id"] == "repo:proj"
+		assert row["branch"] == "feat/mirror", "la rama no desaparece: pasa a atributo"
+
+	async def test_dos_worktrees_del_mismo_repo_comparten_mision(self, tmp_path):
+		"""AD-099: la misión es el proyecto; la rama y el worktree son atributos.
+
+		El caso real (2026-10-30): una sesión trabajaba en un git worktree y quedaba
+		en OTRA misión (`repo:feat/...`), así que el coro no la veía y D-07 no le
+		permitía ni despertar ni ser despertada. Aquí se prueba con un worktree de
+		verdad: misma misión, ramas distintas.
+		"""
+		import subprocess
+
+		from red_pill.session.store import SessionRegistry
+
+		repo = tmp_path / "proj"
+		repo.mkdir()
+		for args in (
+			["init", "-q"],
+			["config", "user.email", "t@t"],
+			["config", "user.name", "t"],
+		):
+			subprocess.run(["git", *args], cwd=repo, check=True)
+		(repo / "f").write_text("x")
+		subprocess.run(["git", "add", "."], cwd=repo, check=True)
+		subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+		wt = tmp_path / "wt"
+		subprocess.run(["git", "worktree", "add", "-q", "-b", "feat/wt", str(wt)], cwd=repo, check=True)
+
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "opencode:wt1", "workdir": str(repo)}):
+			await self._handshake({"user_prompt": "x"})
+		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "opencode:wt2", "workdir": str(wt)}):
+			await self._handshake({"user_prompt": "x"})
+
+		registry = SessionRegistry()
+		main_row = registry.get_by_originator("opencode:wt1")
+		wt_row = registry.get_by_originator("opencode:wt2")
+		assert main_row["mission_id"] == wt_row["mission_id"] == "repo:proj"
+		assert main_row["branch"] == "master" or main_row["branch"] == "main"
+		assert wt_row["branch"] == "feat/wt"
+		assert wt_row["worktree"] == str(wt.resolve()), "el worktree se sigue sabiendo (claims)"
 
 	async def test_mision_por_repo_tocado_f3(self):
 		from red_pill.session.store import SessionRegistry

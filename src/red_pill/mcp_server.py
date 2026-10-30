@@ -1990,9 +1990,15 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				branch = inferred.get("branch") or branch
 				if inferred.get("worktree"):
 					mirror = inferred
-	# La misión sale del manifiesto (env de confianza) → repo:rama → adhoc. El
-	# argumento del modelo NO la declara (evita spoofing y params innecesarios).
-	mission_id = resolve_default_mission(os.getenv("REDPILL_MISSION_ID") or None, branch=branch)
+	# La misión sale del manifiesto (env de confianza) → **repo:<repositorio>** →
+	# adhoc (AD-099: la rama y el worktree son atributos, no la misión; si no,
+	# cada worktree abría una misión y el coro se fragmentaba). El argumento del
+	# modelo NO la declara (evita spoofing y params innecesarios).
+	mission_id = resolve_default_mission(
+		os.getenv("REDPILL_MISSION_ID") or None,
+		branch=branch,
+		repo=(mirror or {}).get("repo"),
+	)
 	if shared and str(shared.get("mission_id") or "").strip():
 		mission_id = str(shared["mission_id"]).strip()
 	role = str(os.getenv("REDPILL_ROLE") or (existing or {}).get("role") or "task").strip() or "task"
