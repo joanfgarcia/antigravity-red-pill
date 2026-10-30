@@ -171,6 +171,21 @@ def _ack_nudges(session_id: str, prompt: object) -> None:
 		pass
 
 
+def _workdir(payload: dict) -> str:
+	"""Raíz del proyecto de la sesión, no el cwd del momento.
+
+	El `cwd` del payload sigue a los `cd` del agente (en el desktop, el directorio
+	de trabajo cambia con la shell): con él, entrar en un worktree movía la misión
+	a `repo:<rama del worktree>` y la matriz D-07 dejaba de despertar a las pares
+	de `repo:next` (2026-10-30). `CLAUDE_PROJECT_DIR`, que Claude Code exporta a
+	los hooks, es la raíz estable; el `cwd` queda como degradación."""
+	project = (os.environ.get("CLAUDE_PROJECT_DIR") or "").strip()
+	if project:
+		return project
+	cwd = payload.get("cwd")
+	return cwd if isinstance(cwd, str) else ""
+
+
 def _phase(payload: dict) -> str:
 	return "end" if payload.get("hook_event_name") in END_EVENTS else "start"
 
@@ -241,8 +256,7 @@ def _run() -> None:
 	# El bridge sólo se refresca al INICIO del turno (sesión activa); en los
 	# eventos de cierre no se reescribe (evita dejar una sesión muerta como fresca).
 	if phase == "start":
-		cwd = payload.get("cwd")
-		_write_bridge(session_id, cwd if isinstance(cwd, str) else "")
+		_write_bridge(session_id, _workdir(payload))
 		_begin_turn(payload, session_id)
 		_ack_nudges(session_id, payload.get("prompt"))
 	else:
