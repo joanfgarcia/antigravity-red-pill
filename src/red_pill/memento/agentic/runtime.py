@@ -513,6 +513,17 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		response.raise_for_status()
 		_body = response.json()
 		_note_served_model(_body.get("model"))
+		# Instrumentación (2026-10-31): el reloj real de UNA llamada, visto por el
+		# cliente. El log del servidor dice ~22 tok/s en las corridas y ~45 aislado;
+		# con esto se sabrá si la diferencia es del servidor (encolado incluido en
+		# `eval time`) o real. DEBUG: no ensucia el nocturno.
+		_timings = _body.get("timings") or {}
+		if _timings:
+			logger.debug(
+				f"[llm] prefill {_timings.get('prompt_per_second', 0):.0f} tok/s · "
+				f"decode {_timings.get('predicted_per_second', 0):.1f} tok/s · "
+				f"{_timings.get('predicted_n', 0)} tok"
+			)
 		_choice = (_body.get("choices") or [{}])[0]
 		if _choice.get("finish_reason") == "length":
 			# 2026-10-30: K2 con 1024 tokens truncaba el array a medias → el parser
