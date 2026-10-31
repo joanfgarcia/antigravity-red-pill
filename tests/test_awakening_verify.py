@@ -5,11 +5,20 @@ Regresión del 2026-10-30: la primera versión marcaba como "inventada" la fecha
 Un guardia que grita en falso se ignora, así que esto queda fijado con tests.
 """
 
+import importlib.util
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from scripts.awakening_verify import verificar
+# `scripts/` no es un paquete instalable: en CI `import scripts...` falla
+# (ModuleNotFoundError). Se carga por ruta, mismo patrón que
+# `test_memento_agentic_discover.py`.
+_MOD = Path(__file__).resolve().parents[1] / "scripts" / "awakening_verify.py"
+_spec = importlib.util.spec_from_file_location("awakening_verify", _MOD)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+verificar = _mod.verificar
 
 
 @pytest.fixture
