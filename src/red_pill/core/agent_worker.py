@@ -8,7 +8,7 @@ import threading
 import time
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -1455,6 +1455,7 @@ class IDEWorker:
 		# sigue latiendo (el vigilante no tiene de qué quejarse) y lo que no ocurre
 		# es el trabajo caro. Se comprueba ANTES de gastar: ni bridge ni modelo.
 		# Es su nota, no un auto-silenciado: quién y hasta cuándo van en el log.
+		_sanitize: Optional[Callable[[object, int], str]]
 		try:
 			from red_pill.session import theatre
 			from red_pill.session.store import sanitize_inline as _sanitize

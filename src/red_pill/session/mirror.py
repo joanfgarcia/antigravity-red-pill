@@ -76,7 +76,7 @@ def _turn_id_or_new(value: Optional[str]) -> str:
 	"""
 	from red_pill.session.turn_seal import is_valid_turn_id, new_turn_id
 
-	return value if is_valid_turn_id(value or "") else new_turn_id()
+	return value if value and is_valid_turn_id(value) else new_turn_id()
 
 
 def _cap_text(value: Optional[str], cap: int) -> Optional[str]:

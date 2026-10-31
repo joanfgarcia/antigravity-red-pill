@@ -395,15 +395,15 @@ def served_engine() -> str:
 	uso) para no cambiar el contrato existente.
 	"""
 	global _LAST_SERVED
-	if not _LAST_SERVED:
-		return engine_id()
 	path = _LAST_SERVED
+	if not path:
+		return engine_id()
 	try:
 		from red_pill.core.model_registry import ModelRegistry
 
 		for name, prof in (ModelRegistry.get_all_profiles() or {}).items():
 			if str(prof.get("model_path") or "") == path:
-				return name
+				return str(name)
 	except Exception:
 		pass
 	return path.rsplit("/", 1)[-1]
