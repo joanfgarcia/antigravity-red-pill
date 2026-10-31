@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -23,6 +24,15 @@ from red_pill.core.paths import get_state_dir
 
 CURRENT_DIR = "external_turns/current"
 ARCHIVE_DIR = "external_turns/archive"
+# Ventana de re-importación del archivo. El `finish_external_turn` archiva el
+# turno cerrado y borra el `current/`: si nadie importa mientras está `pending`,
+# el turno se pierde para el espejo. Se re-lee el archivo, pero sólo lo reciente
+# (un turno de hace un mes no tiene nada que sellar y el archivo crece sin fin).
+ARCHIVE_IMPORT_DAYS = 7
+# Marca de agua: mtime del journal más nuevo ya importado. Sin ficheros nuevos
+# no se toca la base — el handshake llama a esto en CADA turno.
+_IMPORT_WATERMARK = "external_turns/.import_watermark"
+_IMPORT_LOCK = threading.Lock()
 
 
 def _now() -> float:
@@ -143,10 +153,86 @@ def _journals(root: Optional[Path] = None) -> List[Path]:
 	for sub in (CURRENT_DIR, ARCHIVE_DIR):
 		directory = root / sub
 		try:
-			paths.extend(sorted(p for p in directory.iterdir() if p.suffix == ".json"))
+			found = sorted(p for p in directory.iterdir() if p.suffix == ".json")
 		except (FileNotFoundError, NotADirectoryError):
 			continue
+		if sub == ARCHIVE_DIR and ARCHIVE_IMPORT_DAYS > 0:
+			cutoff = _now() - ARCHIVE_IMPORT_DAYS * 86400
+			found = [p for p in found if _journal_mtime(p) >= cutoff]
+		paths.extend(found)
 	return paths
+
+
+def _journal_mtime(path: Path) -> float:
+	try:
+		return path.stat().st_mtime
+	except OSError:
+		return 0.0
+
+
+def newest_journal_mtime(root: Optional[Path] = None) -> float:
+	"""mtime del journal más nuevo (current + archivo reciente)."""
+	root = Path(root) if root is not None else _root()
+	newest = 0.0
+	for path in _journals(root):
+		newest = max(newest, _journal_mtime(path))
+	return newest
+
+
+def _watermark_path(root: Optional[Path] = None) -> Path:
+	root = Path(root) if root is not None else _root()
+	return root / _IMPORT_WATERMARK
+
+
+def _read_watermark(root: Optional[Path] = None) -> float:
+	try:
+		return float(_watermark_path(root).read_text(encoding="utf-8").strip() or 0)
+	except (OSError, ValueError):
+		return 0.0
+
+
+def _write_watermark(stamp: float, root: Optional[Path] = None) -> None:
+	path = _watermark_path(root)
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		# `repr` y no un formato con decimales: un mtime con nanosegundos
+		# truncado a 6 decimales queda POR DEBAJO del real y la marca de agua
+		# nunca coincidiría — se reimportaría en cada turno.
+		path.write_text(repr(float(stamp)), encoding="utf-8")
+	except OSError:
+		pass
+
+
+def maybe_import_external_turns(
+	*,
+	limit: int = 200,
+	root: Optional[Path] = None,
+	force: bool = False,
+	mirror: Any = None,
+	registry: Any = None,
+) -> Optional[Dict[str, int]]:
+	"""Importa journals nuevos al espejo; `None` si no hay novedad.
+
+	Pensado para el handshake: el sellado del turno no puede depender de que el
+	modelo recuerde llamar a `refresh_session_context`. Barato de verdad —sin
+	journals nuevos desde la última marca de agua, no abre la base— y con lock
+	para que dos sesiones en paralelo no sellen a la vez.
+	"""
+	if not force:
+		stamp = newest_journal_mtime(root)
+		if stamp <= _read_watermark(root):
+			return None
+	if not _IMPORT_LOCK.acquire(blocking=False):
+		return None
+	try:
+		stamp = newest_journal_mtime(root)
+		counts = import_external_turns(limit=limit, root=root, mirror=mirror, registry=registry)
+		_write_watermark(stamp, root)
+		return counts
+	except Exception:  # noqa: BLE001 — el sellado nunca rompe un turno
+		return None
+	finally:
+		_IMPORT_LOCK.release()
 
 
 def import_external_turns(

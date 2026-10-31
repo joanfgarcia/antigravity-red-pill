@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -2269,6 +2270,19 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 
 	# ── Phase 0: Identidad (A1/A2/F5) — cuerpo, alma y misión ──
 	identity = await _resolve_session_identity(arguments)
+
+	# ── Phase 0.bis: sellado del turno externo en el espejo (Alma y Coro) ──
+	# El `finish_external_turn` del hook archiva el turno cerrado y borra el
+	# `current/`: el sellado no puede depender de que alguien llame a
+	# `refresh_session_context` (medido 2026-10-31: cero filas de espejo desde
+	# que se desplegó, con 6 journals esperando). Va en un hilo y con marca de
+	# agua: sin journals nuevos no abre la base, y el handshake no espera.
+	try:
+		from red_pill.session.external_turns import maybe_import_external_turns
+
+		threading.Thread(target=maybe_import_external_turns, kwargs={"limit": 200}, daemon=True).start()
+	except Exception as e:  # noqa: BLE001 — nunca rompe el handshake
+		logger.debug(f"[HANDSHAKE] sellado externo no lanzado: {e}")
 
 	outputs: List[str] = []
 

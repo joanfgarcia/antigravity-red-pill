@@ -1,5 +1,23 @@
 ## Unreleased
 
+### 🧷 El espejo no recibía ni un turno: el sellado estaba mudo
+
+- **[FIX]** El sellado del turno externo (`begin/finish_external_turn`) archiva el
+  journal **cerrado** y borra el `current/`, pero el único consumidor en una sesión
+  viva era `refresh_session_context`. Medido 2026-10-31: **0 filas** de espejo de
+  opencode desde el despliegue (2026-10-30 17:32), con 6 journals completados
+  esperando en el archivo.
+- **[NEW]** `maybe_import_external_turns()`: se lanza desde el `sovereign_handshake`
+  en CADA turno, en un hilo (el handshake no espera) y **con marca de agua**: sin
+  journals nuevos no abre la base. Antes existía como importación manual por CLI o
+  dentro del despertar — el sellado no puede depender de que alguien se acuerde.
+- **[NEW]** El archivo se re-lee sólo si es reciente (`ARCHIVE_IMPORT_DAYS`, 7):
+  un turno de hace un mes no tiene nada que sellar y el archivo crece sin fin.
+- **[SAFE]** Un fallo de importación no propaga (nunca rompe el handshake) y el
+  lock impide dos sellados simultáneos entre sesiones paralelas.
+- **[FIX]** Backfill medido: 28 completados + 8 abortados + 1 pendiente sellados
+  a mano tras el fix. 9 tests nuevos.
+
 ### ⏱️ El reloj del handshake — tres escalas de tiempo en vez de una
 
 - **[NEW]** `pulse.time_line()`: `Ahora: 2026-10-31 16:36 (sáb) · turno anterior:
