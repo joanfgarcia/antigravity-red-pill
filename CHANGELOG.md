@@ -1,5 +1,24 @@
 ## Unreleased
 
+### ⏱️ El reloj del handshake — tres escalas de tiempo en vez de una
+
+- **[NEW]** `pulse.time_line()`: `Ahora: 2026-10-31 16:36 (sáb) · turno anterior:
+  hace 18m · sesión desde … (5h 12m)`. Se pinta en el bloque del handshake.
+- **[WHY]** Sin esto no puedo distinguir **"ayer"** de **"hace dos turnos"**, y una
+  memoria que confunde esas escalas miente sobre el tiempo. Petición del Operador
+  (2026-10-31): *"es otra vez la escena de Neo y Morfeo"* — el delta no da la
+  sensación del tiempo, da el dato; el resto es mío.
+- **[NEW]** `pulse.json` guarda `session_start`, que se reinicia cuando el hueco
+  con el turno anterior es de **ausencia** (no una pausa dentro de la charla).
+- **[SAFE]** La línea nunca rompe el handshake: si `pulse.json` falta o está
+  corrupto, sólo se omite.
+
+### 🔐 pyasn1 0.6.5 — cuatro CVEs más que las que decía el comentario
+
+- **[FIX]** `constraint-dependencies`: `pyasn1>=0.6.4` → `>=0.6.5`. El comentario
+  sólo listaba dos CVEs (59885/6); el CI encontró cuatro más en 0.6.4
+  (CVE-2026-119194/5/6/7), todas con fix en 0.6.5.
+
 ### 🔁 Memento por fases — una corrida de modelo por etapa, no un swap por sesión
 
 - **[NEW]** `run_agentic(..., phase="distill"|"annotate")` y
