@@ -107,7 +107,7 @@ constraint-dependencies = [
     "httplib2>=0.32.0",   # PYSEC-2026-3444
     "setuptools>=84.1.0", # PYSEC-2026-3447 + GHSA-xmj3-9gf7-h52w (fix 84.1.0)
     "filelock>=4.2.1",    # CVE-2026-112940
-    "pyasn1>=0.6.4",      # CVE-2026-59885, CVE-2026-59886
+    "pyasn1>=0.6.5",      # CVE-2026-59885/6 (0.6.4) + CVE-2026-119194/5/6/7 (0.6.5)
 ]
 [tool.ruff]
 line-length = 150
