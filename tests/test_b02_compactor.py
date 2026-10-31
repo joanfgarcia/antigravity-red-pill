@@ -42,7 +42,8 @@ class TestCompactionSchema:
 		path = tmp_path / "session.db"
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 7
+		# v8 (AD-095) añadió la correspondencia del coro a `mission_events`.
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 8
 		cols = {row[1] for row in con.execute("PRAGMA table_info(session_compactions)").fetchall()}
 		assert {"compaction_id", "continuity_id", "range_start_seq", "range_end_seq", "summary", "parent_compaction_id"} <= cols
 		con.close()

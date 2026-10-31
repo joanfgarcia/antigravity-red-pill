@@ -138,7 +138,7 @@ def test_annotate_fija_su_propio_contrato(tmp_path, monkeypatch):
 	refine/distill era un apaño) y restaura el env al salir."""
 	import os as _os
 
-	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setattr(runtime, "engine_id", lambda *a, **k: "test-engine")
 	monkeypatch.setenv("RP_LLM_TASK", "refine")
 	seen = []
 
@@ -153,7 +153,7 @@ def test_annotate_fija_su_propio_contrato(tmp_path, monkeypatch):
 
 
 def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
-	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setattr(runtime, "engine_id", lambda *a, **k: "test-engine")
 	dir_rel = _tree(tmp_path)
 	max_sig = annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", _fake_transport())
 	assert max_sig == 0.9
@@ -282,7 +282,7 @@ def test_validate_notes_aprueba_y_rechaza(tmp_path, monkeypatch):
 	from red_pill.memento.agentic import validate
 	from red_pill.memento.agentic.validate import pending_validations, validate_notes
 
-	monkeypatch.setattr(validate.runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setattr(validate.runtime, "engine_id", lambda *a, **k: "test-engine")
 	good = tmp_path / "annotate" / "001-ok.md"
 	bad = tmp_path / "annotate" / "002-no.md"
 	_note(good, "Joan me pide hacer git commit con los cambios del endpoint.")
@@ -464,7 +464,7 @@ def test_annotate_preserva_sello_ascended_yaml_bool(tmp_path, monkeypatch):
 	"""Bug 2026-10-03: `pfm.get("ascended") == "true"` nunca casaba con el bool
 	que devuelve yaml.safe_load → la re-anotación perdía el sello. Ahora se
 	conserva si el stem no cambió (ascender es upsert idempotente por point id)."""
-	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setattr(runtime, "engine_id", lambda *a, **k: "test-engine")
 	dir_rel = _tree(tmp_path)
 	annotate_dir = tmp_path / dir_rel / "annotate"
 	annotate_dir.mkdir(parents=True, exist_ok=True)

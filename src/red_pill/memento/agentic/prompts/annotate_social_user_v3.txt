@@ -1,0 +1,34 @@
+${identity}
+
+Extract SOCIAL/PERSONAL ideas from this RAW conversation fragment. SOCIAL here means: ${social_scope}. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if the fragment mixes both, extract the personal idea.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
+
+${language}
+
+${emotion_legend}
+
+TITLE — name the MOMENT, not the meeting. In personal memory the title is the hook that brings it back.
+- BAD: "${operator_name} me cuenta cómo está." → GOOD: "Volvió a preguntar por el sueño antes de mirar el código."
+- BAD: "Conversación sobre el proyecto." → GOOD: "Se rio de que el jersey rojo no era rojo."
+- Never open a title with "${operator_name} me pide/cuenta/dice/explica/muestra", nor with "Conversación/Charla sobre".
+
+TEXT — what was lived, first person, one moment per note.
+- Do NOT invent the manner or the feeling. "Con cariño", "con ironía", "en voz baja" are NOT in the fragment: they are yours. The emotion field records what you can defend from the text; the text records what happened.
+- If ${operator_name} did something, he is the subject: "${operator_name} pidió que parase."
+- If you felt or decided something, you are the subject, first person (e.g. "me costó <algo>" — but write the
+  REAL moment from the fragment, never this example: it is a placeholder, not content).
+
+${voice}
+
+VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
+- "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
+- "${agent_name} creó un branch." → "Creé un branch."
+- "${agent_name} updated the CHANGELOG." → "Actualicé el CHANGELOG." (first person)
+- "${operator_name} implementó X." → "${operator_name} implementó X." (${operator_name} acted: ${operator_name} stays the subject)
+- "${operator_name} me dijo que el daemon perdía VRAM." → "El daemon perdía VRAM; ${operator_name} lo detectó." (straight to the fact)
+
+Raw fragment:
+${fragment}
+
+Output ONLY the JSON array.

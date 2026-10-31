@@ -132,7 +132,7 @@ async def test_mcp_suggest_review(tmp_path):
 	assert row["suggested_verdict"] == "uphold"
 
 
-async def test_announce_intent_encola_review(tmp_path):
+async def test_post_encola_review(tmp_path):
 	reg = SessionRegistry()
 	reg.upsert_session(originator="opencode:d23a", continuity_id="alma-d23a", mission_id="repo:feat/d23")
 	bridge = {"originator": "opencode:d23a", "workdir": str(tmp_path)}
@@ -146,11 +146,11 @@ async def test_announce_intent_encola_review(tmp_path):
 		patch("red_pill.session.d23_review.review_mode", return_value="review"),
 		patch("red_pill.session.d23_review.enqueue_review", new=fake_enqueue),
 	):
-		announced = await _call("announce_intent", {"summary": "nota", "type": "intent_updated"})
+		announced = await _call("coro_api", {"action": "post", "payload": {"summary": "nota", "type": "intent_updated"}})
 		event_id = announced.split("event=")[1].split()[0].strip()
 		out = await _call(
-			"announce_intent",
-			{"summary": "no cuadra", "type": "objection", "target_event_id": event_id},
+			"coro_api",
+			{"action": "object", "payload": {"claim": "no cuadra", "target_event_id": event_id}},
 		)
 	assert "review_job=job-1" in out
 	assert "mode=review" in out
@@ -261,7 +261,7 @@ def test_bandeja_filtra_sealed_y_ocultas(tmp_path):
 	assert reg.list_decisions() == []
 
 
-async def test_announce_intent_rechaza_objection_sealed(tmp_path):
+async def test_object_rechaza_nota_sealed(tmp_path):
 	reg = SessionRegistry()
 	reg.upsert_session(originator="opencode:d23a", continuity_id="alma-d23a", mission_id="repo:feat/d23")
 	bridge = {"originator": "opencode:d23a", "workdir": str(tmp_path)}
@@ -269,9 +269,9 @@ async def test_announce_intent_rechaza_objection_sealed(tmp_path):
 		patch("red_pill.mcp_server._harness_bridge", return_value=bridge),
 		patch("red_pill.mcp_server._current_git_branch", return_value="feat/d23"),
 	):
-		sealed = await _call("announce_intent", {"summary": "secreto", "type": "intent_updated", "sealed": True})
+		sealed = await _call("coro_api", {"action": "post", "payload": {"summary": "secreto", "type": "intent_updated", "sealed": True}})
 		event_id = sealed.split("event=")[1].split()[0].strip()
-		out = await _call("announce_intent", {"summary": "obj", "type": "objection", "target_event_id": event_id})
+		out = await _call("coro_api", {"action": "object", "payload": {"claim": "obj", "target_event_id": event_id}})
 	assert "sealed" in out
 
 

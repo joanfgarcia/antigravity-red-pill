@@ -19,12 +19,19 @@ it fires *instead of* ``Stop``.
 An Esc interrupt fires no hook at all: that `.start` stays "in flight" until the
 next turn or ``SESSION_ACTIVE_MIN``.
 
+On ``UserPromptSubmit`` it also acknowledges board nudges: if the prompt carries
+``msg=<event_id>`` markers, the matching ``event_deliveries`` rows of this soul
+move to ``delivered`` (RFC-INTEROP-001 §12 bis). A nudge that lands mid-turn
+arrives as a system reminder, fires no hook and stays ``handed_off``.
+
 Non-fatal by contract: any error (unreadable or non-object payload included) is
 swallowed and we exit 0 — the hook never blocks the IDE turn.
 """
 
 import json
 import os
+import re
+import sqlite3
 import sys
 import time
 import uuid
@@ -121,8 +128,70 @@ def _finish_turn(payload: dict, session_id: str, status: str, reason: str) -> No
 		pass
 
 
+# Acuse por hook (RFC-INTEROP-001 §12 bis). COPIA LITERAL de `ACK_MARKER_RE` y
+# `ACK_SQL` de `red_pill.session.delivery` (el hook no importa el kernel); el test
+# de paridad falla si divergen.
+ACK_MARKER_RE = re.compile(r"\bmsg=([0-9a-f]{32})\b")
+ACK_SQL = (
+	"UPDATE event_deliveries SET state = 'delivered', reason = ?, updated_at = ?"
+	" WHERE event_id = ? AND state IN ('in_flight', 'handed_off')"
+	" AND continuity_id IN (SELECT continuity_id FROM session_registry"
+	" WHERE originator = ? AND ttl_state != 'expired')"
+)
+
+
+def _session_db() -> Path:
+	"""${XDG_DATA_HOME}/red-pill/queue/session.db (= `core.paths.get_session_db`)."""
+	xdg = os.environ.get("XDG_DATA_HOME")
+	base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+	return base / "red-pill" / "queue" / "session.db"
+
+
+def _ack_nudges(session_id: str, prompt: object) -> None:
+	"""Si el prompt trae nudges del tablón, el arnés confirma la entrega.
+
+	Sin marcador no se abre la BD (el caso normal cuesta una regex). La BD no se
+	crea aquí: si no existe, no hay nada que acusar."""
+	if not isinstance(prompt, str):
+		return
+	ids = sorted(set(ACK_MARKER_RE.findall(prompt)))
+	db = _session_db()
+	if not ids or not db.exists():
+		return
+	origin = f"{PROVIDER}:{session_id}"
+	try:
+		conn = sqlite3.connect(str(db), timeout=2.0)
+		try:
+			for event_id in ids:
+				conn.execute(ACK_SQL, (f"ack_hook:{origin}"[:200], time.time(), event_id, origin))
+			conn.commit()
+		finally:
+			conn.close()
+	except Exception:
+		pass
+
+
+def _project_dir() -> str:
+	"""Raíz del proyecto de la sesión (`CLAUDE_PROJECT_DIR`, que Claude Code exporta a
+	los hooks). No sigue a los `cd`: de ahí sale la MISIÓN. El `cwd` del payload sí
+	los sigue y de él salen la rama y el worktree (atributos), así que se guardan
+	los dos (2026-10-30: con solo el cwd, salir del repo movía la misión a otro
+	sitio; con solo la raíz, la rama decía `next` dentro de un worktree)."""
+	return (os.environ.get("CLAUDE_PROJECT_DIR") or "").strip()
+
+
 def _phase(payload: dict) -> str:
 	return "end" if payload.get("hook_event_name") in END_EVENTS else "start"
+
+
+def _bridge_token(token: str) -> str:
+	"""Mismo saneo que `core.bridge._safe`: si no casan, el lector no encuentra el fichero."""
+	return str(token).replace("/", "_").replace(":", "_").replace("__", "_")
+
+
+def _session_bridge_path(session_id: str) -> Path:
+	"""${STATE_DIR}/sessions/bridge/claude_code__<sid>.json — el bridge POR SESIÓN (D-BRIDGE)."""
+	return _state_root() / "sessions" / "bridge" / f"{_bridge_token(PROVIDER)}__{_bridge_token(session_id)}.json"
 
 
 def _write_bridge(session_id: str, cwd: str) -> None:
@@ -130,20 +199,38 @@ def _write_bridge(session_id: str, cwd: str) -> None:
 	servidor MCP corre con cwd=kernel y necesita session_id + workspace del agente.
 	CRÍTICO que sea en `UserPromptSubmit` (no sólo en Stop): si sólo se escribiera
 	al final, el primer turno de una sesión nueva resolvería el bridge de la
-	sesión anterior. Best-effort (nunca rompe el turno)."""
+	sesión anterior. Best-effort (nunca rompe el turno).
+
+	Dos ficheros, como el plugin de opencode: el global (compat, último que
+	escribe) y el POR SESIÓN, que además lleva el socket de mensajería de Claude
+	Code (`CLAUDE_CODE_MESSAGING_SOCKET`): es el punto de inyección del tablón
+	(transporte `claude_socket` de `core/soul_notify.py`, F6). El token del socket
+	NO se guarda: es un secreto y en Linux la línea de auth es opcional."""
+	data = {
+		"provider": PROVIDER,
+		"session_id": session_id,
+		"workdir": (cwd or "").strip(),
+		"updated_at": time.time(),
+	}
+	project = _project_dir()
+	if project:
+		data["project_dir"] = project
 	try:
-		payload = json.dumps(
-			{
-				"provider": PROVIDER,
-				"session_id": session_id,
-				"workdir": (cwd or "").strip(),
-				"updated_at": time.time(),
-			}
-		)
 		path = _bridge_path()
 		path.parent.mkdir(parents=True, exist_ok=True)
 		tmp = path.with_suffix(".json.tmp")
-		tmp.write_text(payload, encoding="utf-8")
+		tmp.write_text(json.dumps(data), encoding="utf-8")
+		os.replace(tmp, path)
+	except Exception:
+		pass
+	socket_path = (os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or "").strip()
+	if socket_path:
+		data["messaging_socket"] = socket_path
+	try:
+		path = _session_bridge_path(session_id)
+		path.parent.mkdir(parents=True, exist_ok=True)
+		tmp = path.with_suffix(f".{os.getpid()}.tmp")
+		tmp.write_text(json.dumps(data), encoding="utf-8")
 		os.replace(tmp, path)
 	except Exception:
 		pass
@@ -169,6 +256,7 @@ def _run() -> None:
 		cwd = payload.get("cwd")
 		_write_bridge(session_id, cwd if isinstance(cwd, str) else "")
 		_begin_turn(payload, session_id)
+		_ack_nudges(session_id, payload.get("prompt"))
 	else:
 		_finish_turn(payload, session_id, "aborted", str(payload.get("hook_event_name") or "session_end"))
 

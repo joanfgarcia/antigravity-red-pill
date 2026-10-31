@@ -79,6 +79,28 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 			originator=identity.get("originator") or f"queue_worker.process_driver_jobs({job_id})",
 			continuity_id=identity.get("continuity_id") or None,
 		)
+		# AD-090 (temporal): tras dejar el reporte en el inbox, avisar al alma que
+		# lanzó el job. Sin esto el reporte solo se ve si alguien mira el buzón
+		# ("nadie lo abre"), y la única salida para una tarea larga era un
+		# `nohup &` sin alma. Non-fatal: perder el aviso no tumba el runner.
+		#
+		# Solo estados TERMINALES despiertan. Un "warning" (reintento con cota
+		# duplicada, pausa) no es un desenlace: interrumpir a alguien para decirle
+		# "sigo intentándolo" es ruido, y despertar cuesta un turno. Esos se leen
+		# por pull del inbox.
+		terminal = status in ("success", "failed", "killed")
+		continuity = identity.get("continuity_id") or None
+		if terminal and continuity:
+			try:
+				from red_pill.core.soul_notify import build_job_notice, notify_soul
+
+				notify_soul(
+					continuity,
+					build_job_notice(title, str(task.get("source") or "job"), status, content, result_path),
+					originator=identity.get("originator") or None,
+				)
+			except Exception as notify_err:
+				logger.warning(f"[soul-notify] aviso no entregado para job {job_id}: {notify_err}")
 	except Exception as e:
 		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
 
@@ -403,7 +425,17 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			else:
 				cog_queue.mark_failed(job_id, str(e))
 				after_fail = cog_queue.get_task(job_id)
-				if after_fail and str(after_fail.get("status") or "") == "FRUSTRATED":
+				if after_fail and after_fail.get("cancel_requested_at"):
+					# A4: la cancelación ganó la carrera; `mark_failed` se negó a
+					# devolver el job a PENDING. Se reporta como kill, no como
+					# fallo con reintento (que ya no existe).
+					try:
+						driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
+					except Exception as term_err:
+						logger.warning(f"Job {job_id} on_terminal failed after cancel race: {term_err}")
+					_report_job(job_id, task, "killed", "interrumpido por el Operador")
+					logger.info(f"Job {job_id} step failed after cancel; job stays {after_fail.get('status')} (A4).")
+				elif after_fail and str(after_fail.get("status") or "") == "FRUSTRATED":
 					try:
 						driver.on_terminal(task["payload"], checkpoint, "failed", str(e))
 					except Exception as term_err:

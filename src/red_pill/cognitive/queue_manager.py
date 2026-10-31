@@ -94,6 +94,17 @@ class CognitiveQueueManager:
 				"ON cognitive_tasks(parent_mission_id, status)"
 			)
 
+			# A4 (2026-10-27): marca de cancelación MONOTÓNICA. Un kill sella el
+			# job con el instante de la orden; ninguna transición del runner puede
+			# devolverlo a la vida (PENDING/COMPLETED) salvo un `resume`/`skip`
+			# explícito del Operador, que la limpia. Cierra la resurrección
+			# kill↔claim (T6): antes, kill → PAUSED y la excepción del step en
+			# vuelo → `mark_failed` → PENDING → el runner lo volvía a reclamar.
+			try:
+				conn.execute("ALTER TABLE cognitive_tasks ADD COLUMN cancel_requested_at REAL DEFAULT NULL")
+			except sqlite3.OperationalError:
+				pass  # La columna ya existe
+
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
 				CREATE INDEX IF NOT EXISTS idx_queue_routing
@@ -199,7 +210,7 @@ class CognitiveQueueManager:
 			SELECT id, source, priority, payload, attempts, checkpoint_data,
 				mission_id, continuity_id, parent_mission_id
 			FROM cognitive_tasks
-			WHERE status = 'PENDING'
+			WHERE status = 'PENDING' AND cancel_requested_at IS NULL
 		"""
 		params = []
 		if allowed_sources is not None:
@@ -230,15 +241,20 @@ class CognitiveQueueManager:
 				return None
 
 			task_id = row["id"]
-			# Marcar atómicamente
-			conn.execute(
+			# Marcar atómicamente. A4: el WHERE repite la guarda de cancelación —
+			# si un kill selló el job entre el SELECT y el UPDATE (imposible bajo
+			# BEGIN EXCLUSIVE, pero la guarda es barata), no se reclama.
+			cursor = conn.execute(
 				"""
 				UPDATE cognitive_tasks
 				SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP
-				WHERE id = ?
+				WHERE id = ? AND status = 'PENDING' AND cancel_requested_at IS NULL
 				""",
 				(task_id,),
 			)
+			if cursor.rowcount == 0:
+				conn.execute("ROLLBACK")
+				return None
 			conn.execute("COMMIT")
 
 			checkpoint_raw = row["checkpoint_data"]
@@ -350,19 +366,40 @@ class CognitiveQueueManager:
 		except Exception as e:
 			logger.warning(f"[CURIOSITY] Failed to update curiosity ratings: {e}")
 
+	def is_cancel_requested(self, task_id: str) -> bool:
+		"""A4: ¿lleva el job la marca monotónica de cancelación (kill del Operador)?"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT cancel_requested_at FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+		return bool(row and row["cancel_requested_at"] is not None)
+
 	def mark_completed(self, task_id: str) -> None:
-		"""Marca una tarea como finalizada exitosamente y desbloquea tareas hijas (Flujo DAG)."""
+		"""Marca una tarea como finalizada exitosamente y desbloquea tareas hijas (Flujo DAG).
+
+		A4: la guarda `cancel_requested_at IS NULL` es la que hace monotónica la
+		cancelación — un job matado mientras corría un step ya no puede sellarse
+		como COMPLETED cuando ese step termina. La condición `dirty_kill` se
+		conserva para filas selladas antes de existir la columna.
+		"""
 		self._update_curiosity_rating(task_id, success=True)
 		with self._get_connection() as conn:
-			conn.execute(
+			cursor = conn.execute(
 				"""
 				UPDATE cognitive_tasks
 				SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP
-				WHERE id = ? AND status <> 'FRUSTRATED' AND NOT (status = 'PAUSED' AND checkpoint_data LIKE '%"dirty_kill"%')
+				WHERE id = ? AND status <> 'FRUSTRATED' AND cancel_requested_at IS NULL
+					AND NOT (status = 'PAUSED' AND checkpoint_data LIKE '%"dirty_kill"%')
 				""",
 				(task_id,),
 			)
-			# DAG: Desbloquear dependencias
+			completed = cursor.rowcount > 0
+			if not completed:
+				# A4 (auditoría 2026-10-28): el COMPLETED se negó (job cancelado o
+				# frustrado) → NO se desbloquean los hijos. Un kill no puede
+				# resucitar trabajo por la puerta del DAG; antes este UPDATE
+				# corría igual y devolvía los hijos BLOCKED a PENDING.
+				logger.info(f"[QUEUE] Task {task_id} completed after cancel; COMPLETED refused, children kept BLOCKED (A4).")
+				return
+			# DAG: Desbloquear dependencias (solo si el padre pasó de verdad a COMPLETED)
 			cursor = conn.execute(
 				"""
 				UPDATE cognitive_tasks
@@ -379,7 +416,29 @@ class CognitiveQueueManager:
 		"""
 		Marca un fallo. Incrementa intentos.
 		Si attempts > 3, activa el disyuntor y la etiqueta como FRUSTRATED.
+
+		A4 — NO RESUCITA. Si el job lleva marca de cancelación o está detenido
+		por el Operador (PAUSING/PAUSED/FRUSTRATED), el fallo del step en vuelo
+		solo se anota en `error_log`: ni `attempts++` ni vuelta a PENDING. Ese
+		`PENDING` era exactamente la resurrección: kill → PAUSED, excepción del
+		step → mark_failed → cola → `pop_next_task` lo reclamaba de nuevo.
 		"""
+		with self._get_connection() as conn:
+			row = conn.execute(
+				"SELECT status, cancel_requested_at FROM cognitive_tasks WHERE id = ?",
+				(task_id,),
+			).fetchone()
+			if row and (
+				row["cancel_requested_at"] is not None
+				or str(row["status"]) in ("PAUSING", "PAUSED", "FRUSTRATED")
+			):
+				conn.execute(
+					"UPDATE cognitive_tasks SET error_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(error_msg, task_id),
+				)
+				logger.info(f"[QUEUE] Task {task_id} failed after cancel/pause; kept {row['status']} (A4: no resurrection).")
+				return
+
 		self._update_curiosity_rating(task_id, success=False)
 		with self._get_connection() as conn:
 			# Primero incrementamos intentos
@@ -488,6 +547,7 @@ class CognitiveQueueManager:
 				f"""
 				SELECT COUNT(*) FROM cognitive_tasks
 				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND cancel_requested_at IS NULL
 					AND updated_at < datetime('now', ?)
 				""",
 				(*sources, f"-{int(stuck_after_seconds)} seconds"),
@@ -687,6 +747,10 @@ class CognitiveQueueManager:
 		`BEGIN IMMEDIATE` cubre SELECT/UPDATE para que un PENDING→PROCESSING
 		concurrente no devuelva un estado viejo (carrera H2). El UPDATE lleva
 		guarda de estado para no resucitar un job que terminó entre medias.
+
+		A4: toda cancelación sella además `cancel_requested_at` (marca monotónica)
+		en la MISMA transacción. Esa marca es la que impide que el step en vuelo
+		cierre el job como COMPLETED o lo devuelva a PENDING tras un fallo.
 		"""
 		with self._get_connection() as conn:
 			conn.execute("BEGIN IMMEDIATE")
@@ -698,6 +762,13 @@ class CognitiveQueueManager:
 			if current not in ("PENDING", "PROCESSING", "PAUSED", "PAUSING", "BLOCKED"):
 				conn.rollback()
 				return False, current
+			# A4: sello monotónico antes de tocar el estado — la orden del
+			# Operador queda grabada aunque el runner esté a mitad de step.
+			cancel_ts = time.time()
+			conn.execute(
+				"UPDATE cognitive_tasks SET cancel_requested_at = ? WHERE id = ?",
+				(cancel_ts, task_id),
+			)
 			if current != "BLOCKED":
 				try:
 					checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
@@ -732,8 +803,9 @@ class CognitiveQueueManager:
 			rows = conn.execute("SELECT id FROM cognitive_tasks WHERE parent_task_id = ? AND status = 'BLOCKED'", (current,)).fetchall()
 			for r in rows:
 				conn.execute(
-					"UPDATE cognitive_tasks SET status = 'FRUSTRATED', error_log = 'parent cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-					(r["id"],),
+					"UPDATE cognitive_tasks SET status = 'FRUSTRATED', error_log = 'parent cancelled', "
+					"cancel_requested_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(time.time(), r["id"]),
 				)
 				cancelled += 1
 				queue.append(r["id"])
@@ -783,15 +855,21 @@ class CognitiveQueueManager:
 				return False
 			current_status = row["status"]
 
-			# Cancelación de pausa en caliente: el job está corriendo en PAUSING
+			# Cancelación de pausa en caliente: el job está corriendo en PAUSING.
+			# A4: reanudar es la ÚNICA puerta que limpia la marca de cancelación.
 			if current_status == "PAUSING":
-				conn.execute("UPDATE cognitive_tasks SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+				conn.execute(
+					"UPDATE cognitive_tasks SET status = 'PROCESSING', cancel_requested_at = NULL, "
+					"updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(task_id,),
+				)
 				return True
 
 			# Reanudación desde estado detenido
 			cursor = conn.execute(
 				"""
-				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP
+				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0,
+					cancel_requested_at = NULL, updated_at = CURRENT_TIMESTAMP
 				WHERE id = ? AND (
 					status IN ('PAUSED', 'FRUSTRATED')
 					OR (status = 'PROCESSING' AND updated_at < datetime('now', '-900 seconds'))
@@ -821,8 +899,11 @@ class CognitiveQueueManager:
 			checkpoint["skip_next"] = True
 			status = row["status"]
 			if status in ("PAUSED", "FRUSTRATED"):
+				# A4: saltar es una orden explícita del Operador sobre un job
+				# detenido → también es puerta legítima para limpiar la marca.
 				conn.execute(
-					"UPDATE cognitive_tasks SET checkpoint_data = ?, status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, status = 'PENDING', attempts = 0, "
+					"cancel_requested_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 					(json.dumps(checkpoint), task_id),
 				)
 			else:
@@ -854,10 +935,12 @@ class CognitiveQueueManager:
 	def defer_task(self, task_id: str) -> bool:
 		"""Deferral por entorno no disponible (VRAM/IDE/SIP): PROCESSING → PENDING
 		SIN incrementar attempts (R1 — el disyuntor es para fallos reales del job).
-		Condicional sobre PROCESSING: una pausa del operador a mitad de step gana (R3)."""
+		Condicional sobre PROCESSING: una pausa del operador a mitad de step gana (R3).
+		A4: tampoco devuelve a la vida un job con marca de cancelación."""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
-				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PROCESSING'",
+				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP "
+				"WHERE id = ? AND status = 'PROCESSING' AND cancel_requested_at IS NULL",
 				(task_id,),
 			)
 			return cursor.rowcount > 0
@@ -877,6 +960,7 @@ class CognitiveQueueManager:
 				UPDATE cognitive_tasks
 				SET status = 'PENDING', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
 				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND cancel_requested_at IS NULL
 					AND updated_at < datetime('now', ?)
 				""",
 				(*sources, f"-{int(older_than_seconds)} seconds"),
@@ -904,6 +988,7 @@ class CognitiveQueueManager:
 				"""
 				SELECT id FROM cognitive_tasks
 				WHERE status = 'PROCESSING' AND source = ?
+					AND cancel_requested_at IS NULL
 					AND updated_at < datetime('now', ?)
 				""",
 				(source, f"-{int(older_than_seconds)} seconds"),

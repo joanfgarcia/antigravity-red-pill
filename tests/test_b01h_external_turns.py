@@ -94,3 +94,89 @@ def test_claude_hooks_write_same_journal(state, monkeypatch, db):
 	scribe._finish_turn("s1", "mundo", "claude-x", "completed")
 	counts = ext.import_external_turns(mirror=mirror, registry=registry, root=state)
 	assert counts["completed"] == 1
+
+
+def test_el_turno_importado_sale_sellado_con_reloj_e_identidad(state, db):
+	"""El agujero que esto cierra (medido 2026-10-30): 20.204 filas del espejo y
+	NINGUNA con `global_turn > 0`, así que `fetch_divergent_turns` (D15) no podía
+	leer nada. El turno importado tiene que salir con número y con identidad propia.
+	"""
+	path, registry, mirror = db
+	registry.upsert_session(originator="opencode:s1", continuity_id=CID, mission_id="repo:next", role="task")
+	ext.begin_external_turn(provider="opencode", session_id="s1", prompt="hola")
+	ext.finish_external_turn(provider="opencode", session_id="s1", response="mundo", model="m")
+	counts = ext.import_external_turns(mirror=mirror, registry=registry, root=state)
+	assert counts["completed"] == 1
+
+	import sqlite3
+
+	con = sqlite3.connect(str(path))
+	rows = con.execute(
+		"SELECT role, global_turn, turn_id FROM session_mirror WHERE continuity_id = ? ORDER BY seq",
+		(CID,),
+	).fetchall()
+	con.close()
+
+	assert len(rows) == 2, "user + assistant"
+	assert all(gt > 0 for _r, gt, _t in rows), f"turnos sin sellar: {rows}"
+	assert len({t for _r, _g, t in rows if t}) == 1, "las filas del mismo turno comparten identidad"
+	assert rows[0][1] == rows[1][1], "y comparten número de reloj"
+
+
+def test_un_request_id_repetido_no_se_traga_el_siguiente_turno(state, db):
+	"""El id del arnés no identifica: se conserva como procedencia."""
+	path, registry, mirror = db
+	registry.upsert_session(originator="opencode:s2", continuity_id=CID, mission_id="repo:next", role="task")
+	for prompt in ("uno", "dos"):
+		ext.begin_external_turn(provider="opencode", session_id="s2", prompt=prompt)
+		ext.finish_external_turn(provider="opencode", session_id="s2", response=f"eco {prompt}")
+	ext.import_external_turns(mirror=mirror, registry=registry, root=state)
+
+	import sqlite3
+
+	con = sqlite3.connect(str(path))
+	turns = [r[0] for r in con.execute(
+		"SELECT turn_id FROM session_mirror WHERE continuity_id = ? AND role = 'user'", (CID,)
+	)]
+	con.close()
+	assert len(turns) == 2 and len(set(turns)) == 2, f"dos turnos, dos identidades: {turns}"
+
+
+def test_un_request_id_repetido_por_el_arnes_no_pierde_el_segundo_turno(state, db):
+	"""Dos turnos distintos con el MISMO `request_id` (arnés que reinicia contador).
+
+	Antes: `source_ref = f"{request}:user"` colisionaba, `INSERT OR IGNORE` tiraba
+	la fila del segundo turno en silencio. Ahora la clave lleva el contenido.
+	"""
+	path, registry, mirror = db
+	registry.upsert_session(originator="opencode:s3", continuity_id=CID, mission_id="repo:next", role="task")
+	current = state / ext.CURRENT_DIR
+	current.mkdir(parents=True, exist_ok=True)
+	for prompt in ("turno uno", "turno dos"):
+		journal = {
+			"request_id": "repetido-42",
+			"originator": "opencode:s3",
+			"prompt": prompt,
+			"response": f"eco de {prompt}",
+			"status": "completed",
+			"started_at": 1793000000.0,
+			"finished_at": 1793000001.0,
+			"model": "m",
+			"provider": "opencode",
+			"session_id": "s3",
+		}
+		(current / f"opencode__s3__{prompt.replace(' ', '_')}.json").write_text(json.dumps(journal))
+
+	ext.import_external_turns(mirror=mirror, registry=registry, root=state)
+
+	import sqlite3
+
+	con = sqlite3.connect(str(path))
+	users = con.execute(
+		"SELECT turn_id, global_turn, status FROM session_mirror WHERE continuity_id=? AND role='user' ORDER BY seq",
+		(CID,),
+	).fetchall()
+	con.close()
+	assert len(users) == 2, f"se perdió un turno: {users}"
+	assert len({u[0] for u in users}) == 2, "cada turno con su identidad"
+	assert all(u[1] > 0 for u in users), "y sellados con reloj"

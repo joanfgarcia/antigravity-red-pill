@@ -74,6 +74,8 @@ def distill_session(
 				("source_lines", ref),
 				("source_ref", "memento/index.md"),
 				("engine", runtime.engine_id()),
+				# Con qué cerebro se escribió esto (full | concern | draft).
+				("trust", runtime.model_trust()),
 				("prompt_version", runtime.distill_prompt_version()),
 			]
 			if total > 1:

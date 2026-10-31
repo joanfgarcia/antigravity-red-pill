@@ -151,7 +151,7 @@ def test_metrics_min_margin_y_none_sin_puntuaciones():
 
 
 def test_annotate_meta_lleva_manifest_metrics_e_input_hash(tmp_path, monkeypatch):
-	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setattr(runtime, "engine_id", lambda *a, **k: "test-engine")
 	dir_rel = _tree(tmp_path)
 	annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", _fake_transport())
 	meta = json.loads((tmp_path / dir_rel / "annotate" / "_meta.json").read_text(encoding="utf-8"))

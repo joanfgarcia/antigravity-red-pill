@@ -439,7 +439,7 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 
 
 _NOISE_MARKERS = ("[TOOL USE:", "[TOOL RESULT:")
-_DIALOG_PREFIXES = ("USER:", "ASSISTANT:", "Operator Prompt:", "AI Response Node:")
+_DIALOG_PREFIXES = ("USER:", "PEER:", "TOOL:", "ASSISTANT:", "Operator Prompt:", "AI Response Node:")
 
 
 def _tool_noise_ratio(full_text: str) -> float:

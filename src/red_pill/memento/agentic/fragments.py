@@ -84,7 +84,7 @@ def work_units(session_dir: Path) -> List[WorkUnit]:
 # cortar diálogos a medias.
 
 
-_TURN_RE = re.compile(r"^(## .+ — )(Usuario|Asistente|Tool|None)\s*$")
+_TURN_RE = re.compile(r"^(## .+ — )(Usuario|Asistente|Tool|Peer|None)\s*$")
 FRAGMENT_VIEWS = ("raw", "actors", "pairs")
 
 
@@ -105,7 +105,7 @@ def fragment_view(content: str, mode: str = "raw", operator: str = "Operador", a
 	"""
 	if mode not in FRAGMENT_VIEWS or mode == "raw":
 		return content
-	labels = {"Usuario": operator, "Asistente": agent, "Tool": f"{agent} (herramienta)", "None": "(sin rol)"}
+	labels = {"Usuario": operator, "Asistente": agent, "Tool": f"{agent} (herramienta)", "Peer": f"{agent} (otra sesión)", "None": "(sin rol)"}
 	preamble: List[str] = []
 	turns: List[Tuple[str, str, List[str]]] = []
 	for line in content.split("\n"):
@@ -121,14 +121,18 @@ def fragment_view(content: str, mode: str = "raw", operator: str = "Operador", a
 	# "turnos del operador" de una sesión eran salidas de herramienta del agente).
 	# Un turno del operador cuyo cuerpo son SOLO `[TOOL RESULT…]` es de herramienta.
 	turns = [("Tool", prefix, body) if role == "Usuario" and _only_tool_results(body) else (role, prefix, body) for role, prefix, body in turns]
+	# Mensaje entre almas: llega como turno `user` y el renderer lo pinta `— Usuario`.
+	# Atribuirlo al Operador fabrica autoridad: el sobre declara por escrito que no
+	# viene de él (archivo 2026-10-27 lo guardó como «Usuario» igualmente).
+	turns = [("Peer", prefix, body) if role == "Usuario" and _is_peer_message(body) else (role, prefix, body) for role, prefix, body in turns]
 	if mode == "pairs":
 		kept = []
 		for i, turn in enumerate(turns):
-			if turn[0] == "Usuario":
+			if turn[0] in ("Usuario", "Peer"):
 				kept.append(turn)
 			elif turn[0] == "Asistente":
-				nxt = next((t[0] for t in turns[i + 1 :] if t[0] in ("Usuario", "Asistente")), "Usuario")
-				if nxt == "Usuario":
+				nxt = next((t[0] for t in turns[i + 1 :] if t[0] in ("Usuario", "Peer", "Asistente")), "Usuario")
+				if nxt in ("Usuario", "Peer"):
 					kept.append(turn)
 		turns = kept
 	out = list(preamble)
@@ -141,6 +145,14 @@ def fragment_view(content: str, mode: str = "raw", operator: str = "Operador", a
 def _only_tool_results(body: List[str]) -> bool:
 	lines = [line for line in body if line.strip()]
 	return bool(lines) and all(line.lstrip().startswith("[TOOL RESULT") for line in lines)
+
+
+def _is_peer_message(body: List[str]) -> bool:
+	"""Turno `Usuario` que en realidad es un mensaje entre almas (otra sesión)."""
+	from red_pill.core.speaker import PEER, classify_prompt
+
+	text = "\n".join(body).strip()
+	return bool(text) and classify_prompt(text).label == PEER
 
 
 def _split_messages(content: str) -> List[Tuple[str, str]]:

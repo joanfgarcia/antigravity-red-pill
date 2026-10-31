@@ -378,12 +378,26 @@ class RuntimeServer:
 		top_k: Optional[int] = None,
 		min_p: Optional[float] = None,
 		chat_template_kwargs: Optional[dict] = None,
+		tools: Optional[List[Dict[str, Any]]] = None,
+		tool_choice: Optional[str] = None,
+		response_format: Optional[Dict[str, Any]] = None,
 		timeout: float = 600.0,
 	) -> Dict[str, Any]:
-		"""POST /v1/chat/completions (no streaming) contra el servidor dedicado."""
+		"""POST /v1/chat/completions (no streaming) contra el servidor dedicado.
+
+		`tools` es necesario para el carril de minions: un perfil de fork también
+		tiene que poder hacer function calling, y sin esto el servidor dedicado
+		era el único camino sin herramientas.
+		"""
 		if not self.is_running():
 			raise RuntimeServerError("servidor no está corriendo (usa start())")
 		body: Dict[str, Any] = {"messages": messages, "stream": False}
+		if tools:
+			body["tools"] = tools
+		if tool_choice:
+			body["tool_choice"] = tool_choice
+		if response_format:
+			body["response_format"] = response_format
 		if max_tokens is not None:
 			body["max_tokens"] = max_tokens
 		if temperature is not None:

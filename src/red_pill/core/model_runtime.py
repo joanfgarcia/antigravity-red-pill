@@ -99,6 +99,15 @@ class ResolvedModel:
 	reasoning_effort: Optional[str] = None  # AD-049: esfuerzo declarado (medium/xhigh...)
 	reasoning_budget: Optional[int] = None  # tope DURO de tokens de thinking (no toca el contexto: acota la traza)
 	sampling: Dict[str, Any] = field(default_factory=dict)  # receta de samplers del modelo (top_p, top_k, min_p...)
+	# Args extra para el `llama-server` de un runtime de fork (AD-049). Config, no
+	# código: las peculiaridades de un modelo (p.ej. forzar `--reasoning off` porque
+	# su template razona y deja `content` vacío) se declaran en el perfil.
+	extra_server_args: List[str] = field(default_factory=list)
+	# Variante de prompts de la etapa `annotate` que este modelo necesita (2026-10-30).
+	# Paralelo a `prompt_file` (que versiona la destilación): un juez no lee como un
+	# escritor, y el prompt que hace buena a granite hace episódica a K2. None =
+	# variante por defecto del carril.
+	annotate_prompt_set: Optional[str] = None
 
 	def resolved_n_ctx(self) -> int:
 		"""n_ctx efectivo del perfil resuelto (vram_tiers aplicado)."""
@@ -237,6 +246,7 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		reasoning_effort=profile.get("reasoning_effort"),
 		reasoning_budget=int(profile["reasoning_budget"]) if profile.get("reasoning_budget") else None,
 		sampling=dict(profile.get("sampling") or {}),
+		extra_server_args=[str(a) for a in (profile.get("extra_server_args") or [])],
 		extra={"tier": tier, "thinking_supported": thinking != "off", "fa_capable": bool(profile.get("fa_capable"))},
 	)
 
@@ -481,6 +491,19 @@ def resolve(body: Optional[dict] = None) -> ResolvedModel:
 	# AD-049: anclaje de runtime del perfil. Informativo aquí; el gate
 	# de disponibilidad es require_runtime() antes de cargar el modelo.
 	profile = _get_profile(resolved.profile_name) if resolved.profile_name else {}
+	# Niveles estándar de razonamiento (2026-10-30): el perfil declara a qué flags
+	# equivalen en SU runtime; aquí se traducen. `low` = sin thinking, por contrato.
+	niveles = profile.get("reasoning_levels") or {}
+	if niveles:
+		pedido = str(getattr(resolved, "reasoning_effort", None) or profile.get("reasoning_level") or "medium").lower()
+		if pedido not in niveles:
+			pedido = "medium" if "medium" in niveles else next(iter(niveles))
+		flags_nivel = list(niveles.get(pedido) or [])
+		resolved.reasoning_effort = pedido
+		if flags_nivel:
+			resolved.extra_server_args = flags_nivel + [a for a in resolved.extra_server_args if a not in flags_nivel]
+	if profile.get("annotate_prompt_set"):
+		resolved.annotate_prompt_set = str(profile["annotate_prompt_set"])
 	if profile.get("runtime"):
 		resolved.runtime_id = str(profile["runtime"])
 		resolved.runtime = RuntimeRegistry.for_profile(profile)

@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from red_pill.core.speaker import classify_prompt
 from red_pill.memento.clean import normalize_noise
 from red_pill.memento.scrub import scrub_secrets
 
@@ -140,6 +141,13 @@ def render_session(
 			first_dt = first_dt or dt
 			last_dt = dt
 		label = ROLE_LABELS.get(str(message.get("role")), str(message.get("role", "?")).capitalize())
+		# Mensaje entre almas: llega con rol `user` (el arnés lo inyecta como turno
+		# del usuario) pero no lo habló el Operador. Si se escribe «Usuario», el
+		# destilado lo atribuye a él y fabrica autoridad — pasó en 2026-10-27 con un
+		# sobre que decía «no es del Operador». El rol se decide aquí, en el árbol,
+		# para que destilado, anotación y lectura humana vean lo mismo.
+		if label == ROLE_LABELS["user"] and classify_prompt(content).is_peer:
+			label = "Peer"
 		blocks.append((f"## {_display(dt)} — {label}", content))
 
 	# Mes inmutable (§4.3): primer mensaje; en reruns manda el registry (month_override).

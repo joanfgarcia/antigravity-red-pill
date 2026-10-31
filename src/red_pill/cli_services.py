@@ -393,6 +393,60 @@ def handle_session(args: argparse.Namespace) -> None:
 			return
 		print(f"[MODERATE] {result['event_id']} → {result['status']} ({result['action']}); D-obj resueltas={result['resolved_decisions']}")
 		return
+	if getattr(args, "session_cmd", None) == "deliver":
+		import json
+
+		from red_pill.session import delivery as _delivery
+
+		soul = str(getattr(args, "continuity", "") or "").strip()
+		limit = int(getattr(args, "limit", 20) or 20)
+		dry = bool(getattr(args, "dry_run", False))
+		if not dry and os.getenv("REDPILL_OPERATOR") != "1":
+			# Empujar un turno a la sesión de otra alma es meterse en su conversación.
+			# La política de wake por rol es C3; hasta eso, la superficie pública es
+			# el Operador. `--dry-run` solo lee, así que no está gated.
+			print("[DELIVER] solo Operador (REDPILL_OPERATOR=1). Con --dry-run se lista lo pendiente.")
+			return
+		if getattr(args, "summary", False):
+			print(json.dumps(_delivery.delivery_summary(soul), ensure_ascii=False))
+			return
+		if dry:
+			pending = _delivery.pending_for_soul(soul, limit=limit)
+			if getattr(args, "json", False):
+				print(json.dumps(pending, ensure_ascii=False, indent=2, default=str))
+				return
+			if not pending:
+				print(f"[DELIVER] {soul[:8]}: sin eventos pendientes de entrega.")
+				return
+			print(f"--- PENDIENTES DE ENTREGA ({len(pending)}) — alma {soul[:8]} ---")
+			for ev in pending:
+				print(
+					f"  seq={ev.get('event_seq')} · {ev.get('type')} · {str(ev.get('mission_id'))[:40]} · "
+					f"state={ev.get('delivery_state') or 'pending'} · attempts={ev.get('delivery_attempts') or 0} · "
+					f"{str(ev.get('summary') or '')[:100]}"
+				)
+			return
+		delivery_report = _delivery.deliver_events(
+			soul,
+			originator=getattr(args, "originator", None) or None,
+			limit=limit,
+			holder="cli-operator",
+		)
+		if getattr(args, "json", False):
+			print(json.dumps(delivery_report, ensure_ascii=False, indent=2, default=str))
+			return
+		print(
+			f"[DELIVER] alma={soul[:8]} · cuerpo={delivery_report.get('leg') or '(ninguno)'} · "
+			f"al_transporte={len(delivery_report.get('handed_off', []))} · diferidos={len(delivery_report.get('deferred', []))} · "
+			f"omitidos={len(delivery_report.get('skipped', []))} · rendidos={len(delivery_report.get('given_up', []))}"
+		)
+		for item in delivery_report.get("handed_off", []):
+			if item.get("trace"):
+				print(f"  rastro: {item.get('trace')}")
+		for bucket in ("deferred", "skipped", "given_up"):
+			for item in delivery_report.get(bucket, []):
+				print(f"  {bucket}: {str(item.get('event_id'))[:12]} · {item.get('reason')}")
+		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 
 

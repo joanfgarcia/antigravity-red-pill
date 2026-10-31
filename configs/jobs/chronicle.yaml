@@ -37,21 +37,41 @@ manifest:
       command: .venv/bin/python scripts/list_memento_agentic_pending.py
       on_fail: warn
       depends_on: [memento]
-    - id: memento-agentic
+    # ── El pase va POR FASES, no por sesión (2026-10-30) ──────────────────
+    # distill y annotate resuelven modelos distintos (`task_profiles.yaml`).
+    # Intercalados por sesión —lo que hacía la etapa única memento-agentic—
+    # el daemon cambia de modelo DOS VECES por sesión: medido el 2026-10-30,
+    # 40 cargas en una noche de 20 sesiones (~1,7 min tirados, y crece con
+    # modelos grandes tipo K2-7B Q5 o Spark a 262K). Por fases: 2 por corrida.
+    # Ambas etapas comparten la MISMA lista congelada de `discover` (una
+    # sesión por step) y se serializan con depends_on.
+    - id: memento-distill
       type: command
       minion: command_runner
       fan_out_from: discover
       fanout_stepwise: true          # 1 sesión = UN step → el progreso avanza por sesión
-      fanout_label: sesión           # etiqueta del sub-progreso: "· sesión k/N"
-      progress_file: true            # avance FINO intra-sesión (extract k/N) vía RP_PROGRESS_FILE
-      command: .venv/bin/python scripts/memento_agentic.py --target {{item}}
-      # AD-030 (v3): `llm:` POR ETAPA del dag_job — el pase
-      # Memento pide task distill/refine (default granite_8b).
+      fanout_label: polaroids         # etiqueta del sub-progreso: "· polaroids k/N"
+      progress_file: true            # avance FINO intra-sesión vía RP_PROGRESS_FILE
+      command: .venv/bin/python scripts/memento_agentic.py --phase distill --target {{item}}
+      # AD-030 (v3): `llm:` POR ETAPA — aquí manda la task distill (bonsai_2_27b).
       llm:
         task: distill
-      # El default de etapa es 600s y abate las sesiones largas (incidente
-      # 2026-09-17, mismo motivo que el fan-out redistill). 5400s como el
-      # resto del pase agéntico; el tope real lo pone control.max_step_minutes.
       timeout: 5400
       on_fail: warn
       depends_on: [discover]
+    - id: memento-annotate
+      type: command
+      minion: command_runner
+      fan_out_from: discover
+      fanout_stepwise: true
+      fanout_label: notas
+      progress_file: true
+      command: .venv/bin/python scripts/memento_agentic.py --phase annotate --target {{item}}
+      # El juez es otra decisión, no la del destilador: hoy granite_8b por la
+      # task `annotate`. Si algún día K2-7B demuestra ser mejor juez (15/15 en
+      # el benchset), se cambia AQUÍ y en task_profiles — sin tocar código.
+      llm:
+        task: annotate
+      timeout: 5400
+      on_fail: warn
+      depends_on: [memento-distill]

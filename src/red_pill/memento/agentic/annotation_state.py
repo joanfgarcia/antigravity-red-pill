@@ -44,7 +44,7 @@ def _scrub_idea(idea: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _contract(voice_rewrite: bool) -> Dict[str, Any]:
-	return {"prompt_version": runtime.annotate_prompt_version(), "engine": runtime.engine_id(), "voice_rewrite": bool(voice_rewrite)}
+	return {"prompt_version": runtime.annotate_prompt_version(), "engine": runtime.served_engine(), "voice_rewrite": bool(voice_rewrite)}
 
 
 def _empty_partial(contract: Dict[str, Any]) -> Dict[str, Any]:

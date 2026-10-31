@@ -52,11 +52,37 @@ _METABOLISM_PROMPTS = {
 _LITERAL = ("Aleth", "Aletheia", "Joan")
 
 
+def _es_subsecuencia(original: list[str], actual: list[str]) -> bool:
+	"""¿Todas las líneas del original siguen en `actual`, en el mismo orden?"""
+	i = 0
+	for linea in actual:
+		if i < len(original) and linea == original[i]:
+			i += 1
+	return i == len(original)
+
+
 def _resolve(text: str) -> str:
 	return text.replace("${agent_name}", _AGENT).replace("${operator_name}", _OPERATOR)
 
 
+# Baseline congelada por fichero (2026-10-30). La medida del Operador es sobre la
+# CONVERSIÓN a placeholders, no sobre el contenido para siempre: si un prompt se
+# edita a propósito después, comparar contra `main` da rojo legítimo y obliga a
+# tocar el test. Para esos ficheros se congela el original PRE-placeholders en
+# `tests/fixtures/identity_baseline/<nombre>`. Congelar aquí es una decisión
+# consciente: los prompts de identidad no se editan sin querer.
+_BASELINE_FIXTURE = {
+	"src/red_pill/metabolism/prompts/distiller_v3_voice.txt": "distiller_v3_voice.txt",
+}
+
+
 def _git_original(rel_path: str) -> str:
+	fixture = _BASELINE_FIXTURE.get(rel_path)
+	if fixture:
+		base = _REPO / "tests" / "fixtures" / "identity_baseline" / fixture
+		if not base.exists():
+			pytest.skip(f"baseline congelada ausente para {rel_path}")
+		return base.read_text(encoding="utf-8")
 	out = subprocess.run(["git", "-C", str(_REPO), "show", f"main:{rel_path}"], capture_output=True, text=True)
 	if out.returncode != 0:
 		pytest.skip(f"git/main no disponible para {rel_path}")
@@ -88,7 +114,14 @@ def test_equivalencia_byte_a_byte():
 	for rel in _CONVERTED_FILES:
 		new = _resolve((_REPO / rel).read_text(encoding="utf-8"))
 		old = _resolve(_git_original(rel))
-		if new != old:
+		if rel in _BASELINE_FIXTURE:
+			# Fichero editado a propósito tras la conversión: la garantía ya no es
+			# igualdad, es NO PÉRDIDA — cada línea del original debe seguir ahí, en
+			# orden. Añadir reglas está permitido (y se ve); quitar o torcer una
+			# línea que venía de la conversión, no.
+			if not _es_subsecuencia(old.splitlines(), new.splitlines()):
+				mismatched.append(f"{rel} (se perdió o cambió alguna línea del original)")
+		elif new != old:
 			mismatched.append(rel)
 	assert not mismatched, "la sustitución no reproduce el original en: " + ", ".join(mismatched)
 

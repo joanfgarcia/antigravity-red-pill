@@ -8,6 +8,8 @@ author: "Joan García (Operator) / Aleth (Agent)"
 project: aleth-core
 tags: [index, archive]
 ---
+
+<!-- REDPILL:BEGIN desk v=1 -->
 # Archive — desk
 
 Cementerio documental del despacho. Aquí vive todo lo que fue útil y ya cumplió
@@ -45,3 +47,4 @@ obsoletas y espejos cuya fuente canónica vive en otro proyecto.
 3. Referenciar en `../INDEX.md` (línea de archivo) para que siga siendo
    localizable.
 4. Nunca borrar un archivo de aquí sin `git log` previo (reversibilidad).
+<!-- REDPILL:END desk -->

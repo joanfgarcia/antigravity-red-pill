@@ -852,3 +852,137 @@ if os.environ.get("REDPILL_TESTING") != "1":
 			logger.info(f"[NPU] FastFlowLM provider registered: {_flm_url} ({_flm_model})")
 	except Exception:
 		pass
+
+
+class ForkServerInferenceProvider(BaseInferenceProvider):
+	"""Adaptador de provider sobre `RuntimeServer` (AD-049).
+
+	Los perfiles anclados a un runtime no-python (`PTQ1_0`, `PQ2_0`, `i2_s`) no
+	pueden servirse en proceso con llama-cpp-python. `RuntimeServer` ya levanta el
+	`llama-server` del runtime declarado, resuelve modelo/contexto/plan de KV/ngl
+	desde el perfil y lleva el ciclo de vida (health real, log en el error,
+	apagado con liberación de VRAM).
+
+	Aquí sólo se expone el contrato de provider para que quien consume no sepa
+	cuál hay detrás: **ni el daemon ni el Job Manager cambian cuando cambia el
+	motor**. No se reimplementa el ciclo de vida; duplicarlo fue el primer intento
+	y era peor que el original.
+	"""
+
+	def __init__(
+		self,
+		profile_name: str,
+		*,
+		ctx: Optional[int] = None,
+		kv_type: Optional[str] = None,
+		variant: Optional[str] = None,
+		extra_args: Optional[List[str]] = None,
+		unload_daemon: bool = False,
+	):
+		self.profile_name = profile_name
+		self.ctx = ctx
+		self.kv_type = kv_type
+		self.variant = variant
+		self.extra_args = list(extra_args or [])
+		self.unload_daemon = unload_daemon
+		self._srv: Optional[Any] = None
+
+	def _server(self) -> Any:
+		"""Servidor vivo, arrancándolo si hace falta. Idempotente."""
+		from red_pill.inference.runtime_server import RuntimeServer
+
+		if self._srv is None or not self._srv.is_running():
+			self._srv = RuntimeServer(
+				self.profile_name,
+				ctx=self.ctx,
+				kv_type=self.kv_type,
+				variant=self.variant,
+				extra_args=self.extra_args,
+				unload_daemon=self.unload_daemon,
+			).start()
+		return self._srv
+
+	def is_available(self) -> bool:
+		try:
+			self._server()
+			return True
+		except Exception as e:
+			logger.warning(f"[FORK-PROVIDER] '{self.profile_name}' no disponible: {e}")
+			return False
+
+	def stop(self) -> None:
+		if self._srv is not None:
+			try:
+				self._srv.stop()
+			except Exception as e:
+				logger.warning(f"[FORK-PROVIDER] fallo al parar: {e}")
+		self._srv = None
+
+	def generate(self, prompt: str, **kwargs) -> str:
+		messages = kwargs.get("messages")
+		if not messages:
+			messages = []
+			system_prompt = kwargs.get("system_prompt")
+			if system_prompt:
+				messages.append({"role": "system", "content": system_prompt})
+			messages.append({"role": "user", "content": prompt})
+		message = self.chat(
+			messages,
+			temperature=float(kwargs.get("temperature", 0.3)),
+			max_tokens=int(kwargs.get("max_tokens", 1024)),
+		)
+		return str(message.get("content") or "")
+
+	def stream(self, prompt: str, **kwargs) -> Iterator[str]:  # pragma: no cover - streaming pendiente
+		yield self.generate(prompt, **kwargs)
+
+	def chat(
+		self,
+		messages: List[Dict[str, Any]],
+		*,
+		tools: Optional[List[Dict[str, Any]]] = None,
+		tool_choice: Optional[str] = None,
+		temperature: float = 0.3,
+		max_tokens: int = 1024,
+		response_format: Optional[Dict[str, Any]] = None,
+		timeout: int = 600,
+	) -> Dict[str, Any]:
+		payload = self._server().chat(
+			messages,
+			max_tokens=max_tokens,
+			temperature=temperature,
+			tools=tools,
+			tool_choice=tool_choice,
+			response_format=response_format,
+			timeout=float(timeout),
+		)
+		choices = payload.get("choices") or [{}]
+		return choices[0].get("message") or {}
+
+
+def provider_for_profile(resolved: Any) -> Optional[BaseInferenceProvider]:
+	"""Devuelve el provider que corresponde al runtime declarado en el perfil.
+
+	Un perfil con `runtime: llama_cpp_fork` (PTQ1_0, PQ2_0, i2_s) no puede servirse
+	en proceso: devuelve un provider que delega en `RuntimeServer`. El resto
+	devuelve `None` y sigue por el camino stock (llama-cpp-python en proceso).
+	"""
+	from red_pill.core.runtime_registry import RuntimeRegistry
+
+	# `runtime` es el dict ya resuelto; el id es `runtime_id` (str).
+	runtime_id = getattr(resolved, "runtime_id", None) or RuntimeRegistry.default_id()
+	entry = RuntimeRegistry.get(runtime_id) or {}
+	if entry.get("kind") != "llama_cpp_fork":
+		return None
+	profile_name = getattr(resolved, "profile_name", None)
+	if not profile_name:
+		raise RuntimeError(
+			f"perfil con runtime '{runtime_id}' sin `profile_name`: RuntimeServer resuelve "
+			"modelo, contexto y plan de KV desde el perfil, no desde aquí"
+		)
+	return ForkServerInferenceProvider(
+		profile_name,
+		ctx=getattr(resolved, "n_ctx", None),
+		kv_type=getattr(resolved, "kv_cache_type", None),
+		extra_args=getattr(resolved, "extra_server_args", None) or [],
+	)

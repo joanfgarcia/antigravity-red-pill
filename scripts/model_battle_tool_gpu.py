@@ -51,6 +51,29 @@ MODELS: dict[str, str] = {
 BASE_URL = f"http://127.0.0.1:{PORT}"
 
 
+_HELP_CACHE: dict[str, str] = {}
+
+
+def _server_supports(flag: str) -> bool:
+	"""¿Este binario acepta `flag`? Varía entre builds del mismo llama.cpp.
+
+	`--no-mmap` existe en llama_official y en el fork prism, y NO en el build
+	stock reciente. Un arnés que asuma uno de los dos muere antes de cargar el
+	modelo ("invalid argument: --no-mmap") — pasó el 2026-10-30.
+	"""
+	binario = str(LLAMA_SERVER)
+	if binario not in _HELP_CACHE:
+		import subprocess
+
+		try:
+			_HELP_CACHE[binario] = subprocess.run(
+				[binario, "--help"], capture_output=True, text=True, timeout=30
+			).stdout
+		except Exception:
+			_HELP_CACHE[binario] = ""
+	return flag in _HELP_CACHE[binario]
+
+
 def _health() -> bool:
 	import urllib.request
 
@@ -95,8 +118,9 @@ def _run_model(model_name: str, gguf: str) -> list[BattleResult]:
 			"127.0.0.1",
 			"--port",
 			str(PORT),
-			"--no-mmap",
 		]
+		if _server_supports("--no-mmap"):
+			cmd.append("--no-mmap")
 		logf = open(log_path, "w")
 		server = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT)
 		print(f"\n##### {model_name} (llama-server/{gguf}) #####", flush=True)

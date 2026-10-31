@@ -12,13 +12,19 @@ HEARTBEAT_FILE = str(get_state_dir() / "pulse.json")
 def record_interaction() -> Dict[str, Any]:
 	"""Records current interaction time and returns cadence stats."""
 	now = time.time()
-	data = {"last_interaction": now, "prev_interaction": 0.0}
+	# `session_start`: desde cuándo va esta sesión. Se reinicia cuando el hueco
+	# con el turno anterior es de AUSENCIA (no de una pausa dentro de la charla).
+	data = {"last_interaction": now, "prev_interaction": 0.0, "session_start": now}
 
 	if os.path.exists(HEARTBEAT_FILE):
 		try:
 			with open(HEARTBEAT_FILE, "r") as f:
 				old_data = json.load(f)
 				data["prev_interaction"] = old_data.get("last_interaction", 0.0)
+				prev_start = old_data.get("session_start") or old_data.get("last_interaction") or now
+				gap = now - data["prev_interaction"] if data["prev_interaction"] else None
+				nueva = gap is None or gap > cfg.CADENCE_ABSENCE_THRESHOLD
+				data["session_start"] = now if nueva else prev_start
 		except Exception:
 			pass
 
@@ -38,6 +44,47 @@ def record_interaction() -> Dict[str, Any]:
 		status = "dormant"
 
 	return {"status": status, "delta_seconds": delta, "delta_human": _human_time(delta)}
+
+
+_DIAS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+
+
+def _stamp(ts: float) -> str:
+	"""Fecha local con offset y día de la semana: `2026-10-31 14:52 (sáb)`."""
+	from datetime import datetime
+
+	d = datetime.fromtimestamp(ts).astimezone()
+	return f"{d.strftime('%Y-%m-%d %H:%M')} ({_DIAS[d.weekday()]})"
+
+
+def time_line(now: float | None = None) -> str:
+	"""Línea de tiempo para el handshake: qué hora es, cuánto hace del turno
+	anterior y desde cuándo va la sesión.
+
+	Pedido del Operador (2026-10-31): sin esto no puedo distinguir "ayer" de "hace
+	dos turnos", y una memoria que confunde esas dos escalas miente sobre el
+	tiempo. Se lee de `pulse.json` (lo escribe `record_interaction` en el pase de
+	memoria); no escribe nada y nunca lanza.
+	"""
+	now = time.time() if now is None else now
+	session_start = None
+	prev = 0.0
+	try:
+		if os.path.exists(HEARTBEAT_FILE):
+			with open(HEARTBEAT_FILE, "r") as f:
+				data = json.load(f)
+			prev = float(data.get("last_interaction") or 0.0)
+			session_start = float(data.get("session_start") or 0.0) or None
+	except Exception:
+		pass
+
+	partes = [f"- Ahora: {_stamp(now)}"]
+	if prev > 0:
+		delta = now - prev
+		partes.append(f"turno anterior: hace {_human_time(delta)}")
+	if session_start:
+		partes.append(f"sesión desde {_stamp(session_start)} ({_human_time(now - session_start)})")
+	return " · ".join(partes)
 
 
 def _atomic_write_heartbeat(data: Dict[str, Any]) -> None:

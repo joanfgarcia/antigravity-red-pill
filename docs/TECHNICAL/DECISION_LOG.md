@@ -1309,6 +1309,35 @@ Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a 
 ### 4. Open Questions
 Network-MCP support in Antigravity / Claude Desktop (Claude Code is fine); **security** — the RedPill-Kernel MCP runs subprocess/heal effectors, so it must NOT be exposed on an unauthenticated TCP port (prefer UDS file-perms, or localhost + token).
 
+### 5. Operación — recargar el kernel cuando cambia el CATÁLOGO de tools (2026-10-29)
+§3 vale para **datos** (roots, grafos, memoria): cambian dentro del servidor y el
+cliente no se entera. El caso contrario es **código**: si se añade, se purga o se
+renombra una tool, hay **tres** capas y hay que recorrer las tres, en este orden.
+
+| # | Capa | Qué se queda viejo | Cómo se refresca |
+|---|---|---|---|
+| 1 | **Backend** `redpill-mcp.service` (UDS) | importa `mcp_server` una vez y sirve para siempre: el `ToolRegistry` vive en su memoria | `systemctl --user restart redpill-mcp.service` (o `scripts/install_mcp_service.sh`) |
+| 2 | **Proxy** `mcp_proxy` (uno por instancia del IDE) | nada relevante: abre conexión **nueva por petición** y reintenta una vez | se refresca solo al recargar el cliente |
+| 3 | **Catálogo del cliente** (el que ve el modelo) | se inyecta al abrir la sesión y **se restaura al reanudarla** | `/reload`, o sesión nueva si se reanudó |
+
+El backend es *stateless* y el proxy no reutiliza conexión, así que el paso 1 **no
+orfana ni corta** a las sesiones vivas (verificado el 2026-10-27 y otra vez el
+2026-10-29 con cuatro sesiones concurrentes).
+
+**Síntoma según el paso que falte** — así se diagnostica sin adivinar:
+
+- Falta el 1: la tool nueva no existe para nadie y una tool **purgada sigue
+  respondiendo** (el backend viejo aún la tiene).
+- Falta el 2: el handshake o la tool devuelven texto viejo (el backend nuevo no se
+  está usando).
+- Falta el 3: el **backend sirve la tool** pero el modelo no la encuentra en su
+  catálogo; al llamar una purgada, el error viene del **backend**
+  (`Unknown tool: …`), no del cliente.
+
+Prueba barata y sin coste de modelo: hablar el protocolo por el mismo proxy que usa
+el IDE y pedir `tools/list`. El snippet vive en
+`scripts/check_mcp_tools.py` (lista las tools que ve un cliente nuevo).
+
 ### 5. Spike 2026-10-25 — validado (UDS + streamable HTTP + proxy stdio)
 **Host corregido**: el `SovereignDaemon` actual es **monitor-only** (`DaemonPlugin`: “nunca ejecutar tareas pesadas”). El backend del MCP irá en un **servicio systemd dedicado** (`redpill-mcp.service` + `redpill-mcp.socket`, UDS 0600, socket-activated); los clientes usan un **proxy stdio ligero** por instancia que reenvía al backend por UDS. La idea original (un MCP, N clientes) se mantiene; cambia el host.
 
@@ -1982,3 +2011,1087 @@ Validado por un panel adversarial de 5 rondas (veredicto final **PASS**, sin
 CRITICAL/HIGH). El núcleo verificado en vivo: el handshake emite
 `leg="opencode:<session_id>"` real y escribe `session_registry`; el bridge lo
 escribe el plugin nuevo. Suite completa verde.
+
+---
+
+## [AD-089] Bridge por sesión — resolución del cuerpo por instancia (D-BRIDGE)
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED. Cierra la deuda **P2a** que AD-050 §3 dejó *diferida a 0b*
+("Bridge por sesión (no por proveedor)").
+
+### 1. The Problem
+El bridge del arnés era **un fichero global por arnés** (`state/<harness>_session.json`):
+lo escribe el hook de cada pestaña y lo lee el proxy/MCP. Con varias pestañas vivas
+(todas escriben en el mismo fichero) gana el **último escritor**, así que un alma
+(`continuity_id`) podía quedar atribuida al **cuerpo** (`session_id`) de otra pestaña.
+Reproducido en vivo el 2026-10-28: 5 procesos `mcp_proxy` con el **mismo padre**
+(`opencode-cli`) y el mismo backend, pero `cwd` distinto por instancia; el entorno del
+proxy **no** trae el `session_id` (la config MCP es estática) y `PWD` está rancio.
+
+### 2. The Decision
+1. **Escritor (plugin):** además del bridge global, el hook escribe un bridge **por
+   sesión** (`state/sessions/bridge/opencode__<sid>.json`), con `session_id`, `workdir`
+   y `updated_at`. El global se conserva (compat + degradación).
+2. **Lector (proxy):** el proxy corre **por instancia** y tiene el `cwd` de su pestaña
+   (único discriminador disponible). `core/bridge.py` resuelve su cuerpo por correlación:
+   - **Capa 1:** bridges per-sesión con `workdir == cwd` **de sesión viva** (el hook
+     acaba de escribir el suyo; funciona aunque la sesión aún no esté en `opencode.db`).
+   - **Capa 2:** `opencode.db` (`session.directory == cwd`) entre las vivas — desempate.
+   - **Degradación honesta:** si hay varias pestañas vivas en el mismo workspace la
+     correlación no decide y se cae al bridge global (comportamiento anterior).
+3. **Vitalidad en todas las capas.** La capa 1 exige latido **y frescura** (`updated_at`
+   dentro de la ventana): un bridge rancio de una pestaña cerrada no puede ganar a la
+   sesión viva (defecto detectado por la auditoría adversarial del mismo día).
+4. **`_norm` con `realpath`** (symlinks) y **paridad de saneado** JS/Python (`[/:]`→`_`).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Colisión "rara y auto-sanable" (AD-050 §3) | **corregida** | No era auto-sanable: la última pestaña atribuía su cuerpo a la otra alma |
+| `session_id` por env del MCP | rechazada | La config MCP es estática: opencode no conoce la sesión al arrancar el proxy |
+| Bridge por sesión sin guarda de vitalidad | corregida | Un bridge rancio atribuía el cuerpo de una pestaña muerta (auditoría 2026-10-28) |
+
+### 4. Rationale
+Verificado en vivo (5 proxies, cwd por instancia, sesión del turno aún ausente de
+`opencode.db`). El path del backend ya era correcto: el `originator` del canal de
+confianza (`X-RedPill-Proxy`) gana sobre env/bridge en el resolver del
+handshake, así que arreglar la resolución en el proxy basta. 10 tests nuevos
+(`tests/test_bridge_per_session.py` + 1 de plugin); lint y tipos limpios.
+
+---
+
+## [AD-090] Aviso de fin de job al alma — pieza TEMPORAL, se reapunta a neon-link
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED, **PROVISIONAL** (transporte temporal por decisión del Operador).
+
+### 1. The Problem
+Un job lanzado desde una sesión viva terminaba y dejaba su reporte en el
+MinionInbox (`_report_job`, con la identidad del alma). Pero **nadie lo abría**: el
+reporte solo se veía si el agente llamaba `check_minion_inbox`. Para una tarea larga
+(suite completa, compilación, benchmark) no quedaba más salida que `nohup … &` — que
+además **no tiene alma**, así que ni siquiera puede avisar a quien lo lanzó.
+Es el mismo patrón que el RFC-RECIPE-001 documenta: *"no murió por ser un mal cajón,
+murió porque nadie lo abría"*.
+
+### 2. The Decision
+1. **Tras el push al MinionInbox**, el runner **avisa al alma** que lanzó el job
+   (`core/soul_notify.py`). El reporte del inbox **se conserva**: el push es *aditivo*
+   al pull, nunca lo sustituye. Si el aviso falla, el pull sigue funcionando.
+2. **Transporte TEMPORAL: `opencode run --session <id>`** — la ruta que **inyecta**
+   (D-11; `api POST` fallaría cerrado y el mensaje desaparecería). Es el patrón ya
+   probado en vivo con la sesión hermana (E-001..E-005, D-BRIDGE).
+3. **Seam único de transporte.** Todo el transporte vive detrás de `_TRANSPORTS` +
+   `_resolve_transport()`. **Repuntar a neon-link = cambiar `_DEFAULT_TRANSPORT`** (o
+   `REDPILL_SOUL_NOTIFY_TRANSPORT=neon_link`). Nada más en el repo debe invocar
+   `opencode run --session` para notificar a un alma.
+4. **Gateado por D-07** (cadena de mando): un job es hijo del alma que lo lanzó, así
+   que avisarla es *su* cadena — permitido sin ampliar el círculo. Sin cuerpo vivo
+   (latido), no hay push: el aviso se queda en el inbox (pull).
+5. **D-09**: el aviso es **dato**, no orden ("No requiere respuesta").
+6. **No bloquea al runner**: la entrega corre en hilo daemon con timeout. Un job no
+   puede quedarse colgado esperando el turno de otro.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| `nohup … &` con un wrapper que avise | rechazada | El proceso suelto **no tiene alma** (`continuity_id`): no sabe a quién avisar, no es reanudable ni trazable |
+| Solo MinionInbox (status quo) | insuficiente | El reporte existe pero nadie lo abre → tareas largas a ciegas |
+| Broker completo de neon-link ahora | **diferida** | Es la pieza buena (D-06), pero más grande; el MVP valida el patrón antes |
+
+### 4. Rationale
+Validado con 17 tests (`tests/test_soul_notify.py`) + 232 en la batería de cola/jobs/
+alma. **NO se retira el fallback SQLite del plugin ni el inbox**: el aviso es una capa
+más, no un reemplazo.
+
+### 5. Deuda declarada (SIGUIENTE PASO OBLIGATORIO)
+> **Cuando `neon-link` mire hacia dentro** (canal `soul`, D-06, mensaje como evento de
+> `mission_events` y broker guardando **solo** el estado de entrega), **esta pieza debe
+> reapuntarse a ese canal**; el transporte CLI quedará como fallback (o se retira).
+> `_deliver_neon_link()` existe ya como placeholder honesto que **no entrega** (devuelve
+> `False`) para que el repunte sea explícito y testeado, no una promesa.
+>
+> **Actualizado 2026-10-28:** el canal `soul` **no existe** todavía. Medido: `neon-link`
+> tiene `core/inbox.py` = `LocalInbox` en memoria (28 líneas) y un `outbox` de **egress**
+> con estados, pero **ningún canal `soul`** ni `inbox_adapters.py`. Ver **AD-094 §3**
+> para la tabla de lo que sí y lo que no. El repunte sigue pendiente y el transporte
+> CLI sigue siendo el vigente.
+
+---
+
+## [AD-091] Fase 4 — claims de etapa: coordinación federada sin carrera
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED (E0–E5). El E2E de aceptación corre contra la cola y el
+driver reales (ver §6.1 de `STAGE_CLAIMS.md`): con un TTL de 20 s sobre una etapa
+de 75 s, otra alma intentó reclamarla 25 veces y recibió `held_by_other` las 25,
+sin un solo robo, y no quedaron filas huérfanas. El cierre del F4 expone el claim
+como tool MCP `try_claim_stage` y cierra los flecos de captura — ver **AD-092**.
+**Contrato**: [`docs/TECHNICAL/STAGE_CLAIMS.md`](STAGE_CLAIMS.md).
+
+### 1. The Problem
+El `DagJobDriver` recorre el árbol de una misión por sí solo. Eso es seguro con
+**un** driver; deja de serlo cuando varias ejecuciones tocan el mismo proyecto
+(dos sesiones en la misma rama, un `awakening` retomando lo que una sesión humana
+ya retomó, un `dag_job` y un bucle a mano sobre el mismo worktree). Todos ven la
+misma etapa como "pendiente" y todos la ejecutan: trabajo duplicado en el mejor
+caso, worktree corrupto en el peor.
+
+### 2. The Decision
+1. **Lock ligero por etapa**, no cola ni planificador: una tabla de claims.
+   Decidir si se salta, espera o reintenta es **política del llamante** (E3).
+2. **`claim_key` canónica (D12)**: `sha256(afinidad_canónica | branch | worktree |
+   stage_path)`, serializada como **JSON de tupla** (codificación inyectiva) y con
+   el worktree normalizado (`realpath`). Reutiliza `canonize_affinity` (D19).
+3. **Atomicidad (D13)**: `BEGIN IMMEDIATE` con **re-lectura dentro** de la
+   transacción. El `SELECT`-y-luego-escribir tiene carrera: dos drivers ven
+   "expirado" y los dos roban.
+4. **Propiedad por alma (D18)**: `owner_continuity_id` es el dueño;
+   `owner_originator` es solo el cuerpo. Un `switch_model` no pierde el claim.
+5. **TTL renovable (D9-a)**: 1800 s por defecto, renovable por checkpoint. No se
+   renueva lo ajeno **ni lo propio ya expirado**: resucitar un claim caducado
+   decide por quien legítimamente iba a robarlo.
+6. **Fail-closed**: entrada inválida o BD caída → `claimed=False`, `reason="error"`.
+   Nunca "supongo que sí".
+7. **Purga (D14)** por job periódico, no por el camino del claim.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Cola/scheduler por etapa | rechazada | Convierte el lock en un punto de bloqueo y hace los timeouts inanalizables; el DAG ya tiene su propio recorrido |
+| Claim por `originator` (cuerpo) | rechazada | Un `switch_model` a mitad de etapa perdería el lock (D18) |
+| Concatenar la clave con separadores | **corregida** | Colisión entre etapas distintas (un `\|` o una coma bastaban) → una bloqueaba y robaba a la otra |
+| Esperar dentro del claim | rechazada | El almacén no conoce la política de la misión |
+
+### 4. Rationale
+Precondición A4 verificada por ejecución real (166 tests, §6 del contrato).
+E2 validado con **segunda lente independiente** (sesión hermana, GLM 5.3 Flash,
+hilo E-006): cinco defectos reales —colisión de clave, renovación de expirados,
+worktree no canónico, `rowcount` ausente, fail-closed incompleto— todos
+reproducidos y corregidos con test de regresión. El test de carrera se valida por
+**mutación**: sin `BEGIN IMMEDIATE` falla con "8 almas robaron el mismo claim".
+
+### 5. Deuda declarada
+- **Multi-host** fuera de alcance: es un SQLite local. La coordinación entre
+  máquinas es territorio de `neon-rings` y depende de **D26** (firma real).
+- **Responsable de misión y skip bloqueante**: propuesto por el Operador
+  (2026-10-28) y anotado en `planner/ideas/F4-ORQUESTADOR-MISION`. Hoy los skips
+  por claim ajeno se difieren (`JobDeferred`) y se ven en el checkpoint; no hay
+  aviso al responsable ni un dueño durable de la misión. Trabajo posterior.
+- **Lección de verificación**: el E2E encontró que `renew_claim`/`release_claim`
+  se llamaban con kwargs de más (`TypeError` tragado por el `except`) mientras
+  los tests —con mocks `lambda **k`— daban verde. Un mock con `**kwargs` no
+  verifica un contrato de llamada.
+
+---
+
+## [AD-092] Cierre Alma y Coro (etapa A) — el claim como tool MCP y dos flecos de captura
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED & VERIFIED (doc-anchor, etapa A de ALMA_Y_CORO_CIERRE).
+**Commits**: `a77cda5` (tool MCP `try_claim_stage`) · `5d3b9e7` (filtro D2 en `drop_report` + prefijo de provider en `chronicle_sources`).
+
+### 1. The Problem
+Tres piezas dejaban al sistema mintiendo o desprotegido:
+1. El CAS de etapas de Fase 4 (`session/stage_claims.py`) era alcanzable sólo en
+   Python in-process: un alma en otro arnés no podía reclamar una etapa sin
+   escribir código — el claim existía pero no estaba expuesto a quien lo necesita.
+2. `MinionInbox.drop_report` insertaba **sin deduplicación**: un reintento del
+   minion o una doble entrega dejaba dos filas con el mismo `event_id`.
+3. La fuente chronicle `memory_queue` (RFC-002 MUST 10) excluía originators por
+   **igualdad exacta** contra `CHRONICLE_ARCHIVE_SOURCES`. Los providers nativos
+   llegan como `proveedor:id` (`opencode:ses_abc`), así que la igualdad nunca los
+   cazaba: su verbatim se **duplicaba** en Memento (entra por el provider store
+   y también por la cola). Además el docstring afirmaba que Telegram capturaba
+   sólo vía `memorize_interaction` — falso: `telegram` está en la lista de config
+   y su verbatim entra por su propia fuente de chronicle.
+
+### 2. The Decision
+1. **Tool MCP como envoltorio, nunca como reimplementación** (`a77cda5`):
+   `try_claim_stage` en `mcp_server.py` delega en `session/stage_claims.py` —
+   la clave canónica (D12), el `BEGIN IMMEDIATE` (D13), la propiedad por alma
+   (D18) y el TTL (D9-a) siguen viviendo ahí. Lo que añade la capa MCP es sólo
+   el canal de confianza y texto legible: identidad (alma+cuerpo) del registro,
+   **ignorada** en los argumentos del modelo; sin alma resuelta no se reclama
+   (`reason=error`, fail-closed); `branch`/`worktree`/`affinity` salen por defecto
+   del workspace del llamante (nunca del cwd del servidor, que es el checkout del
+   kernel), y un argumento explícito **gana** sobre lo derivado — lo único que un
+   argumento no puede sustituir es la identidad; cualquier fallo degrada a
+   texto y el servidor sigue vivo (non-fatal); la transacción corre fuera del
+   event loop (`asyncio.to_thread`; `busy_timeout=5000` en `session/store.py:314`,
+   no en `stage_claims.py`).
+2. **D2 dentro de la sentencia de escritura** (`5d3b9e7`): el filtro es
+   `INSERT ... SELECT WHERE NOT EXISTS`, no un `SELECT` previo — lo único que
+   SQLite serializa bajo el write-lock frente a dos minions simultáneos. Con
+   `event_id` vacío se inserta (comportamiento histórico).
+3. **Exclusión por prefijo de provider** (`5d3b9e7`): `_is_excluded` parte el
+   `originator` en `:` y compara el provider contra la lista; la igualdad exacta
+   sigue valiendo para formas legacy sin sesión. El filtro se traslada de SQL
+   (`NOT IN`) a Python porque el prefijo no cabe en un `NOT IN` exacto.
+4. **Hermeticidad de identidad en la suite** (`a77cda5`, `tests/conftest.py`):
+   fixture autouse que **borra** `REDPILL_ORIGINATOR/CONTINUITY_ID/MISSION_ID/
+   CAMPAIGN_ID/ROLE/HARNESS` por test. Un job lanza la suite heredando el cuerpo
+   del job en el entorno y los tests de identidad lo afirmaban como propio —
+   9 fallos (o verdes mentirosos) sin tocar producción. Se borra, no se fija:
+   la identidad de un test viene de lo que el test declara.
+
+### 3. Rationale / Evidence
+Todo lo afirmado arriba está respaldado por comandos ejecutados en el worktree
+`cierre/alma-a` (2026-10-28), salida literal:
+
+```
+$ git log --oneline -4
+5d3b9e7 fix(captura): filtro D2 en drop_report + prefijo de provider en chronicle
+a77cda5 feat(f4): tool MCP try_claim_stage
+29a1f00 docs(f4): E5 cerrado — evidencia del E2E y la lección de los mocks
+46965b5 fix(f4): el latido renovaba con kwargs de más — el claim expiraba y otro lo robaba
+```
+
+**Tool registrada en el catálogo real** (no «lo dice un test»: se importa el
+módulo y se interroga el registry que sirve `handle_list_tools`):
+
+```
+$ PYTHONPATH=<worktree>/src:<worktree> python -c "from red_pill.mcp_server import registry; …"
+total tools: 11
+try_claim_stage registered: True
+handler registered: True
+['announce_intent', 'check_parallel_sessions', 'fetch_divergent_turns', 'fetch_events',
+ 'list_decisions', 'moderate_note', 'review_decision', 'sovereign_handshake',
+ 'suggest_review', 'try_claim_stage', 'unregister_session']
+```
+
+**Tests** (venv del kernel, `PYTHONPATH` al worktree):
+
+```
+$ python -m pytest tests/test_mcp_server.py -q
+86 passed, 1 warning in 3.34s
+
+$ python -m pytest tests/test_mcp_server.py -q -k "TryClaimStage"
+10 passed, 76 deselected in 2.27s
+
+$ python -m pytest tests/test_inbox.py tests/test_memento.py -q
+37 passed in 2.00s
+
+$ python -m pytest tests/test_stage_claims.py -q
+30 passed in 2.41s
+
+$ python -m pytest tests/ -q --timeout=300        # suite íntegra
+3678 passed, 18 skipped, 11 xfailed, 6 warnings in 134.95s (0:02:14)
+```
+
+**D2 verificado en vivo** (no por aserción: tres `drop_report` reales sobre una
+BD temporal, dos con el mismo `event_id`):
+
+```
+filas tras 3 drops (2 con mismo event_id): 2
+event_ids: ['', 'evt-1']
+```
+
+**Prefijo de provider verificado en vivo** (fuente sobre BD temporal con
+originators nativos, legacy y sin provider):
+
+```
+descubierto: [('mcp:awakening:2026-10-28', 1), ('unknown:2026-10-28', 1)]
+excluded config: ['antigravity', 'claude_code', 'opencode', 'pi', 'telegram']
+opencode:ses_abc -> excluido: True
+telegram:uuid-1 -> excluido: True
+opencode -> excluido: True          # legacy sin sesión: la igualdad exacta sigue valiendo
+mcp:awakening -> excluido: False
+```
+
+`opencode:ses_x` y `telegram:uuid` ya no duplican; `opencode` pelado (legacy)
+sigue excluyéndose; las superficies sin provider store entran. (Que el verbatim
+de Telegram no se pierda con el filtro está respaldado por la existencia de su
+propia fuente: `chronicle_sources/telegram.py`, `name = "telegram"`.)
+
+**Hermeticidad de identidad: el contrafáctico reproducido** (no se acepta el
+«9 fallos» del mensaje de commit; se ejecuta). Con el `conftest.py` revertido a
+`a77cda5^` y el entorno del job puesto (`REDPILL_ORIGINATOR=dag:bf5ce21e…`,
+`REDPILL_MISSION_ID=repo:next`):
+
+```
+$ python -m pytest tests/test_mcp_server.py -q          # SIN el fixture de a77cda5
+9 failed, 77 passed, 1 warning in 3.62s
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_emite_alma_y_tag_session
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_bridge_resuelve_originator_y_workspace
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_originator_explicito_deriva_provider_del_bridge
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_mision_por_defecto_repo_rama
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_llamante_legacy_role_task
+FAILED tests/test_mcp_server.py::TestSovereignHandshakeIdentity::test_relay_propaga_originator_al_sink
+FAILED tests/test_mcp_server.py::TestSession0b::test_reloj_late_y_se_guarda
+FAILED tests/test_mcp_server.py::TestSession0b::test_espejo_git_se_llena - Ty...
+FAILED tests/test_mcp_server.py::TestSession0b::test_mision_por_repo_tocado_f3
+
+$ cp /tmp/opencode/conftest.keep tests/conftest.py      # conftest de HEAD, mismo entorno del job
+$ python -m pytest tests/test_mcp_server.py -q
+86 passed, 1 warning in 3.51s
+```
+
+Los 9 fallos son exactamente los que afirma el commit, incluidos los dos que
+nombra (`test_mision_por_defecto_repo_rama`, `test_emite_alma_y_tag_session`).
+El fix es necesario y suficiente en este puesto.
+
+### 4. Alternatives
+(a) Reimplementar el CAS en la capa MCP — rechazada: dos fuentes de verdad para
+D12/D13/D18; la lección de `**kwargs` (AD-091 §5) aplicada al diseño, el
+envoltorio no toca la lógica. (b) D2 con `SELECT` previo + `INSERT` — rechazada:
+carrera entre dos minions (`test_drop_report_idempotente_bajo_carrera` la
+reproduce con 8 hilos y una fila esperada). (c) Filtro SQL `NOT LIKE 'opencode:%'`
+por provider — rechazada: la lista es config cerrada y el patrón `LIKE` se
+saldría de la semántica exacta de `CHRONICLE_ARCHIVE_SOURCES`; se agrupa todo y
+se filtra en Python. (d) Fijar la identidad de test a valores fijos en vez de
+borrar el entorno — rechazada: los tests de identidad miden lo que el test
+declara; un valor fijo sería otra mentira heredada.
+
+### 5. Consequences
+- El claim de etapa está al alcance de cualquier arnés con MCP: misma semántica
+  CAS que el driver (nada cambia en `stage_claims.py`), texto explícito con
+  `claimed/owner/reason` + rama/worktree/afinidad/expiración.
+- MinionInbox es idempotente por `event_id`. **Observación estática**: los drops
+  de señales usan `event_id=f"signal_{name}"` (`memory.py:1429`,
+  `cloud_sync/plugin.py:78`, `metabolism/auditor.py:615`) — una segunda
+  ocurrencia de la misma señal se deduplicará mientras la primera fila viva.
+  Si eso es intención o efecto colateral: **UNVERIFIED** (ningún test ni doc lo
+  afirma; ver §6).
+- La fuente `memory_queue` ya no duplica el verbatim de providers nativos en
+  Memento; el docstring corrigió la afirmación sobre Telegram.
+- La suite es hermética a la identidad del proceso que la lanza (jobs,
+  awakenings): los 9 fallos reproducidos quedan cerrados por el fixture de
+  `conftest.py`.
+- El contrato `STAGE_CLAIMS.md` **no cambia de semántica**: la tool expone lo que
+  ya estaba. Se le añade una subsección en §4 («MCP surface») que documenta la
+  capa MCP —canal de confianza, precedencia de argumentos, non-fatal— y deja
+  explícito que `renew_claim`/`release_claim`/`get_claim` siguen siendo sólo
+  Python (el latido vive en el driver, E4, no en el modelo).
+
+### 6. UNVERIFIED (declarado, no afirmado)
+- **Invocación de la tool por transporte MCP** contra `redpill-mcp.service` con
+  un cliente real y bridge de sesión: verificado el registro in-process (catálogo
+  + handler) y los 10 tests del handler; no se llamó la tool por el transporte en
+  esta etapa.
+- **Deduplicación de señales en producción** (`signal_{name}`, §5): concluida por
+  grep de llamantes, no probada en runtime ni confirmada por el Operador como
+  intención.
+- **Efecto del filtro por prefijo sobre el Memento ya renderizado**: los grupos
+  duplicados escritos antes de `5d3b9e7` siguen en disco; no se verificó aquí
+  ninguna limpieza/regeneración retroactiva.
+
+### 7. Discrepancia detectada (doc vs código — gana el código)
+El mensaje de `a77cda5` dice «Los argumentos del modelo afinan, no sustituyen».
+Cierto sólo para la **identidad** (`continuity_id`/`originator` se ignoran). En
+`mcp_server.py:3144-3146`, `branch`, `worktree` y `affinity` explícitos **sí
+sustituyen** al valor derivado del workspace — es la funcionalidad que necesita
+un driver que trabaja en otro worktree. El código está bien; el enunciado del
+commit era demasiado ancho. Se corrige aquí y en `STAGE_CLAIMS.md` §4 para que la
+próxima alma no lea «no sustituyen» y espere que un `worktree` explícito sea
+ignorado.
+
+---
+
+## [AD-093] Interceptor 12_session_sync — digest global de la sala de guerra (D16) con presupuesto p99 medido
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTED & VERIFIED (doc-anchor, etapa B de ALMA_Y_CORO_CIERRE).
+**Commits**: `da56589` (feat: interceptor + config + tests unitarios) · `8e3a7fb` (perf: benchmark p99) · `a3bdcb3` (test: E2E de sala de guerra y digest).
+
+### 1. The Problem
+El coro (varias sesiones paralelas sobre el mismo Búnker) abría turno **ciego**: un agente no
+sabía quién más estaba vivo ni en qué misión hasta que invocaba `session_board` a mano — y
+eso era cierto justamente cuando más importaba (dos almas tocando el mismo repo). La pieza
+D16 de RFC_CONSCIENCIA pedía un digest global al abrir turno, pero cualquier inyección por
+turno tiene un enemigo: el coste. Un interceptor pesado en el camino crítico del prompt
+frena al sistema entero, y un interceptor que degrada en silencio puede estar "verde" en
+tests mientras devuelve la cadena vacía siempre.
+
+### 2. The Decision
+1. **Un plugin Ferrari (12) con tres modos y default SILENT** (`12_session_sync.py`,
+   `SESSION_SYNC_MODE` en `config.py`): `silent` → `""` con **cero I/O** (el modo se
+   resuelve antes del caché; ni se mira); `minimal` → una línea
+   (`[SYNC: N otra(s) viva(s) · global_turn=T]`); `header` → bloque agrupado por misión
+   con origen/rol/estado (en vuelo vs activa), turno global y aviso de eventos
+   pendientes en la misión propia. Un modo desconocido cae a `silent`
+   (`_mode()`: `raw if raw in MODES else "silent"`).
+2. **Presupuesto p99 < 20 ms por turno, medido y no declarado**: el digest se cachea con
+   TTL corto (`SESSION_SYNC_TTL_S`, default 8 s) y solo usa lecturas baratas que ya
+   existían — latidos en disco (`session_liveness.iterdir`) y `session.db` (SELECTs
+   indexados). Sin Qdrant, sin `opencode.db`, sin LLM, sin subprocess. `timeout=0.5` s
+   (el pipeline impone `asyncio.wait_for`; corto a propósito: nunca frena el turno).
+3. **Fallar en silencio, pero jamás rápido-vacío**: cualquier excepción degrada a `""` y
+   registra a debug (el interceptor NUNCA tumba el turno). El benchmark cierra la
+   trampa de la degradación: un `_FailureDetector` cuenta CUALQUIER log del plugin y
+   **invalida la medición** (exit 2) — un interceptor roto es rapidísimo y no sale verde.
+4. **Benchmark con carga real Y coro sintético** (`scripts/bench_interceptor_session_sync.py`):
+   dos escenarios por modo (cold = TTL ínfimo, peor caso por turno; warm = TTL de
+   producción) × dos cargas (estado real del Búnker; coro sintético de 24 sesiones
+   vivas en 4 misiones con 40 eventos pendientes, sobre `XDG_DATA_HOME` redirigido a un
+   tmp — el estado del Operador no se toca). 300 iteraciones por escenario, percentil
+   por rango más cercano **sin recortar muestras**; la primera (boot) entra en la
+   distribución y se reporta aparte.
+5. **E2E sobre piezas reales, no mocks** (`tests/test_session_sync_e2e.py`): registro
+   SQLite en `tmp_path`, latidos `.start`/`.end` envejecidos con `os.utime`, reloj global
+   de turnos andado; el tablón (`build_board`/`render_board`, fuente del MCP
+   `session_board`) se prueba en la misma escena. La sala de guerra simulada: YO + 2
+   vivas en una misión + 2 vivas en misiones distintas (una en la mía) + 1 muerta.
+
+### 3. Rationale / Evidence
+Todo lo afirmado arriba está respaldado por comandos ejecutados en el worktree
+`cierre/alma-b` (2026-10-28), salida literal.
+
+**Terreno** (`git log --oneline -5` y `git diff HEAD~3 --stat`):
+
+```
+a3bdcb3 test(session): E2E de sala de guerra y digest
+8e3a7fb perf(session): benchmark del interceptor con p99 medido
+da56589 feat(session): interceptor 12_session_sync (SILENT/MINIMAL/HEADER)
+e37c611 fix(identidad): con dos sesiones vivas en el mismo cwd, no se atribuye por el global
+acb9445 feat(f4): tool MCP try_claim_stage + filtros de captura (Bloque A del cierre)
+```
+
+```
+ scripts/bench_interceptor_session_sync.py    | 377 +++++++++++++++++++++++++++
+ src/red_pill/config.py                       |   9 +
+ src/red_pill/interceptors/12_session_sync.py | 211 +++++++++++++++
+ tests/test_interceptor_session_sync.py       | 260 ++++++++++++++++++
+ tests/test_session_sync_e2e.py               | 296 +++++++++++++++++++++
+ 5 files changed, 1153 insertions(+)
+```
+
+**Tests** (venv del kernel, `PYTHONPATH` al worktree):
+
+```
+$ PYTHONPATH=<worktree>/src:<worktree> <venv>/bin/python -m pytest tests/test_interceptor_session_sync.py tests/test_session_sync_e2e.py -q
+...........................                                              [100%]
+27 passed in 1.95s
+```
+
+Por fichero: `tests/test_interceptor_session_sync.py` → `15 passed in 1.79s`;
+`tests/test_session_sync_e2e.py` → `12 passed in 1.81s`.
+
+**Default SILENT, verificado por tres vías independientes** (modelo de config, fallback
+del plugin, y `execute()` real):
+
+```
+$ PYTHONPATH=<worktree>/src <venv>/bin/python - <<'EOF'
+> import importlib, os, unittest.mock as mock
+> os.environ.pop("SESSION_SYNC_MODE", None)
+> import red_pill.config as c
+> print("modulo config:", c.__file__)
+> f = c.RedPillConfig.model_fields["SESSION_SYNC_MODE"]
+> print("config default SESSION_SYNC_MODE =", repr(f.default))
+> ft = c.RedPillConfig.model_fields["SESSION_SYNC_TTL_S"]
+> print("config default SESSION_SYNC_TTL_S =", repr(ft.default))
+> m = importlib.import_module("red_pill.interceptors.12_session_sync")
+> print("modulo plugin:", m.__file__)
+> with mock.patch.object(m, "_conf", lambda name, default: default):
+>     print("_mode() con config ausente =", repr(m._mode()))
+> import asyncio
+> p = m.SessionSyncPlugin()
+> with mock.patch.object(m, "_conf", lambda name, default: default):
+>     out = asyncio.run(p.execute("turno de prueba"))
+> print("execute() con default =", repr(out))
+> EOF
+modulo config: <worktree>/src/red_pill/config.py
+config default SESSION_SYNC_MODE = 'silent'
+config default SESSION_SYNC_TTL_S = 8.0
+modulo plugin: <worktree>/src/red_pill/interceptors/12_session_sync.py
+_mode() con config ausente = 'silent'
+execute() con default = ''
+```
+
+(La primera ejecución de este chequeo dio `KeyError: 'SESSION_SYNC_MODE'`: sin
+`PYTHONPATH` al worktree, `import red_pill.config` resolvía el paquete **instalado**
+del sharing, que aún no tiene los flags. El `modulo config:` impreso en la salida de
+arriba es la prueba de que el chequeo corre contra el código correcto — y recordatorio
+de que estos flags solo existen en esta rama.)
+
+**Integración real en el pipeline** (no «lo dice un test»: se recarga el pipeline
+in-process con el `PYTHONPATH` del worktree y se interroga `_PLUGINS`):
+
+```
+$ PYTHONPATH=<worktree>/src <venv>/bin/python - <<'EOF'
+> import red_pill.interceptors as itp
+> msg = itp.reload_plugins()
+> print("mensaje reload:", msg)
+> for p in itp._PLUGINS:
+>     print(f"{type(p).__name__} | {p.name} | timeout={p.timeout} | enabled={p.is_enabled}")
+> EOF
+mensaje reload: [HOT RELOAD] 5 plugins reloaded.
+...
+TelemetryPlugin          | Telemetry & Context OS-Agnostic File Reader | timeout=0.5 | enabled=True
+MoodOrchestratorPlugin   | Mood Orchestrator (Ferrari 05-09) | timeout=8.0 | enabled=True
+PredictivePreloadPlugin  | Predictive Preload (Ferrari 10)  | timeout=2.0 | enabled=True
+EmotionalPreHeatingPlugin | Emotional Pre-Heating (Oracle Protocol) | timeout=4.0 | enabled=True
+SessionSyncPlugin        | Session Sync (Ferrari 12)        | timeout=0.5 | enabled=True
+```
+
+**Benchmark** (`<venv>/bin/python scripts/bench_interceptor_session_sync.py`, 300
+iteraciones por escenario, presupuesto 20 ms, exit code 0). Estado REAL del Búnker
+(host `Joan-OMEN-16`, python 3.12.12, kernel 7.0.0-38-generic; carga: 75 latidos, 24
+filas de registro, global_turn=390, 1 otra sesión viva):
+
+```
+modo     escenario     n      p50      p95      p99    media      max
+---------------------------------------------------------------------
+silent   cold        300    0.007    0.009    0.010    0.007    0.030
+minimal  cold        300    0.736    1.134    1.623    0.792    1.831
+minimal  warm        300    0.013    0.013    0.015    0.013    0.018
+header   cold        300    1.312    1.516    2.294    1.387    9.258
+header   warm        300    0.013    0.017    0.020    0.013    0.022
+---------------------------------------------------------------------
+  silent    p99 =    0.010 ms  → CUMPLE del presupuesto (20.0 ms)
+  minimal   p99 =    1.623 ms  → CUMPLE del presupuesto (20.0 ms)
+  header    p99 =    2.294 ms  → CUMPLE del presupuesto (20.0 ms)
+```
+
+Coro SINTÉTICO (25 latidos, 25 filas, 16 otras vivas, 40 eventos pendientes):
+
+```
+modo     escenario     n      p50      p95      p99    media      max
+---------------------------------------------------------------------
+silent   cold        300    0.006    0.007    0.011    0.007    0.013
+minimal  cold        300    0.322    0.396    0.545    0.338    1.161
+minimal  warm        300    0.013    0.019    0.020    0.014    0.023
+header   cold        300    0.841    0.952    1.182    0.862    1.693
+header   warm        300    0.013    0.015    0.018    0.013    0.047
+---------------------------------------------------------------------
+  silent    p99 =    0.011 ms  → CUMPLE del presupuesto (20.0 ms)
+  minimal   p99 =    0.545 ms  → CUMPLE del presupuesto (20.0 ms)
+  header    p99 =    1.182 ms  → CUMPLE del presupuesto (20.0 ms)
+
+[bench] OK: los tres modos caben en 20.0 ms (p99), con el estado real y con el coro sintético lleno.
+EXIT_CODE=0
+```
+
+El **peor p99 medido es 2.294 ms** (header cold, estado real) — 8,7 veces por debajo del
+presupuesto. El `max` de 9.258 ms en header cold es la primera muestra (boot: construir
+el `SessionRegistry`), coste por proceso y no por turno; el script la reporta aparte a
+propósito. Nota honesta: el coro sintético (16 vivas) sale MÁS rápido que el estado real
+(1 viva, 75 latidos en disco) — el coste dominante del cold real es el `iterdir` sobre el
+directorio de latidos del Búnker, no el tamaño del digest; el número que decide el
+presupuesto es el peor de ambos: **2.294 ms < 20 ms, CUMPLE**.
+
+**Muestra del digest real** (header, estado real, tal cual sale del interceptor — prueba
+de que no devuelve la cadena vacía disfrazada de rápido):
+
+```
+--- SYNC: global_turn=390 · 1 otra(s) viva(s) ---
+## '(sin misión)' (1)
+  [opencode] task · en vuelo · hace 106s
+```
+
+### 4. Qué cambia para el Operador
+- Nada por defecto: `SESSION_SYNC_MODE=silent` → el interceptor devuelve `""` con cero
+  I/O y el turno no paga nada. El feature está instalado pero dormido.
+- Para verlo: `SESSION_SYNC_MODE=minimal` (una línea) o `header` (bloque por misión) en
+  el `.env` / config, y hot-reload (`swarm_orchestrator_api → hot_reload_interceptors` o
+  `refresh_session_context`). La caché TTL (default 8 s) amortiza turnos rápidos; fuera
+  del TTL cada turno paga el cold (p99 ≤ 2.3 ms medido).
+- `ENV_REFERENCE.md` documenta ahora los dos flags nuevos (estaban sin documentar —
+  ver §6).
+
+### 5. Consequences
+- La sala de guerra pasa de pull-only (`session_board` a demanda) a push por turno con
+  coste acotado y medido. El conteo es de **otras** sesiones (la propia nunca se
+  cuenta) y las muertas (latido viejo) ni aparecen en el digest; en el tablón sí se
+  muestran como `huérfana`/`reciente` — diferencia intencionada, cubierta por E2E.
+- El benchmark es re-ejecutable por cualquiera (`scripts/bench_interceptor_session_sync.py`)
+  y su exit code es contractual: 0 = cumple, 1 = algún p99 supera el presupuesto (la
+  decisión de subirlo es del Operador, no del script), 2 = medición inválida.
+- El patrón «FailureDetector invalida la medición» cierra la clase de bug «interceptor
+  roto = interceptor rápido»; reusable por los próximos plugins.
+
+### 6. UNVERIFIED (declarado, no afirmado)
+- **Inyección por transporte en producción**: el registro en `_PLUGINS` se verificó
+  in-process (proceso nuevo con `PYTHONPATH` al worktree), NO contra el
+  `redpill-mcp.service` vivo tras un `hot_reload_interceptors`. Con el default `silent`
+  esto no cambia el comportamiento del servicio, pero la activación real (`minimal`/
+  `header` en un turno vivo) no se ha probado end-to-end por el pipeline.
+- **Generalización de los milisegundos**: las cifras son de este host (Joan-OMEN-16,
+  NVMe, python 3.12.12, kernel 7.0.0-38-generic) con la carga de latidos de HOY (75).
+  Otro host o un directorio de latidos mucho mayor (retención 48 h) puede dar otros
+  números; el presupuesto queda cumplido con margen 8,7×, no verificado en otras
+  máquinas.
+- **Contención SQLite concurrente**: el benchmark corre en un solo proceso. No se midió
+  el p99 con varias almas escribiendo `session.db` simultáneamente (write-lock real);
+  los SELECT del digest son de lectura y `busy_timeout=5000` las cubre, pero el número
+  bajo contención de escritura es UNVERIFIED.
+- **El `max=9.258 ms` del boot**: es un punto muestral, no una distribución; se reporta
+  como coste por proceso. No se midió su varianza entre arranques.
+
+### 7. Discrepancia detectada (doc vs código — gana el código)
+`docs/ENV_REFERENCE.md` documentaba `SESSION_ACTIVE_MIN` y `SESSION_LIVENESS_TTL_H` pero
+**no** los dos flags nuevos (`SESSION_SYNC_MODE`, `SESSION_SYNC_TTL_S`), que sí existen en
+`config.py` (`grep -n "SESSION_SYNC" docs/ENV_REFERENCE.md` → vacío antes de este AD). El
+código manda: se añaden las dos filas a la tabla (junto a las de latido) con sus defaults
+reales (`silent`, `8.0`), verificados por comando en §3. Sin este arreglo el documento
+afirmaría implícitamente que no existen knobs de sync.
+
+---
+
+## [AD-094] Fase 5 — adaptadores de entrega y política de wake; canal `soul` = GAP declarado
+
+**Date**: 2026-10-28
+**Status**: IMPLEMENTADO (adaptador + política). **C4 (repunte a neon-link): GAP
+DECLARADO, no implementado.** Bloque C de la misión `ALMA_Y_CORO_CIERRE`.
+
+### 1. The Problem
+Fase 5 tenía dos piezas: que un evento del tablón llegue **dentro** del arnés de un
+alma (no solo al buzón), y decidir **quién puede despertar a quién** sin que
+cualquiera pueda interrumpir a cualquiera (D-07). Además, AD-090 dejó el aviso de
+fin de job con un transporte **temporal** por CLI, pendiente de repuntar al canal
+`soul` de `neon-link` (D-06).
+
+### 2. The Decision
+1. **`session/delivery.py`** — entrega de eventos dirigida al **alma**
+   (`continuity_id`), con estados de entrega (`delivered` / `pulled` / `skipped` /
+   `given_up`) y CAS para no entregar dos veces. **Pull-first y fail-closed**: si
+   no hay cuerpo, o el arnés no tiene punto de inyección, el evento **sigue
+   pendiente** y se recoge en el siguiente turno. No invoca `opencode run` por su
+   cuenta: usa el seam de `core/soul_notify.py` (un solo transporte, AD-090).
+2. **Tabla de honestidad por arnés** en el docstring, con fichero:línea: `opencode`
+   sí tiene punto de inyección; `claude_code` y `pi` son **headless** (abren turno
+   en otro proceso, no despiertan la sesión del Operador); `telegram` vive fuera
+   del repo. Los tres degradan a **pull**. No se maquilla la asimetría.
+3. **`session/wake_policy.py`** — D-07 como **dato** (config), no cableado:
+   default de fábrica `*:self, orchestrator:chain, *:same_mission`. Controles de
+   entrada por sesión (`accept` / `hold` / `refuse`); `refuse` es terminal,
+   `hold` difiere. **`rules_invalid` ante config ilegible o malformada** en vez de
+   caer a un default permisivo: despertar por no saber es el fallo que se evita.
+   D-09 respetado: un mensaje es DATO y no suspende constraints del Operador.
+
+### 3. The GAP (C4) — medido, no supuesto
+El RFC suponía que `neon-link` ya tenía `events.db` con `inbox`/`outbox`/
+`dead_letters` y un `core/inbox_adapters.py` con el contrato «un canal nuevo añade
+su lector sin tocar el worker». **No es así.** Medido el 2026-10-28:
+
+| Comprobación | Resultado |
+|---|---|
+| `neon-link/src/neon_link/core/inbox.py` | existe, pero es `LocalInbox` **en memoria** (28 líneas: push/summary/pop_all) |
+| `core/inbox_adapters.py` | **NO existe** |
+| `outbox` con canales y estados | **SÍ existe** (`core/manager.py:_poll_outbox_loop`, `_fail_outbox_msg`, `status = SENT`) — es **egress** |
+| canal `soul` (`grep -rln soul --include=*.py`) | **vacío** |
+
+**Conclusión:** falta el canal `soul` (dirección = `continuity_id`) y el adaptador
+inbound por arnés; el puente para que `delivery.py` escriba en el `outbox` en vez
+de usar el CLI tampoco existe. La infraestructura de transporte **está a medias en
+los dos lados**, no ausente: red-pill ya tiene `delivery.py` + el seam
+`_TRANSPORTS`, y `neon-link` ya tiene outbox con estados. Lo que no hay es el
+canal que los une.
+
+**Por qué no se implementa ahora:** exige tocar otro repo y una decisión de diseño
+que el propio RFC ya fijó pero nadie ha materializado (el cuerpo del mensaje es un
+evento de `mission_events`; el broker guarda **solo** su estado de entrega). Y
+cerrar una fase fingiendo el canal sería peor que dejarla abierta con nombre.
+
+### 4. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Simular el canal `soul` para «cerrar» Fase 5 | **rechazada** | Un canal falso es peor que un GAP escrito: el aviso seguiría sin llegar |
+| Repuntar AD-090 al `LocalInbox` en memoria | rechazada | Es in-memory: se pierde al reiniciar, justo lo contrario del requisito |
+| Seguir con el transporte CLI como definitivo | rechazada | Funciona, pero es acoplamiento al arnés y no sobrevive a un cambio de proveedor |
+
+### 5. Rationale
+`delivery.py` (514 líneas + 477 de tests) y `wake_policy.py` (401 + 271) generados
+por `qwen3.8-omni-flash` en el `dag_job` `e328f02f` y **revisados a mano**: tabla de
+honestidad verificada contra los bridges, fail-closed comprobado, y el módulo no
+reabre una segunda vía de transporte. Suite del worktree: 3786 passed.
+
+### 6. Deuda declarada
+- **Canal `soul` en `neon-link`** (arriba). Es el destino de AD-090 y la pieza que
+  convierte Fase 5 en completa.
+- **El aviso al alma depende de un proveedor con crédito.** Incidente 2026-10-28:
+  `cheaper-inference` y `openrouter` se quedaron **sin crédito** a mitad de la
+  misión; el trabajo agéntico quedó bloqueado. El aviso (AD-090) usa el modelo de
+  la sesión, así que también cae con el proveedor. **Esto convierte el «fallback de
+  proveedores» de idea futura en necesidad operativa**: hoy no existe, y la única
+  ruta viva era `opencode-go`.
+
+## [AD-095] El coro tiene una sola puerta: `coro_api`, tablón + correspondencia + buzón
+
+**Date**: 2026-10-29
+**Status**: ACEPTADO (contrato) e **IMPLEMENTADO en S1** (`72c4b09`; migración a
+prueba de BD existente en `f5d1b59`). **S2** (canal `soul` en neon-link) y **S3**
+(presencia en el digest) pendientes. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md`.
+
+### 1. The Problem
+El protocolo entre almas estaba **firmado** (D-01…D-13 del hilo E-001/E-002/E-003) pero
+repartido en cinco sitios, y **el sustrato no podía expresar un mensaje**: `mission_events`
+no tiene destinatario y `delivery.pending_for_soul` empuja solo los eventos cuyo autor es
+el alma (`WHERE e.continuity_id = ?`, `session/delivery.py:178-180`). Por la superficie,
+diez tools sueltas más dos acciones dentro de `swarm_orchestrator_api`, con
+`check_parallel_sessions` y `session_board` devolviendo la misma vista. Resultado: el
+Operador no tenía "un verbo para hablar con mi hermana", y la entrega de Fase 5 solo
+servía para el aviso de fin de job.
+
+### 2. The Decision
+1. **Una tool consolidada `coro_api`** (lectura y escritura), registrada por el
+   `ToolRegistry` como **módulo** (`src/red_pill/coro/`), no cableada en `mcp_server.py`.
+   Acciones: `post`, `send(verb)`, `inbox`, `ack`, `fetch`, `board`, `object`
+   (`dlq`/`replay` llegan con el broker en S2 y no se registran antes). El verbo
+   (`notify`/`ask`/`reply`/`park`) es **enum de `send`**, no una tool.
+2. **Purga, no deprecación** (Operador, 2026-10-29): `announce_intent` → `post`,
+   `fetch_events` → `fetch`, `check_parallel_sessions` y `session_board` → `board`.
+   Se borran del catálogo con sus llamantes actualizados; sin alias de compatibilidad.
+3. **El destinatario se añade al evento, no se inventa un buzón paralelo**:
+   `session.db` v8 con `to_continuity`, `verb`, `thread_id`, `hop`/`hop_max`,
+   `expects_reply`, `value_class` (`now`/`seed`) y `expires_at`; `EVENT_TYPES += "message"`.
+4. **Un solo dueño del estado de entrega: `neon-link`**. `outbox` con
+   `channel='soul'` (`channel_user_id = continuity_id`) y payload = **sobre**, nunca
+   cuerpo. Se retira `event_deliveries` como máquina de estados; se añade el
+   `core/inbox_adapters.py` que AD-094 midió inexistente.
+5. **Rebote → `park`, no `post`** (refina D-12): el destinatario se conserva y el
+   mensaje se entrega al reencarnar. `post` queda solo para lo que nunca tuvo
+   destinatario.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| `agent_bus_api` de RFC-INTEROP-001 con su propia `agent_bus.db` | rechazada | tercera fuente de verdad de estado de entrega; el Operador ya decidió que el buzón es neon-link |
+| Mantener las tools viejas como alias deprecados | rechazada por el Operador | dos superficies para el mismo hecho; el modelo elige mal |
+| Verbos como acciones separadas (`notify`/`ask`/`reply`/`park`) | rechazada | cuatro tools donde cabe un enum; más superficie, mismo poder |
+| Tabla `coro_messages` en `session.db` | rechazada | reconstruye el "segundo tablón" que se mató en Fase 2 |
+| Seguir con `event_deliveries` y que neon-link solo transporte | rechazada | dos máquinas de estado para el mismo mensaje; el `True` optimista de `_deliver_cli` nunca se corrige |
+
+### 4. Rationale
+El registry ya genera tools consolidadas (`registry.py:39-77`), así que la puerta única
+cuesta una línea de registro y cero cambios en el servidor. Poner el destinatario en el
+evento mantiene **una sola verdad** (append-only) y hace que el `pull` funcione gratis:
+si el alma está muerta, el mensaje espera y lo recoge su primer handshake. La purga es
+lo que convierte "el protocolo no está claro" en un hecho verificable: el catálogo MCP
+no puede ofrecer dos caminos.
+
+### 5. Consecuencias y deuda
+- **S1** (sustrato + puerta + purga) no depende de neon-link: la entrega ya existe por
+  el seam `_TRANSPORTS` y `park` cubre el camino barato.
+- **S2** (canal `soul` + `inbox_adapters`) es la durabilidad: broker con backoff, DLQ y
+  `redrive` en vez de un hilo daemon que muere con el proceso.
+- **S3**: el `[CORO]` del handshake cuenta `inbox` pendiente (hoy solo `mission_events`)
+  y el render hace evidente `respuesta: NO` (D-13).
+- Sigue fuera: **D26** (firma real) y la federación entre teatros.
+
+## [AD-096] El coro contra A2A: estándar en la frontera, dialecto en casa
+
+**Date**: 2026-10-30
+**Status**: ACEPTADO. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md` §11.
+
+### 1. The Problem
+El coro ya tiene un protocolo propio (AD-095): verbos `notify`/`ask`/`reply`/`park`,
+sobre con procedencia y salto, dirección por alma y entrega diferida. Al mismo tiempo
+existe **A2A** (v1.0.1, Agentic AI Foundation): estándar abierto para que agentes se
+deleguen tareas, con *Agent Card* firmada, ocho estados de tarea, `Message`/`Part`
+(text/file/data) y transporte HTTP. La pregunta del Operador fue la correcta: **¿estamos
+reinventando lo que ya es estándar?**
+
+### 2. The Decision
+1. **A2A no entra dentro.** No por tamaño, por suposición: en A2A el agente **es un
+   endpoint vivo**; si no está, la tarea muere. Nuestro protocolo promete lo contrario —
+   *un mensaje a un alma muerta se entrega al reencarnar*— y `park` existe precisamente
+   para el caso que el estándar no modela. Meterlo dentro obligaría a fingir que las
+   almas nunca mueren, o a mantener nuestra durabilidad **detrás** del estándar.
+2. **A2A se adopta como gramática de la frontera.** La federación entre teatros (atada a
+   D26) se resuelve con una **pasarela en `neon-link`**: traduce nuestro sobre ↔
+   `Task`/`Message`. Dentro se habla coro; nada de A2A cruza la puerta de casa.
+3. **Alineación de vocabulario ya**, para que la pasarela sea traducción y no reescritura:
+   `queued→submitted`, `delivered→working`, `ask→input_required`,
+   `refuse→rejected`, `read/replied→completed`, `given_up→failed`, `retirado→canceled`,
+   anexo `agentbus://`→`Part.file`, `thread_id`+`event_id`→`contextId`+`task.id`.
+4. **El `parte` nace con los ocho estados de A2A**: el futuro sistema de tickets se
+   escribe A2A-native y no hay que recortarlo después.
+5. **El dialecto se queda y se mantiene.** `park`, `alma`, `teatro`, `coro`, `notify` no
+   se renombran: son el modelo, no el estilo. Se **mapean** en una tabla de desviaciones
+   con motivo (CORO_PROTOCOL §11.3) — un dialecto con pasaporte, no una lengua privada.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| A2A como protocolo interno (un servidor por alma) | rechazada | identidad = endpoint contradice alma ≠ cuerpo; añade HTTP, auth, tarjetas, SSE y task store para reemplazar un SQLite que resuelve en 0,5 ms |
+| Ignorar A2A hasta que haga falta | rechazada | la federación es un plan real; sin alineación previa, el día que llegue se recorta el modelo |
+| Renombrar nuestros verbos a los de A2A | rechazada | perderíamos la única frase que explica el sistema (la entrega a un alma muerta) |
+| Pasarela A2A en el borde, sin tocar el interior | **elegida** | es el uso para el que A2A existe: sistemas independientes, opacos, con confianza decidida antes |
+
+### 4. Rationale
+Un estándar no compite con un dialecto: le da frontera. Lo que A2A resuelve —descubrir
+capacidades, decidir confianza, delegar trabajo entre organizaciones— no es nuestro
+problema; el nuestro es que dos hermanas en la misma máquina puedan dejarse una nota que
+sobreviva a la pestaña. Confundir las capas costaría una capa entera de superficie
+(Smith: T1–T7 hoy) para no ganar nada dentro.
+
+Y hay una razón que no es técnica: nuestras palabras se ganaron describiendo algo que el
+estándar no cree posible. Se mapean, no se tiran.
+
+### 5. Consequences y deuda declarada
+- **Revisión obligatoria por versión**: cada subida de minor de A2A (`A2A-Version`) se
+  revisa la tabla de §11.3. Sin esa revisión, "dialecto" degenera en "lengua privada".
+- **Toda palabra nueva del coro** entra en la tabla con tres columnas (qué es, a qué se
+  parece fuera, por qué no se usa el término ajeno). Sin fila, no es palabra: es ruido.
+- **Pendiente**: la pasarela `neon-link` ↔ A2A no se implementa hasta que exista la
+  federación (D26). Hoy solo queda el mapeo y la regla de mantenimiento.
+
+## [AD-097] Las direcciones del coro se pueden copiar (y el transporte dice por qué falla)
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (`9ad423a`, `c9fa901`, `b580173`, `1fd6ade`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §6 y §12.
+
+### 1. The Problem
+Primer uso real del coro entre dos hermanas vivas, y dos fallos que se tapaban:
+
+1. El aviso **nunca salió**: el backend corre bajo systemd con un `PATH` mínimo y el
+   binario del arnés vive en `~/.opencode/bin/`. `shutil.which` devolvía `None`,
+   `notify_soul` `False`, el mensaje quedaba `pending` y el digest lo cerraba como
+   `pulled`. El Operador tuvo que ir a decírselo a mano a la otra ventana.
+2. La destinataria **no pudo contestar**: el `board` daba su id truncado a 12 y el
+   `inbox` daba el `seq` en vez del `event_id`, así que el fail-closed rechazaba
+   cualquier respuesta — con razón. Y `thread` (alias natural) se ignoraba.
+
+### 2. The Decision
+1. **Regla de direcciones**: el id del alma se muestra **completo** donde se elige
+   (`board`); cada mensaje viaja con `msg=<event_id>` y la línea de respuesta compuesta;
+   `to`/`reply_to`/`ack` aceptan **prefijo único ≥8** y rechazan el ambiguo.
+2. **Resolución de binarios en `core/paths`** (`find_harness_binary`): PATH primero,
+   después las rutas conocidas del HOME y del sistema. Ningún módulo cablea rutas.
+3. **El fallo del transporte es `error` y su motivo viaja al emisor**
+   (`transport_refused:<detalle>`), no un genérico que obliga a investigar.
+4. **`pulled` no se pinta como `delivered`**: son hechos distintos (digest vs cuerpo).
+5. **Unión de schemas que no estrecha**: los `enum` se unen; si los tipos discrepan, se
+   quita el tipo. Un schema que rechaza una llamada legítima es un fallo disfrazado.
+6. **El cuerpo no se recorta en silencio** en el nudge (400 → 800, el tope del store).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Exigir el `continuity_id` completo siempre | rechazada | es correcto y hostil: nadie copia 36 caracteres de un log; el prefijo único conserva el fail-closed |
+| Mostrar el id corto con un comando «resolver» aparte | rechazada | añade un paso a algo que debe ser copiar y pegar |
+| Añadir `~/.opencode/bin` al `PATH` de la unidad | insuficiente | arregla hoy y se rompe con el próximo arnés, contenedor o cron; la resolución pertenece al código |
+| Pintar `pulled` como «entregado» | rechazada (ya en el código) | era mentira: el mensaje no llegó al cuerpo |
+
+### 4. Rationale
+Un protocolo se juzga por el caso que falla, no por el que funciona. Los tres fallos
+tenían la misma forma: **el sistema sabía algo y no lo decía** — ni al emisor (motivo del
+fallo), ni al destinatario (dirección completa), ni al cliente (enum del schema). Escribir
+el motivo y mostrar la dirección cuesta líneas; no hacerlo costó una sesión y una visita
+del Operador a otra ventana.
+
+### 5. Consequences y deuda
+- **S2 sigue siendo el arreglo de fondo**: el seam CLI es optimista al arrancar y mudo al
+  fallar; el broker durable (canal `soul`) cierra esa asimetría. Lo de hoy es la verdad
+  mínima mientras el seam exista.
+- **El catálogo del cliente cachea el schema**: un cambio de `enum` exige `/reload`
+  (capa 3 de la adenda de AD-018 §5), aunque el backend ya sirva el nuevo.
+- Pendiente de campo: probar el ciclo completo `ask` → llegada sin intervención → `reply`
+  con el id que la destinataria ve en su `inbox`.
+
+---
+
+## [AD-098] Claude Code recibe el tablón por su socket, y el push dice `handed_off`, no `delivered`
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/f6-claude-socket`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §5. Cierra F6 de RFC-INTEROP-001 (D-06).
+
+### 1. The Problem
+1. **Claude Code era solo pull.** `INJECTION_POINTS` solo tenía opencode: un mensaje a
+   un alma en Claude esperaba al siguiente turno que abriera el Operador.
+2. **`delivered` mentía.** Un `ask` de Claude a una hermana de opencode quedó
+   `delivered` y nunca llegó. Con el MCP directo, el `send` lanzó `opencode run` como
+   hilo daemon **dentro del MCP de Claude**, con `timeout=120 s`: el turno del receptor
+   murió a medias (su log tiene una línea, `cli starting`) y el estado ya estaba escrito
+   al **arrancar**. Además, `opencode run --session <id desconocido>` no falla: abre una
+   sesión nueva y hace un turno que nadie mira. Ni el `rc` ni el arranque prueban nada.
+3. **El fallo no dejó rastro**: sus logs vivían en un proceso que ya no existe.
+
+### 2. The Decision
+1. **Transporte `claude_socket`**: Claude Code abre un socket UDS por sesión
+   (`CLAUDE_CODE_MESSAGING_SOCKET`). El hook `redpill_turn_start.py` lo deja en el bridge
+   **por sesión** (`sessions/bridge/claude_code__<sid>.json`; el token no se guarda) y
+   el transporte escribe una línea NDJSON `{"type":"user",...}`. Si la sesión está en un
+   turno, el mensaje entra en él; si está idle, Claude abre uno (medido en el desktop,
+   CLI 2.1.309). Solo se conecta a un socket real, del mismo UID y en un `cc-socks`.
+2. **Transporte por arnés** (`_PROVIDER_TRANSPORT`): opencode→`cli`,
+   claude_code→`claude_socket`. `REDPILL_SOUL_NOTIFY_TRANSPORT` sigue forzando uno.
+3. **El CLI no hereda la vida del llamante**: `Popen` con `start_new_session=True` y
+   **sin timeout**. El turno es del receptor; cortarlo es peor que no enterarse. Se
+   retira `wait_for_deliveries` (era el parche del hilo daemon).
+4. **`handed_off` ≠ `delivered`**: el push cierra como `handed_off` («en manos del
+   transporte, sin acuse»). `delivered` queda reservado para un transporte que confirme
+   que el arnés aceptó el turno; hoy ninguno lo hace.
+5. **Rastro legible**: la salida del CLI va a `logs/soul_notify/<ts>_<sid>.log` y el
+   motivo de la entrega lleva `rastro=<fichero>`; `send` lo devuelve al emisor.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Channels MCP (`claude/channel`) | descartada por ahora | exige relanzar con `--dangerously-load-development-channels`, solo CLI de terminal (el desktop no consta), research preview y falla en silencio |
+| Monitor en la sesión | descartada | máximo 30 min y solo mientras la sesión lo tenga armado: no es un canal |
+| `claude --resume <id> -p` | descartada | headless: abre el turno en otro proceso, no en la sesión que se mira |
+| Validar el cuerpo opencode contra `opencode.db` | descartada | en V2 la tabla `session` está obsoleta (la sesión viva no aparece): daría `stale` falsos |
+| Mantener `timeout=120 s` y drenar | descartada | drenar solo sirve si el llamante espera; un MCP que se recicla no espera |
+
+### 4. Rationale
+El emisor no puede prometer lo que no sabe. Hasta que un transporte confirme, lo
+verdadero es «salió por el transporte» y dónde mirar si algo fue mal.
+
+### 5. Consequences y deuda
+- **Sigue sin validarse el cuerpo opencode** antes de inyectar: la fuente fiable es la API
+  del arnés (`GET /api/session`, pide la auth del desktop). Hasta entonces, un leg de una
+  sesión muerta recibe `handed_off` y el rastro muestra el turno huérfano.
+- `claude_socket` es local (mismo host y UID). El receptor puede retener el mensaje
+  (`crossSessionInbound` y la paridad de modo de permisos) sin que el emisor lo sepa.
+- Para que Claude reciba, hay que resembrar el hook (`inject_settings.py`).
+
+---
+
+## [AD-099] El arnés receptor acusa el nudge: `handed_off` → `delivered` por hook
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/coro-ack-hook`). Contrato:
+`docs/TECHNICAL/CORO_PROTOCOL.md` §5. Origen: RFC-INTEROP-001 §12 bis, recomendación 1.
+
+### 1. The Problem
+AD-098 dejó la entrega en `handed_off`: ningún transporte confirma. El emisor sabía
+que el mensaje salió, pero no si llegó a un cuerpo que lo viera.
+
+### 2. The Decision
+1. **Marcador estable**: todo nudge (`build_event_nudge`) lleva `msg=<event_id>`, tanto
+   en las notas como en los mensajes, que ya lo usaban para el `reply_to`.
+2. **Acusa el arnés, no el transporte**: el hook de inicio de turno (Claude:
+   `redpill_turn_start.py` en `UserPromptSubmit`; opencode: `session.hook("prompt")` del
+   scribe) busca el marcador en el prompt y promueve la fila a **`delivered`**
+   (`reason=ack_hook:<cuerpo>`). Sin marcador no abre la BD; si `session.db` no existe,
+   no la crea.
+3. **Solo acusa el alma destinataria**: la sentencia exige que el cuerpo que recibe esté
+   en `session_registry` con el `continuity_id` de la fila. La sesión huérfana que abre
+   `opencode run --session <id desconocido>` no tiene registro, así que no acusa.
+4. **Un acuse no retrocede**: `set_delivery_state` no baja de `delivered`/`read` a
+   `pending`/`in_flight`/`handed_off`. Con el socket, el hook del receptor puede
+   confirmar antes de que el entregador escriba `handed_off`.
+5. **Sin estado nuevo**: `delivered` era justo el hueco que AD-098 reservó para «el
+   arnés lo aceptó». Un `seen` aparte habría sido un sinónimo.
+6. **Una sola fuente**: `ACK_MARKER_RE` y `ACK_SQL` viven en `session/delivery.py` y los
+   hooks los copian tal cual (no importan el kernel). Un test de paridad lo vigila.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Estado `seen` nuevo por encima de `handed_off` | rechazada | duplica `delivered`, que ya significaba «confirmado» y estaba vacío |
+| CLI ligero (`red-pill …`) desde el hook | rechazada | arrancar el CLI cuesta ~2 s; un `UPDATE` directo cuesta milisegundos |
+| Acusar sin mirar el registro | rechazada | daría por entregado el turno huérfano de un id desconocido |
+
+### 4. Consequences y deuda
+- **Hueco en Claude a mitad de turno**: un mensaje que llega por el socket mientras la
+  sesión trabaja entra como recordatorio de sistema y no dispara `UserPromptSubmit`; se
+  queda en `handed_off`. Cubrirlo exigiría leer el transcript en `Stop`.
+- Pegar a mano un nudge en el prompt también acusa. Es benigno: el texto sí llegó al
+  cuerpo, y solo vale para el alma destinataria.
+- Para que actúe hay que resembrar el hook de Claude y el plugin de opencode.
+
+---
+
+## [AD-100] No se inyecta a un cuerpo que no existe, y su leg caduca
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO (rama `feat/coro-stale-leg`). Contrato: tabla de honestidad de
+`session/delivery.py`.
+
+### 1. The Problem
+1. **`opencode run --session <id desconocido>` crea una sesión con ese id** y le hace un
+   turno. Medido con `ses_doesnotexist000000000000`: hoy existe, tiene 6 mensajes y una
+   alma propia registrada. Inyectar a un leg cuyo cuerpo ya no existe no falla: fabrica
+   un fantasma.
+2. El tablón seguía ofreciendo legs `ttl=active` de cuerpos que ya no existían, porque
+   `ttl_state` solo cambia con un `unregister` o con el janitor nocturno.
+
+### 2. The Decision
+1. **Sonda antes de inyectar**: `opencode session export <id>` contra el servicio de fondo
+   del arnés (sin la auth del desktop, unos 70 ms, solo lectura). rc=0 → existe;
+   «Session not found» → no existe; cualquier otra respuesta → no se sabe.
+2. **No existe → `stale_leg`**: no se inyecta y `notify_soul` caduca el leg
+   (`unregister_session`). En Claude cuenta igual el socket desaparecido
+   (`claude_socket_ausente`). Si la sesión vuelve, su handshake reactiva el leg.
+3. **No se sabe → no se inyecta y no se caduca** (`opencode_sonda_fallida`). El evento
+   queda para el pull.
+4. **La existencia se mira en el arnés, no por edad**: se mantiene AD-090 (un alma idle
+   días sigue siendo avisable si su cuerpo existe).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Tabla `session` de `opencode.db` | descartada | en V2 está obsoleta: la sesión viva no aparece |
+| `GET /api/session` del desktop | descartada por ahora | pide la auth del desktop (407 sin ella) |
+| `opencode session list` | descartada | lista solo el proyecto del cwd |
+| Caducar por edad (TTL corto) | descartada | contradice AD-090: castiga el alma pausada legítima |
+| Sondear en cada `board` | descartada | N subprocesos por consulta; la caducidad perezosa en la entrega basta |
+
+### 4. Consequences y deuda
+- La caducidad es **perezosa**: un leg muerto se limpia al primer intento de entrega, no
+  antes. Si se quisiera limpiar el tablón por adelantado, haría falta un janitor que
+  sondee.
+- Tras reiniciar Claude, la sesión reanudada tiene un socket nuevo que el bridge solo
+  conoce al llegar el siguiente prompt. Un envío en ese intervalo caduca el leg, y el
+  handshake lo reactiva en cuanto el Operador escribe. El mensaje queda para el pull.
+- El fantasma `ses_doesnotexist…` (alma `01a18d66`) es una sesión real y no se toca. Si
+  sobra, lo cierra el Operador.
+
+## [AD-101] La misión es el repositorio; la rama y el worktree son atributos
+
+**Date**: 2026-10-30
+**Status**: IMPLEMENTADO. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md` §13. Reabre y
+precisa **F6/D22** ("la rama es la misión de facto").
+**Numeración**: se publicó como «AD-099» (`b357e21`, también en su mensaje de commit),
+pero ese número ya era el acuse por hook. Se renumeró a AD-101 el mismo día.
+
+### 1. The Problem
+El primer E2E entre tres ámbitos (opencode, Claude Code y un worktree) devolvió un
+`park (no_rule)` donde debía haber una entrega: la destinataria vivía en
+`repo:feat/f6-claude-socket` —o en `mission:adhoc-<fecha>` cuando el bridge no daba
+workdir— y el emisor en `repo:next`. Misiones distintas ⇒ D-07 no ve relación ⇒ no hay
+despertar, en ninguna dirección. Y era silencioso: el `board` la mostraba como una fila
+más, y el fallo parecía del transporte.
+
+Medido: una sesión viva en `repo:feat/coro-stale-leg` con **cero eventos visibles** para
+el resto del coro.
+
+**Causa de diseño, no de código.** F6/D22 eligió `repo:<rama>` pensando en *un PR de
+larga vida por release*. Con worktrees como forma normal de trabajar —la propia regla del
+despertar los exige— cada rama se convirtió en una misión, y el coro se fragmentó justo
+donde más se usa.
+
+### 2. The Decision
+1. **`mission_id = repo:<repositorio>`**, donde el repositorio es el del
+   `--git-common-dir` (el `.git` compartido): el **mismo** desde el árbol principal y
+   desde cualquier worktree enlazado.
+2. **`branch` y `worktree` siguen siendo atributos** del cuerpo en `session_registry`, y
+   siguen siendo la clave de aislamiento de los claims de etapa.
+3. **Cascada**: env (`REDPILL_MISSION_ID`) → `repo:<repo>` → `repo:<rama>` (compatibilidad
+   para llamantes que sólo conocen la rama) → `mission:adhoc-<fecha>`.
+4. **Documentar las tres palabras** (misión / rama / worktree) con su dueño y sus
+   consumidores, porque la confusión fue la causa raíz (CORO_PROTOCOL §13).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Añadir la relación `same_repo` a la matriz de wake | rechazada (parche) | arregla el despertar y deja el tablón y el digest fragmentados; los claims ya dan el aislamiento que la misión intentaba dar |
+| Mantener `repo:<rama>` y ampliar `WAKE_POLICY` a `any` | rechazada | abre el círculo a cualquiera para tapar un problema de identidad |
+| Misión = repo y **campaña** = rama | rechazada | la campaña es un marco estratégico que puede cruzar proyectos; una rama no lo es |
+| Columna `branch` nueva en `mission_events` | rechazada | innecesaria: la rama se reconstruye por `originator` → registro |
+
+### 4. Rationale
+El coro existe para que hermanas **del mismo proyecto** se ayuden. La rama es una unidad
+de *trabajo*, y quien aísla el trabajo son los claims, que ya lo hacen mejor (rama +
+worktree normalizado, TTL, propiedad por alma). Usar la misión para eso era doble
+contabilidad con un coste alto: invisibilidad entre ramas y negación de despertar.
+
+La prueba de que el criterio es el correcto: el síntoma de la misma mañana —un fix de
+lint varado en `awaken/20261029-2000` que nadie aterrizó— se entiende mejor como "dos
+ramas del mismo repo, invisibles entre sí" que como "falta un cartero".
+
+### 5. Consequences y deuda
+- **Costura declarada**: los eventos anteriores al 2026-10-30 viven bajo `repo:<rama>`
+  (append-only: no se reescriben) y no se mezclan con los nuevos. Dos días de historia.
+- **Afinidad recalculada** con el nuevo id; las sesiones viejas no intersectan hasta su
+  próximo turno.
+- **El `board` agrupa por proyecto**, no por rama: menos entradas, más útiles.
+- **Los claims no cambian**: siguen keyados por rama+worktree.
+- **Pendiente**: que el hook de Claude escriba el `cwd` real de la sesión (hoy pone su
+  carpeta de transcripciones), para que `repo:` resuelva en vez de caer a `adhoc`.

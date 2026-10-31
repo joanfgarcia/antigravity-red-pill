@@ -1,10 +1,13 @@
 """Fuente memory_queue (RFC-002 MUST 10): turnos sin provider store propio.
 
-Las superficies que solo capturan vía MCP `memorize_interaction` (Telegram,
-AWAKENINGs, legacy) no tienen store nativo — la cola ES su registro canónico.
-Se agrupan por `originator` + día: `mcp:<originator>:<AAAA-MM-DD>`. Los
-originators cubiertos por otras fuentes (antigravity/claude_code/opencode)
-se excluyen: su verbatim ya entra por el provider store.
+Las superficies que solo capturan vía MCP `memorize_interaction` (AWAKENINGs,
+legacy) no tienen store nativo — la cola ES su registro canónico. Se agrupan por
+`originator` + día: `mcp:<originator>:<AAAA-MM-DD>`. Los originators cubiertos
+por otras fuentes se excluyen **por provider** (lo que hay antes de `:`):
+`opencode:ses_x` cae bajo `opencode` y `telegram:<uuid>` bajo `telegram`, así
+que su verbatim entra por el provider store y no se duplica aquí. La
+coincidencia exacta sigue valiendo para las filas legacy sin sesión
+(`originator="opencode"`).
 
 No está en CHRONICLE_ARCHIVE_SOURCES (el archivo Qdrant no cambia, MUST 8);
 Memento la habilita vía MEMENTO_EXTRA_SOURCES.
@@ -46,6 +49,25 @@ class MemoryQueueSourcePlugin(ChronicleSourcePlugin):
 
 		return list(getattr(cfg, "CHRONICLE_ARCHIVE_SOURCES", ["antigravity", "claude_code", "opencode"]))
 
+	def _is_excluded(self, originator: str, excluded: Optional[frozenset] = None) -> bool:
+		"""Filtro por PREFIJO de provider: `opencode:ses_x` se excluye si
+		`opencode` está en la lista de config (lo que hay antes de `:`).
+
+		Los originators de provider nativo llegan como `proveedor:id` (p.ej.
+		`opencode:ses_abc`), así que la igualdad exacta contra la lista cerrada
+		nunca los cazaba. Se mantiene la compatibilidad: una coincidencia
+		exacta también excluye (formas legacy sin `:`).
+
+		`excluded` se puede pasar ya resuelto para no releer el config por fila
+		(el `getattr` del módulo resuelve el singleton y mide el `.env`).
+		"""
+		if excluded is None:
+			excluded = frozenset(self._excluded_originators())
+		if originator in excluded:
+			return True
+		provider, sep, _ = originator.partition(":")
+		return bool(sep) and provider in excluded
+
 	def _where_group(self, originator: str) -> Tuple[str, List[Any]]:
 		if originator == UNKNOWN_ORIGINATOR:
 			return "originator IS NULL", []
@@ -55,23 +77,27 @@ class MemoryQueueSourcePlugin(ChronicleSourcePlugin):
 		if not self.db_path.exists():
 			logger.info(f"[{self.name}] Queue database not found: {self.db_path}")
 			return []
-		excluded = self._excluded_originators()
-		placeholders = ",".join("?" for _ in excluded)
+		excluded = frozenset(self._excluded_originators())
 		try:
 			con = self._connect()
 			try:
+				# El filtro es por prefijo de provider (`opencode:ses_x` → `opencode`),
+				# así que no cabe un NOT IN exacto en SQL: se agrupa todo y se excluye
+				# en Python (mismo resultado, lista de config cerrada por provider).
 				rows = con.execute(
 					f"SELECT COALESCE(originator, '{UNKNOWN_ORIGINATOR}'), date(created_at, 'unixepoch'), COUNT(*) "
-					f"FROM memory_queue WHERE originator IS NULL OR originator NOT IN ({placeholders}) "
-					"GROUP BY 1, 2 ORDER BY 2, 1",
-					excluded,
+					"FROM memory_queue GROUP BY 1, 2 ORDER BY 2, 1"
 				).fetchall()
 			finally:
 				con.close()
 		except sqlite3.Error as e:
 			logger.warning(f"[{self.name}] Could not read queue database: {e}")
 			return []
-		return [(f"{originator}:{day}", int(count)) for originator, day, count in rows if day]
+		return [
+			(f"{originator}:{day}", int(count))
+			for originator, day, count in rows
+			if day and not self._is_excluded(originator, excluded)
+		]
 
 	def _rows_of(self, conversation_id: str) -> List[Tuple[Any, ...]]:
 		originator, _, day = conversation_id.rpartition(":")

@@ -9,6 +9,7 @@ project: aleth-core
 tags: [desk, tools, seed, germen, enlaces]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # planner/tools — herramientas del desk
 
 Las herramientas **generales** del desk. Su fuente canónica es el **germen** en el
@@ -42,6 +43,21 @@ python3 planner/tools/state.py            # STATE.md a stdout
 python3 planner/tools/state.py -o STATE.md
 ```
 
+## `families.py` — índice de familias de `design/`
+
+Cruza las dos cosas que no viven en el mismo sitio: **dónde está** un documento
+(bandeja) y **en qué estado está** (`status`). Una fila por familia con el recuento
+literal de estados, el último cambio y si tiene puerta (`INDEX.md`/`README.md`).
+Es **generado**: regenéralo tras mover, añadir o cerrar documentos.
+
+```
+python3 planner/tools/families.py -o planner/design/INDEX.md
+python3 planner/tools/families.py            # sólo imprimir
+```
+
+Un `—`/**falta** en la columna "Puerta" no es un error del tool: es una familia a
+la que le falta `INDEX.md`.
+
 ## `links.py` — grafo de enlaces (RFC-ENLACES-001)
 
 Construye el grafo de referencias tipadas (`related` / `depends_on` / `supersedes` /
@@ -73,3 +89,4 @@ planner/tools/hooks/install.sh
 
 Al **añadir / mover / renombrar / actualizar** docs del desk: corre `links.py` y
 deja que el hook avise. Toda tool general nueva → al germen (`seeds/desk/`).
+<!-- REDPILL:END desk -->

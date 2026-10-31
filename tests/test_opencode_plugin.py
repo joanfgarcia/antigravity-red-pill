@@ -9,24 +9,31 @@ sus hooks (`server()` → `chat.message` + `event`) contra una cola temporal:
 - escribe el bridge del arnés (`opencode_session.json`) con session_id + workdir;
 - NO escribe el bridge para sub-sesiones (`task`, con parentID).
 
-Se omite si `bun` no está disponible.
+Runtime: los harness `harness.mjs` importan `bun:sqlite` (API exclusiva de Bun),
+así que se exige un runtime con capacidad Bun. Verificado (sonda 2026-10-28): el
+arnés embebe Bun 1.4.4; el test usa el Bun del sistema (o el que fije
+`REDPILL_JS_RUNTIME`). Sin runtime válido → **xfail NO silencioso** (antes un
+`skip` mudo que en CI —que no instala bun— significaba cobertura cero sin avisar).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import sqlite3
-import subprocess
 from pathlib import Path
 
-import pytest
+from red_pill.session.store import SessionRegistry
+from tests._js_runtime import find_js_runtime, needs_js_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED = REPO_ROOT / "seeds" / "opencode" / "plugins" / "redpill-scribe.js"
 
-pytestmark = pytest.mark.skipif(shutil.which("bun") is None, reason="bun no disponible")
+# El harness ejercita el plugin, que usa `bun:sqlite` → se exige esa capacidad.
+_BUN = find_js_runtime(require_bun_sqlite=True)
+# XFAIL ruidoso SOLO en los tests que ejecutan JS. Los puramente textuales (leer
+# el seed y comparar) no necesitan runtime y deben pasar siempre.
+_runtime = needs_js_runtime(require_bun_sqlite=True)
 
 _QUEUE_DDL = """
 CREATE TABLE memory_queue (
@@ -96,17 +103,18 @@ def _run_plugin(tmp_path: Path, harness_src: str = _HARNESS) -> dict:
 	harness = tmp_path / "harness.mjs"
 	harness.write_text(harness_src, encoding="utf-8")
 
-	res = subprocess.run(
-		["bun", str(harness)],
+	res = _BUN.run(
+		str(harness),
 		capture_output=True,
 		text=True,
 		env={**os.environ, "PLUGIN_PATH": str(plugin), "QUEUE_DB": str(queue_db), "STATE_DIR": str(state)},
 		timeout=60,
 	)
-	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
+	assert res.returncode == 0, f"{_BUN.label} falló:\n{res.stdout}\n{res.stderr}"
 	return json.loads(res.stdout.strip().splitlines()[-1])
 
 
+@_runtime
 def test_plugin_captura_turno_con_originator_compuesto(tmp_path):
 	out = _run_plugin(tmp_path)
 	row = out["row"]
@@ -116,6 +124,7 @@ def test_plugin_captura_turno_con_originator_compuesto(tmp_path):
 	assert row["content_hash"], "content_hash ausente (dedup ciega del worker)"
 
 
+@_runtime
 def test_plugin_escribe_bridge_con_workdir(tmp_path):
 	out = _run_plugin(tmp_path)
 	bridge = out["bridge"]
@@ -126,12 +135,44 @@ def test_plugin_escribe_bridge_con_workdir(tmp_path):
 	assert bridge["updated_at"] > 0
 
 
+@_runtime
 def test_plugin_no_pisa_bridge_con_subsession(tmp_path):
 	out = _run_plugin(tmp_path)
 	# Tras la sub-sesión child1, el bridge debe seguir siendo el del padre s1.
 	assert out["bridge"]["session_id"] == "s1"
 
 
+_HARNESS_PER_SESSION = """
+import { readFileSync, existsSync } from "node:fs";
+
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const a = await plugin.server({ directory: "/ws/a" });
+const b = await plugin.server({ directory: "/ws/b" });
+
+await a["chat.message"]({ sessionID: "s1" }, { parts: [{ type: "text", text: "uno" }] });
+await b["chat.message"]({ sessionID: "s2" }, { parts: [{ type: "text", text: "dos" }] });
+
+const dir = `${process.env.STATE_DIR}/sessions/bridge`;
+const readOne = (sid) => {
+  const p = `${dir}/opencode__${sid}.json`;
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
+};
+console.log(JSON.stringify({ s1: readOne("s1"), s2: readOne("s2") }));
+"""
+
+
+@_runtime
+def test_plugin_escribe_bridge_por_sesion(tmp_path):
+	"""D-BRIDGE: además del global, un bridge por sesión (el proxy resuelve por cwd)."""
+	out = _run_plugin(tmp_path, _HARNESS_PER_SESSION)
+	assert out["s1"] is not None and out["s2"] is not None, "falta el bridge por sesión"
+	assert out["s1"]["session_id"] == "s1"
+	assert out["s1"]["workdir"] == "/ws/a"
+	assert out["s2"]["session_id"] == "s2"
+	assert out["s2"]["workdir"] == "/ws/b"
+
+
+@_runtime
 def test_plugin_cwd_por_instancia_no_se_pisa_entre_sesiones(tmp_path):
 	out = _run_plugin(tmp_path, _HARNESS_MULTI)
 	# a procesa DESPUÉS de que b haya arrancado: debe conservar /ws/a.
@@ -225,11 +266,12 @@ def _run_plugin_handshake(tmp_path: Path, env_extra: dict | None = None) -> dict
 	harness = tmp_path / "harness.mjs"
 	harness.write_text(_HARNESS_HANDSHAKE, encoding="utf-8")
 	env = {**os.environ, "PLUGIN_PATH": str(plugin), "STATE_DIR": str(state), **(env_extra or {})}
-	res = subprocess.run(["bun", str(harness)], capture_output=True, text=True, env=env, timeout=60)
+	res = _BUN.run(str(harness), capture_output=True, text=True, env=env, timeout=60)
 	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
 	return json.loads(res.stdout.strip().splitlines()[-1])
 
 
+@_runtime
 def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 	out = _run_plugin_handshake(tmp_path)
 	assert out["reminderBefore"] == 1, "el contexto del turno no lleva el recordatorio"
@@ -260,7 +302,84 @@ def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 	]
 
 
+@_runtime
 def test_handshake_gate_se_puede_desactivar(tmp_path):
 	out = _run_plugin_handshake(tmp_path, {"REDPILL_HANDSHAKE_GATE": "off"})
 	assert out["reminderBefore"] == 0
 	assert out["nonHandshakeBefore"]["status"] == "allowed"
+
+
+def test_recordatorio_nombra_la_forma_correcta_de_code_mode():
+	"""El recordatorio debe nombrar el id REAL de la tool según el modo de exposición.
+
+	Incidencia 2026-10-28: el recordatorio decía "(code-mode calls do not count)",
+	FALSO en opencode v2 (Code Mode es el default de exposición MCP) → empujaba al
+	agente a pedir `RedPill-Kernel_sovereign_handshake` directa, que en ese modo NO
+	está en el catálogo ("No tool named ... is currently available"). Debe nombrar
+	la forma de Code Mode y la de `codemode: false`, y NO repetir la afirmación falsa.
+	"""
+	text = SEED.read_text(encoding="utf-8")
+	assert 'tools["RedPill-Kernel"].sovereign_handshake' in text, "falta la forma de Code Mode (default v2)"
+	assert "RedPill-Kernel_sovereign_handshake" in text, "falta la forma de codemode:false (listado directo)"
+	# La afirmación falsa sólo importa si está EN EL RECORDATORIO (el comentario
+	# puede citarla para explicar por qué se retiró).
+	reminder_block = text.split("const HANDSHAKE_REMINDER =", 1)[1].split(";", 1)[0]
+	assert "code-mode calls do not count" not in reminder_block, (
+		"la afirmación falsa sobre Code Mode no debe reaparecer en el recordatorio (incidente 2026-10-28)"
+	)
+
+
+# ── Acuse por hook (AD-099): el prompt con `msg=<event_id>` promueve la fila ──
+_HARNESS_ACK = """
+const plugin = (await import(process.env.PLUGIN_PATH)).default;
+const sessionHooks = {};
+const ctx = {
+  session: { hook: async (name, cb) => { (sessionHooks[name] ||= []).push(cb); } },
+  tool: { hook: async () => {} },
+  event: { subscribe: async function* () {} },
+  location: { directory: "/ws/proj" },
+};
+await plugin.setup(ctx);
+const fire = async (name, event) => {
+  for (const cb of sessionHooks[name] || []) await cb(event);
+};
+await fire("prompt", { sessionID: "ses_huerfana", prompt: { text: process.env.NUDGE_ORPHAN } });
+await fire("prompt", { sessionID: "ses_a", prompt: { text: process.env.NUDGE } });
+await new Promise((r) => setTimeout(r, 300));
+console.log(JSON.stringify({ ok: true }));
+"""
+
+
+@_runtime
+def test_plugin_acusa_el_nudge_solo_para_su_alma(tmp_path):
+	from red_pill.session import delivery
+
+	reg = SessionRegistry(str(tmp_path / "session.db"))
+	reg.upsert_session(originator="opencode:ses_a", continuity_id="alma-1", mission_id="repo:next")
+	events = []
+	for _ in range(2):
+		ev = reg.add_event(
+			event_type="message", mission_id="repo:next", summary="¿llega?", continuity_id="alma-2",
+			originator="opencode:ses_b", global_turn=1, to_continuity="alma-1", verb="ask",
+		)
+		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
+		events.append(ev)
+	mine, orphan = events
+	state = tmp_path / "state"
+	state.mkdir()
+	plugin = tmp_path / "redpill-scribe.js"
+	src = SEED.read_text(encoding="utf-8")
+	src = src.replace("${QUEUE_DB}", str(tmp_path / "bunker_queue.db")).replace("${STATE_DIR}", str(state))
+	plugin.write_text(src, encoding="utf-8")
+	harness = tmp_path / "harness.mjs"
+	harness.write_text(_HARNESS_ACK, encoding="utf-8")
+	env = {
+		**os.environ,
+		"PLUGIN_PATH": str(plugin),
+		"NUDGE": delivery.build_event_nudge(reg.get_event(mine["event_id"])),
+		"NUDGE_ORPHAN": delivery.build_event_nudge(reg.get_event(orphan["event_id"])),
+	}
+	res = _BUN.run(str(harness), capture_output=True, text=True, env=env, timeout=60)
+	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
+	assert delivery.get_delivery(mine["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_DELIVERED
+	assert delivery.get_delivery(orphan["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_HANDED_OFF

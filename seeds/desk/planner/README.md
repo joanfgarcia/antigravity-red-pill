@@ -12,6 +12,7 @@ related:
 tags: [planner, fases, panel, prioridad]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Planner — sistema de planificación
 
 Carpeta del despacho que centraliza **todo el sistema de planificación**: las
@@ -28,27 +29,53 @@ herramienta que genera el panel de seguimiento on-demand (`tools/panel.py`).
 > despacho los tiene (`design/governance/`), mandan ellos; si no, este README
 > resume lo esencial (fases, estados y ciclo de vida).
 
-## Modelo: la fase es una carpeta
+> **Fuente canónica**: estas convenciones viven en `seeds/desk/` del repo red-pill
+> y se siembran en cada instalación. Este `planner/` es la **instancia** de esta
+> máquina. Lo que hay entre las marcas `REDPILL:BEGIN/END` es del seed; el
+> frontmatter y lo que quede fuera es de este desk.
 
-Un ítem (tarea, RFC, idea) es **una carpeta**. Su ubicación en el árbol dice su
-fase; cambiar de fase es mover la carpeta:
+## Modelo: la bandeja dice dónde vive; el `status` dice en qué está
 
-```
-planner/ideas/        → spark/llama, ni analizada
-planner/research/     → maturing, se investiga sin decidir
-planner/design/       → aprobada, diseñando el plan (RFCs)
-planner/pending/      → tarea comprometida, sin arrancar
-planner/in_progress/  → implementando
-archive/<proyecto>/   → finalizado (cerrado/archivado)
-```
+Las bandejas **no son un ciclo de vida que se recorre**. Con 120 documentos, mover
+cada uno al cambiar de estado no ha pasado nunca y no va a pasar: una bandeja que
+promete ciclo de vida y no lo cumple miente, y obliga a desmembrar familias para
+cumplirla. Así que cada bandeja dice una cosa distinta:
 
-El movimiento se hace con `git mv` (preserva historia):
+| Bandeja | Qué significa | Se mantiene al día |
+|---|---|---|
+| `ideas/` | de aquí entró: chispa sin analizar | no hace falta |
+| `research/` | de aquí entró: se investigó antes de decidir | no hace falta |
+| `design/<familia>/` | **el expediente** de un tema, con todas sus piezas | no hace falta |
+| `pending/` | **cola**: lo comprometido y sin arrancar | **sí, siempre** |
+| `in_progress/` | **cola**: lo que se está haciendo (2-3 cosas) | **sí, siempre** |
+| `archive/<proyecto>/` | terminado o consumido | **sí, es la única salida** |
+
+Reglas que se pueden cumplir:
+
+- **Un documento no se mueve al cambiar de estado.** Su estado se lee en el
+  `status` del frontmatter, no en la ruta.
+- **La familia no se desmiembra.** `design/<familia>/` guarda el RFC y sus piezas
+  aunque algunas estén implementadas: fuera de su familia pierden el contexto.
+  La familia entera se archiva cuando **todas** sus piezas están cerradas.
+- **`pending/` e `in_progress/` sí se mueven**, y son las únicas que el panel
+  revisa: son una cola, y una cola que no refleja la realidad no sirve. Ahí sí
+  avisa `⚠️` si el `status` no cuadra con la bandeja.
+- **`archive/` es la salida**, con `status: archived`/`closed` y su `archive_reason`.
+
+Para ver el estado sin abrir un solo documento (la ruta no lo dice, el panel sí):
 
 ```bash
-git mv planner/ideas/MI_IDEA planner/research/
-git mv planner/research/MI_IDEA planner/design/<familia>/
-git mv planner/pending/MI_TAREA planner/in_progress/
-git mv planner/in_progress/MI_TAREA archive/<proyecto>/
+python3 planner/tools/panel.py                      # todo, con ⚠️ donde la cola no cuadre
+python3 planner/tools/panel.py --status implemented  # lo terminado
+python3 planner/tools/state.py -o STATE.md           # entrada en frío
+```
+
+Los movimientos que sí existen, y son pocos:
+
+```bash
+git mv planner/pending/MI_TAREA planner/in_progress/        # arranca
+git mv planner/in_progress/MI_TAREA archive/<proyecto>/     # termina
+git mv planner/design/<familia> archive/<proyecto>/         # cierra la familia entera
 ```
 
 ## Flujo blando (no es un pipeline duro)
@@ -110,6 +137,81 @@ planner/
   Ciclo de vida: `draft → ratified → implemented → closed → archived`
   (detallado en `design/governance/RFC_FLUJO_RFCS.md` si tu despacho lo tiene).
 
+## Tamaño de documento (guardarraíl medible)
+
+Un documento que no se asimila no se lee: se hojea. Y se carga en contexto, así
+que además **desplaza** lo demás.
+
+**La unidad son TOKENS, no KB.** El KB es lo que ocupa en disco; el token es lo
+que ocupa **en la ventana del modelo**, y es lo único que se compara con el
+contexto disponible. Un documento de 30 KB de prosa española son ~9.400 tok; el
+mismo peso en tablas y rutas pasa de 12.000. El KB miente; el token no. Por eso
+el KB se muestra al lado sólo como comodidad (`~x KB`).
+
+| Umbral | Regla | En folios A4 técnicos |
+|---|---|---|
+| **> 2.000 tok** (~6 KB) | El documento **debe** llevar un índice de secciones al principio | ~2-3 páginas |
+| **> 6.000 tok** (~19 KB) | **Señal de dividir**: sub-carpeta + `INDEX.md` que resuma y enlace | ~6-7 páginas |
+
+De dónde salen (medido el 2026-10-29, no supuesto): con `granite_8b` el
+**prompt útil** real es `n_ctx - 4.096` = **6.144 tok** — no los 10.240 que
+anuncia la ventana, porque 4.096 se reservan para la salida. Y **3,2 caracteres
+≈ 1 token** en prosa española. De ahí:
+
+- **blando = un tercio del presupuesto** (~2.000): se lee entero junto a otros
+  dos o tres documentos y la pregunta.
+- **duro = el presupuesto entero** (~6.000): por sí solo ya no deja sitio a nada
+  con lo que compararlo. No se razona, se hojea.
+
+Ojo con dar por buena una ventana: depende de la **compresión del KV cache**, no
+del modelo. El mismo `granite_8b` en la misma máquina: `f16` → 12.288 tok,
+`q8_0` → 24.576, `q4_0` → 49.152. Estos umbrales están anclados al caso
+**conservador (`f16`)**: con KV comprimido hay más sitio y el criterio sigue
+siendo válido, sólo que exigente.
+
+**El índice es la pieza, no la fusión.** Un directorio con muchos documentos
+pequeños **no** se fusiona: se le pone un `INDEX.md` con un resumen general del
+tema y 1-2 líneas por documento enlazado. Eso escala recursivamente (sub-carpeta
+con su propio índice) sin crear monolitos. Sólo se fusiona lo que está
+**duplicado**.
+
+### Procedimiento al reorganizar (checklist)
+
+1. Si el fichero se llama `README`/`INDEX` pero **es** un documento → **renombrar**
+   a su nombre real (`git mv`).
+2. Carpeta con **varios** documentos → `INDEX.md` como puerta (resumen del tema en
+   2 frases + tabla con 1-2 líneas por documento + "cómo leerlo").
+3. Carpeta con **un** documento → **TOC interno** al principio; un índice de un
+   solo elemento no aporta nada.
+4. Supera el umbral duro → **partir** por secciones temáticas.
+5. **Actualizar TODAS las referencias**, incluida la que se olvida siempre: los
+   `related: ./README.md` **relativos dentro de la misma carpeta**. Un `grep` de
+   la ruta completa no los ve; el hook de `links.py` sí. Correr `links.py` **antes**
+   de commitear, no después.
+6. Regenerar `STATE.md`: `python3 planner/tools/state.py -o STATE.md`.
+
+**Es una hipótesis fechada, no una ley.** Los números viven en
+`tools/check_doc_size.py` como dos constantes (`SOFT_LIMIT_TOKENS`,
+`HARD_LIMIT_TOKENS`) con su fecha de calibración, más `CHARS_PER_TOKEN` para el
+`~x KB`. Cuando los modelos objetivo crezcan —un 12B o 27B donde hoy hay un 9B,
+o una técnica de lectura por partes— se suben ahí y se anota el nuevo objetivo.
+Nunca se cambia un número disperso por el código.
+
+```bash
+python3 planner/tools/check_doc_size.py            # el desk
+python3 planner/tools/check_doc_size.py --strict   # falla también el blando
+```
+
+**La deuda no se escribe aquí, se mide.** Un número copiado en un README se queda
+viejo el día siguiente y nadie lo nota; el script sí sabe la verdad:
+
+```bash
+python3 planner/tools/check_doc_size.py | sed -n '4p'   # documentos · > blando · > duro
+```
+
+Los que superan el umbral duro son la cola de trabajo de índices, y se ataca de
+uno en uno con el procedimiento de arriba.
+
 ## Panel
 
 `tools/panel.py` recorre el árbol, lee el frontmatter y genera el panel en
@@ -126,3 +228,4 @@ python3 tools/panel.py -o /tmp/panel.md
 
 El panel ordena por prioridad y respeta `depends_on` (topológico). No es un
 fichero físico: se genera cuando se pide.
+<!-- REDPILL:END desk -->

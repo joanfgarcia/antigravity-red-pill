@@ -49,6 +49,46 @@ def test_drop_and_get_unread(temp_inbox: MinionInbox):
 	assert unread[1]["event_id"] == "evt_123"
 
 
+def test_drop_report_idempotente_por_event_id(temp_inbox: MinionInbox):
+	"""D2: el mismo event_id dos veces registra UNA sola fila (reintento del minion)."""
+	temp_inbox.drop_report(event_id="evt_dup", source="AgentSmith", status="success", content="primera")
+	temp_inbox.drop_report(event_id="evt_dup", source="AgentSmith", status="success", content="segunda")
+
+	with sqlite3.connect(temp_inbox.db_path) as conn:
+		rows = conn.execute("SELECT content FROM inbox WHERE event_id = ?", ("evt_dup",)).fetchall()
+	assert len(rows) == 1, "el segundo drop no debe duplicar la fila"
+	assert rows[0][0] == "primera", "queda la primera versión (fire-and-forget)"
+
+	# Un event_id distinto sí entra: la idempotencia es por id, no global.
+	temp_inbox.drop_report(event_id="evt_otro", source="AgentSmith", status="success", content="tercera")
+	assert len(temp_inbox.get_unread(limit=10)) == 2
+
+
+def test_drop_report_idempotente_bajo_carrera(temp_inbox: MinionInbox):
+	"""D2 en concurrente: dos minions con el MISMO event_id a la vez → una fila.
+
+	Un SELECT previo seguido de INSERT no bastaría aquí: la ventana entre ambos
+	permite el duplicado. Por eso el filtro vive en la propia sentencia.
+	"""
+	import threading
+
+	def _drop():
+		# Conexión/instancia propia, como harían dos procesos minion distintos.
+		MinionInbox(db_path=temp_inbox.db_path).drop_report(
+			event_id="evt_race", source="AgentSmith", status="success", content="carrera"
+		)
+
+	threads = [threading.Thread(target=_drop) for _ in range(8)]
+	for t in threads:
+		t.start()
+	for t in threads:
+		t.join()
+
+	with sqlite3.connect(temp_inbox.db_path) as conn:
+		n = conn.execute("SELECT COUNT(*) FROM inbox WHERE event_id = ?", ("evt_race",)).fetchone()[0]
+	assert n == 1, f"el mismo event_id bajo carrera debe registrarse una sola vez (got {n})"
+
+
 def test_mark_as_read(temp_inbox: MinionInbox):
 	"""Verify that reading a report hides it from get_unread."""
 	temp_inbox.drop_report(event_id="evt_789", source="Oracle", status="success", content="Data found")

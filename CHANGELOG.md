@@ -1,5 +1,189 @@
 ## Unreleased
 
+### 🧷 El espejo no recibía ni un turno: el sellado estaba mudo
+
+- **[FIX]** El sellado del turno externo (`begin/finish_external_turn`) archiva el
+  journal **cerrado** y borra el `current/`, pero el único consumidor en una sesión
+  viva era `refresh_session_context`. Medido 2026-10-31: **0 filas** de espejo de
+  opencode desde el despliegue (2026-10-30 17:32), con 6 journals completados
+  esperando en el archivo.
+- **[NEW]** `maybe_import_external_turns()`: se lanza desde el `sovereign_handshake`
+  en CADA turno, en un hilo (el handshake no espera) y **con marca de agua**: sin
+  journals nuevos no abre la base. Antes existía como importación manual por CLI o
+  dentro del despertar — el sellado no puede depender de que alguien se acuerde.
+- **[NEW]** El archivo se re-lee sólo si es reciente (`ARCHIVE_IMPORT_DAYS`, 7):
+  un turno de hace un mes no tiene nada que sellar y el archivo crece sin fin.
+- **[SAFE]** Un fallo de importación no propaga (nunca rompe el handshake) y el
+  lock impide dos sellados simultáneos entre sesiones paralelas.
+- **[FIX]** Backfill medido: 28 completados + 8 abortados + 1 pendiente sellados
+  a mano tras el fix. 9 tests nuevos.
+
+### ⏱️ El reloj del handshake — tres escalas de tiempo en vez de una
+
+- **[NEW]** `pulse.time_line()`: `Ahora: 2026-10-31 16:36 (sáb) · turno anterior:
+  hace 18m · sesión desde … (5h 12m)`. Se pinta en el bloque del handshake.
+- **[WHY]** Sin esto no puedo distinguir **"ayer"** de **"hace dos turnos"**, y una
+  memoria que confunde esas escalas miente sobre el tiempo. Petición del Operador
+  (2026-10-31): *"es otra vez la escena de Neo y Morfeo"* — el delta no da la
+  sensación del tiempo, da el dato; el resto es mío.
+- **[NEW]** `pulse.json` guarda `session_start`, que se reinicia cuando el hueco
+  con el turno anterior es de **ausencia** (no una pausa dentro de la charla).
+- **[SAFE]** La línea nunca rompe el handshake: si `pulse.json` falta o está
+  corrupto, sólo se omite.
+
+### 🔐 pyasn1 0.6.5 — cuatro CVEs más que las que decía el comentario
+
+- **[FIX]** `constraint-dependencies`: `pyasn1>=0.6.4` → `>=0.6.5`. El comentario
+  sólo listaba dos CVEs (59885/6); el CI encontró cuatro más en 0.6.4
+  (CVE-2026-119194/5/6/7), todas con fix en 0.6.5.
+
+### 🔁 Memento por fases — una corrida de modelo por etapa, no un swap por sesión
+
+- **[NEW]** `run_agentic(..., phase="distill"|"annotate")` y
+  `pending_agentic(phase=)` (`memento_agentic.py --phase`). `distill` escribe
+  polaroids y marca `distill_hash` + `annotate_pending`; `annotate` sella la
+  significance y **se niega a destilar** (si faltan polaroids, salta la sesión y
+  lo cuenta en `skipped_distill`). `phase=None` conserva el camino histórico.
+- **[NEW]** `chronicle.yaml`: la etapa `memento-agentic` se parte en
+  `memento-distill` (task `distill`) y `memento-annotate` (task `annotate`),
+  ambas fan-out de `discover` y serializadas por `depends_on`.
+- **[WHY]** Medido en la corrida real: 41 cargas de modelo en una noche de 20
+  sesiones (102 s de swap puro). Con un juez de 6 GB o un lector de 262K, esas
+  40 cargas dejan de ser minuto y medio y son 15-20 minutos.
+- **[NEW]** `registry.agentic.engine_annotate`: quién juzgó, distinto de
+  `engine` (quién puso la voz). Sin ese campo, cambiar de juez es invisible.
+- **[NEW]** `configs/jobs/memento_redistill_bonsai.yaml` +
+  `scripts/memento_redistill_one.sh`: repetir una ronda con un modelo concreto
+  sobre una lista congelada de sesiones, sin tocar el delta nocturno.
+
+### 📉 El cuello del sueño no era el prefill: era la KV en f16
+
+- **[FIX]** `bonsai_2_27b`: `kv_cache.preferred` f16 → **q8_0**. A ventana fija
+  de 16.384 y mismo binario: f16 **18,7 tok/s** de decode, q8_0 **46,4**,
+  q4_0 46,6 — con 94 MiB de diferencia de VRAM. No es presión de memoria: es el
+  kernel de atención en f16 del build prism, y empeora con la ventana (12,7 tok/s
+  a 24K). End-to-end sobre la sesión más pesada: **280 s → 165 s**.
+- **[WHY]** El perfil pedía f16 porque *cabía*. Cabía y era 2,5× más lento. La
+  noche de bonsai (61,7 min vs 29,7 de granite) medía el perfil, no el modelo.
+- **[NEW]** `llama_cpp_k2` como runtime de primera clase (`runtimes.yaml`) y
+  perfil `k2_horizon_7b`: prefill **2.217 tok/s** y decode **58 tok/s**, el más
+  rápido de la casa en ambas. El daemon lo sirve sin tocar código.
+- **[DOC]** `docs/MODELS/PREFILL_2026-10-30.md`: curva `n_ctx × KV`, hipótesis
+  descartadas (ubatch plano 128→2048, `Nice=19` sin efecto, throttling descartado)
+  y la trampa de medir con el daemon vivo (`out of memory` por coexistencia).
+
+### ⚖️ El juez también tiene prompt, y lo elige el modelo
+
+- **[NEW]** `annotate_prompt_set` en el perfil del modelo (gemelo de
+  `prompt_file` de destilación) → `ResolvedModel.annotate_prompt_set` →
+  `runtime.annotate_prompt_set()`, con override `MEMENTO_ANNOTATE_PROMPT`. Entra
+  en `annotate_prompt_version()`, así que cambiar de juez invalida la frescura y
+  re-anota (correcto: notas de otro contrato no son comparables).
+- **[NEW]** `prompts/annotate_{work,social}_user_v3.txt`: pide el **acto**, no la
+  escena (título = hallazgo; cuerpo = hecho; prohibido inventar la manera).
+  Con la v2 —la de granite— K2 titulaba **45 %** de sus notas "Joan me pide/
+  cuenta…"; granite, 0 %. Medido en dos sesiones: 12→5→**13** y 0→7→**12**
+  (granite / K2+v2 / K2+v3).
+- **[FIX]** El presupuesto de extracción estaba **clavado en 1024 en el código**.
+  Con K2 el array se cortaba (`finish_reason=length`), el parser no encontraba el
+  cierre y la sesión salía con **0 notas**: indistinguible de "no hay nada que
+  anotar". Ahora sale de la task (`annotate.max_tokens: 2048`) y el truncado
+  emite warning.
+- **[FIX]** `engine_id()` mentía en los cambios de modelo: cacheaba `/v1/models`
+  por proceso y, si la primera llamada caía con el modelo anterior cargado, toda
+  la sesión se sellaba mal (K2 juzgando, `engine: granite_8b`). Ahora
+  `served_engine()` lee el campo `model` de la propia respuesta.
+
+### 🩹 Auditoría de cicatrices y cola de arreglo a mano
+
+- **[NEW]** `scripts/memento_audit.py`: read-only, sin LLM, 12 patrones con score
+  ponderado y cita textual (deixis, tono inventado, 3ª persona, meta-narración,
+  episódico, sin notas, ref roto, duplicado, inglés, título largo, cuerpo corto,
+  fuga de plantilla). Determinista a propósito: un listado que cambia en cada
+  pasada no sirve para decidir una noche.
+- **[NEW]** `scripts/memento_fix_queue.py` + `configs/jobs/memento_fix_slow.yaml`:
+  N=2 sesiones por tirada, **lanzadas a mano**. Recalcula la auditoría y propone
+  las peores aún no procesadas; el libro `state/memento_fix_done.jsonl` evita el
+  bucle. Reprocesar memoria es una decisión, no mantenimiento.
+- **[DATA]** Inventario inicial (1.222 sesiones): 5.209 meta-narraciones en 774,
+  3.357 deixis en 615, 1.309 de 3ª persona, 1.291 de tono inventado y **493
+  sesiones con polaroids y cero notas** — hueco de memoria, no estilo.
+
+### 🔌 Motor de inferencia agnóstico — un modelo ternario servido por el daemon
+
+- **[NEW]** `red_pill/inference/local_backend.py`: `build_local_backend(resolved)`
+  devuelve un objeto con la interfaz que el daemon ya usaba (`tokenize` +
+  `create_chat_completion`), tanto si carga en proceso con llama-cpp-python como
+  si lo sirve el binario de un fork. **El daemon no ramifica por motor.**
+- **[NEW]** `ForkChatBackend` sirve por HTTP el modelo del fork: tokenize vía
+  `/tokenize`, chat con `tools`, streaming SSE traducido a chunks. Descarta las
+  claves que sólo existen en proceso (`chat_format`, `grammar`…).
+- **[REFACTOR]** `ForkServerInferenceProvider` delega en `RuntimeServer` (AD-049)
+  en vez de reimplementar arranque, health y apagado. Primer intento duplicaba
+  algo que ya existía y mejor.
+- **[NEW]** `RuntimeServer.chat` acepta `tools`/`tool_choice`/`response_format`:
+  un perfil de fork también puede hacer function calling (`minion_tool`).
+- **[NEW]** `ResolvedModel.extra_server_args`: las peculiaridades de un modelo se
+  declaran en el perfil, no en código. `bonsai_2_27b` declara
+  `--reasoning off --reasoning-budget 0` y `flash_attn`/`fa_capable` (AD-037).
+- **[FIX]** Desmontaje sin parar el servicio: `build_local_backend(unload_daemon=)`
+  pide evict al proxy; el daemon llama `stop()` al backend si lo expone. Antes un
+  servidor de fork se quedaba con la VRAM al cambiar de modelo.
+- **[FIX]** `ResolvedModel.runtime` es el dict resuelto; el id es `runtime_id`
+  (rompía `RuntimeRegistry.get` con un dict).
+- **[E2E]** Verificado bidireccional por el puerto 8760: bonsai 200 en 5,9 s y
+  vuelta a granite 200 en 1,5 s, sin fugas de VRAM. `system_fingerprint` del
+  servidor = build prism `b1-4fbda12`.
+
+### 🎭 Atribución de hablante — los mensajes entre almas dejan de ser del Operador
+
+- **[FIX]** El buffer rápido etiquetaba como `USER:` *cualquier* prompt, y el prompt
+  del destilador define `USER:` como «habló el Operador». Un mensaje entre almas —o
+  un volcado de herramienta— se archivaba como frase del Operador: autoridad
+  fabricada y, si el dato era erróneo, un hecho falso con su firma.
+- **[NEW]** `red_pill/core/speaker.py`: clasifica el turno como `USER`/`PEER`/`TOOL`
+  tolerando las variantes reales del sobre (corchetes ASCII o de ancho completo,
+  envuelto en comillas por el arnés). El sobre debe **abrir** el turno: citarlo a
+  mitad de frase no reclasifica (falso positivo observado al consultar opencode).
+- **[NEW]** `PEER` y `TOOL` viajan como roles propios en `memory.py`, `chunker.py` y
+  `maintenance.py`. En el camino agentic, `fragments.py` los pinta como
+  `— <Agente> (otra sesión)` y conserva el turno en modo `pairs`.
+- **[FIX]** Reglas de atribución PEER/TOOL en `distiller_v3_voice.txt` (MODE B) y en
+  el fragmento `voice_distiller.txt` (MODE A, el que usa `granite_8b`).
+- **[FINDING]** Caso real en el archivo (2026-10-27): el sobre decía «no es del
+  Operador» y se guardó como «Usuario». `granite_8b` corre con `distiller_v3.txt`,
+  que **no tenía ni una mención a `USER:`**: la tercera persona en los enmemas no
+  era desobediencia, era un prompt sin reglas de hablante.
+- **[TEST]** `tests/test_speaker_role.py` (21 casos: sobres reales, ancho completo,
+  comillas, falso positivo por cita, integración Qdrant y vista de fragmento).
+- **[DOCS]** E2E con los dos modelos sobre mensajes reales: ninguno atribuye el peer
+  al Operador (4/4); k2 respeta el formato 2/2 y nombra al peer, granite rompe JSON 1/2.
+- **[NOTE]** La prueba de textura del 2026-10-29 usó MODE B para los dos modelos;
+  `granite_8b` corre MODE A, así que esa comparación no fue fiel a producción para
+  granite. Repetir antes de cualquier decisión de sustitución.
+
+### 🧠 Base de conocimiento de modelos — límites por cuantización de KV
+
+- **[NEW]** `docs/MODELS/`: una carpeta por modelo (id de perfil como nombre) con
+  `INDEX.md` y `PROCEDURE.md`. Nace de la auditoría K2-Horizon vs Granite (2026-10-29).
+- **[NEW]** `scripts/gguf_info.py`: specs declaradas y coste de KV por token leídos
+  de la cabecera GGUF, sin servidor ni GPU.
+- **[FIX]** Hueco de procedimiento: la cascada de contexto sólo se medía en `f16`.
+  Medido por cuantización — Granite 12.288 / 24.576 / 49.152 y K2-Horizon
+  32.768 / 49.152 / 98.304 (f16 / q8_0 / q4_0). La ventana servible es el 9-19% de
+  la declarada y el perfil sólo guarda el peor caso.
+- **[FINDING]** `model_runtime` y `model_registry` no pasan `type_k`/`type_v`, aunque
+  el `llama_cpp` del venv los acepta y `scripts/bakeoff_granite_42.py` ya los usaba
+  (AD-033). Duplicar la ventana de `granite_8b` es una línea de runtime.
+- **[FINDING]** `_KNOWN_LICENSES["apache-2.0"]` marca `attribution_required: False`;
+  Apache-2.0 §4(b) exige conservar el NOTICE al redistribuir.
+- **[DOCS]** Calidad medida con higiene: `finish_reason`, n>=5, `sd` y orden
+  declarado. Concluido que el test de calidad a distancia **no** rankea precisiones
+  de KV: el fallo dominante es selección de documento, no pérdida de precisión.
+- **[DOCS]** `k2_horizon_3_7b` entra como **candidato**, no sustituto: su defecto de
+  deixis pasa de 2/5 a 5/5 con un refuerzo de prompt; falta la prueba de textura
+  sobre recuerdos reales.
+
 ### 🪝 B-01h — write-ahead en arneses externos
 
 - **[NEW]** Journal JSON atómico por turno antes del modelo en Claude/opencode/Pi;

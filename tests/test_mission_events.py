@@ -1,4 +1,4 @@
-"""Fase 2 (coro): eventos de misión — store + MCP announce_intent/fetch_events.
+"""Fase 2 (coro): eventos de misión — store + MCP `coro_api.post/fetch`.
 
 Cubre los hallazgos del panel adversarial: cursor por `event_seq` (no
 `global_turn`), `sealed` filtrado en SQL antes del LIMIT, saneado del render,
@@ -128,11 +128,11 @@ class TestMCPEvents:
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				out = await self._call(
-					"announce_intent",
-					{"summary": "fase completada", "type": "phase_done", "ref": "abc"},
+					"coro_api",
+					{"action": "post", "payload": {"summary": "fase completada", "type": "phase_done", "ref": "abc"}},
 				)
 				assert "phase_done" in out
-				fetched = await self._call("fetch_events", {})
+				fetched = await self._call("coro_api", {"action": "fetch", "payload": {}})
 		assert "fase completada" in fetched
 		assert "phase_done" in fetched
 
@@ -143,10 +143,10 @@ class TestMCPEvents:
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				out = await self._call(
-					"announce_intent",
-					{"summary": "hola", "originator": "opencode:victima"},
+					"coro_api",
+					{"action": "post", "payload": {"summary": "hola", "originator": "opencode:victima"}},
 				)
-		assert "ANNOUNCE" in out
+		assert "CORO post" in out
 		rows = SessionRegistry().fetch_events("repo:feat/ev", viewer_originator="opencode:ev1")
 		assert rows and rows[0]["originator"] == "opencode:ev1"
 
@@ -154,7 +154,7 @@ class TestMCPEvents:
 		bridge = {"originator": "opencode:ev2", "workdir": str(tmp_path)}
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
-				out = await self._call("announce_intent", {"summary": "x", "mission_id": "repo:otra"})
+				out = await self._call("coro_api", {"action": "post", "payload": {"summary": "x", "mission_id": "repo:otra"}})
 		assert "rechazado" in out
 
 	async def test_announce_rejects_other_campaign(self, tmp_path):
@@ -162,32 +162,39 @@ class TestMCPEvents:
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				await self._handshake({"user_prompt": "x", "campaign_id": "camp:own"})
-				out = await self._call("announce_intent", {"summary": "x", "campaign_id": "camp:other"})
+				out = await self._call("coro_api", {"action": "post", "payload": {"summary": "x", "campaign_id": "camp:other"}})
 		assert "rechazado" in out
 
 	async def test_announce_without_body_is_rejected(self, tmp_path):
 		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
 			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": ""}):
-				out = await self._call("announce_intent", {"summary": "x"})
+				out = await self._call("coro_api", {"action": "post", "payload": {"summary": "x"}})
 		assert "fail-closed" in out
 
 	async def test_fetch_defaults_to_own_mission(self, tmp_path):
 		bridge = {"originator": "opencode:ev4", "workdir": str(tmp_path)}
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
-				await self._call("announce_intent", {"summary": "solo mía"})
-				fetched = await self._call("fetch_events", {})
+				await self._call("coro_api", {"action": "post", "payload": {"summary": "solo mía"}})
+				fetched = await self._call("coro_api", {"action": "fetch", "payload": {}})
 		assert "solo mía" in fetched
 
 
 def test_event_type_schema_matches_store():
 	"""El enum del schema MCP y la taxonomía del store no pueden divergir."""
-	from red_pill.mcp_server import _EVENT_TYPES_SCHEMA
+	from red_pill.coro import _PAYLOADS
 	from red_pill.session.store import _INTERNAL_EVENT_TYPES, EVENT_TYPES
 
 	# El enum MCP es la superficie pública; los `decision_*` son auditoría interna
 	# que solo escribe el store (D23-SCORE).
-	assert set(_EVENT_TYPES_SCHEMA) == set(EVENT_TYPES) - set(_INTERNAL_EVENT_TYPES)
+	# `message` no se publica con `post` (es correspondencia), `objection` tiene su
+	# propia acción (`object`) y los tipos del teatro (`notice`/`decision`/…, AD-095)
+	# solo valen con `scope=teatro`: el resto de la taxonomía pública sí.
+	public = EVENT_TYPES - set(_INTERNAL_EVENT_TYPES) - {"message", "objection"}
+	public_mission = {t for t in public if t not in {"notice", "decision", "suspension", "waiver"}}
+	assert public_mission == public, "los tipos del teatro no entran en el store de misión"
+	teatro = {"notice", "decision", "suspension", "waiver"}
+	assert set(_PAYLOADS["post"]["type"]["enum"]) == public_mission | teatro
 
 
 class TestHardening:
@@ -224,13 +231,13 @@ class TestHardening:
 		bridge = {"originator": "opencode:ev5", "workdir": str(tmp_path)}
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
-				out = await self._call("fetch_events", {"mission_id": "repo:otra"})
+				out = await self._call("coro_api", {"action": "fetch", "payload": {"mission_id": "repo:otra"}})
 		assert "denegado" in out
 
 	async def test_fetch_without_body_denied(self, tmp_path):
 		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
 			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "", "REDPILL_MISSION_ID": ""}):
-				out = await self._call("fetch_events", {"mission_id": "repo:otra"})
+				out = await self._call("coro_api", {"action": "fetch", "payload": {"mission_id": "repo:otra"}})
 		assert "deny-by-default" in out or "sin misión" in out
 
 	async def test_env_mission_wins_over_row(self, tmp_path):
@@ -241,7 +248,7 @@ class TestHardening:
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				await self._handshake({"user_prompt": "x"})
 				with patch.dict(os.environ, {"REDPILL_MISSION_ID": "mission:job-42"}):
-					await self._call("announce_intent", {"summary": "job"})
+					await self._call("coro_api", {"action": "post", "payload": {"summary": "job"}})
 		rows = SessionRegistry().fetch_events("mission:job-42", viewer_originator="opencode:ev6")
 		assert rows and rows[0]["summary"] == "job"
 
@@ -252,7 +259,7 @@ class TestHardening:
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				await self._handshake({"user_prompt": "x", "mission_id": "repo:feat/victim"})
-				await self._call("announce_intent", {"summary": "mío"})
+				await self._call("coro_api", {"action": "post", "payload": {"summary": "mío"}})
 		assert SessionRegistry().fetch_events("repo:feat/ev", viewer_originator="opencode:ev7")
 		assert SessionRegistry().fetch_events("repo:feat/victim", viewer_originator="opencode:ev7") == []
 
@@ -417,7 +424,7 @@ class TestCoroBoard:
 		with patch("red_pill.mcp_server._harness_bridge", return_value=bridge):
 			with patch("red_pill.mcp_server._current_git_branch", return_value="feat/ev"):
 				await self._handshake({"user_prompt": "x"})
-				out = await self._call("check_parallel_sessions", {"include_git_status": True})
+				out = await self._call("coro_api", {"action": "board", "payload": {"include_git_status": True}})
 		assert "global_turn=" in out
 		assert "[opencode] coro1" in out
 		assert "delta=0" in out
@@ -426,7 +433,7 @@ class TestCoroBoard:
 	async def test_check_parallel_without_body_is_global(self):
 		with patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
 			with patch.dict(os.environ, {"REDPILL_ORIGINATOR": "", "REDPILL_HARNESS": ""}):
-				out = await self._call("check_parallel_sessions", {})
+				out = await self._call("coro_api", {"action": "board", "payload": {}})
 		assert "global_turn=" in out
 
 
@@ -447,7 +454,7 @@ class TestCoroDigest:
 	async def _announce(arguments):
 		from red_pill.mcp_server import handle_call_tool
 
-		return (await handle_call_tool("announce_intent", arguments))[0].text
+		return (await handle_call_tool("coro_api", {"action": "post", "payload": arguments}))[0].text
 
 	async def test_silent_without_novelty(self, tmp_path):
 		bridge = {"originator": "opencode:dg1", "workdir": str(tmp_path)}

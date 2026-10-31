@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, pending]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: pending
 
 Carril de **tareas concretas comprometidas y aún sin arrancar** (equivalente al
@@ -18,6 +19,10 @@ operador o una chispa que es una tarea puntual, no un estudio — ver
 espera a que arranque su implementación).
 
 Lo que está aquí, se hace — solo falta decidir cuándo.
+
+**Esta bandeja es una cola y se mantiene al día**: si algo ya arrancó, está en
+`../in_progress/`; si se cerró o se consumió, en `archive/`. Es una de las dos
+únicas bandejas que el panel revisa contra el `status` (⚠️ si no cuadra).
 
 Reglas:
 
@@ -30,3 +35,4 @@ Reglas:
   antes. El panel respeta este orden.
 - Al arrancar una tarea → `git mv` a `../in_progress/`.
 - Este README es genérico; no lista tareas por nombre.
+<!-- REDPILL:END desk -->

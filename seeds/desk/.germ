@@ -1,18 +1,17 @@
 # Manifiesto del GERMEN (DESK-001). Ficheros del runtime red-pill que el seed
-# ACTUALIZA en cada instalación (con guard de hash: si divergieron en el desk →
-# backup + actualizar). Todo lo que NO esté aquí es contenido del PUESTO:
-# copy-if-absent, el seed NUNCA lo pisa.
+# ACTUALIZA en cada instalación. Todo lo que NO esté aquí (ni en `.blocks`) es
+# contenido del PUESTO: copy-if-absent, el seed NUNCA lo pisa.
+#
+# Tres niveles de propiedad (2026-10-29):
+#   GERMEN (aquí)    código: si diverge, la herramienta se comporta distinto.
+#                    El seed manda: se alinea, con copia y aviso si no consta que
+#                    el desk esté intacto.
+#   BLOQUE (.blocks) prosa compartida: el seed mantiene sólo su región marcada;
+#                    el desk conserva frontmatter y lo de fuera. Merge de 3 vías.
+#   PUESTO           todo lo demás: `INDEX.md` del desk, familias, notas.
 #
 # Un glob por línea (sintaxis `case`: * y ** equivalen a cualquier secuencia).
-AGENTS.md
-README.md
-INDEX.md
-FRONTMATTER_TEMPLATE.md
-archive/README.md
-planner/README.md
-planner/ideas/README.md
-planner/research/README.md
-planner/design/README.md
-planner/pending/README.md
-planner/in_progress/README.md
-planner/tools/**
+# Sólo CÓDIGO: la prosa de `planner/tools/README.md` es un BLOQUE (ver `.blocks`),
+# y dejarla caer bajo este glob la convertía en código sin querer.
+planner/tools/*.py
+planner/tools/hooks/**
