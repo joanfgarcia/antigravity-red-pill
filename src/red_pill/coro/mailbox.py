@@ -3,14 +3,14 @@
 Qué hace y qué NO hace
 ----------------------
 - **Sí**: escribe una fila en `outbox(channel='soul', channel_user_id=<continuity>,
-  payload=<sobre>)` para que el broker de neon-link intente la entrega y sea el
-  dueño del estado de transporte (PENDING/SENT/FAILED, backoff, DLQ, redrive).
+	payload=<sobre>)` para que el broker de neon-link intente la entrega y sea el
+	dueño del estado de transporte (PENDING/SENT/FAILED, backoff, DLQ, redrive).
 - **No**: no guarda el texto del mensaje. El cuerpo vive en `mission_events`
-  (append-only); el sobre solo lleva la referencia (`event_id`) y los metadatos
-  necesarios para entregar. Si el buzón guardara el texto, habríamos construido
-  el segundo tablón que AD-094 prohíbe.
+	(append-only); el sobre solo lleva la referencia (`event_id`) y los metadatos
+	necesarios para entregar. Si el buzón guardara el texto, habríamos construido
+	el segundo tablón que AD-094 prohíbe.
 - **No**: no entrega. La entrega la hace neon-link (`plugins/soul.py`) llamando
-  al puerto local de red-pill. Aquí solo se publica.
+	al puerto local de red-pill. Aquí solo se publica.
 
 Best-effort por diseño: si neon-link está caído o la DB no está accesible, se
 registra y se devuelve `False`; el evento sigue en `mission_events` y el pull lo

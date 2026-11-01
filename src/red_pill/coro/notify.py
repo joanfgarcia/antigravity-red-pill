@@ -11,7 +11,7 @@ alma** en `mission_events` y lo entrega por el canal `soul` (neon-link):
 - el `outbox` solo lleva el sobre;
 - el `SoulHub` despierta al cuerpo vivo cuando corresponde;
 - si el cuerpo está ocupado, el mensaje se queda `queued` y se entrega al abrir
-  turno: **no interrumpe** el turno en curso.
+	turno: **no interrumpe** el turno en curso.
 
 La autoría es `job:<id>` (o el `originator` que se pase). `delivery._wake_verdict`
 tiene una regla de cadena de mando: un aviso de job dirigido a su propia alma

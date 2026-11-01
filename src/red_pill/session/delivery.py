@@ -4,27 +4,27 @@ Qué guarda y qué NO
 -------------------
 - `mission_events` sigue siendo la única verdad del contenido (append-only).
 - **`message_receipts`** guarda solo lo que el alma o el pull saben:
-  `handed_off` (el transporte lo tomó), `read` (el cuerpo lo acusó con `msg=`),
-  `pulled` (el cursor del digest lo pasó) y `skipped` (eco propio o rechazo).
+	`handed_off` (el transporte lo tomó), `read` (el cuerpo lo acusó con `msg=`),
+	`pulled` (el cursor del digest lo pasó) y `skipped` (eco propio o rechazo).
 - **El estado de transporte vive en neon-link**: `outbox` (PENDING/SENT/FAILED),
-  `retries`, backoff y `dead_letters`. Este módulo no lleva `in_flight`,
-  `attempts`, `holder` ni `given_up`: eso era `event_deliveries`, **retirada** en
-  S2.2. La tabla vieja se migra una vez a `message_receipts` y se elimina.
+	`retries`, backoff y `dead_letters`. Este módulo no lleva `in_flight`,
+	`attempts`, `holder` ni `given_up`: eso era `event_deliveries`, **retirada** en
+	S2.2. La tabla vieja se migra una vez a `message_receipts` y se elimina.
 
 Reglas que implementa
 ---------------------
 - **Dirección = `continuity_id` (D-05).** El cuerpo se resuelve por presencia con
-  `soul_notify.resolve_live_leg` (idle también vale; `ttl_state='expired'` no).
+	`soul_notify.resolve_live_leg` (idle también vale; `ttl_state='expired'` no).
 - **Un solo transporte.** El push pasa por el seam `_TRANSPORTS` de
-  `core/soul_notify.py`; no abre otro canal.
+	`core/soul_notify.py`; no abre otro canal.
 - **Fail-closed / pull-first.** Sin cuerpo, sin punto de inyección o transporte
-  caído, el evento se queda pendiente y el siguiente turno lo recoge. El pull
-  cierra como `pulled`; reempujarlo sería duplicar lo que el digest ya anunció.
+	caído, el evento se queda pendiente y el siguiente turno lo recoge. El pull
+	cierra como `pulled`; reempujarlo sería duplicar lo que el digest ya anunció.
 - **Sin CAS de entrega.** El broker de neon-link es el único que llama a este
-  módulo por evento y ya tiene la fila del outbox como claim. Un `handed_off`
-  escrito por el push evita reempujes manuales; el `read` gana siempre.
+	módulo por evento y ya tiene la fila del outbox como claim. Un `handed_off`
+	escrito por el push evita reempujes manuales; el `read` gana siempre.
 - **Aviso de job**: un `originator=job:*` auto-dirigido puede despertar a su alma
-  (cadena de mando AD-090); los controles `refuse`/`hold` se respetan antes.
+	(cadena de mando AD-090); los controles `refuse`/`hold` se respetan antes.
 
 TABLA DE HONESTIDAD (por arnés)
 -------------------------------
