@@ -1,5 +1,9 @@
 ## Unreleased
 
+## [8.2.0] - 2026-11-02 (Alma y coro cerrados: la identidad sobrevive al cuerpo, los claims federados se certifican y el coro vive en el transporte)
+
+> Release acumulada: el número 8.2.0 se fijó el 2026-10-15 (composición por imagen) y no llegó a etiquetarse, así que esta es su primera publicación oficial e incluye todo lo posterior. El bloque de media conserva su fecha original al final.
+
 ### 🩺 S2.2 — doctor, marca de agua y egress aislado
 
 - **[NEW] `red-pill doctor` revisa el coro**: `event_deliveries` sin migrar,
@@ -519,9 +523,7 @@
   ficheros convertidos (`tests/test_instance_identity.py`, contra `main`): resolver con los nombres
   del puesto reproduce el texto original → **las firmas de prompts no cambian**.
 
-## [8.2.0] - 2026-10-15 (Composición por imagen en el arnés media + `media-gen --config`)
-
-### 🎨 Media — condicionamiento por imagen y encargos en fichero
+### 🎨 Media — condicionamiento por imagen y encargos en fichero (cortado el 2026-10-15)
 
 - **[NEW]** **Eje de composición** en el elenco media (`composition` + `composition_pipelines`): cada modelo
   declara qué operaciones de condicionamiento por imagen soporta (`reference_image`, `multi_reference`, `img2img`,
