@@ -42,6 +42,7 @@ ofrecer una acción que miente.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -49,6 +50,8 @@ from typing import Any, Dict, Optional
 
 from red_pill.coro import protocol
 from red_pill.session.store import SessionRegistry, sanitize_inline
+
+logger = logging.getLogger(__name__)
 
 
 class CoroError(Exception):
@@ -255,7 +258,21 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
 	state, reason = "queued", ""
 	if verb in protocol.WAKE_VERBS:
-		state, reason = _push(target)
+		# S2.1: el buzón único. El sobre va al outbox de neon-link (canal `soul`);
+		# el broker es el dueño del estado de transporte. Si el buzón no está
+		# disponible, se conserva el push directo como fallback para no perder
+		# el aviso mientras se despliega el canal.
+		published = False
+		try:
+			from red_pill.coro import mailbox
+
+			published = mailbox.publish_message(event)
+		except Exception as e:
+			logger.warning(f"[CORO send] no se pudo publicar en neon-link: {e}")
+		if published:
+			state, reason = "queued", "neon_link"
+		else:
+			state, reason = _push(target)
 
 	reply_note = " · respuesta: SÍ" if expects else ""
 	why = f" · {reason}" if reason else ""

@@ -217,6 +217,32 @@ Con esto, "el aviso usa el modelo de la sesión y cae si el proveedor se seca"
 proveedor para **guardar** el mensaje, solo para **despertar** al receptor — y si
 no puede, queda `park` y llega al reencarnar.
 
+### 7.1 S2.1 — el canal `soul` ya entrega (2026-11-01)
+
+Primer slice implementado, en dos repos:
+
+- **red-pill publica**: `coro_api.send` (verbos que despiertan) inserta un sobre en
+  `outbox(channel='soul', channel_user_id=<continuity_id>, payload=SOBRE)` vía
+  `src/red_pill/coro/mailbox.py`. Es idempotente por `event_id` (`INSERT OR
+  IGNORE`). Si la publicación falla, **se conserva el push directo** como fallback
+  (`_push`) para no perder el aviso mientras el canal se despliega.
+- **neon-link entrega**: `plugins/soul.py` (`SoulHub`, `raw_payload = True`) se
+  registra con `ENABLE_SOUL=true`. No usa red ni MLS: llama al puerto local
+  `red-pill session deliver --event <event_id> --broker --json` y traduce el
+  informe: `handed_off`/`skipped` → SENT; `deferred` → RETRY; `given_up` → DEAD
+  (`PermanentEgressError`); informe vacío → SENT (ya terminal).
+- **red-pill ejecuta**: `session deliver` gana `--event` (filtro exacto) y
+  `--broker` (exige además `REDPILL_BROKER=1`), para que el broker local pueda
+  empujar sin abrir el push a un CLI cualquiera.
+- **El texto no viaja**: el sobre lleva `event_id`, `mission_id`, `continuity_id`,
+  `verb`, `thread_id`, `reply_to`, `hop`, `hop_max`, `expects_reply`,
+  `value_class`, `expires_at`. El cuerpo sigue en `mission_events`.
+
+Lo que **queda** de S2 (deuda declarada): retirar `event_deliveries` como máquina
+de estados de transporte (hoy sigue como recibo), el reconciliador
+`mission_events → outbox` para publicaciones perdidas, y el E2E con `redrive` de
+una carta `soul` realmente fallida.
+
 ---
 
 ## 8. Qué se construye, en orden
@@ -224,7 +250,7 @@ no puede, queda `park` y llega al reencarnar.
 | Slice | Contenido | Aceptación ejecutable |
 |---|---|---|
 | **S1 — el sustrato y la puerta** ✅ HECHO (`72c4b09`, migración `f5d1b59`) | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
-| **S2 — el buzón único** | neon-link: `core/inbox_adapters.py` + `SoulAdapter` + publicación al `outbox`; `_deliver_neon_link` real; retirada de la máquina de estados de `event_deliveries` | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
+| **S2 — el buzón único** | **S2.1 HECHO (2026-11-01)**: publicación al `outbox` desde `coro_api.send`, `plugins/soul.py` en neon-link, `session deliver --event --broker`. **Queda**: retirar `event_deliveries` como máquina de estados, reconciliador `mission_events → outbox`, E2E de `redrive` | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
 | **S3 — presencia en la interfaz** | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente) | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
 
 S1 no depende de S2: la entrega ya existe por el seam `_TRANSPORTS` (CLI) y el

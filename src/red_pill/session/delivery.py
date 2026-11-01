@@ -181,7 +181,13 @@ def _soul_cursor_cond() -> str:
 	)
 
 
-def pending_for_soul(continuity_id: str, *, limit: int = 20, db_path: Optional[str] = None) -> List[dict]:
+def pending_for_soul(
+	continuity_id: str,
+	*,
+	limit: int = 20,
+	db_path: Optional[str] = None,
+	event_id: Optional[str] = None,
+) -> List[dict]:
 	"""Eventos del tablón dirigidos a `continuity_id` y aún no entregados.
 
 	Qué se excluye y por qué:
@@ -199,6 +205,11 @@ def pending_for_soul(continuity_id: str, *, limit: int = 20, db_path: Optional[s
 		return []
 	internal = tuple(sorted(_INTERNAL_EVENT_TYPES))
 	placeholders = ",".join("?" * len(internal))
+	event_filter = ""
+	extra: List[Any] = []
+	if str(event_id or "").strip():
+		event_filter = " AND e.event_id = ?"
+		extra = [str(event_id).strip()]
 	sql = (
 		"SELECT e.event_seq, e.event_id, e.type, e.mission_id, e.summary, e.ref,"
 		" e.originator, e.continuity_id, e.created_at,"
@@ -213,9 +224,10 @@ def pending_for_soul(continuity_id: str, *, limit: int = 20, db_path: Optional[s
 		" AND (e.expires_at IS NULL OR e.expires_at > ?)"
 		f" AND {_soul_cursor_cond()}"
 		" AND (d.event_id IS NULL OR d.state IN ('pending', 'in_flight'))"
+		f"{event_filter}"
 		" ORDER BY e.event_seq ASC LIMIT ?"
 	)
-	params = [soul, soul, *internal, time.time(), soul, max(1, min(int(limit or 20), 200))]
+	params = [soul, soul, *internal, time.time(), soul, *extra, max(1, min(int(limit or 20), 200))]
 	try:
 		with _connect(db_path) as conn:
 			conn.execute(_TABLE_DDL)
@@ -478,6 +490,7 @@ def deliver_events(
 	db_path: Optional[str] = None,
 	holder: str = "delivery",
 	now: Optional[float] = None,
+	event_id: Optional[str] = None,
 ) -> dict:
 	"""Empuja los eventos pendientes del alma a su cuerpo vivo.
 
@@ -492,14 +505,22 @@ def deliver_events(
 	from red_pill.core import soul_notify
 
 	soul = str(continuity_id or "").strip()
-	report: Dict[str, Any] = {"continuity_id": soul, "leg": "", "handed_off": [], "deferred": [], "skipped": [], "given_up": []}
+	report: Dict[str, Any] = {
+		"continuity_id": soul,
+		"event_id": str(event_id or ""),
+		"leg": "",
+		"handed_off": [],
+		"deferred": [],
+		"skipped": [],
+		"given_up": [],
+	}
 	if not soul:
 		return report
 	if soul_notify.notify_disabled():
 		report["deferred"].append({"event_id": "*", "reason": "kill_switch"})
 		return report
 
-	events = pending_for_soul(soul, limit=limit, db_path=db_path)
+	events = pending_for_soul(soul, limit=limit, db_path=db_path, event_id=event_id)
 	if not events:
 		return report
 

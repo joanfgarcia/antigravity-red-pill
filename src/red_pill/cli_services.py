@@ -401,17 +401,21 @@ def handle_session(args: argparse.Namespace) -> None:
 		soul = str(getattr(args, "continuity", "") or "").strip()
 		limit = int(getattr(args, "limit", 20) or 20)
 		dry = bool(getattr(args, "dry_run", False))
-		if not dry and os.getenv("REDPILL_OPERATOR") != "1":
+		event_id = str(getattr(args, "event", "") or "").strip() or None
+		broker = bool(getattr(args, "broker", False))
+		if not dry and os.getenv("REDPILL_OPERATOR") != "1" and not (broker and os.getenv("REDPILL_BROKER") == "1"):
 			# Empujar un turno a la sesión de otra alma es meterse en su conversación.
 			# La política de wake por rol es C3; hasta eso, la superficie pública es
-			# el Operador. `--dry-run` solo lee, así que no está gated.
-			print("[DELIVER] solo Operador (REDPILL_OPERATOR=1). Con --dry-run se lista lo pendiente.")
+			# el Operador. El broker local (neon-link) es la otra vía autorizada:
+			# exige el flag `--broker` Y el entorno `REDPILL_BROKER=1`, para que no
+			# se abra por accidente a un CLI cualquiera. `--dry-run` solo lee.
+			print("[DELIVER] solo Operador (REDPILL_OPERATOR=1) o broker local (--broker + REDPILL_BROKER=1). Con --dry-run se lista lo pendiente.")
 			return
 		if getattr(args, "summary", False):
 			print(json.dumps(_delivery.delivery_summary(soul), ensure_ascii=False))
 			return
 		if dry:
-			pending = _delivery.pending_for_soul(soul, limit=limit)
+			pending = _delivery.pending_for_soul(soul, limit=limit, event_id=event_id)
 			if getattr(args, "json", False):
 				print(json.dumps(pending, ensure_ascii=False, indent=2, default=str))
 				return
@@ -430,7 +434,8 @@ def handle_session(args: argparse.Namespace) -> None:
 			soul,
 			originator=getattr(args, "originator", None) or None,
 			limit=limit,
-			holder="cli-operator",
+			holder="cli-broker" if broker else "cli-operator",
+			event_id=event_id,
 		)
 		if getattr(args, "json", False):
 			print(json.dumps(delivery_report, ensure_ascii=False, indent=2, default=str))

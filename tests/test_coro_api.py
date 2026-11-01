@@ -59,6 +59,9 @@ def _session(soul: str, originator: str, mission: str = "repo:next") -> dict:
 def push(monkeypatch):
 	"""Aviso encendido y transporte fake en el seam (nunca `opencode run` real)."""
 	monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")
+	# Estos tests ejercitan el push directo (fallback): sin buzón, para que el
+	# contrato de `_push` se mida aislado del canal `soul` de neon-link.
+	monkeypatch.setenv("REDPILL_CORO_MAILBOX_DISABLE", "1")
 	calls: list = []
 
 	def fake(session_id, text):
@@ -125,6 +128,16 @@ class TestVerbos:
 		assert "estado=handed_off" in out
 		assert len(push) == 1 and push[0][0] == "ses_b"
 		assert "respuesta: NO" in push[0][1], "D-13: el silencio tiene que verse"
+
+	async def test_notify_publica_en_neon_link_y_no_hace_push(self, reg, push):
+		"""S2.1: el sobre va al outbox `soul`; el push directo se salta."""
+		from red_pill.coro import mailbox, service
+
+		with patch.object(mailbox, "publish_message", return_value=True) as pub:
+			out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "notify", "body": "por el buzón"})
+		pub.assert_called_once()
+		assert "estado=queued" in out and "neon_link" in out
+		assert push == [], "con buzón no se usa el push directo"
 
 	async def test_ask_espera_respuesta_por_defecto(self, reg, push):
 		from red_pill.coro import service

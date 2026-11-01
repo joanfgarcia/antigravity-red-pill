@@ -3095,3 +3095,58 @@ ramas del mismo repo, invisibles entre sí" que como "falta un cartero".
 - **Los claims no cambian**: siguen keyados por rama+worktree.
 - **Pendiente**: que el hook de Claude escriba el `cwd` real de la sesión (hoy pone su
   carpeta de transcripciones), para que `repo:` resuelva en vez de caer a `adhoc`.
+
+---
+
+## [AD-102] S2.1 — el canal `soul` de neon-link entrega de verdad
+
+**Date**: 2026-11-01
+**Status**: IMPLEMENTADO (slice S2.1). Contrato: `CORO_PROTOCOL` §7.1.
+**Repos**: `sharing` (publica y ejecuta el puerto local) + `neon-link` (broker).
+
+### 1. The Problem
+`AD-094` dejó el canal `soul` como GAP medido: `neon-link` no tenía adaptador
+interno y `_deliver_neon_link` era un stub. El aviso al alma seguía dependiendo
+del CLI del arnés (`opencode run --session`, socket de Claude) y del crédito de un
+proveedor. El buzón único estaba diseñado pero no existía.
+
+### 2. The Decision
+1. **Publicar el sobre**: `coro_api.send` (verbos que despiertan) inserta en
+   `outbox(channel='soul', channel_user_id=<continuity_id>)` un sobre con
+   `event_id` y metadatos; **nunca** el texto. Es idempotente por `event_id`
+   (`INSERT OR IGNORE`). Nuevo `red_pill/coro/mailbox.py`.
+2. **Entregar en neon-link**: plugin local `SoulHub` (`plugins/soul.py`,
+   `raw_payload=True`) que no usa red ni MLS; llama al puerto local
+   `red-pill session deliver --event <id> --broker --json` y traduce
+   `handed_off`/`skipped` → SENT, `deferred` → RETRY, `given_up` → DEAD.
+3. **Puerto local**: `session deliver` gana `--event` (filtro exacto) y `--broker`
+   (exige `REDPILL_BROKER=1`), para no abrir el push a un CLI cualquiera.
+4. **Dual-run**: si la publicación falla, se conserva `_push` como fallback. No se
+   retira el camino viejo hasta que el canal esté probado en vivo.
+5. **Config**: `ENABLE_SOUL=true` en neon-link; `NEON_LINK_SOUL_REDPILL` con ruta
+   absoluta si el daemon no tiene el venv en `PATH`.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Escribir en el outbox desde neon-link con SQL directo | rechazada | Duplica el esquema y el dueño del estado. |
+| Retirar `event_deliveries` en este slice | rechazada | Es el recibo actual; se drena cuando el canal esté probado en vivo. |
+| Entregar desde red-pill con un segundo worker | rechazada | Dos dueños del transporte; el broker ya tiene outbox/DLQ/redrive. |
+| Cifrar `soul` con MLS | rechazada | Es local; la red no amplía la confianza local. |
+
+### 4. Rationale / Evidence
+- `neon-link`: **102 passed** (incluye `tests/test_soul.py`, 12 casos: mapping
+  SENT/RETRY/DEAD, timeout, payload corrupto, `raw_payload`).
+- `sharing`: **142 passed** en coro/delivery/CLI; `test_coro_mailbox` verifica que
+  el sobre no lleva texto y que es idempotente.
+- Sin E2E todavía contra el daemon real: falta reiniciar neon-link con
+  `ENABLE_SOUL=true` y probar una carta real entre dos almas.
+
+### 5. Consequences y deuda
+- `event_deliveries` sigue como recibo de entrega (no se retira aún).
+- Falta el reconciliador `mission_events → outbox` para publicaciones perdidas
+  (si neon-link estaba caído al publicar, el evento sigue en el tablón y llega por
+  pull; el push no se reintenta solo).
+- El poller de neon-link es síncrono: un `soul` lento retrasa otros canales; hay
+  timeout (120 s) y se moverá a worker por canal si el volumen crece.
+- El `SoulHub` no va en el perfil lite; es un canal del broker, no del alma.

@@ -147,6 +147,26 @@ class TestEntregaCorrecta:
 		assert "primero" in push[0][1] and "segundo" in push[1][1]
 
 
+class TestEventoUnico:
+	"""S2.1: el broker entrega un evento concreto, no toda la cola del alma."""
+
+	def test_pending_filtra_por_event_id(self, reg, db):
+		_event(reg, summary="uno")
+		ev2 = _event(reg, summary="dos")
+		rows = delivery.pending_for_soul("alma-1", db_path=db, event_id=ev2["event_id"])
+		assert [r["event_id"] for r in rows] == [ev2["event_id"]]
+
+	def test_deliver_solo_el_evento_pedido(self, reg, db, push):
+		_event(reg, summary="uno")
+		ev2 = _event(reg, summary="dos")
+		report = delivery.deliver_events(
+			"alma-1", originator="opencode:ses_a", db_path=db, event_id=ev2["event_id"]
+		)
+		assert report["event_id"] == ev2["event_id"]
+		assert len(push) == 1
+		assert "dos" in push[0][1]
+
+
 class TestDegradacionPull:
 	def test_sin_sesion_viva_el_evento_se_queda_en_el_tablon(self, reg, db, push):
 		"""Fail-closed: sin cuerpo no se empuja, no se escribe estado y no se pierde."""
