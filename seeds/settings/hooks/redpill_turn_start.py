@@ -133,11 +133,15 @@ def _finish_turn(payload: dict, session_id: str, status: str, reason: str) -> No
 # de paridad falla si divergen.
 ACK_MARKER_RE = re.compile(r"\bmsg=([0-9a-f]{32})\b")
 ACK_SQL = (
-	"UPDATE event_deliveries SET state = 'delivered', reason = ?, updated_at = ?"
-	" WHERE event_id = ? AND state IN ('in_flight', 'handed_off')"
-	" AND continuity_id IN (SELECT continuity_id FROM session_registry"
-	" WHERE originator = ? AND ttl_state != 'expired')"
+	"INSERT INTO message_receipts (event_id, continuity_id, state, reason, updated_at) SELECT ?, r.continuity_id, 'read', ?, ? FROM session_registry r WHERE r.originator = ? AND r.ttl_state != 'expired' AND EXISTS (SELECT 1 FROM mission_events e WHERE e.event_id = ? AND e.to_continuity = r.continuity_id) ON CONFLICT(event_id, continuity_id) DO UPDATE SET state = 'read', reason = excluded.reason, updated_at = excluded.updated_at WHERE message_receipts.state NOT IN ('read', 'pulled')"
 )
+_RECEIPT_DDL = (
+	"CREATE TABLE IF NOT EXISTS message_receipts ("
+	"event_id TEXT NOT NULL, continuity_id TEXT NOT NULL, state TEXT NOT NULL,"
+	"reason TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL,"
+	"PRIMARY KEY (event_id, continuity_id))"
+)
+_RECEIPT_INDEX = "CREATE INDEX IF NOT EXISTS idx_receipts_soul_state ON message_receipts(continuity_id, state)"
 
 
 def _session_db() -> Path:
@@ -162,8 +166,12 @@ def _ack_nudges(session_id: str, prompt: object) -> None:
 	try:
 		conn = sqlite3.connect(str(db), timeout=2.0)
 		try:
+			conn.execute(_RECEIPT_DDL)
+			conn.execute(_RECEIPT_INDEX)
+			reason = f"ack_hook:{origin}"[:200]
+			stamp = time.time()
 			for event_id in ids:
-				conn.execute(ACK_SQL, (f"ack_hook:{origin}"[:200], time.time(), event_id, origin))
+				conn.execute(ACK_SQL, (event_id, reason, stamp, origin, event_id))
 			conn.commit()
 		finally:
 			conn.close()

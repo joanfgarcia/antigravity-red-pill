@@ -180,8 +180,8 @@ plegarlas cuando D23-SCORE estabilice.
 ## 7. El buzón: `neon-link` mirando hacia dentro
 
 **Un solo buzón para todo** (Operador, 2026-10-29). El estado de entrega **no** se
-duplica: se retira `event_deliveries` como máquina de estados y el `outbox` de
-neon-link pasa a ser el único.
+duplica: **se retiró `event_deliveries`** y el `outbox` de neon-link es el único
+dueño del estado de transporte; red-pill guarda solo `message_receipts`.
 
 ```text
 red-pill                              neon-link
@@ -238,12 +238,15 @@ Primer slice implementado, en dos repos:
   `verb`, `thread_id`, `reply_to`, `hop`, `hop_max`, `expects_reply`,
   `value_class`, `expires_at`. El cuerpo sigue en `mission_events`.
 
-Lo que **queda** de S2 (deuda declarada): retirar `event_deliveries` como máquina
-de estados de transporte (hoy sigue como recibo) y el reconciliador
-`mission_events → outbox` para publicaciones perdidas. El E2E entre dos almas vivas
-(ida/vuelta, receptor cerrado, no-duplicación y DLQ/`redrive`) está hecho y medido:
-ver `DECISION_LOG` **AD-102 §6**. Queda el caso de una carta `soul` que envejece
-hasta `dead_letters` por `no_live_body` (24 h) y su `redrive`.
+**S2.2 (2026-11-01) — cerrado.** `event_deliveries` se migró a
+`message_receipts` (`handed_off`/`read`/`pulled`/`skipped`) y se eliminó: el
+transporte es del `outbox` de neon-link. El reconciliador
+`red-pill coro reconcile` publica los mensajes dirigidos que se quedaron sin
+sobre; el `SoulHub` lo lanza cada 60 s (`NEON_LINK_SOUL_RECONCILE_S`). El E2E
+entre dos almas vivas (ida/vuelta, receptor cerrado, no-duplicación y
+DLQ/`redrive`) está medido: ver `DECISION_LOG` **AD-102 §6**. Queda solo el caso
+de una carta `soul` que envejece hasta `dead_letters` por `no_live_body` (24 h)
+y su `redrive`.
 
 ### 7.2 Callbacks: jobs, CI y MinionInbox despiertan por el coro (2026-11-01)
 
@@ -276,7 +279,7 @@ trabajos que sobreviven al turno.
 | Slice | Contenido | Aceptación ejecutable |
 |---|---|---|
 | **S1 — el sustrato y la puerta** ✅ HECHO (`72c4b09`, migración `f5d1b59`) | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
-| **S2 — el buzón único** | **S2.1 HECHO (2026-11-01)**: publicación al `outbox` desde `coro_api.send`, `plugins/soul.py` en neon-link, `session deliver --event --broker`. **Queda**: retirar `event_deliveries` como máquina de estados, reconciliador `mission_events → outbox`, E2E de `redrive` | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
+| **S2 — el buzón único** ✅ HECHO (S2.1 + S2.2, 2026-11-01) | Publicación al `outbox` desde `coro_api.send`, `plugins/soul.py`, `session deliver --event --broker`; `message_receipts` sustituye a `event_deliveries`; `red-pill coro reconcile` y loop del SoulHub | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
 | **S3 — presencia en la interfaz** | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente) | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
 
 S1 no depende de S2: la entrega ya existe por el seam `_TRANSPORTS` (CLI) y el

@@ -236,10 +236,10 @@ class TestAck:
 
 		out = await service.send(_session(A, "opencode:ses_a"), {"to": B, "verb": "park", "body": "leeme"})
 		event_id = out.split("msg=")[1].split()[0].strip()
-		assert delivery.get_delivery(event_id, B) is None
+		assert delivery.get_receipt(event_id, B) is None
 		ack = await service.ack(_session(B, "opencode:ses_b"), {"event_id": event_id})
 		assert "leído" in ack
-		assert delivery.get_delivery(event_id, B)["state"] == delivery.STATE_READ
+		assert delivery.get_receipt(event_id, B)["state"] == delivery.STATE_READ
 
 	async def test_no_puedes_ackear_un_mensaje_ajeno(self, reg):
 		from red_pill.coro import service

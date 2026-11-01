@@ -385,7 +385,9 @@ async function openDatabase(path = QUEUE_DB) {
 // COPIA LITERAL de `ACK_MARKER_RE`/`ACK_SQL` de `red_pill/session/delivery.py`
 // (el plugin no importa el kernel); el test de paridad vigila que no diverjan.
 const ACK_MARKER_RE = /\bmsg=([0-9a-f]{32})\b/g;
-const ACK_SQL = "UPDATE event_deliveries SET state = 'delivered', reason = ?, updated_at = ? WHERE event_id = ? AND state IN ('in_flight', 'handed_off') AND continuity_id IN (SELECT continuity_id FROM session_registry WHERE originator = ? AND ttl_state != 'expired')";
+const ACK_SQL = "INSERT INTO message_receipts (event_id, continuity_id, state, reason, updated_at) SELECT ?, r.continuity_id, 'read', ?, ? FROM session_registry r WHERE r.originator = ? AND r.ttl_state != 'expired' AND EXISTS (SELECT 1 FROM mission_events e WHERE e.event_id = ? AND e.to_continuity = r.continuity_id) ON CONFLICT(event_id, continuity_id) DO UPDATE SET state = 'read', reason = excluded.reason, updated_at = excluded.updated_at WHERE message_receipts.state NOT IN ('read', 'pulled')";
+const RECEIPT_DDL = "CREATE TABLE IF NOT EXISTS message_receipts (event_id TEXT NOT NULL, continuity_id TEXT NOT NULL, state TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL, PRIMARY KEY (event_id, continuity_id))";
+const RECEIPT_INDEX = "CREATE INDEX IF NOT EXISTS idx_receipts_soul_state ON message_receipts(continuity_id, state)";
 // session.db vive junto a bunker_queue.db (`core.paths.get_session_db`).
 const SESSION_DB = QUEUE_DB.replace(/[^/]*$/, "session.db");
 
@@ -399,8 +401,12 @@ async function ackNudges(sessionId, text) {
     db = await openDatabase(SESSION_DB);
     if (!db) return;
     const origin = compositeOriginator(sessionId);
+    db.exec(RECEIPT_DDL);
+    db.exec(RECEIPT_INDEX);
     const stmt = db.query(ACK_SQL);
-    for (const id of ids) stmt.run(`ack_hook:${origin}`.slice(0, 200), Date.now() / 1000, id, origin);
+    const reason = `ack_hook:${origin}`.slice(0, 200);
+    const stamp = Date.now() / 1000;
+    for (const id of ids) stmt.run(id, reason, stamp, origin, id);
   } catch (_) {
   } finally {
     try {

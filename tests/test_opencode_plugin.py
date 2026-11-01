@@ -362,7 +362,7 @@ def test_plugin_acusa_el_nudge_solo_para_su_alma(tmp_path):
 			event_type="message", mission_id="repo:next", summary="¿llega?", continuity_id="alma-2",
 			originator="opencode:ses_b", global_turn=1, to_continuity="alma-1", verb="ask",
 		)
-		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
+		delivery.set_receipt(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
 		events.append(ev)
 	mine, orphan = events
 	state = tmp_path / "state"
@@ -381,5 +381,5 @@ def test_plugin_acusa_el_nudge_solo_para_su_alma(tmp_path):
 	}
 	res = _BUN.run(str(harness), capture_output=True, text=True, env=env, timeout=60)
 	assert res.returncode == 0, f"bun falló:\n{res.stdout}\n{res.stderr}"
-	assert delivery.get_delivery(mine["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_DELIVERED
-	assert delivery.get_delivery(orphan["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_HANDED_OFF
+	assert delivery.get_receipt(mine["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_READ
+	assert delivery.get_receipt(orphan["event_id"], "alma-1", db_path=reg.db_path)["state"] == delivery.STATE_HANDED_OFF

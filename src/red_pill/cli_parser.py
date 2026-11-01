@@ -223,6 +223,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_deliver.add_argument("--broker", action="store_true", help="Invocación del broker local (neon-link); requiere REDPILL_BROKER=1")
 	session_deliver.add_argument("--json", action="store_true", help="Salida JSON")
 
+	coro_parser = subparsers.add_parser("coro", help="Coro: tablón, correo y reconciliación del outbox")
+	coro_sub = coro_parser.add_subparsers(dest="coro_cmd")
+	coro_reconcile = coro_sub.add_parser(
+		"reconcile",
+		help="Publica en el outbox soul los mensajes dirigidos que se quedaron sin sobre",
+	)
+	coro_reconcile.add_argument("--limit", type=int, default=200, help="Máximo de eventos por pasada (default 200)")
+	coro_reconcile.add_argument("--hours", type=float, default=24.0, help="Ventana hacia atrás en horas (0 = sin corte)")
+	coro_reconcile.add_argument("--dry-run", action="store_true", help="Solo lista; no publica")
+	coro_reconcile.add_argument("--json", action="store_true", help="Salida JSON")
+
 	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
 	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")
 	mcp_serve = mcp_sub.add_parser("serve", help="Backend MCP compartido sobre UDS")

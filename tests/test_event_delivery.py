@@ -7,10 +7,11 @@ Contrato que se prueba (en el orden del módulo):
 - **Degradación a pull**: sin sesión viva, o en un arnés sin punto de inyección,
 	el evento **se queda** en el tablón (append-only) y el estado de entrega no se
 	toca. Nada se pierde.
-- **No duplicado**: el CAS de `claim_delivery` y el estado terminal impiden
-	empujar dos veces lo mismo; el pull (cursor del digest) gana y cierra el push.
-- **Sin bucles**: tras `MAX_PUSH_ATTEMPTS` el evento cierra como `given_up` y
-	deja de reintentarse; el eco al propio autor se marca `skipped`.
+- **No duplicado**: el recibo `handed_off`/`read` impide reempujar lo mismo; el
+	pull (cursor del digest) gana y cierra el push.
+- **Sin bucles**: el estado de transporte vive en el outbox; aquí un fallo no
+	escribe recibo y el evento queda para reintento/pull. El eco propio se marca
+	`skipped`.
 
 Los tests usan una BD temporal (`db_path`) y un transporte fake: ninguno lanza
 `opencode run` de verdad (las guardas de `conftest` lo bloquearían).
@@ -91,7 +92,7 @@ class TestEntregaCorrecta:
 		assert push[0][0] == "ses_a"
 		assert "etapa c2 hecha" in push[0][1]
 		assert report["handed_off"][0]["event_id"] == ev["event_id"]
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_HANDED_OFF
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_HANDED_OFF
 
 	def test_el_nudge_es_dato_no_orden(self, reg, db, push):
 		"""D-09: avisar no es mandar. El texto no puede pedir nada al receptor."""
@@ -143,7 +144,7 @@ class TestEntregaCorrecta:
 			report = delivery.deliver_events("alma-1", originator="claude_code:uuid-c1", db_path=db)
 		assert por_cli == []
 		assert por_socket == ["uuid-c1"]
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["reason"] == "handed_to_transport:claude_socket"
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)["reason"] == "handed_to_transport:claude_socket"
 		assert report["handed_off"]
 
 	def test_varios_eventos_en_una_pasada_respetran_el_orden(self, reg, db, push):
@@ -182,7 +183,7 @@ class TestDegradacionPull:
 			report = delivery.deliver_events("alma-1", db_path=db)
 		assert push == [], "no hay a quién empujar"
 		assert [item["reason"] for item in report["deferred"]] == ["no_live_body"]
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db) is None
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db) is None
 		assert [e["event_id"] for e in delivery.pending_for_soul("alma-1", db_path=db)] == [ev["event_id"]]
 		# El evento sigue en el registro (append-only). No se busca en la vista del
 		# tablón: desde AD-095 la correspondencia no se renderiza en él.
@@ -205,7 +206,7 @@ class TestDegradacionPull:
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
 		assert report["handed_off"] == []
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_PULLED
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_PULLED
 
 	def test_reconcile_no_cierra_lo_que_el_cursor_no_pasa(self, reg, db):
 		ev = _event(reg)
@@ -245,34 +246,17 @@ class TestNoDuplicado:
 		assert segunda["handed_off"] == []
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []
 
-	def test_otro_entregador_no_lo_roba(self, reg, db, push):
-		"""CAS (D13): un `in_flight` ajeno en curso no se puede reclamar."""
-		ev = _event(reg)
-		assert delivery.claim_delivery(event_id=ev["event_id"], continuity_id="alma-1", holder="otro", db_path=db) is True
-		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", holder="yo", db_path=db)
-		assert push == []
-		assert report["deferred"][0]["reason"] == "claimed_by_other"
-
-	def test_in_flight_colgado_se_reclama(self, reg, db, push):
-		"""El entregador murió: pasado el TTL el evento no queda en tierra de nadie."""
-		ev = _event(reg)
-		t0 = time.time()
-		delivery.claim_delivery(event_id=ev["event_id"], continuity_id="alma-1", holder="muerto", db_path=db, now=t0)
-		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db, now=t0 + delivery.CLAIM_TTL_S + 1)
-		assert len(push) == 1
-		assert report["handed_off"][0]["event_id"] == ev["event_id"]
-
 	def test_el_eco_al_propio_autor_no_se_empuja(self, reg, db, push):
 		"""El cuerpo que publica ya sabe lo que publicó; devolvérselo es un bucle."""
 		ev = _event(reg, originator="opencode:ses_a")
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
 		assert report["skipped"][0]["reason"] == "self_authored"
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_SKIPPED
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)["state"] == delivery.STATE_SKIPPED
 		assert delivery.pending_for_soul("alma-1", db_path=db) == [], "omitido no se reintenta"
 
-	def test_agotados_los_intentos_deja_de_reintentarse(self, reg, db, monkeypatch):
-		"""Sin bucles: `given_up` es terminal y el evento queda para el pull."""
+	def test_fallo_de_transporte_no_escribe_recibo_y_el_outbox_reintenta(self, reg, db, monkeypatch):
+		"""El estado de transporte es del outbox: aquí no hay `given_up`."""
 		monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")
 		ev = _event(reg)
 		attempts = []
@@ -284,13 +268,9 @@ class TestNoDuplicado:
 		with patch.dict(soul_notify._TRANSPORTS, {"cli": failing}):
 			for _ in range(3):
 				delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-			cuarta = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		assert len(attempts) == delivery.MAX_PUSH_ATTEMPTS
-		assert cuarta["given_up"] == [] and cuarta["handed_off"] == []
-		assert delivery.pending_for_soul("alma-1", db_path=db) == []
-		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)
-		assert row["state"] == delivery.STATE_GIVEN_UP
-		assert row["attempts"] == delivery.MAX_PUSH_ATTEMPTS
+		assert len(attempts) == 3
+		assert delivery.pending_for_soul("alma-1", db_path=db) != [], "sin recibo, el evento sigue para reintento/pull"
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db) is None
 		assert reg.get_event(ev["event_id"]) is not None, "rendirse no borra el tablón"
 
 
@@ -305,7 +285,7 @@ class TestPoliticaDeEntrada:
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
 		assert report["skipped"] == [{"event_id": ev["event_id"], "reason": wake_policy.REASON_INBOUND_REFUSE}]
-		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)
+		row = delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)
 		assert row["state"] == delivery.STATE_SKIPPED
 		assert delivery.pending_for_soul("alma-1", db_path=db) == [], "refuse no se reintenta"
 
@@ -317,7 +297,7 @@ class TestPoliticaDeEntrada:
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
 		assert push == []
 		assert report["deferred"] == [{"event_id": ev["event_id"], "reason": wake_policy.REASON_INBOUND_HOLD}]
-		assert delivery.get_delivery(ev["event_id"], "alma-1", db_path=db) is None, "no se escribe estado al diferir"
+		assert delivery.get_receipt(ev["event_id"], "alma-1", db_path=db) is None, "no se escribe estado al diferir"
 		assert [e["event_id"] for e in delivery.pending_for_soul("alma-1", db_path=db)] == [ev["event_id"]]
 
 	def test_accept_es_el_default_y_no_estorba(self, reg, db, push):
@@ -365,14 +345,13 @@ class TestFallos:
 		blocker.write_text("no es un directorio")
 		bad = str(blocker / "session.db")
 		assert delivery.pending_for_soul("alma-1", db_path=bad) == []
-		assert delivery.claim_delivery(event_id="e", continuity_id="a", holder="h", db_path=bad) is False
-		assert delivery.set_delivery_state(event_id="e", continuity_id="a", state=delivery.STATE_HANDED_OFF, db_path=bad) is False
+		assert delivery.set_receipt(event_id="e", continuity_id="a", state=delivery.STATE_HANDED_OFF, db_path=bad) is False
 		assert delivery.reconcile_pulled("alma-1", until_seq=5, db_path=bad) == 0
 		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=bad)
 		assert report["handed_off"] == []
 
 	def test_estado_desconocido_no_se_escribe(self, reg, db):
-		assert delivery.set_delivery_state(event_id="x", continuity_id="a", state="inventado", db_path=db) is False
+		assert delivery.set_receipt(event_id="x", continuity_id="a", state="inventado", db_path=db) is False
 
 
 class TestFiltrosDelTablon:
@@ -407,6 +386,37 @@ class TestEsquemaYDiagnostico:
 		delivery.ensure_schema(db)
 		assert delivery.pending_for_soul("alma-1", db_path=db) == []
 
+	def test_migra_event_deliveries_y_la_retira(self, tmp_path):
+		"""La tabla vieja se copia a recibos y desaparece: una sola fuente."""
+		import sqlite3
+
+		db = str(tmp_path / "session.db")
+		con = sqlite3.connect(db)
+		con.execute(
+			"CREATE TABLE event_deliveries (event_id TEXT NOT NULL, continuity_id TEXT NOT NULL,"
+			" state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,"
+			" holder TEXT NOT NULL DEFAULT '', claimed_at REAL NOT NULL DEFAULT 0,"
+			" reason TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL,"
+			" PRIMARY KEY (event_id, continuity_id))"
+		)
+		con.execute(
+			"INSERT INTO event_deliveries VALUES ('e1','soul','delivered',1,'h',0,'ack_hook:x',1.0)"
+		)
+		con.execute(
+			"INSERT INTO event_deliveries VALUES ('e2','soul','given_up',3,'h',0,'push_exhausted',2.0)"
+		)
+		con.commit()
+		con.close()
+
+		delivery.ensure_schema(db)
+
+		con = sqlite3.connect(db)
+		tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+		assert "event_deliveries" not in tables
+		rows = {r[0]: r[1] for r in con.execute("SELECT event_id, state FROM message_receipts")}
+		con.close()
+		assert rows == {"e1": "read"}, "given_up no era un recibo y no se migra"
+
 	def test_resumen_cuenta_por_estado(self, reg, db, push):
 		_event(reg, summary="uno")
 		_event(reg, summary="dos")
@@ -433,7 +443,7 @@ class TestEsquemaYDiagnostico:
 		ev = _event(reg)
 		with patch.dict(soul_notify._TRANSPORTS, {"cli": lambda *a: True}):
 			delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
-		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=db)
+		row = delivery.get_receipt(ev["event_id"], "alma-1", db_path=db)
 		assert row["reason"].startswith("handed_to_transport")
 
 
@@ -449,7 +459,7 @@ class TestWiringEnElHandshake:
 		ev = _event(reg, continuity="alma-handshake")
 		with patch("red_pill.core.paths.get_session_db", return_value=Path(reg.db_path)):
 			_reconcile_pull_first({"continuity_id": "alma-handshake"}, ev["event_seq"])
-			row = delivery.get_delivery(ev["event_id"], "alma-handshake")
+			row = delivery.get_receipt(ev["event_id"], "alma-handshake")
 		assert row is not None and row["state"] == delivery.STATE_PULLED
 
 	def test_reconcile_pull_first_no_lanza_con_identidad_rara(self):
@@ -511,7 +521,7 @@ class TestLlamanteEfimero:
 		assert "timeout" not in kw, "nadie corta el turno del receptor"
 		assert ev["event_id"][:8] not in out  # el resumen no vuelca ids largos
 		assert "al_transporte=1" in out
-		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=reg.db_path)
+		row = delivery.get_receipt(ev["event_id"], "alma-1", db_path=reg.db_path)
 		assert row["state"] == delivery.STATE_HANDED_OFF
 		trace = row["reason"].split("rastro=", 1)[1]
 		assert Path(trace).read_text(encoding="utf-8").startswith("# soul-notify cli → opencode:ses_a")

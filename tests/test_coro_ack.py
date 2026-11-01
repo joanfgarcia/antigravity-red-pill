@@ -43,12 +43,12 @@ def _handed_off(reg: SessionRegistry, *, to: str = "alma-1", verb: str = "ask") 
 		to_continuity=to,
 		verb=verb,
 	)
-	assert delivery.set_delivery_state(event_id=ev["event_id"], continuity_id=to, state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
+	assert delivery.set_receipt(event_id=ev["event_id"], continuity_id=to, state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
 	return ev
 
 
 def _state(reg: SessionRegistry, ev: dict, soul: str = "alma-1") -> str:
-	return delivery.get_delivery(ev["event_id"], soul, db_path=reg.db_path)["state"]
+	return delivery.get_receipt(ev["event_id"], soul, db_path=reg.db_path)["state"]
 
 
 @pytest.fixture
@@ -74,8 +74,8 @@ class TestAcuse:
 		ev = _handed_off(reg)
 		nudge = delivery.build_event_nudge(reg.get_event(ev["event_id"]))
 		assert delivery.acknowledge_seen("claude_code:uuid-a", nudge, db_path=reg.db_path) == 1
-		row = delivery.get_delivery(ev["event_id"], "alma-1", db_path=reg.db_path)
-		assert row["state"] == delivery.STATE_DELIVERED
+		row = delivery.get_receipt(ev["event_id"], "alma-1", db_path=reg.db_path)
+		assert row["state"] == delivery.STATE_READ
 		assert row["reason"] == "ack_hook:claude_code:uuid-a"
 
 	def test_sin_marcador_no_hace_nada(self, reg):
@@ -96,7 +96,7 @@ class TestAcuse:
 
 	def test_lo_visto_en_el_digest_no_se_toca(self, reg):
 		ev = _handed_off(reg)
-		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_PULLED, db_path=reg.db_path)
+		delivery.set_receipt(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_PULLED, db_path=reg.db_path)
 		assert delivery.acknowledge_seen("claude_code:uuid-a", f"msg={ev['event_id']}", db_path=reg.db_path) == 0
 		assert _state(reg, ev) == delivery.STATE_PULLED
 
@@ -104,9 +104,9 @@ class TestAcuse:
 		"""Con el socket, el hook puede confirmar ANTES de que se escriba `handed_off`."""
 		ev = _handed_off(reg)
 		delivery.acknowledge_seen("claude_code:uuid-a", f"msg={ev['event_id']}", db_path=reg.db_path)
-		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
-		assert _state(reg, ev) == delivery.STATE_DELIVERED
-		delivery.set_delivery_state(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_READ, db_path=reg.db_path)
+		delivery.set_receipt(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_HANDED_OFF, db_path=reg.db_path)
+		assert _state(reg, ev) == delivery.STATE_READ
+		delivery.set_receipt(event_id=ev["event_id"], continuity_id="alma-1", state=delivery.STATE_READ, db_path=reg.db_path)
 		assert _state(reg, ev) == delivery.STATE_READ, "leer sí avanza"
 
 
@@ -139,7 +139,7 @@ class TestHookDeClaude:
 		nudge = delivery.build_event_nudge(reg.get_event(ev["event_id"]))
 		res = self._run(tmp_path, nudge)
 		assert res.returncode == 0, res.stderr
-		assert _state(reg, ev) == delivery.STATE_DELIVERED
+		assert _state(reg, ev) == delivery.STATE_READ
 
 	def test_prompt_sin_marcador_no_toca_nada(self, tmp_path):
 		queue = tmp_path / "red-pill" / "queue"

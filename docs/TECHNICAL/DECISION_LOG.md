@@ -3235,3 +3235,61 @@ terminar y sin interrumpir el turno en curso.
   cobertura de cada minion es deuda.
 - El `SoulHub` sigue siendo síncrono por canal; un aviso lento retrasa el outbox
   general (timeout 120 s).
+
+---
+
+## [AD-104] S2.2 — `event_deliveries` se retira; recibos y reconciliador
+
+**Date**: 2026-11-01
+**Status**: IMPLEMENTADO. Contrato: `CORO_PROTOCOL` §7.1/§8.
+**Cierra la deuda de AD-102 §5.**
+
+### 1. The Problem
+`event_deliveries` seguía siendo una segunda máquina de estados de transporte
+(`pending`/`in_flight`/`handed_off`/`delivered`/`given_up`, attempts, holder,
+CAS) compitiendo con el `outbox` de neon-link. Además, si la publicación al
+buzón fallaba, el evento se quedaba en `mission_events` sin sobre y nadie lo
+reconciliaba: solo el pull lo salvaba.
+
+### 2. The Decision
+1. **`message_receipts`**: el kernel guarda solo recibos (`handed_off`, `read`,
+   `pulled`, `skipped`). No hay `attempts`, `holder`, `claimed_at` ni CAS: el
+   transporte (`PENDING`/`SENT`/`FAILED`, backoff, DLQ, `redrive`) es del
+   `outbox` de neon-link.
+2. **Migración y retirada**: `ensure_schema` copia `delivered→read`, `read`,
+   `handed_off`, `pulled`, `skipped`; descarta `pending`/`in_flight`/`given_up`
+   (no eran recibos) y **elimina** `event_deliveries`.
+3. **Acuse**: los hooks de Claude/opencode copian la nueva `ACK_SQL`; escriben
+   `read` solo si el cuerpo pertenece al alma destinataria. Un `read`/`pulled`
+   no retrocede.
+4. **Reconciliador**: `red-pill coro reconcile` publica los mensajes dirigidos
+   de las últimas 24 h (configurable) que no tienen recibo ni sobre. Es
+   idempotente por `event_id`. El `SoulHub` lo lanza cada 60 s
+   (`NEON_LINK_SOUL_RECONCILE_S`), en un hilo propio para no bloquear egress.
+5. **Sin `given_up` local**: un fallo de transporte no escribe recibo; el evento
+   queda para reintento/pull. El outbox decide cuándo mover a `dead_letters`.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Dejar `event_deliveries` como recibo y solo cambiar el nombre | rechazada | Seguía teniendo attempts/CAS y dos dueños del transporte. |
+| Quitar todo recibo y confiar solo en el outbox | rechazada | El acuse (`read`) y el pull (`pulled`) no son transporte; sin ellos el inbox miente y se reempuja lo ya visto. |
+| Reconciliar todo el histórico | rechazada | Reenviaría mensajes viejos; la ventana de 24 h y el recibo lo evitan. |
+| Un timer systemd nuevo | rechazada | El `SoulHub` ya está vivo y puede lanzar el reconcilio; menos piezas que instalar. |
+
+### 4. Rationale / Evidence
+- `tests/test_event_delivery.py`: 46+ casos actualizados; migración de la tabla
+  vieja, `handed_off`/`read`/`pulled`/`skipped`, fallo de transporte sin recibo.
+- `tests/test_coro_reconcile.py`: solo publica lo que falta; idempotente;
+  `--dry-run`; CLI JSON.
+- `tests/test_coro_ack.py` + `test_opencode_plugin.py`: paridad de `ACK_SQL` en
+  Python/JS, acuse solo del alma destinataria, `read` no retrocede.
+- `tests/test_soul.py`: el plugin llama a `coro reconcile` (13 casos).
+
+### 5. Consequences y deuda
+- La tabla vieja se elimina en la primera llamada a `ensure_schema`; los hooks
+  instalados deben reseedearse con la nueva `ACK_SQL` (los seeds ya la llevan).
+- El reconciliador mira las últimas 24 h; un fallo más antiguo que la ventana
+  queda para pull/`redrive` manual. Es una decisión, no un olvido.
+- Sigue pendiente el caso «carta `soul` agotada por `no_live_body` 24 h →
+  dead letter → `redrive`» (el camino DLQ está probado con fallo permanente).

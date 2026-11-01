@@ -25,6 +25,7 @@ from red_pill.cli_commands import (  # noqa: F401  (re-exported for `red_pill.cl
 from red_pill.cli_jobs import handle_job
 from red_pill.cli_parser import build_parser
 from red_pill.cli_services import (  # noqa: F401  (re-exported for `red_pill.cli.X` compat)
+	handle_coro,
 	handle_ide,
 	handle_identity,
 	handle_license,
@@ -117,6 +118,10 @@ def main() -> None:
 
 	elif args.command == "session":
 		handle_session(args)
+		return
+
+	elif args.command == "coro":
+		handle_coro(args)
 		return
 
 	elif args.command == "mcp":

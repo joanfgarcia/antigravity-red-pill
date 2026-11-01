@@ -317,7 +317,7 @@ async def inbox(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
 	lines = [f"--- INBOX {protocol.soul_mark(me)} ({len(events)}) ---"]
 	for ev in events:
-		row = delivery.get_delivery(ev["event_id"], me) or {}
+		row = delivery.get_receipt(ev["event_id"], me) or {}
 		state = _friendly_state(str(row.get("state") or ""))
 		header = protocol.envelope(
 			verb=str(ev.get("verb") or "notify"),
@@ -348,19 +348,15 @@ def _friendly_state(raw: str) -> str:
 	un día (2026-10-30).
 	"""
 	if raw == "read":
-		return "leído"
-	if raw == "delivered":
 		return "acusado por el cuerpo"
 	if raw == "handed_off":
 		return "en el transporte (sin acuse)"
 	if raw == "pulled":
 		return "visto en el digest"
-	if raw == "in_flight":
-		return "en curso"
-	if raw == "given_up":
-		return "sin push (solo pull)"
 	if raw == "skipped":
 		return "descartado por la destinataria"
+	if not raw:
+		return "en cola (sin recibo)"
 	return "en cola"
 
 

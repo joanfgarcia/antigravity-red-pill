@@ -787,3 +787,28 @@ def handle_memory(args) -> None:
 			print(f"[FAIL] Could not disable memory for {args.workspace}.")
 	else:
 		print("Usage: red-pill memory [sync|optimize|enable|disable]")
+
+
+def handle_coro(args: argparse.Namespace) -> None:
+	"""Comandos del coro que no son MCP: reconciliación del outbox."""
+	if getattr(args, "coro_cmd", None) != "reconcile":
+		print("[CORO] uso: red-pill coro reconcile [--hours N] [--dry-run] [--json]")
+		return
+	import json
+
+	from red_pill.coro import mailbox
+
+	report = mailbox.reconcile(
+		limit=int(getattr(args, "limit", 200) or 200),
+		hours=float(getattr(args, "hours", 24.0) or 0.0),
+		dry_run=bool(getattr(args, "dry_run", False)),
+	)
+	if getattr(args, "json", False):
+		print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+		return
+	print(
+		f"[CORO reconcile] ventana={report['hours']}h · leídos={report['scanned']} · "
+		f"publicados={report['published']} · fallidos={report['failed']}"
+	)
+	for ev in report.get("events", [])[:10]:
+		print(f"  seq={ev.get('seq')} · {ev.get('verb')} → {str(ev.get('to'))[:8]} · msg={ev.get('event_id')}")

@@ -1,5 +1,29 @@
 ## Unreleased
 
+### 📬 S2 cerrado: el transporte vive en neon-link y los recibos en red-pill
+
+- **[NEW] `message_receipts`**: el kernel guarda solo lo que el alma o el pull
+  saben (`handed_off`, `read`, `pulled`, `skipped`). El estado de transporte
+  (`PENDING`/`SENT`/`FAILED`, reintentos, DLQ) es del `outbox` de neon-link.
+- **[REMOVED] `event_deliveries`**: se migran sus recibos útiles
+  (`delivered→read`, `read`, `handed_off`, `pulled`, `skipped`) y la tabla se
+  elimina. Ya no hay dos máquinas de estado para el mismo mensaje.
+- **[NEW] `red-pill coro reconcile`**: publica en el outbox los mensajes
+  dirigidos que se quedaron sin sobre (ventana configurable, `--dry-run`,
+  idempotente por `event_id`). El `SoulHub` lo lanza cada 60 s
+  (`NEON_LINK_SOUL_RECONCILE_S`), así una publicación perdida se recupera sola.
+- **[NEW] Callbacks**: `job_manager_api` acepta `source=script_job` para CI o
+  comandos largos; al terminar publican un `notify` en el coro que despierta al
+  alma sin interrumpir su turno. `_report_job` prefiere el coro y cae al push
+  directo si el buzón no está.
+- **[NEW] MinionInbox**: `drop_report` con `continuity_id` publica un aviso por
+  el coro (el `JobRunner` no duplica: usa `notify=False`).
+- **[NEW] Skill `wake-callback`**: la fórmula de una llamada y sus límites
+  (no `nohup`, no `steer`, no polling; un job = un aviso).
+- **[SAFE] Acuses**: los hooks de Claude/opencode escriben `read` en
+  `message_receipts` con la misma sentencia que el kernel; un `read`/`pulled` no
+  retrocede. El acuse de un job `job:*` auto-dirigido respeta `refuse`/`hold`.
+
 ### 🧷 El espejo no recibía ni un turno: el sellado estaba mudo
 
 - **[FIX]** El sellado del turno externo (`begin/finish_external_turn`) archiva el
