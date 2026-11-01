@@ -658,6 +658,25 @@ def get_antigravity_conversations_export_dir() -> Path:
 	return get_antigravity_root() / "conversations_export"
 
 
+def get_harness_config_path(harness: str, *parts: str) -> Path:
+	"""Ruta de configuración de un arnés de terceros, por convención.
+
+	No es una raíz XDG de red-pill: son los directorios oficiales del arnés
+	(`~/.config/opencode`, `~/.claude`, `~/.pi/agent`). Vive aquí para que ningún
+	módulo cablee `Path.home()` (CONVENTIONS §7).
+	"""
+	roots = {
+		"opencode": Path.home() / ".config" / "opencode",
+		"claude": Path.home() / ".claude",
+		"claude_code": Path.home() / ".claude",
+		"pi": Path.home() / ".pi" / "agent",
+	}
+	root = roots.get(str(harness or "").strip().lower())
+	if root is None:
+		raise ValueError(f"arnés desconocido: {harness!r}")
+	return root.joinpath(*parts)
+
+
 def find_harness_binary(name: str) -> str:
 	"""Ruta del binario de un arnés (`opencode`, …), sin depender del PATH.
 

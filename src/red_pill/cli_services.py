@@ -802,6 +802,7 @@ def handle_coro(args: argparse.Namespace) -> None:
 		limit=int(getattr(args, "limit", 200) or 200),
 		hours=float(getattr(args, "hours", 24.0) or 0.0),
 		dry_run=bool(getattr(args, "dry_run", False)),
+		since_seq=getattr(args, "since_seq", None),
 	)
 	if getattr(args, "json", False):
 		print(json.dumps(report, ensure_ascii=False, indent=2, default=str))

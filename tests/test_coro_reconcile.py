@@ -62,7 +62,7 @@ def test_reconcile_publica_solo_lo_que_falta(db):
 	_event(reg, verb="park", summary="park no se publica")
 	_event(reg, summary="expirado", expires_at=time.time() - 10)
 
-	report = mailbox.reconcile(hours=0)
+	report = mailbox.reconcile(hours=0, since_seq=0)
 	assert report["scanned"] == 1
 	assert report["published"] == 1
 	rows = _outbox(events_db)
@@ -75,15 +75,25 @@ def test_reconcile_publica_solo_lo_que_falta(db):
 def test_reconcile_es_idempotente(db):
 	reg, _, events_db = db
 	_event(reg)
-	mailbox.reconcile(hours=0)
+	mailbox.reconcile(hours=0, since_seq=0)
 	mailbox.reconcile(hours=0)
 	assert len(_outbox(events_db)) == 1
+
+
+def test_primera_pasada_es_baseline_y_no_publica(db):
+	reg, _, events_db = db
+	_event(reg)
+	report = mailbox.reconcile()
+	assert report["baseline"] is True
+	assert report["scanned"] == 0
+	assert _outbox(events_db) == []
+	assert mailbox.reconcile()["scanned"] == 0
 
 
 def test_dry_run_no_publica(db):
 	reg, _, events_db = db
 	_event(reg)
-	report = mailbox.reconcile(hours=0, dry_run=True)
+	report = mailbox.reconcile(hours=0, dry_run=True, since_seq=0)
 	assert report["scanned"] == 1
 	assert report["published"] == 0
 	assert _outbox(events_db) == []
@@ -94,7 +104,7 @@ def test_cli_coro_reconcile_json(db, capsys):
 	_event(reg)
 	from red_pill.cli_services import handle_coro
 
-	handle_coro(argparse.Namespace(coro_cmd="reconcile", limit=200, hours=0.0, dry_run=False, json=True))
+	handle_coro(argparse.Namespace(coro_cmd="reconcile", limit=200, hours=0.0, dry_run=False, json=True, since_seq=0))
 	out = json.loads(capsys.readouterr().out)
 	assert out["published"] == 1
 	assert len(_outbox(events_db)) == 1

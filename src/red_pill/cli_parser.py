@@ -230,7 +230,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 		help="Publica en el outbox soul los mensajes dirigidos que se quedaron sin sobre",
 	)
 	coro_reconcile.add_argument("--limit", type=int, default=200, help="Máximo de eventos por pasada (default 200)")
-	coro_reconcile.add_argument("--hours", type=float, default=24.0, help="Ventana hacia atrás en horas (0 = sin corte)")
+	coro_reconcile.add_argument("--hours", type=float, default=24.0, help="Compatibilidad; la ventana real es la marca de agua")
+	coro_reconcile.add_argument("--since-seq", type=int, default=None, help="Backfill explícito desde un event_seq (p.ej. 0)")
 	coro_reconcile.add_argument("--dry-run", action="store_true", help="Solo lista; no publica")
 	coro_reconcile.add_argument("--json", action="store_true", help="Salida JSON")
 

@@ -1,5 +1,20 @@
 ## Unreleased
 
+### 🩺 S2.2 — doctor, marca de agua y egress aislado
+
+- **[NEW] `red-pill doctor` revisa el coro**: `event_deliveries` sin migrar,
+  `message_receipts` ausente, hooks de Claude/opencode desactualizados, versión
+  de neon-link, sobres `soul` atascados y dead letters. Dice dónde mirar; no cura.
+- **[FIX] Reconciliador con marca de agua**: la primera pasada fija el
+  `event_seq` máximo y **no publica** historia; a partir de ahí solo publica lo
+  nuevo sin recibo. `--since-seq N` permite backfill explícito. Un fallo de
+  publicación no avanza la marca: el siguiente pase lo reintenta.
+- **[NEW] `neon-link 0.7.1`**: el canal `soul` tiene su propio hilo de egress; el
+  poller principal lo excluye y un `session deliver` lento ya no retrasa
+  Telegram/Firebase/rings.
+- **[DOC] Skill `wake-callback`**: nota sobre el catálogo MCP cacheado
+  (`script_job` puede exigir sesión nueva o `/reload`; el CLI siempre lo ve).
+
 ### 📬 S2 cerrado: el transporte vive en neon-link y los recibos en red-pill
 
 - **[NEW] `message_receipts`**: el kernel guarda solo lo que el alma o el pull

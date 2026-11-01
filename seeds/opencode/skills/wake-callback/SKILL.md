@@ -40,6 +40,10 @@ publica un `notify` dirigido a tu alma y el `SoulHub` te despierta.
 Devuelve un `job_id`. **Olvídate**: no esperes, no hagas polling. Cuando acabe,
 te llegará un `notify` con el resultado y el `result.json`.
 
+> Si `job_manager_api` rechaza `source=script_job` con un enum viejo, el backend
+> ya lo sirve: el catálogo del cliente está cacheado. Usa
+> `red-pill job submit --source script_job ...` o abre una sesión nueva / `/reload`.
+
 Si el comando recorre elementos independientes (modelos, ficheros, tests),
 **no lo metas en un solo step**: usa `element_job` o un `dag_job` con una etapa
 por elemento (regla `job_dag_execution` §2).

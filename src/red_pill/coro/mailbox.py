@@ -114,16 +114,17 @@ def publish_message(event: Dict[str, Any], *, db_path: Optional[str] = None) -> 
 		return False
 
 
-def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False) -> Dict[str, Any]:
-	"""Reconcilia `mission_events -> outbox` para mensajes que se quedaron sin sobre.
+def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False, since_seq: Optional[int] = None) -> Dict[str, Any]:
+	"""Reconcilia `mission_events -> outbox` con marca de agua (no reenvía historia).
 
-	Quién lo usa: el `SoulHub` de neon-link lo invoca periódicamente (y el Operador
-	puede lanzarlo con `red-pill coro reconcile`). No reenvía historia: solo mira
-	eventos de las últimas `hours` horas (0 = sin corte), dirigidos, con verbo de
-	despertar, no expirados y **sin recibo** (`message_receipts`). La publicación es
-	idempotente por `event_id` (`INSERT OR IGNORE`), así que repetir no duplica.
+	Primera pasada: fija la marca en el `event_seq` máximo actual y **no publica**
+	nada (evita resucitar mensajes viejos o de pruebas). A partir de ahí publica
+	los mensajes dirigidos posteriores a la marca que no tengan recibo. Es
+	idempotente por `event_id` y, si una publicación falla, no avanza la marca
+	pasada ella: el siguiente pase la reintenta.
 
-	Devuelve `{scanned, published, failed, events, hours}`. `dry_run` no escribe.
+	`since_seq` permite un backfill explícito (p.ej. 0). `hours` se conserva por
+	compatibilidad con el CLI antiguo; la ventana real es la marca de agua.
 	"""
 	import time
 
@@ -131,37 +132,76 @@ def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False) -
 	from red_pill.session import delivery as _delivery
 	from red_pill.session.store import connect_session_db
 
-	# El reconciliador puede correr antes de que nadie haya entregado nada:
-	# asegura `message_receipts` (y migra/retira `event_deliveries`).
 	_delivery.ensure_schema(str(get_session_db()))
-	out: Dict[str, Any] = {"scanned": 0, "published": 0, "failed": 0, "events": [], "hours": hours, "dry_run": bool(dry_run)}
-	cutoff = (time.time() - float(hours) * 3600) if float(hours or 0) > 0 else 0.0
-	sql = (
-		"SELECT e.event_seq, e.event_id, e.mission_id, e.to_continuity, e.verb,"
-		" e.thread_id, e.ref, e.hop, e.hop_max, e.expects_reply, e.value_class, e.expires_at"
-		" FROM mission_events e"
-		" LEFT JOIN message_receipts r ON r.event_id = e.event_id AND r.continuity_id = e.to_continuity"
-		" WHERE e.to_continuity IS NOT NULL"
-		" AND e.verb IN ('notify', 'ask', 'reply')"
-		" AND e.sealed = 0"
-		" AND (e.expires_at IS NULL OR e.expires_at > ?)"
-		" AND e.created_at >= ?"
-		" AND r.event_id IS NULL"
-		" ORDER BY e.event_seq ASC LIMIT ?"
-	)
+	out: Dict[str, Any] = {
+		"scanned": 0,
+		"published": 0,
+		"failed": 0,
+		"events": [],
+		"hours": hours,
+		"dry_run": bool(dry_run),
+		"baseline": False,
+		"last_seq": 0,
+	}
 	try:
 		with connect_session_db(str(get_session_db())) as conn:
-			rows = [dict(r) for r in conn.execute(sql, (time.time(), cutoff, max(1, min(int(limit or 200), 1000)))).fetchall()]
+			conn.execute(
+				"CREATE TABLE IF NOT EXISTS mailbox_reconcile_state ("
+				"id TEXT PRIMARY KEY, last_seq INTEGER NOT NULL)"
+			)
+			row = conn.execute("SELECT last_seq FROM mailbox_reconcile_state WHERE id = 'outbox'").fetchone()
+			last = int(row[0]) if row else None
+			if last is None and since_seq is None:
+				last = int((conn.execute("SELECT COALESCE(MAX(event_seq), 0) FROM mission_events").fetchone() or [0])[0])
+				out["baseline"] = True
+				out["last_seq"] = last
+				if not dry_run:
+					conn.execute(
+						"INSERT INTO mailbox_reconcile_state (id, last_seq) VALUES ('outbox', ?)"
+						" ON CONFLICT(id) DO UPDATE SET last_seq = excluded.last_seq",
+						(last,),
+					)
+					conn.commit()
+				return out
+			if since_seq is not None:
+				last = max(0, int(since_seq))
+			elif last is None:
+				last = 0
+			out["last_seq"] = last
+			sql = (
+				"SELECT e.event_seq, e.event_id, e.mission_id, e.to_continuity, e.verb,"
+				" e.thread_id, e.ref, e.hop, e.hop_max, e.expects_reply, e.value_class, e.expires_at"
+				" FROM mission_events e"
+				" LEFT JOIN message_receipts r ON r.event_id = e.event_id AND r.continuity_id = e.to_continuity"
+				" WHERE e.event_seq > ?"
+				" AND e.to_continuity IS NOT NULL"
+				" AND e.verb IN ('notify', 'ask', 'reply')"
+				" AND e.sealed = 0"
+				" AND (e.expires_at IS NULL OR e.expires_at > ?)"
+				" AND r.event_id IS NULL"
+				" ORDER BY e.event_seq ASC LIMIT ?"
+			)
+			rows = [dict(r) for r in conn.execute(sql, (last, time.time(), max(1, min(int(limit or 200), 1000)))).fetchall()]
+			out["scanned"] = len(rows)
+			last_ok = last
+			for ev in rows:
+				out["events"].append({"event_id": ev.get("event_id"), "seq": ev.get("event_seq"), "to": ev.get("to_continuity"), "verb": ev.get("verb")})
+				if dry_run:
+					continue
+				if publish_message(ev):
+					out["published"] += 1
+					last_ok = int(ev["event_seq"])
+				else:
+					out["failed"] += 1
+					break
+			out["last_seq"] = last_ok
+			if not dry_run and last_ok > last:
+				conn.execute(
+					"INSERT INTO mailbox_reconcile_state (id, last_seq) VALUES ('outbox', ?)"
+					" ON CONFLICT(id) DO UPDATE SET last_seq = excluded.last_seq",
+					(last_ok,),
+				)
+				conn.commit()
 	except Exception as e:
-		logger.warning(f"[coro.mailbox] reconcile no pudo leer mission_events: {e}")
-		return out
-	out["scanned"] = len(rows)
-	for ev in rows:
-		out["events"].append({"event_id": ev.get("event_id"), "seq": ev.get("event_seq"), "to": ev.get("to_continuity"), "verb": ev.get("verb")})
-		if dry_run:
-			continue
-		if publish_message(ev):
-			out["published"] += 1
-		else:
-			out["failed"] += 1
+		logger.warning(f"[coro.mailbox] reconcile no pudo leer/publicar: {e}")
 	return out

@@ -274,6 +274,25 @@ trabajos que sobreviven al turno.
 
 ---
 
+### 7.3 Operación: doctor, marca de agua y egress aislado (2026-11-01)
+
+- **`red-pill doctor`** revisa el coro: `event_deliveries` sin migrar,
+  `message_receipts` ausente, hooks de Claude/opencode desactualizados, versión
+  de `neon-link`, sobres `soul` atascados y dead letters. No cura: dice dónde
+  mirar.
+- **Marca de agua** en `mailbox_reconcile_state`: la primera pasada del
+  reconciliador fija el `event_seq` máximo y no publica historia; después solo
+  publica lo nuevo sin recibo. `--since-seq N` permite backfill explícito. Si
+  una publicación falla, la marca no avanza: el siguiente pase la reintenta.
+- **Egress aislado** (`neon-link 0.7.1`): `SoulHub` procesa `channel='soul'` en
+  su propio hilo y el poller principal lo excluye. Un `session deliver` lento no
+  retrasa Telegram/Firebase/rings.
+- **Catálogo MCP cacheado**: si el cliente rechaza `job_submit source=script_job`,
+  el backend ya lo sirve; hace falta sesión nueva o `/reload`. El CLI
+  (`red-pill job submit --source script_job`) siempre lo ve.
+
+---
+
 ## 8. Qué se construye, en orden
 
 | Slice | Contenido | Aceptación ejecutable |

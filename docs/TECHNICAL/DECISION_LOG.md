@@ -3293,3 +3293,53 @@ reconciliaba: solo el pull lo salvaba.
   queda para pull/`redrive` manual. Es una decisión, no un olvido.
 - Sigue pendiente el caso «carta `soul` agotada por `no_live_body` 24 h →
   dead letter → `redrive`» (el camino DLQ está probado con fallo permanente).
+
+---
+
+## [AD-105] S2.2 — doctor, reconciliador con marca de agua y egress aislado
+
+**Date**: 2026-11-01
+**Status**: IMPLEMENTADO. Contrato: `CORO_PROTOCOL` §7.3. Depende de `neon-link 0.7.1`.
+
+### 1. The Problem
+La primera versión de S2.2 dejó cuatro riesgos operativos: la migración de
+`event_deliveries` era destructiva y dependía de reseedear hooks; el
+reconciliador miraba 24 h y podía resucitar mensajes viejos; el `SoulHub`
+bloqueaba el egress principal; y no había una forma rápida de saber si el
+esquema, los hooks o el outbox estaban sanos.
+
+### 2. The Decision
+1. **Doctor**: `red-pill doctor` añade `_check_coro`: `event_deliveries` sin
+   migrar, `message_receipts` ausente, hooks sin `message_receipts`, versión de
+   neon-link, sobres `soul` PENDING > 1 h y dead letters soul.
+2. **Marca de agua**: `mailbox_reconcile_state` fija el `event_seq` máximo en la
+   primera pasada y no publica historia. Después publica solo lo nuevo sin
+   recibo; un fallo no avanza la marca. `--since-seq` permite backfill.
+3. **Egress aislado** (`neon-link 0.7.1`): `SoulHub` tiene su propio hilo y el
+   poller principal excluye `channel='soul'`; un `session deliver` lento no
+   retrasa los canales externos.
+4. **Cache MCP**: documentado en el skill y en el contrato; no se intenta
+   invalidar el catálogo del cliente desde el servidor.
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Bucle de 24 h sin marca | rechazada | Resucitaba mensajes viejos/de prueba. |
+| Migración sin drop, tabla legacy | rechazada | Dejaba dos fuentes y hooks escribiendo en la vieja. |
+| Cambiar el egress a un pool de hilos global | rechazada | Más superficie; el canal `soul` ya es un dominio propio. |
+| Invalidar el catálogo MCP desde el backend | rechazada | El catálogo vive en el cliente; el backend no puede. |
+
+### 4. Rationale / Evidence
+- `tests/test_coro_reconcile.py`: baseline sin publicar, marca de agua, backfill,
+  idempotencia, dry-run y CLI.
+- `tests/test_soul.py`: hilo de egress propio (14 casos).
+- `red-pill doctor` sobre el puesto: detectó `event_deliveries` pendiente y 8
+  mensajes sin recibo; tras el baseline ya no los cuenta como lag.
+- `neon-link 0.7.1` en PyPI; `ruff`/`mypy`/104 tests verdes.
+
+### 5. Consequences y deuda
+- El reconciliador no reenvía historia: si se quiere un backfill, es explícito
+  (`--since-seq 0`) y puede despertar mensajes viejos.
+- El doctor no cura; el reseed de hooks sigue siendo una acción del instalador.
+- El catálogo MCP cacheado sigue siendo un papercut de UX hasta que el cliente
+  recargue.
