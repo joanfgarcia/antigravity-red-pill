@@ -3275,12 +3275,12 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 		"properties": {
 			"source": {
 				"type": "string",
-				"enum": ["agentic_job", "dag_job"],
-				"description": "Driver que ejecutará el job (forge_job fue retirado — FASE 1 — y sleep_job fue retirado: ya no admiten submits).",
+				"enum": ["agentic_job", "dag_job", "script_job"],
+				"description": "Driver que ejecutará el job (forge_job fue retirado — FASE 1 — y sleep_job fue retirado: ya no admiten submits). `script_job` = un comando largo/CI de un solo paso, con notificación al alma al terminar.",
 			},
 			"payload": {
 				"type": "object",
-				"description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}.",
+				"description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}. script_job: {step_command, cwd?, progress?: {mode: single|bounded|unbounded, ...}, control?: {max_step_minutes}, preflight?}.",
 			},
 			"priority": {"type": "integer", "description": "Mayor = más urgente (default 5)."},
 			"mission_id": {"type": "string", "description": "Grupo de aislamiento entre forges (se lee de payload si se omite)."},

@@ -123,6 +123,13 @@ class TestEntregaCorrecta:
 		"""El adaptador solo usa seams que existen en `soul_notify` (AD-090)."""
 		assert set(delivery.INJECTION_POINTS.values()) <= set(soul_notify._TRANSPORTS)
 
+	def test_aviso_de_job_despierta_a_su_alma_sin_fila_de_leg(self, reg, db, push):
+		"""Cadena de mando: `job:<id>` auto-dirigido despierta aunque no tenga leg."""
+		_event(reg, originator="job:script-1", summary="el CI terminó")
+		report = delivery.deliver_events("alma-1", originator="opencode:ses_a", db_path=db)
+		assert report["handed_off"], "el aviso de job debe empujarse"
+		assert "el CI terminó" in push[0][1]
+
 	def test_claude_code_se_empuja_por_su_socket(self, reg, db, monkeypatch):
 		"""F6: un cuerpo claude_code va por `claude_socket`, no por el CLI de opencode."""
 		monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")

@@ -78,6 +78,10 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 			content=f"Job '{title}' ({task.get('source')}) → {status}: {content}{suffix}",
 			originator=identity.get("originator") or f"queue_worker.process_driver_jobs({job_id})",
 			continuity_id=identity.get("continuity_id") or None,
+			# El aviso de job lo hace `publish_notice` justo después, con el
+			# contrato completo (misión/originator); el hook genérico de inbox
+			# no debe duplicarlo.
+			notify=False,
 		)
 		# AD-090 (temporal): tras dejar el reporte en el inbox, avisar al alma que
 		# lanzó el job. Sin esto el reporte solo se ve si alguien mira el buzón
@@ -94,11 +98,34 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 			try:
 				from red_pill.core.soul_notify import build_job_notice, notify_soul
 
-				notify_soul(
-					continuity,
-					build_job_notice(title, str(task.get("source") or "job"), status, content, result_path),
-					originator=identity.get("originator") or None,
+				notice = build_job_notice(title, str(task.get("source") or "job"), status, content, result_path)
+				payload = task.get("payload") or {}
+				mission = str(
+					task.get("mission_id")
+					or payload.get("parent_mission_id")
+					or payload.get("mission_id")
+					or ""
 				)
+				published = False
+				try:
+					from red_pill.coro.notify import publish_notice
+
+					published = publish_notice(
+						continuity_id=continuity,
+						body=notice,
+						originator=identity.get("originator") or f"job:{job_id}",
+						mission_id=mission,
+					)
+				except Exception as coro_err:
+					logger.warning(f"[coro.notify] aviso de job {job_id} no publicado: {coro_err}")
+				if not published:
+					# Fallback: el canal soul no está disponible; el push directo
+					# sigue despertando como antes (AD-090).
+					notify_soul(
+						continuity,
+						notice,
+						originator=identity.get("originator") or None,
+					)
 			except Exception as notify_err:
 				logger.warning(f"[soul-notify] aviso no entregado para job {job_id}: {notify_err}")
 	except Exception as e:

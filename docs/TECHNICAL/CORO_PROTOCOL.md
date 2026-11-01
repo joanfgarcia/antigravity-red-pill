@@ -245,6 +245,30 @@ de estados de transporte (hoy sigue como recibo) y el reconciliador
 ver `DECISION_LOG` **AD-102 §6**. Queda el caso de una carta `soul` que envejece
 hasta `dead_letters` por `no_live_body` (24 h) y su `redrive`.
 
+### 7.2 Callbacks: jobs, CI y MinionInbox despiertan por el coro (2026-11-01)
+
+El canal `soul` no es solo para hablar entre hermanas: es el **timbre** de los
+trabajos que sobreviven al turno.
+
+- **CI / comando largo**: `job_manager_api` acepta `source=script_job`
+  (`step_command`, `cwd`, `progress`, `control`). El job hereda el
+  `continuity_id` del llamante; al terminar, `_report_job` publica un `notify`
+  dirigido a su alma con `coro.notify.publish_notice`. Una llamada y olvidarse:
+  no `nohup`, no polling.
+- **Tarea agéntica / DAG**: mismo aviso al terminar (`agentic_job`/`dag_job`).
+- **MinionInbox**: `drop_report` con `continuity_id` publica un `notify` con el
+  reporte (salvo `JobRunner`, que ya lo hace `_report_job` con `notify=False`).
+- **Sin interrumpir**: el aviso es `notify`, no `steer`. Si el cuerpo está en un
+  turno, queda `queued` y se entrega al abrir el siguiente; si está idle, el
+  `SoulHub` lo despierta; si no existe, el outbox reintenta y el evento sigue en
+  `mission_events` para pull.
+- **Cadena de mando**: un aviso auto-dirigido con `originator=job:*` puede
+  despertar a su alma aunque el cuerpo del job no tenga fila en el registro. Los
+  controles de entrada (`refuse`/`hold`) del destinatario se respetan antes.
+- **Skill**: `seeds/opencode/skills/wake-callback/SKILL.md` documenta la fórmula
+  y los límites (un job = un aviso; no secretos en el body; trabajos con bucle →
+  `element_job`/`dag_job`).
+
 ---
 
 ## 8. Qué se construye, en orden

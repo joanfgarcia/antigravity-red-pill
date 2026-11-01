@@ -3174,3 +3174,64 @@ Deuda que **sigue** abierta tras el E2E: retirar `event_deliveries` como máquin
 estados, el reconciliador `mission_events → outbox`, y el caso «carta `soul` agotada
 por `no_live_body` durante 24 h → dead letter → `redrive`» (probado el camino DLQ con
 fallo permanente, no con envejecimiento).
+
+---
+
+## [AD-103] Callbacks: jobs, CI y MinionInbox despiertan por el coro
+
+**Date**: 2026-11-01
+**Status**: IMPLEMENTADO. Contrato: `CORO_PROTOCOL` §7.2. Skill: `wake-callback`.
+
+### 1. The Problem
+El Job Manager ya avisaba al alma al terminar (`AD-090`), pero por el CLI/socket
+de `soul_notify`, no por el canal `soul`. Además, un agente que lanza un CI o un
+job debía esperar o hacer polling; los reportes de `MinionInbox` solo se veían si
+alguien abría el buzón. La petición: **invocar y olvidarse**, con aviso al
+terminar y sin interrumpir el turno en curso.
+
+### 2. The Decision
+1. **`script_job` en `job_submit`**: CI/comando largo de un paso se encola con la
+   misma tool; hereda el `continuity_id` del llamante. (Los bucles siguen yendo a
+   `element_job`/`dag_job` por la regla de granularidad.)
+2. **`coro.notify.publish_notice`**: escribe un `message` `notify` auto-dirigido
+   en `mission_events` y publica el sobre en `outbox(channel='soul')`. El cuerpo
+   vive en el tablón; el sobre no lleva texto.
+3. **`_report_job`**: en estados terminales intenta `publish_notice`; si el buzón
+   no está, cae al `notify_soul` de siempre. Un job = un aviso (sin duplicar).
+4. **`MinionInbox.drop_report`**: hook opcional (`notify=True` por defecto) que
+   publica un `notify` cuando el reporte trae `continuity_id`; `JobRunner` lo
+   desactiva porque `_report_job` ya lo hace con el contrato completo.
+5. **Cadena de mando en `_wake_verdict`**: un aviso auto-dirigido `job:*` puede
+   despertar a su alma aunque el cuerpo del job no tenga fila en el registro. Los
+   controles de entrada (`refuse`/`hold`) se consultan antes; no se saltan.
+6. **Sin interrumpir**: el aviso es `notify`, no `steer`. Si el cuerpo está en un
+   turno, queda `queued` y se entrega al siguiente; si no existe, el outbox
+   reintenta y el evento sigue en `mission_events` para pull.
+7. **Skill `wake-callback`**: la fórmula de una llamada y los límites (no
+   secretos en el body, un job = un aviso, no `nohup`).
+
+### 3. Alternatives Considered
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Un `coro_api` action `callback` que envuelva el Job Manager | rechazada | Duplica la superficie de jobs en la tool de mensajería; `job_submit` ya es la puerta. |
+| `notify_soul` directo para todo | rechazada | No deja carta en el tablón y no usa el canal `soul`; el aviso se pierde si el cuerpo muere. |
+| Un watcher que haga polling del MinionInbox | rechazada | Otro proceso y latencia; el hook en `drop_report` es determinista. |
+| `steer` para avisos urgentes | rechazada | Interrumpe el turno; el usuario pidió despertar sin interrumpir. |
+
+### 4. Rationale / Evidence
+- `tests/test_coro_notify.py`: el aviso escribe evento + sobre, resuelve misión,
+  y el payload no lleva texto.
+- `tests/test_inbox_notify.py`: reporte con alma avisa; sin alma no; duplicado no
+  duplica; `JobRunner` no usa el hook genérico.
+- `tests/test_report_job_notify.py`: `_report_job` usa el coro y cae al push
+  directo si el buzón no está.
+- `tests/test_event_delivery.py`: aviso `job:*` auto-dirigido despierta; los
+  controles `refuse`/`hold` y la matriz de misiones siguen mandando en el resto.
+
+### 5. Consequences y deuda
+- **Deuda de S2 sigue**: retirar `event_deliveries` y el reconciliador.
+- El aviso de MinionInbox solo funciona si el minion recibe `continuity_id`; los
+  llamantes que no lo pasan siguen dependiendo del pull. El hook está listo; la
+  cobertura de cada minion es deuda.
+- El `SoulHub` sigue siendo síncrono por canal; un aviso lento retrasa el outbox
+  general (timeout 120 s).

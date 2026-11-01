@@ -658,10 +658,22 @@ def _wake_verdict(ev: dict, soul: str, leg: str, *, db_path: Optional[str] = Non
 	Devuelve `None` si puede, o el motivo del veto. Un mensaje de un alma que no
 	está en el registro no casa con ninguna relación → pull (fail-closed).
 	"""
+	# Cadena de mando (AD-090): un aviso de job dirigido a su propia alma puede
+	# despertarla aunque el cuerpo del job no tenga fila en el registro. El job es
+	# hijo del alma que lo lanzó; sin esta regla el aviso quedaría en pull y el
+	# callback no despertaría a nadie. Solo aplica a avisos auto-dirigidos con
+	# origen `job:`; los controles de entrada del destinatario (refuse/hold) se
+	# respetan antes de conceder el paso.
+	originator = str(ev.get("originator") or "")
+	if ev.get("continuity_id") == soul and originator.startswith("job:"):
+		blocked = wake_policy.inbound_blocked(soul, originator=leg, db_path=db_path)
+		if blocked:
+			return wake_policy.Decision(False, blocked)
+		return None
 	try:
 		with _connect(db_path) as conn:
 			recipient = _actor_for(conn, soul, originator=leg)
-			sender = _actor_for(conn, "", originator=str(ev.get("originator") or ""), by_leg=True)
+			sender = _actor_for(conn, "", originator=originator, by_leg=True)
 		decision = wake_policy.decide_wake(sender=sender, recipient=recipient, db_path=db_path)
 	except Exception as e:
 		# No saber no es permiso: se difiere.
