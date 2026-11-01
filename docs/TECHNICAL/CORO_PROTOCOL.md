@@ -239,9 +239,11 @@ Primer slice implementado, en dos repos:
   `value_class`, `expires_at`. El cuerpo sigue en `mission_events`.
 
 Lo que **queda** de S2 (deuda declarada): retirar `event_deliveries` como máquina
-de estados de transporte (hoy sigue como recibo), el reconciliador
-`mission_events → outbox` para publicaciones perdidas, y el E2E con `redrive` de
-una carta `soul` realmente fallida.
+de estados de transporte (hoy sigue como recibo) y el reconciliador
+`mission_events → outbox` para publicaciones perdidas. El E2E entre dos almas vivas
+(ida/vuelta, receptor cerrado, no-duplicación y DLQ/`redrive`) está hecho y medido:
+ver `DECISION_LOG` **AD-102 §6**. Queda el caso de una carta `soul` que envejece
+hasta `dead_letters` por `no_live_body` (24 h) y su `redrive`.
 
 ---
 

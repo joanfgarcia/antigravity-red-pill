@@ -3139,8 +3139,8 @@ proveedor. El buzón único estaba diseñado pero no existía.
   SENT/RETRY/DEAD, timeout, payload corrupto, `raw_payload`).
 - `sharing`: **142 passed** en coro/delivery/CLI; `test_coro_mailbox` verifica que
   el sobre no lleva texto y que es idempotente.
-- Sin E2E todavía contra el daemon real: falta reiniciar neon-link con
-  `ENABLE_SOUL=true` y probar una carta real entre dos almas.
+- E2E real entre dos almas contra el daemon (2026-11-01, `ENABLE_SOUL=true`): ida,
+  vuelta, receptor cerrado, DLQ/`redrive` y no-duplicación — ver §6.
 
 ### 5. Consequences y deuda
 - `event_deliveries` sigue como recibo de entrega (no se retira aún).
@@ -3150,3 +3150,27 @@ proveedor. El buzón único estaba diseñado pero no existía.
 - El poller de neon-link es síncrono: un `soul` lento retrasa otros canales; hay
   timeout (120 s) y se moverá a worker por canal si el volumen crece.
 - El `SoulHub` no va en el perfil lite; es un canal del broker, no del alma.
+
+### 6. E2E entre dos almas (2026-11-01)
+
+Dos cuerpos opencode vivos en `repo:sharing` (almas `01a19800` y `01a187ba`), daemon
+de neon-link con `ENABLE_SOUL=true`. Todas las pruebas ejecutadas contra la cola real
+(`~/.local/share/neon-link/events.db`) y el tablón real
+(`~/.local/share/red-pill/queue/session.db`).
+
+| # | Prueba | Resultado |
+|---|---|---|
+| 1 | `ask` de A→B | outbox `428` `SENT`; `event_deliveries=delivered`, `reason=ack_hook:opencode:ses_e7845706` |
+| 2 | `reply` de B→A | outbox `430` `SENT`; `delivered` → `read/ack` al abrir turno A |
+| 3 | `notify` de B→A | outbox `431` `SENT`; `delivered` → `read/ack` |
+| 4 | Sobre sin texto | payload solo lleva `v,event_id,mission_id,continuity_id,verb,thread_id,reply_to,hop,hop_max,expects_reply,value_class,expires_at` |
+| 5 | Idempotencia | republicar el mismo evento deja **una** fila (`INSERT OR IGNORE` por `message_id`) |
+| 6 | Re-entrega de evento terminal | `deliver --event <ya delivered>` → informe vacío; **no** abre otro turno |
+| 7 | Receptor cerrado | notify a alma `ttl=expired`: outbox `PENDING`, `retries` crecientes, log `[SoulHub] … diferido: no_live_body`; sin estado tocado, sin dead letter |
+| 8 | Puerta `--broker` | sin `--broker` se niega; con `--broker` + `REDPILL_BROKER=1` entrega, y `--dry-run` solo lista |
+| 9 | DLQ + `redrive` | sobre corrupto → `FAILED` + `dead_letters`; `neon-link redrive` lo devuelve a `PENDING` y vuelve a fallar con `undeliverable: sobre sin event_id/continuity_id` |
+
+Deuda que **sigue** abierta tras el E2E: retirar `event_deliveries` como máquina de
+estados, el reconciliador `mission_events → outbox`, y el caso «carta `soul` agotada
+por `no_live_body` durante 24 h → dead letter → `redrive`» (probado el camino DLQ con
+fallo permanente, no con envejecimiento).
