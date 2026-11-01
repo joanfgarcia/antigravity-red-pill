@@ -506,6 +506,15 @@ class RedPillConfig(BaseSettings):
 	# SESSION_LIVENESS_TTL_H: retención de los ficheros de latido para limpieza
 	# por mtime (distinta del umbral de "activo ahora"). Janitor `session_liveness`.
 	SESSION_LIVENESS_TTL_H: int = 48
+	# SESSION_SYNC_MODE (RFC_CONSCIENCIA Fase 2 / D16): digest global de la sala
+	# de guerra que inyecta el interceptor 12 al abrir turno. `silent` (default,
+	# cero coste, cero I/O), `minimal` (una línea: otras vivas + turno global) y
+	# `header` (bloque compacto por misión con origen/rol/in_flight y avisos).
+	SESSION_SYNC_MODE: str = "silent"
+	# SESSION_SYNC_TTL_S: TTL de la caché del digest (segundos). Presupuesto p99
+	# < 20 ms por turno (medido en B2): la caché amortiza las lecturas baratas
+	# (latidos + registro); nunca se consulta nada por turno dentro del TTL.
+	SESSION_SYNC_TTL_S: float = 8.0
 	# MULTISESSION_PURGE_AFTER_SECS (D14): antigüedad mínima de un leg expirado
 	# antes de borrarlo de `session_registry` (24h). `mission_events` no se toca:
 	# su TTL es la vida de la misión, no la presencia.
@@ -564,6 +573,15 @@ class RedPillConfig(BaseSettings):
 	# MULTISESSION_DIVERGENT_ALLOW_ALL: flag EXPLÍCITO de operador para que
 	# `fetch_divergent_turns` cruce misiones sin intersección de afinidad (D15).
 	MULTISESSION_DIVERGENT_ALLOW_ALL: bool = False
+	# WAKE_POLICY (D-07): a quién puede DESPERTAR (push) un emisor, como dato:
+	# reglas `from:relation` en CSV, primera que casa permite. Relaciones: self,
+	# chain, same_mission, same_campaign, any. Vacío = default de fábrica
+	# (`session/wake_policy.DEFAULT_POLICY`: el alma, el orquestador a su cadena
+	# y los pares de la misma misión). Mal formada o con relación desconocida ⇒
+	# no se despierta a nadie (fail-closed). El campo existe para poder ampliar
+	# el círculo sin tocar código — con `extra="ignore"`, una clave no declarada
+	# aquí se descartaría en silencio.
+	WAKE_POLICY: str = ""
 	# D23-SCORE v0.1 — auto-revisor de objeciones (DECISION_LOG AD-084 / D23).
 	# off: solo Operador; review: sugiere sin mutar; semi: actúa solo con
 	# confianza alta (si no, escala); auto: decide low/medium (high/retract

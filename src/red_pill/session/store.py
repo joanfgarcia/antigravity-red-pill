@@ -73,7 +73,15 @@ global_turn INTEGER NOT NULL DEFAULT 0,
 summary TEXT NOT NULL,
 ref TEXT,
 sealed INTEGER NOT NULL DEFAULT 0,
-created_at REAL NOT NULL
+created_at REAL NOT NULL,
+to_continuity TEXT,
+verb TEXT,
+thread_id TEXT,
+hop INTEGER,
+hop_max INTEGER,
+expects_reply INTEGER,
+value_class TEXT,
+expires_at REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_mission ON mission_events(mission_id, event_seq);
@@ -111,6 +119,9 @@ ts REAL NOT NULL DEFAULT 0,
 originator TEXT NOT NULL DEFAULT '',
 source TEXT NOT NULL DEFAULT '',
 source_ref TEXT,
+-- turn_id: identidad PROPIA del turno (sellada por el kernel, no por el arnés).
+-- `request_id` se conserva como procedencia (de dónde vino), no como identidad.
+turn_id TEXT,
 status TEXT NOT NULL DEFAULT 'completed',
 request_id TEXT,
 status_reason TEXT
@@ -235,6 +246,9 @@ EVENT_TYPES = frozenset(
 		"intent_updated",
 		"mission_closed",
 		"objection",
+		# v8 (AD-095): correspondencia entre almas. Un solo tipo para los cuatro
+		# verbos: el verbo es columna, no tipo (si no, cada verbo migra la taxonomía).
+		"message",
 		# Internos de D23-SCORE (D-obj): solo los escribe el store, no el modelo.
 		"decision_opened",
 		"decision_upheld",
@@ -260,6 +274,11 @@ _INTERNAL_EVENT_TYPES = frozenset(
 
 _EVENT_SUMMARY_MAX = 800
 _EVENT_REF_MAX = 400
+
+# v8 (AD-095): verbos de correspondencia (D-02/D-12) y naturaleza del valor
+# (aportación de la hermana en E-002: el TTL no es solo tiempo, es tipo de valor).
+_MESSAGE_VERBS = frozenset({"notify", "ask", "reply", "park"})
+_MESSAGE_VALUES = frozenset({"now", "seed"})
 _EVENT_ID_MAX = 200
 _EVENT_RATE_PER_MIN = 30
 
@@ -355,6 +374,10 @@ class SessionRegistry:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN request_id TEXT")
 			if "status_reason" not in mirror_cols:
 				conn.execute("ALTER TABLE session_mirror ADD COLUMN status_reason TEXT")
+			try:
+				conn.execute("ALTER TABLE session_mirror ADD COLUMN turn_id TEXT")
+			except sqlite3.OperationalError:
+				pass  # ya existe
 			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_request ON session_mirror(continuity_id, request_id)")
 			conn.execute("CREATE INDEX IF NOT EXISTS idx_mirror_status ON session_mirror(continuity_id, status)")
 			registry_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_registry)").fetchall()}
@@ -400,6 +423,28 @@ class SessionRegistry:
 			if current < 7:
 				# v7: leases de trabajo y misión (B-01L/RFC-INTEROP-003).
 				conn.execute("PRAGMA user_version=7")
+			if current < 8:
+				# v8 (AD-095): correspondencia entre almas. El destinatario vive en
+				# el EVENTO (una sola verdad, append-only); el buzón guarda solo su
+				# estado de entrega. `_SCHEMA` ya crea las columnas en BD nuevas.
+				cols = {row[1] for row in conn.execute("PRAGMA table_info(mission_events)").fetchall()}
+				for name, decl in (
+					("to_continuity", "TEXT"),
+					("verb", "TEXT"),
+					("thread_id", "TEXT"),
+					("hop", "INTEGER"),
+					("hop_max", "INTEGER"),
+					("expects_reply", "INTEGER"),
+					("value_class", "TEXT"),
+					("expires_at", "REAL"),
+				):
+					if name not in cols:
+						try:
+							conn.execute(f"ALTER TABLE mission_events ADD COLUMN {name} {decl}")
+						except sqlite3.OperationalError:
+							pass
+				conn.execute("CREATE INDEX IF NOT EXISTS idx_events_inbox ON mission_events(to_continuity, event_seq)")
+				conn.execute("PRAGMA user_version=8")
 			conn.commit()
 
 	# ── Lecturas ────────────────────────────────────────────────────────────
@@ -600,15 +645,16 @@ class SessionRegistry:
 			conn.commit()
 
 	def next_global_turn(self, originator: str, affinity: Any = None) -> int:
-		"""Inserta un turno en el reloj y devuelve su `global_turn` monotónico."""
-		affinity_json = json.dumps(canonize_affinity(affinity or []), ensure_ascii=False)
-		with self._connect() as conn:
-			cur = conn.execute(
-				"INSERT INTO global_turn_seq (created_at, originator, affinity_json) VALUES (?, ?, ?)",
-				(time.time(), originator, affinity_json),
-			)
-			conn.commit()
-			return int(cur.lastrowid or 0)
+		"""Inserta un turno en el reloj y devuelve su `global_turn` monotónico.
+
+		Delega en `session.turn_seal`, que es el **único** punto que avanza el
+		reloj: `BEGIN IMMEDIATE` (lock de escritura antes de leer) + relectura del
+		máximo, para que dos escritores concurrentes no repartan el mismo número ni
+		hagan retroceder el contador en WAL.
+		"""
+		from red_pill.session.turn_seal import next_global_turn as _next
+
+		return _next(str(originator or ""), affinity, db_path=self.db_path)
 
 	def get_max_global_turn(self) -> int:
 		with self._connect() as conn:
@@ -728,6 +774,14 @@ class SessionRegistry:
 		global_turn: int = 0,
 		ref: Optional[str] = None,
 		sealed: bool = False,
+		to_continuity: Optional[str] = None,
+		verb: Optional[str] = None,
+		thread_id: Optional[str] = None,
+		hop: Optional[int] = None,
+		hop_max: Optional[int] = None,
+		expects_reply: Optional[bool] = None,
+		value_class: Optional[str] = None,
+		expires_at: Optional[float] = None,
 	) -> dict:
 		"""Publica un evento de misión. `ValueError` si tipo/misión/summary no valen.
 
@@ -753,6 +807,26 @@ class SessionRegistry:
 		if not text:
 			raise ValueError("summary requerido")
 		ref_clean = _clean_text(ref, _EVENT_REF_MAX) if ref else None
+		# v8 (AD-095): correspondencia. `verb` sin destinatario (o al revés) es un
+		# error del llamante, no un evento raro: fail-closed antes de escribir.
+		to_soul = _clean_key(to_continuity) if to_continuity else None
+		verb_clean = str(verb or "").strip().lower() or None
+		if verb_clean and verb_clean not in _MESSAGE_VERBS:
+			raise ValueError(f"verbo desconocido: {verb!r}")
+		if verb_clean and not to_soul:
+			raise ValueError("un mensaje necesita destinatario (`to_continuity`)")
+		if verb_clean and kind != "message":
+			raise ValueError("un mensaje es type='message'")
+		if kind == "message" and not verb_clean:
+			raise ValueError("type='message' exige verbo (notify|ask|reply|park)")
+		thread = _clean_key(thread_id) if thread_id else None
+		hop_n = max(0, int(hop or 0)) if verb_clean else None
+		hop_max_n = max(0, int(hop_max or 0)) if verb_clean else None
+		expects = None if expects_reply is None else (1 if expects_reply else 0)
+		value = str(value_class or "now").strip().lower() if verb_clean else None
+		if value is not None and value not in _MESSAGE_VALUES:
+			raise ValueError(f"value_class desconocido: {value_class!r}")
+		expires = float(expires_at) if expires_at else None
 		event_id = _uuid.uuid4().hex
 		now = time.time()
 		with self._connect() as conn:
@@ -767,8 +841,10 @@ class SessionRegistry:
 				"""
 				INSERT INTO mission_events (
 					event_id, type, mission_id, campaign_id, continuity_id, originator,
-					global_turn, summary, ref, sealed, created_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					global_turn, summary, ref, sealed, created_at,
+					to_continuity, verb, thread_id, hop, hop_max, expects_reply,
+					value_class, expires_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
 				(
 					event_id,
@@ -782,6 +858,14 @@ class SessionRegistry:
 					ref_clean,
 					1 if sealed is True else 0,
 					now,
+					to_soul,
+					verb_clean,
+					thread,
+					hop_n,
+					hop_max_n,
+					expects,
+					value,
+					expires,
 				),
 			)
 			conn.commit()
@@ -799,6 +883,14 @@ class SessionRegistry:
 			"ref": ref_clean,
 			"sealed": sealed is True,
 			"created_at": now,
+			"to_continuity": to_soul,
+			"verb": verb_clean,
+			"thread_id": thread,
+			"hop": hop_n,
+			"hop_max": hop_max_n,
+			"expects_reply": None if expects is None else bool(expects),
+			"value_class": value,
+			"expires_at": expires,
 		}
 
 	def fetch_events(
@@ -839,6 +931,11 @@ class SessionRegistry:
 		sql += " AND (COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted') OR ? = 1 OR e.continuity_id = ?)"
 		params.extend([1 if include_hidden else 0, _clean_key(viewer_continuity_id) if viewer_continuity_id else ""])
 		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated', 'decision_suggested')"
+		# v8 (AD-095): la correspondencia NO se renderiza en el tablón de la misión.
+		# Solo la ve su destinatario (también por `inbox`) y quien la escribió.
+		viewer_soul = _clean_key(viewer_continuity_id) if viewer_continuity_id else ""
+		sql += " AND (e.to_continuity IS NULL OR e.to_continuity = ? OR e.continuity_id = ?)"
+		params.extend([viewer_soul, viewer_soul])
 		if types:
 			if not isinstance(types, (list, tuple)):
 				raise ValueError("types debe ser una lista")
@@ -869,6 +966,52 @@ class SessionRegistry:
 				by_id = {str(row["subject_event_id"]): int(row["n"]) for row in counts}
 				for event in out:
 					event["open_decisions"] = by_id.get(event["event_id"], 0)
+		return out
+
+	def fetch_inbox(
+		self,
+		continuity_id: str,
+		*,
+		limit: int = 50,
+		since_seq: int = 0,
+		include_expired: bool = False,
+	) -> List[dict]:
+		"""Mensajes dirigidos a `continuity_id` (AD-095), de cualquier misión.
+
+		La correspondencia **no** se lee por misión: se lee por alma. Un mensaje
+		vive en el tablón de quien lo escribió (append-only) y el destinatario lo
+		encuentra por su dirección, igual que el cartero no imprime el periódico.
+		`sealed` y `hidden/retracted` se excluyen: un mensaje sellado no tiene
+		destinatario posible, y la moderación ya lo apartó.
+		"""
+		soul = _clean_key(continuity_id)
+		if not soul:
+			return []
+		params: list = [soul]
+		sql = (
+			"SELECT e.*, COALESCE(ns.status, 'visible') AS note_status "
+			"FROM mission_events e LEFT JOIN note_status ns ON ns.event_id = e.event_id "
+			"WHERE e.to_continuity = ? AND e.sealed = 0"
+			" AND COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted')"
+		)
+		since = int(since_seq or 0)
+		if since > 0:
+			sql += " AND e.event_seq > ?"
+			params.append(since)
+		if not include_expired:
+			sql += " AND (e.expires_at IS NULL OR e.expires_at > ?)"
+			params.append(time.time())
+		sql += " ORDER BY e.event_seq ASC LIMIT ?"
+		params.append(max(1, min(int(limit or 50), 200)))
+		with self._connect() as conn:
+			rows = conn.execute(sql, tuple(params)).fetchall()
+		out: List[dict] = []
+		for row in rows:
+			event = dict(row)
+			event["sealed"] = bool(event.get("sealed"))
+			event["expects_reply"] = None if event.get("expects_reply") is None else bool(event.get("expects_reply"))
+			event["note_status"] = str(event.get("note_status") or "visible")
+			out.append(event)
 		return out
 
 	def event_exists(self, *, mission_id: str, event_type: str, ref: str, summary: str) -> bool:
@@ -909,6 +1052,10 @@ class SessionRegistry:
 		sql += " AND (COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted') OR ? = 1 OR e.continuity_id = ?)"
 		params.extend([1 if include_hidden else 0, _clean_key(viewer_continuity_id) if viewer_continuity_id else ""])
 		sql += " AND e.type NOT IN ('decision_opened', 'decision_upheld', 'decision_dismissed', 'decision_escalated', 'decision_moderated', 'decision_suggested')"
+		# v8 (AD-095): la correspondencia no se renderiza en el tablón de la misión.
+		viewer_soul = _clean_key(viewer_continuity_id) if viewer_continuity_id else ""
+		sql += " AND (e.to_continuity IS NULL OR e.to_continuity = ? OR e.continuity_id = ?)"
+		params.extend([viewer_soul, viewer_soul])
 		if types:
 			if not isinstance(types, (list, tuple)):
 				raise ValueError("types debe ser una lista")
@@ -923,6 +1070,24 @@ class SessionRegistry:
 		return int(row["n"]) if row else 0
 
 	# ── D23-SCORE: objeciones y decisiones dinámicas (D-obj) ────────────────
+	def find_events_by_prefix(self, prefix: str, *, limit: int = 5) -> List[dict]:
+		"""Eventos cuyo `event_id` empieza por `prefix` (para responder citando el id).
+
+		El tablón renderiza un id corto legible; exigir los 32 hex para contestar es
+		la diferencia entre un protocolo y un acertijo. La resolución exacta sigue
+		mandando: quien llama decide si un prefijo es suficiente (y rechaza si es
+		ambiguo). Mínimo 4 caracteres, para no resolver "a" contra todo.
+		"""
+		key = str(prefix or "").strip().lower()
+		if len(key) < 4:
+			return []
+		with self._connect() as conn:
+			rows = conn.execute(
+				"SELECT * FROM mission_events WHERE event_id LIKE ? ORDER BY event_seq DESC LIMIT ?",
+				(key + "%", max(1, min(int(limit), 20))),
+			).fetchall()
+		return [dict(r) for r in rows]
+
 	def get_event(self, event_id: str) -> Optional[dict]:
 		"""Evento por `event_id` (para validar el objetivo de una objeción)."""
 		with self._connect() as conn:

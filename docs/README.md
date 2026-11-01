@@ -26,11 +26,13 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [IDENTITY_PACT.md](TECHNICAL/IDENTITY_PACT.md) | Identity & Pact (760/770): el agente redacta su identidad; solo carga el pacto vigente |
 | [WAR_ECONOMY.md](TECHNICAL/WAR_ECONOMY.md) | War Economy: Reuse and orchestration of system organs and components |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
+| [CORO_PROTOCOL.md](TECHNICAL/CORO_PROTOCOL.md) | Protocolo del coro (AD-095): tablón, correspondencia entre almas y `coro_api` |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
 | [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | (Histórico) Red Pill v7.0 Plan |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
+| [STAGE_CLAIMS.md](TECHNICAL/STAGE_CLAIMS.md) | Fase 4 contract: federated stage locks (claim key, atomicity, soul ownership, TTL) |
 | [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
@@ -183,6 +185,7 @@ Project-level rules and standards. These govern how the project itself is built 
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
 | [MEDIA_MODELS.md](CORE/MEDIA_MODELS.md) | Media models & runtimes — how the harness discovers models and how to add one |
 | [MODEL_STORAGE.md](CORE/MODEL_STORAGE.md) | Model storage layout & anti-duplication policy (HF blob store + uv hardlinks) |
+| [MODELS/INDEX.md](MODELS/INDEX.md) | **El elenco**: fichas por modelo, inventario, procedimiento de medida (GP-1..GP-6) y comparativas de voz, prefill y cata |
 
 ---
 

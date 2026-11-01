@@ -7,6 +7,33 @@ import mcp.types as types
 logger = logging.getLogger(__name__)
 
 
+def _merge_property(existing: Optional[Dict[str, Any]], incoming: Dict[str, Any]) -> Dict[str, Any]:
+	"""Fusiona dos schemas del MISMO campo en dos acciones distintas.
+
+	El caso real que obligó a esto (2026-10-30): `scope` es `mision|teatro` en
+	`post`/`fetch` y `sesiones|misiones` en `board`. Quedarse con el primero
+	publicaba un enum que **rechazaba** la acción legítima — el cliente valida el
+	schema y el modelo no podía ni llamar a `board`. Regla: una unión nunca
+	estrecha; si los tipos discrepan, se quita el tipo y se deja la descripción.
+	"""
+	if existing is None:
+		return dict(incoming)
+	merged = dict(existing)
+	enums = list(existing.get("enum") or []) + list(incoming.get("enum") or [])
+	if enums:
+		merged["enum"] = sorted({str(value) for value in enums})
+	type_a, type_b = existing.get("type"), incoming.get("type")
+	if type_a and type_b and type_a != type_b:
+		merged.pop("type", None)
+	descriptions: List[str] = []
+	for text in (existing.get("description"), incoming.get("description")):
+		if text and text not in descriptions:
+			descriptions.append(str(text))
+	if descriptions:
+		merged["description"] = " · ".join(descriptions)
+	return merged
+
+
 class ToolRegistry:
 	"""
 	Centralized registry for Red Pill tools.
@@ -58,15 +85,25 @@ class ToolRegistry:
 		for parent, actions in self._actions.items():
 			parent_desc = f"Consolidated API for {parent}.\n\nActions:\n"
 			action_enums = []
+			payload_props: Dict[str, Any] = {}
 			for act_name, act_info in actions.items():
 				parent_desc += f"- '{act_name}': {act_info['description']}\n"
 				action_enums.append(act_name)
+				# Unión de las propiedades de todas las acciones: sin esto el modelo
+				# ve `payload: {}` y tiene que adivinar los nombres de los campos
+				# (los schemas por acción se guardaban pero nunca se publicaban).
+				for prop_name, prop_schema in (act_info.get("schema") or {}).get("properties", {}).items():
+					payload_props[prop_name] = _merge_property(payload_props.get(prop_name), prop_schema)
 
 			parent_schema = {
 				"type": "object",
 				"properties": {
 					"action": {"type": "string", "enum": action_enums, "description": f"The specific action to execute under {parent}."},
-					"payload": {"type": "object", "description": "Serialized parameters matching the specified action."},
+					"payload": {
+						"type": "object",
+						"description": "Serialized parameters matching the specified action.",
+						"properties": payload_props,
+					},
 				},
 				"required": ["action", "payload"],
 			}

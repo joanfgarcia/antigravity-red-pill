@@ -18,10 +18,11 @@ def leases(tmp_path):
 
 
 def test_schema_v7_has_session_leases(tmp_path):
+	"""v7 trajo los leases; v8 (AD-095) añadió la correspondencia del coro."""
 	path = tmp_path / "session.db"
 	SessionRegistry(str(path))
 	con = sqlite3.connect(path)
-	assert con.execute("PRAGMA user_version").fetchone()[0] == 7
+	assert con.execute("PRAGMA user_version").fetchone()[0] == 8
 	cols = {r[1] for r in con.execute("PRAGMA table_info(session_leases)")}
 	assert {"lease_key", "scope", "subject_id", "continuity_id", "state", "idle_ttl_s", "max_wall_s"} <= cols
 	assert con.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_leases_heartbeat'").fetchone()

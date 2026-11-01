@@ -36,20 +36,22 @@ PHASE_DIRS = {
 	"archive": "🗄️ Finalizado (archive)",
 }
 
-# estados cuyo lugar natural es una fase concreta del planner (carpeta vs frontmatter).
-# Solo se avisa si el ítem vive en el planner y su status no cuadra con su fase.
-STATUS_PHASE = {
-	"spark": "planner/ideas",
-	"llama": "planner/ideas",
-	"maturing": "planner/research",
-	"awaiting_operator": "planner/research",
-	"parked": "planner/research",
-	"dead": "planner/research",
-	"superseded": "planner/research",
-	"pending": "planner/pending",
-	"in-progress": "planner/in_progress",
-	"implemented": "planner/in_progress",
-	"archived": "archive",
+# Qué bandejas se revisan contra el `status` (carpeta vs frontmatter).
+#
+# Modelo (2026-10-29, decisión del Operador): **la bandeja dice dónde vive el
+# documento, no en qué estado está.** `ideas/`, `research/` y `design/` son
+# residencia: el documento se queda donde entró y su estado lo dice el `status`.
+# Con 120+ documentos, mover cada uno al cambiar de estado no ha pasado nunca y no
+# va a pasar: una bandeja que promete ciclo de vida y no lo cumple miente.
+#
+# Las dos bandejas de EJECUCIÓN sí se mantienen al día, porque son una cola de
+# trabajo y son pocas: si `pending/` no es lo que está pendiente, no sirve.
+# `archive/` es la única salida y también se respeta.
+#
+# Una bandeja que no aparece aquí no se revisa: puede tener cualquier estado.
+STRICT_PHASE_STATUSES = {
+	"planner/pending": {"pending", "blocked", "paused"},
+	"planner/in_progress": {"in-progress", "implemented", "blocked", "paused"},
 }
 
 # rutas que se consideran "activo" (se muestran por defecto)
@@ -275,10 +277,9 @@ def _render_table(out: list[str], docs: list[Doc]) -> None:
 		link = f"[{d.rel}]({d.rel})"
 		phase = PHASE_DIRS.get(d.phase, d.phase)
 		mismatch = ""
-		if d.rel.startswith("planner/"):
-			for st, expected in STATUS_PHASE.items():
-				if d.status == st and expected not in d.rel:
-					mismatch = " ⚠️"
+		allowed = STRICT_PHASE_STATUSES.get(d.phase) if d.rel.startswith("planner/") else None
+		if allowed is not None and d.status not in allowed:
+			mismatch = " ⚠️"
 		out.append(f"| {phase} | `{d.status}`{mismatch} | {d.priority} | {title} | {link} | {d.project} |")
 
 

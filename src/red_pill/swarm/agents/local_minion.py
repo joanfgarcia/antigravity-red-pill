@@ -51,7 +51,7 @@ _MIN_TOKENS = 256
 # red_pill/mcp_server.py. A prompt-injected 8B (file contents, Bünker memories)
 # must not launch another agent (`run_agent_task`), drive the Bünker
 # (`control_bunker`), rewrite memories or retune the swarm. `check_minion_inbox`
-# marks reports as read and `session_board` refreshes its index cache: both are
+# marks reports as read and `coro_api.board` refreshes the index cache: both are
 # reads with bookkeeping, and the minion needs them (Oracle results land in the
 # inbox). Anything else → "ERROR: action not allowed for the local minion".
 MINION_ALLOWED_ACTIONS: Dict[str, FrozenSet[str]] = {
@@ -66,7 +66,10 @@ MINION_ALLOWED_ACTIONS: Dict[str, FrozenSet[str]] = {
 			"read_workspace_memory",
 		}
 	),
-	"swarm_orchestrator_api": frozenset({"check_minion_inbox", "session_board"}),
+	"swarm_orchestrator_api": frozenset({"check_minion_inbox"}),
+	# AD-095: el coro es su propia tool. Solo lecturas: `board` (quién vive),
+	# `fetch` (tablón de su misión) e `inbox` (mensajes dirigidos a su alma).
+	"coro_api": frozenset({"board", "fetch", "inbox"}),
 }
 
 # run_bash jail (default policy; scripts/autonomy_ladder.py reuses it). Commands
@@ -131,12 +134,30 @@ TOOLS: List[Dict[str, Any]] = [
 		"function": {
 			"name": "swarm_orchestrator_api",
 			"description": (
-				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports), session_board (live and recent sessions)."
+				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports)."
 			),
 			"parameters": {
 				"type": "object",
 				"properties": {
 					"action": {"type": "string", "enum": sorted(MINION_ALLOWED_ACTIONS["swarm_orchestrator_api"])},
+					"payload": {"type": "object"},
+				},
+				"required": ["action", "payload"],
+			},
+		},
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "coro_api",
+			"description": (
+				"RedPill coro (read-only). Actions: board (who is alive), fetch (your mission's "
+				"board from a cursor), inbox (messages addressed to your soul)."
+			),
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"action": {"type": "string", "enum": sorted(MINION_ALLOWED_ACTIONS["coro_api"])},
 					"payload": {"type": "object"},
 				},
 				"required": ["action", "payload"],

@@ -1,0 +1,36 @@
+# Memento — re-destilado de UNA ronda con UN modelo concreto (element_job).
+#
+# Uso (2026-10-30, primera ronda: comparar la voz de bonsai contra la de granite
+# sobre EXACTAMENTE las mismas sesiones). No sirve para producción nocturna: el
+# nocturno es `configs/jobs/chronicle.yaml` y saca el modelo de `task_profiles.yaml`
+# (task `distill`), que es donde vive la decisión de quién pone la voz.
+#
+# Patrón (job_dag_execution §2): UN step = UNA sesión.
+#   - La lista se congela en el checkpoint del driver al primer step → procesa
+#     exactamente N, reanudable por elemento (job_pause/job_resume).
+#   - `on_fail` por elemento no existe aquí: cada step es independiente, pero el
+#     pase salta una sesión fallida sin cortar el resto (fail-soft del propio
+#     memento_agentic: 3 fallos de conexión consecutivos → deferral, no error).
+#   - `--force --target` ignora `pending_agentic`: re-procesa aunque ya esté
+#     destilada en disco (es una ronda de comparación, no un delta).
+#
+# `llm.task: distill` es lo que hace que el daemon sirva el modelo de la task
+# `distill` (hoy bonsai_2_27b) y NO el default del daemon (granite_8b).
+source: element_job
+priority: 4
+title: Memento re-destilado de una ronda (modelo de la task distill)
+mission_id: memento-redistill-round
+step_command: scripts/memento_redistill_one.sh
+elements_file: state/memento_redistill_elements.json
+defer_exit_code: 77
+pause_exit_code: 78
+llm:
+  task: distill
+preflight:
+  llm_required: true
+control:
+  # Una sesión = distill + annotate con prefill grande; el histórico son ~2-3 min.
+  # 20 min de watchdog deja margen sin colgar la cola si una sesión se atasca.
+  max_step_minutes: 20
+progress:
+  mode: element

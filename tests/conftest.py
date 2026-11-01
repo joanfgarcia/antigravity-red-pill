@@ -104,6 +104,86 @@ _SW_FLAGS = (
 
 
 @pytest.fixture(autouse=True)
+def _flags_de_fabrica_pese_al_env(monkeypatch):
+	"""Hermético al `.env` del Operador: la suite corre con los defaults de fábrica.
+
+	Algunos tests afirman el comportamiento de FÁBRICA (p.ej. "el compactor está
+	apagado por defecto"), pero el `.env` del puesto puede activarlo. Resultado:
+	la suite pasa en CI (sin `.env`) y falla en la máquina del Operador — o peor,
+	pasa o falla según el entorno, que es cobertura que no significa nada.
+
+	Detectado el 2026-10-28: con `SESSION_COMPACTOR_ENABLED=true` en `.env` fallaban
+	`test_compactor_flags_are_off_by_default`, `test_trigger_compaction` y
+	`test_pending_agentic_omite_anotadas_frescas_con_from_raw` (verificado: fallan
+	igual en el commit anterior a los cambios de ese día → deuda preexistente).
+
+	Se fijan como VARIABLES DE ENTORNO, no parcheando el objeto de config:
+	`bunker_isolation` hace `get_config.cache_clear()` y reconstruye el singleton
+	más tarde, así que un parche sobre la instancia se perdería. El rebuild lee
+	el entorno (y las env vars ganan al `.env`), de modo que esto sobrevive.
+
+	`monkeypatch` restaura al terminar cada test: un test que necesite el valor
+	del `.env` puede pedirlo con su propio `monkeypatch`/override.
+	"""
+	defaults = {
+		"SESSION_COMPACTOR_ENABLED": "false",
+		# El `.env` del puesto lo activa; con GATE activo, `pending_agentic` toma la
+		# rama del gate y NUNCA evalúa la frescura de `annotate/` (es un `elif`),
+		# así que el test de MEM-006 no puede pasar.
+		"MEMENTO_ANNOTATE_GATE": "false",
+	}
+	for name, value in defaults.items():
+		monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
+def _identidad_del_puesto_apagada(monkeypatch):
+	"""Hermético a la identidad del proceso que lanza la suite (misma familia que
+	`_flags_de_fabrica_pese_al_env`, pero para el canal de confianza).
+
+	Un job (`dag_job`/awakening) lanza la suite con `REDPILL_ORIGINATOR`,
+	`REDPILL_CONTINUITY_ID`, `REDPILL_MISSION_ID`, `REDPILL_ROLE`,
+	`REDPILL_CAMPAIGN_ID` y `REDPILL_HARNESS` puestos en el entorno: el proceso de
+	test HEREDA ese cuerpo y `_resolve_session_identity` lo trata como canal de
+	confianza. Resultado: los tests de identidad afirman el llamante del job, no el
+	suyo — `test_mision_por_defecto_repo_rama` ve `mission="repo:next"` en vez de
+	la rama parcheada, y `test_emite_alma_y_tag_session` ve el alma real del
+	Operador. La suite verde en CI y roja (o mentirosa) en el puesto.
+
+	Detectado el 2026-10-28 (etapa A1, cierre-alma-a): 9 fallos en
+	`tests/test_mcp_server.py` sin tocar el código de producción.
+
+	Se BORRA el entorno por test, no se fija a un valor: la identidad de un test
+	llega de lo que el test declara (`monkeypatch.setenv` / `patch.dict` /
+	argumento / bridge parcheado), que es exactamente la semántica que estos tests
+	estan midiendo. Precedente local: `tests/test_mcp_shared.py` ya hace este pop
+	en su propio fixture.
+	"""
+	for name in (
+		"REDPILL_ORIGINATOR",
+		"REDPILL_CONTINUITY_ID",
+		"REDPILL_MISSION_ID",
+		"REDPILL_CAMPAIGN_ID",
+		"REDPILL_ROLE",
+		"REDPILL_HARNESS",
+	):
+		monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _soul_notify_disabled_por_defecto(monkeypatch):
+	"""Los tests NO deben lanzar entregas reales al alma (AD-090).
+
+	`_report_job` avisa al alma con `opencode run --session`, que inyecta un turno
+	real (proceso externo + coste). En la suite no hay cuerpos vivos registrados y
+	no debería dispararse, pero un test que registre un leg vivo sí lo haría. Este
+	fixture cierra esa puerta; los tests del propio aviso lo reactivan con
+	`monkeypatch` (gana el fixture) o parchean el transporte.
+	"""
+	monkeypatch.setenv("REDPILL_SOUL_NOTIFY_DISABLE", "1")
+
+
+@pytest.fixture(autouse=True)
 def _default_ingest_not_retired(monkeypatch):
 	"""Hermético a los flags single-writer/RFC-004: la suite corre con el default
 	de fábrica (OFF) aunque el `.env` del operador los tenga ON. Los tests que

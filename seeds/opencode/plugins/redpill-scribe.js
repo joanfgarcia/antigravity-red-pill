@@ -77,7 +77,7 @@
  * Runtime: Bun — uses bun:sqlite.
  */
 
-import { mkdirSync, writeFileSync, renameSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync, readFileSync, unlinkSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 const QUEUE_DB = "${QUEUE_DB}";
@@ -208,6 +208,17 @@ function touchLiveness(sessionId, phase) {
 // (best-effort) cwd. `_resolve_session_identity` lo lee cuando el handshake no
 // pasa originator → `opencode:<session_id>` real + rama del workspace.
 const BRIDGE_PATH = `${STATE_DIR}/opencode_session.json`;
+// Bridge POR SESIÓN (D-BRIDGE, 2026-10-28): el global de arriba es un fichero
+// único por arnés, así que con varias pestañas vivas el ÚLTIMO ESCRITOR gana y
+// el alma puede acabar atribuida al cuerpo de otra. Este directorio guarda un
+// JSON por sesión para que el proxy pueda resolver SU cuerpo por correlación
+// (cwd de instancia → sesión viva) sin depender de quién escribió después.
+const SESSION_BRIDGE_DIR = `${STATE_DIR}/sessions/bridge`;
+
+function sessionBridgePath(sessionId) {
+  const safe = String(sessionId).replace(/[/:]/g, "_").replace(/__/g, "_");
+  return `${SESSION_BRIDGE_DIR}/opencode__${safe}.json`;
+}
 
 // Directorio del workspace de la instancia que sirve la sesión (v1
 // PluginInput.directory / v2 ctx.location.directory). Viaja en una closure por
@@ -223,9 +234,16 @@ function writeBridge(sessionId, cwdHint) {
       workdir: String(cwdHint || "").trim(),
       updated_at: Date.now() / 1000,
     };
+    // Global (compat: arneses sin hook de instancia y fallback del proxy).
     const tmp = `${BRIDGE_PATH}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(payload));
     renameSync(tmp, BRIDGE_PATH);
+    // Por sesión (D-BRIDGE): el proxy lo elige por correlación de cwd.
+    const dir = SESSION_BRIDGE_DIR;
+    mkdirSync(dir, { recursive: true });
+    const tmp2 = `${sessionBridgePath(sessionId)}.${process.pid}.tmp`;
+    writeFileSync(tmp2, JSON.stringify(payload));
+    renameSync(tmp2, sessionBridgePath(sessionId));
   } catch (_) {}
 }
 
@@ -341,22 +359,60 @@ function compatDb(raw) {
   };
 }
 
-async function openDatabase() {
+async function openDatabase(path = QUEUE_DB) {
   try {
     const { Database } = await import("bun:sqlite");
-    return compatDb(new Database(QUEUE_DB));
+    return compatDb(new Database(path));
   } catch (_) {}
   try {
     const { DatabaseSync } = await import("node:sqlite");
-    return compatDb(new DatabaseSync(QUEUE_DB));
+    return compatDb(new DatabaseSync(path));
   } catch (_) {}
   try {
     const { createRequire } = await import("node:module");
     const require = createRequire(import.meta.url);
     const Database = require("better-sqlite3");
-    return compatDb(new Database(QUEUE_DB));
+    return compatDb(new Database(path));
   } catch (_) {}
   return null;
+}
+
+// ── ACUSE POR HOOK (RFC-INTEROP-001 §12 bis) ────────────────────────────────
+// Cada nudge del tablón lleva `msg=<event_id>`. Si el prompt que abre el turno lo
+// trae, ESTE arnés confirma la entrega (`handed_off` → `delivered`), siempre que
+// la sesión pertenezca al alma destinataria: un `opencode run --session <id
+// desconocido>` abre una sesión huérfana sin registro y no acusa nada.
+// COPIA LITERAL de `ACK_MARKER_RE`/`ACK_SQL` de `red_pill/session/delivery.py`
+// (el plugin no importa el kernel); el test de paridad vigila que no diverjan.
+const ACK_MARKER_RE = /\bmsg=([0-9a-f]{32})\b/g;
+const ACK_SQL = "INSERT INTO message_receipts (event_id, continuity_id, state, reason, updated_at) SELECT ?, r.continuity_id, 'read', ?, ? FROM session_registry r WHERE r.originator = ? AND r.ttl_state != 'expired' AND EXISTS (SELECT 1 FROM mission_events e WHERE e.event_id = ? AND e.to_continuity = r.continuity_id) ON CONFLICT(event_id, continuity_id) DO UPDATE SET state = 'read', reason = excluded.reason, updated_at = excluded.updated_at WHERE message_receipts.state NOT IN ('read', 'pulled')";
+const RECEIPT_DDL = "CREATE TABLE IF NOT EXISTS message_receipts (event_id TEXT NOT NULL, continuity_id TEXT NOT NULL, state TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL, PRIMARY KEY (event_id, continuity_id))";
+const RECEIPT_INDEX = "CREATE INDEX IF NOT EXISTS idx_receipts_soul_state ON message_receipts(continuity_id, state)";
+// session.db vive junto a bunker_queue.db (`core.paths.get_session_db`).
+const SESSION_DB = QUEUE_DB.replace(/[^/]*$/, "session.db");
+
+async function ackNudges(sessionId, text) {
+  if (!sessionId || !text || childSessions.has(sessionId)) return;
+  const ids = [...new Set([...String(text).matchAll(ACK_MARKER_RE)].map((m) => m[1]))];
+  // Sin marcador no se abre la BD; y no se crea si no existe.
+  if (!ids.length || SESSION_DB.includes("${") || !existsSync(SESSION_DB)) return;
+  let db = null;
+  try {
+    db = await openDatabase(SESSION_DB);
+    if (!db) return;
+    const origin = compositeOriginator(sessionId);
+    db.exec(RECEIPT_DDL);
+    db.exec(RECEIPT_INDEX);
+    const stmt = db.query(ACK_SQL);
+    const reason = `ack_hook:${origin}`.slice(0, 200);
+    const stamp = Date.now() / 1000;
+    for (const id of ids) stmt.run(id, reason, stamp, origin, id);
+  } catch (_) {
+  } finally {
+    try {
+      db?.close();
+    } catch (_) {}
+  }
 }
 
 async function initStore() {
@@ -512,6 +568,7 @@ export default {
         touchLiveness(sessionId, "start");
         writeBridge(sessionId, resolveCwd(sessionId, instanceCwd, event, event?.data));
       }
+      if (sessionId && text) ackNudges(sessionId, text);
       if (sessionId && text && !CAPTURE_DISABLED) {
         beginExternalTurn(sessionId, text, resolveCwd(sessionId, instanceCwd, event, event?.data));
         const prev = sessions.get(sessionId);
@@ -528,12 +585,24 @@ export default {
     // Exentas las sub-sesiones (`task`/paneles): su padre ya hizo el handshake.
     const HANDSHAKE_GATE = (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
     const MAX_REFUSALS = 3; // fail-open: nunca dejar una sesión sin salida
+    // El nombre REAL de la tool depende del modo de exposición del servidor MCP
+    // (opencode v2, docs/tools §Extensions):
+    //   - `codemode` (default v2): las tools se alcanzan SOLO dentro de `execute`
+    //     → tools["RedPill-Kernel"].sovereign_handshake
+    //   - `codemode: false`: el servidor las lista directamente
+    //     → RedPill-Kernel_sovereign_handshake
+    // La versión anterior decía "(code-mode calls do not count)", que es FALSO en
+    // v2 y empujaba al agente a pedir la tool directa, inexistente con Code Mode
+    // (incidente 2026-10-28: "No tool named RedPill-Kernel_sovereign_handshake").
     const HANDSHAKE_REMINDER =
       "<redpill_handshake_reminder>\n" +
       "MANDATORY FIRST STEP OF THIS TURN (not done yet): call `sovereign_handshake` " +
-      "(the tool whose id contains `sovereign_handshake`) with only `user_prompt`, " +
-      "before calling any other tool (code-mode calls do not count). Until you do, " +
-      "every other tool call is refused. " +
+      "(any tool id containing `sovereign_handshake`) with only `user_prompt`, " +
+      "before calling any other tool. Until you do, every other tool call is refused. " +
+      "Code Mode IS a valid way to call it: with the default MCP exposure the tool " +
+      'lives inside the gateway as `tools["RedPill-Kernel"].sovereign_handshake`; ' +
+      "only if the server is declared `codemode: false` is it listed directly as " +
+      "`RedPill-Kernel_sovereign_handshake`. " +
       "That call loads identity, pain signals and OPEN LOOPS.\n" +
       "</redpill_handshake_reminder>";
     const turnHandshake = new Map(); // sessionID -> bool
@@ -653,6 +722,7 @@ export default {
           .map((p) => p.text)
           .join("\n");
         if (textParts) {
+          await ackNudges(sessionID, textParts);
           beginExternalTurn(sessionID, textParts, resolveCwd(sessionID, instanceCwd, input, output));
           sessions.set(sessionID, {
             prompt: textParts,

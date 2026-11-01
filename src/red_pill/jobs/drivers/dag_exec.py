@@ -8,13 +8,51 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from red_pill.jobs.drivers.dag_manifest import _PROTECTED_STAGE_PARAMS, _TYPE_AGENT, _render_item
+
+logger = logging.getLogger(__name__)
+
+
+def _stage_affinity(payload: Dict[str, Any], workdir: str) -> list:
+	"""Afinidad de la etapa, en la forma que espera `claim_key` (D12/D19).
+
+	Se reutiliza `derive_affinity` para que un claim y una sesión hablen el mismo
+	idioma (`campaign:`, `mission:`, `ws:`). Si el payload declara afinidad
+	explícita, esa manda: es un acto del Operador, no del driver.
+	"""
+	try:
+		from red_pill.core.affinity import derive_affinity, parse_affinity
+
+		explicit = parse_affinity(payload.get("affinity"))
+		if explicit:
+			return explicit
+		return derive_affinity(
+			workdir=workdir,
+			mission_id=str(payload.get("mission_id") or "") or None,
+			campaign_id=str(payload.get("campaign_id") or "") or None,
+		)
+	except Exception:
+		# Sin afinidad derivable, el claim se apoya solo en branch/worktree/ruta;
+		# `claim_key` sigue siendo determinista (lista vacía es una afinidad válida).
+		return []
+
+
+def _workdir_branch(workdir: str) -> str:
+	"""Rama del worktree (vacía si no es repo). Cacheado por `gitinfo`."""
+	try:
+		from red_pill.core.gitinfo import git_snapshot
+
+		return str(git_snapshot(workdir).get("branch") or "")
+	except Exception:
+		return ""
 
 
 def _gpu_health_probe() -> Tuple[bool, int, int]:
@@ -140,6 +178,123 @@ class DagExecMixin:
 			return declared
 		return max(1, min(declared, int(left)))
 
+	# ── Fase 4 (E3): claims de etapa ─────────────────────────────────────────
+	def _claim_params(self, payload: Dict[str, Any], workdir: str, stage_path: str) -> Optional[Dict[str, Any]]:
+		"""Argumentos del claim, o None si el job no tiene alma.
+
+		Sin `continuity_id` no hay dueño posible y el claim no sobreviviría a un
+		cambio de cuerpo (D18): se mantiene el comportamiento legacy (D-02) y el
+		job corre sin reclamar. Nunca se inventa un dueño.
+		"""
+		continuity = str(payload.get("continuity_id") or "").strip()
+		if not continuity:
+			return None
+		try:
+			ttl = int(payload.get("claim_ttl_s") or 0) or None
+		except Exception:
+			ttl = None
+		params: Dict[str, Any] = {
+			"stage_path": stage_path,
+			"affinity": _stage_affinity(payload, workdir),
+			"branch": str(payload.get("branch") or "") or _workdir_branch(workdir),
+			"worktree": workdir,
+			"continuity_id": continuity,
+			"originator": f"dag:{getattr(self, 'job_id', '') or 'unknown'}",
+			"intent": str(payload.get("title") or "") or None,
+		}
+		if ttl:
+			params["ttl_seconds"] = ttl
+		return params
+
+	def _claim_stage(self, payload: Dict[str, Any], stage_path: str, workdir: str):
+		"""Reclama la etapa. None si el job no tiene alma (legacy, sin claim)."""
+		params = self._claim_params(payload, workdir, stage_path)
+		if params is None:
+			return None
+		try:
+			from red_pill.session.stage_claims import try_claim_stage
+
+			return try_claim_stage(**params)
+		except Exception as e:
+			# Non-fatal: un fallo del subsistema de claims no puede impedir que el
+			# DAG avance. Se registra y se ejecuta sin claim (fail-open AQUÍ, donde
+			# el riesgo es duplicar trabajo, no corromper: el claim es cooperativo).
+			logger.warning(f"[DagJob] claim no disponible para '{stage_path}': {e}")
+			return None
+
+	# Claves que acepta cada operación de `stage_claims`. Se declaran explícitamente
+	# porque `_claim_params` devuelve el conjunto COMPLETO: pasarlo tal cual a
+	# `renew_claim`/`release_claim` lanzaba `TypeError` por kwargs de más
+	# (`intent`, `originator`) y —tragado por el `except`— dejaba el latido sin
+	# renovar (el claim expiraba y otro driver lo robaba) y el release sin soltar
+	# (filas huérfanas). Detectado por el E2E de F4-E5, 2026-10-28.
+	_RENEW_KEYS = ("stage_path", "affinity", "branch", "worktree", "continuity_id", "originator", "ttl_seconds")
+	_RELEASE_KEYS = ("stage_path", "affinity", "branch", "worktree", "continuity_id")
+
+	def _release_stage_claim(self, payload: Dict[str, Any], stage_path: str, workdir: str) -> None:
+		"""Suelta el claim de la etapa. Non-fatal."""
+		params = self._claim_params(payload, workdir, stage_path)
+		if params is None:
+			return
+		try:
+			from red_pill.session.stage_claims import release_claim
+
+			release_claim(**{k: v for k, v in params.items() if k in self._RELEASE_KEYS})
+		except Exception as e:
+			logger.warning(f"[DagJob] no se pudo soltar el claim de '{stage_path}': {e}")
+
+	@staticmethod
+	def _renew_interval(ttl_seconds: int) -> float:
+		"""Cada cuánto late la renovación: un tercio del TTL, con suelo de 5 s.
+
+		Un tercio deja dos oportunidades de renovar antes de que expire: un fallo
+		puntual de la BD no cuesta el claim. El suelo evita martillear con TTLs
+		cortos (tests, etapas pequeñas).
+		"""
+		try:
+			ttl = int(ttl_seconds) or 0
+		except Exception:
+			ttl = 0
+		if ttl <= 0:
+			from red_pill.session.stage_claims import DEFAULT_TTL_S
+
+			ttl = DEFAULT_TTL_S
+		return max(5.0, ttl / 3.0)
+
+	def _start_claim_renewer(self, payload: Dict[str, Any], stage_path: str, workdir: str) -> Optional[threading.Event]:
+		"""Arranca el latido de renovación (D9-a). Devuelve el evento de parada.
+
+		El hilo es daemon y no bloquea: si el proceso muere, el claim caduca solo
+		por TTL, que es exactamente la red de seguridad que queremos.
+		"""
+		params = self._claim_params(payload, workdir, stage_path)
+		if params is None:
+			return None
+		from red_pill.session.stage_claims import DEFAULT_TTL_S, renew_claim
+
+		try:
+			ttl = int(params.get("ttl_seconds") or DEFAULT_TTL_S)
+		except Exception:
+			ttl = DEFAULT_TTL_S
+		stop = threading.Event()
+		interval = self._renew_interval(ttl)
+
+		renew_kwargs = {k: v for k, v in params.items() if k in self._RENEW_KEYS}
+
+		def _beat() -> None:
+			while not stop.wait(interval):
+				try:
+					if not renew_claim(**renew_kwargs):
+						# El claim ya no es nuestro o expiró: otro pudo robarlo. La
+						# etapa sigue (tirarla sería peor que el posible solape), pero
+						# queda registrado: es la señal de que el TTL se quedó corto.
+						logger.warning(f"[DagJob] el claim de '{stage_path}' no se pudo renovar (expirado o robado); la etapa continúa")
+				except Exception as e:
+					logger.warning(f"[DagJob] renovación del claim de '{stage_path}' falló: {e}")
+
+		threading.Thread(target=_beat, name=f"claim-renew-{stage_path[-24:]}", daemon=True).start()
+		return stop
+
 	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
 	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any = None) -> str:
 		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
@@ -160,11 +315,47 @@ class DagExecMixin:
 		"""
 		if stage.get("fan_out_from"):
 			raise RuntimeError(f"dag stage '{stage_path}' es plantilla de fan_out y no debe ejecutarse directa (fuente no completada).")
-		from red_pill.jobs.drivers.base import build_pause_probe
-		from red_pill.swarm.factory import MinionFactory
+		from red_pill.jobs.drivers.base import JobDeferred
 
 		self._preflight_stage_gpu(stage, stage_path, payload)
 		workdir = self._workdir(payload)
+
+		# ── Fase 4 (E3): reclamar la etapa antes de ejecutarla ────────────────
+		# Si otra alma la tiene reclamada, NO se ejecuta: se difiere el step.
+		# `JobDeferred` es el mecanismo correcto (no un "skip" que finge
+		# completar): preserva lo que las hermanas paralelas ya completaron, no
+		# consume intentos y el runner reentra cuando el claim expire. Nunca se
+		# marca completada una etapa que no se ejecutó.
+		claims_on = bool(payload.get("stage_claims", True))
+		claim = self._claim_stage(payload, stage_path, str(workdir)) if claims_on else None
+		if claim is not None and not claim.claimed:
+			raise JobDeferred(
+				f"etapa '{stage_path}' reclamada por otra alma ({claim.owner or 'desconocida'}, {claim.reason}); "
+				"se reintenta cuando expire el claim"
+			)
+		renewer: Optional[threading.Event] = None
+		try:
+			if claim is not None and claim.claimed:
+				# Fase 4 (E4, D9-a): latido que renueva el claim mientras la etapa
+				# corre. Sin esto, una etapa de más de `ttl` pierde el claim a mitad
+				# y otro driver la roba mientras sigue en vuelo — dos ejecutando lo
+				# mismo. Es un latido PROPIO y no un hook de checkpoint: las etapas
+				# atómicas pueden no emitir checkpoints intermedios, así que atar la
+				# renovación a ellos no cubriría justo los casos largos.
+				renewer = self._start_claim_renewer(payload, stage_path, str(workdir))
+			return self._run_atomic_inner(payload, stage, stage_path, gate, workdir)
+		finally:
+			if renewer is not None:
+				renewer.set()  # para el latido antes de soltar (evita renovar lo liberado)
+			if claim is not None and claim.claimed:
+				# Se suelta al terminar (o al diferir/pausar).
+				self._release_stage_claim(payload, stage_path, str(workdir))
+
+	def _run_atomic_inner(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any, workdir: Any) -> str:
+		"""Cuerpo original de `_run_atomic` (sin claim). Ver `_run_atomic`."""
+
+		from red_pill.jobs.drivers.base import build_pause_probe
+		from red_pill.swarm.factory import MinionFactory
 
 		minion = MinionFactory.create(str(stage.get("minion")))
 		if minion is None:

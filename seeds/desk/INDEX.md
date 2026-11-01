@@ -1,6 +1,6 @@
 ---
 type: index
-title: "${AGENT_CORE_DIR} — Índice"
+title: "Índice del desk"
 status: active
 created: 2026-09-13
 updated: 2026-10-02

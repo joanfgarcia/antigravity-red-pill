@@ -91,6 +91,14 @@ VOICE_REWRITE_USER_V2 = _load_prompt_file("voice_rewrite_user_v2.txt")
 # qué es "trabajo" depende del oficio — lo legal/laboral propio es SOCIAL salvo jurista).
 ANNOTATE_WORK_USER_V2 = _load_prompt_file("annotate_work_user_v2.txt")
 ANNOTATE_SOCIAL_USER_V2 = _load_prompt_file("annotate_social_user_v2.txt")
+# v3 (2026-10-30): la variante del JUEZ. La v2 creció en torno a granite (muestras
+# de voz, "Joan me dijo que… responde sin narrar") y K2 lee eso como una orden de
+# contar la escena: el 45% de sus notas abrían con "Joan me pide/cuenta…" y se
+# comía el defecto. v3 pide el acto, no el diálogo. Seleccionada por
+# MEMENTO_ANNOTATE_PROMPT=annotate_v3; QUIÉN la pide lo decide el config YAML
+# (por defecto solo `k2_horizon_7b` lo trae) — nunca un `if` en el código.
+ANNOTATE_WORK_USER_V3 = _load_prompt_file("annotate_work_user_v3.txt")
+ANNOTATE_SOCIAL_USER_V3 = _load_prompt_file("annotate_social_user_v3.txt")
 DUAL_SCORE_USER_V2 = _load_prompt_file("dual_score_user_v2.txt")
 
 

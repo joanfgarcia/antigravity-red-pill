@@ -48,12 +48,23 @@ def resolve_default_mission(
 	mission_id: object = None,
 	*,
 	branch: str | None = None,
+	repo: str | None = None,
 	today: _dt.date | None = None,
 ) -> str:
 	"""Resuelve el `mission_id` efectivo (nunca vacío, A2).
 
-	Cascada: `mission_id` explícito (canonizado) → `repo:<rama>` si hay rama
-	(primera escritura desde un repo) → `mission:adhoc-<fecha>` (sin repo).
+	Cascada: `mission_id` explícito (canonizado) → **`repo:<repositorio>`** →
+	`repo:<rama>` (compatibilidad: quien solo conoce la rama) →
+	`mission:adhoc-<fecha>` (sin repo).
+
+	**Misión = proyecto, no rama** (AD-101, 2026-10-30). Las ramas y los worktrees
+	son unidades de TRABAJO, no equipos: dos sesiones de `repo:next` y
+	`feat/algo` del mismo repositorio son el par que tiene que verse y poder
+	despertarse. Con `repo:<rama>` cada worktree abría una misión y el coro se
+	fragmentaba justo donde más se usa (los claims ya aíslan el trabajo por
+	rama+worktree). La rama sigue viviendo en `session_registry.branch` y en
+	`worktree`, que es donde se consulta.
+
 	El valor explícito se respeta verbatim (solo trim); legacy sin scope sigue
 	válido. La gramática es `<scope>:<id>` (scopes: telegram, dossier, repo,
 	adhoc, mission).
@@ -62,6 +73,9 @@ def resolve_default_mission(
 		text = str(mission_id).strip()
 		if text:
 			return text
+	project = str(repo or "").strip()
+	if project:
+		return f"repo:{project}"
 	if branch:
 		clean = str(branch).strip()
 		if clean:

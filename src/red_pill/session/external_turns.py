@@ -11,8 +11,10 @@ turno `pending`/`aborted`, nunca un `completed` inventado.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +24,15 @@ from red_pill.core.paths import get_state_dir
 
 CURRENT_DIR = "external_turns/current"
 ARCHIVE_DIR = "external_turns/archive"
+# Ventana de re-importación del archivo. El `finish_external_turn` archiva el
+# turno cerrado y borra el `current/`: si nadie importa mientras está `pending`,
+# el turno se pierde para el espejo. Se re-lee el archivo, pero sólo lo reciente
+# (un turno de hace un mes no tiene nada que sellar y el archivo crece sin fin).
+ARCHIVE_IMPORT_DAYS = 7
+# Marca de agua: mtime del journal más nuevo ya importado. Sin ficheros nuevos
+# no se toca la base — el handshake llama a esto en CADA turno.
+_IMPORT_WATERMARK = "external_turns/.import_watermark"
+_IMPORT_LOCK = threading.Lock()
 
 
 def _now() -> float:
@@ -142,10 +153,86 @@ def _journals(root: Optional[Path] = None) -> List[Path]:
 	for sub in (CURRENT_DIR, ARCHIVE_DIR):
 		directory = root / sub
 		try:
-			paths.extend(sorted(p for p in directory.iterdir() if p.suffix == ".json"))
+			found = sorted(p for p in directory.iterdir() if p.suffix == ".json")
 		except (FileNotFoundError, NotADirectoryError):
 			continue
+		if sub == ARCHIVE_DIR and ARCHIVE_IMPORT_DAYS > 0:
+			cutoff = _now() - ARCHIVE_IMPORT_DAYS * 86400
+			found = [p for p in found if _journal_mtime(p) >= cutoff]
+		paths.extend(found)
 	return paths
+
+
+def _journal_mtime(path: Path) -> float:
+	try:
+		return path.stat().st_mtime
+	except OSError:
+		return 0.0
+
+
+def newest_journal_mtime(root: Optional[Path] = None) -> float:
+	"""mtime del journal más nuevo (current + archivo reciente)."""
+	root = Path(root) if root is not None else _root()
+	newest = 0.0
+	for path in _journals(root):
+		newest = max(newest, _journal_mtime(path))
+	return newest
+
+
+def _watermark_path(root: Optional[Path] = None) -> Path:
+	root = Path(root) if root is not None else _root()
+	return root / _IMPORT_WATERMARK
+
+
+def _read_watermark(root: Optional[Path] = None) -> float:
+	try:
+		return float(_watermark_path(root).read_text(encoding="utf-8").strip() or 0)
+	except (OSError, ValueError):
+		return 0.0
+
+
+def _write_watermark(stamp: float, root: Optional[Path] = None) -> None:
+	path = _watermark_path(root)
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		# `repr` y no un formato con decimales: un mtime con nanosegundos
+		# truncado a 6 decimales queda POR DEBAJO del real y la marca de agua
+		# nunca coincidiría — se reimportaría en cada turno.
+		path.write_text(repr(float(stamp)), encoding="utf-8")
+	except OSError:
+		pass
+
+
+def maybe_import_external_turns(
+	*,
+	limit: int = 200,
+	root: Optional[Path] = None,
+	force: bool = False,
+	mirror: Any = None,
+	registry: Any = None,
+) -> Optional[Dict[str, int]]:
+	"""Importa journals nuevos al espejo; `None` si no hay novedad.
+
+	Pensado para el handshake: el sellado del turno no puede depender de que el
+	modelo recuerde llamar a `refresh_session_context`. Barato de verdad —sin
+	journals nuevos desde la última marca de agua, no abre la base— y con lock
+	para que dos sesiones en paralelo no sellen a la vez.
+	"""
+	if not force:
+		stamp = newest_journal_mtime(root)
+		if stamp <= _read_watermark(root):
+			return None
+	if not _IMPORT_LOCK.acquire(blocking=False):
+		return None
+	try:
+		stamp = newest_journal_mtime(root)
+		counts = import_external_turns(limit=limit, root=root, mirror=mirror, registry=registry)
+		_write_watermark(stamp, root)
+		return counts
+	except Exception:  # noqa: BLE001 — el sellado nunca rompe un turno
+		return None
+	finally:
+		_IMPORT_LOCK.release()
 
 
 def import_external_turns(
@@ -183,16 +270,38 @@ def import_external_turns(
 		prompt = str(data.get("prompt") or "")
 		status = str(data.get("status") or "pending")
 		try:
+			# Sellado del turno: UNA vez por turno, aquí, que es el punto donde el
+			# turno entra de verdad en el kernel. El `request_id` del arnés viaja
+			# como procedencia: si viene vacío o se repite, no identifica nada y
+			# no puede tragarse el turno (la identidad la pone el sello).
+			from red_pill.session.turn_seal import seal_turn
+
+			sealed = seal_turn(
+				originator=originator,
+				requested_id=request,
+				role="user",
+				prompt=prompt,
+				response=str(data.get("response") or ""),
+				affinity=[f"mission:{mission}"] if mission else None,
+			)
+			request_key = request or sealed["turn_id"]
+			# La clave de fila lleva hash del contenido: si un arnés REPITE su
+			# `request_id` para dos turnos distintos, el segundo no se pierde por
+			# chocar con el `source_ref` del primero (el `INSERT OR IGNORE` lo
+			# habría tirado en silencio).
+			content_key = hashlib.sha256(prompt.encode("utf-8", "replace")).hexdigest()[:10]
 			mirror.begin_turn(
 				continuity_id=continuity,
 				mission_id=mission,
-				request_id=request,
+				request_id=request_key,
 				content=prompt,
 				originator=originator,
 				source="external_hook",
 				model=str(data.get("model") or "") or None,
 				ts=float(data.get("started_at") or _now()),
-				source_ref=f"{request}:user",
+				source_ref=f"{request_key}:{content_key}:user",
+				global_turn=sealed["global_turn"],
+				turn_id=sealed["turn_id"],
 			)
 			response = str(data.get("response") or "")
 			if status == "completed":
@@ -204,11 +313,13 @@ def import_external_turns(
 						content=response,
 						originator=originator,
 						source="external_hook",
-						source_ref=f"{request}:response",
-						request_id=request,
+						source_ref=f"{request_key}:{content_key}:response",
+						request_id=request_key,
 						status="completed",
+						global_turn=sealed["global_turn"],
+						turn_id=sealed["turn_id"],
 					)
-				mirror.complete_turn(continuity_id=continuity, request_id=request)
+				mirror.complete_turn(continuity_id=continuity, request_id=request_key, turn_id=sealed["turn_id"])
 				counts["completed"] += 1
 				from red_pill.session.compaction_hook import maybe_start_after_turn
 
@@ -222,7 +333,7 @@ def import_external_turns(
 			elif status == "aborted":
 				mirror.abort_turn(
 					continuity_id=continuity,
-					request_id=request,
+					request_id=request_key,
 					reason=str(data.get("reason") or "external_aborted"),
 					partial_response=response or None,
 					mission_id=mission,

@@ -115,8 +115,21 @@ class MinionInbox:
 		content: str,
 		originator: Optional[str] = None,
 		continuity_id: Optional[str] = None,
+		*,
+		notify: bool = True,
 	) -> None:
-		"""Save a fire-and-forget report from a background minion."""
+		"""Save a fire-and-forget report from a background minion.
+
+		D2 (idempotencia): el `event_id` es la clave de deduplicación. Si ya
+		existe una fila con ese `event_id`, la llamada es un no-op — un reintento
+		del minion o una doble entrega no duplican el informe. La comprobación no
+		va en un SELECT aparte: vive dentro del propio `INSERT ... SELECT WHERE
+		NOT EXISTS`, que SQLite serializa bajo el write-lock, así que tampoco hay
+		carrera entre dos minions que lleguen con el mismo id. Con `event_id`
+		vacío no hay nada que deduplicar, así que se inserta (comportamiento
+		histórico).
+		"""
+		raw_content = content
 		if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
 			try:
 				msg_bytes = self.mls_group.encrypt_application_message(content.encode("utf-8"))
@@ -125,17 +138,53 @@ class MinionInbox:
 				logger.error(f"ICE encryption failed in drop_report: {e}")
 				return
 
+		inserted = False
 		try:
 			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
-				cursor.execute(
-					"INSERT INTO inbox (event_id, source, status, content, timestamp, originator, continuity_id) "
-					"VALUES (?, ?, ?, ?, ?, ?, ?)",
-					(event_id, source, status, content, time.time(), originator, continuity_id),
-				)
+				columns = "event_id, source, status, content, timestamp, originator, continuity_id"
+				values = (event_id, source, status, content, time.time(), originator, continuity_id)
+				if event_id:
+					# D2: la deduplicación VA EN la misma sentencia de escritura
+					# (no en un SELECT previo), que es lo único que SQLite
+					# serializa bajo el write-lock frente a otro minion simultáneo.
+					cursor.execute(
+						f"INSERT INTO inbox ({columns}) SELECT ?, ?, ?, ?, ?, ?, ? "
+						"WHERE NOT EXISTS (SELECT 1 FROM inbox WHERE event_id = ?)",
+						values + (event_id,),
+					)
+					if cursor.rowcount == 0:
+						logger.debug(f"drop_report D2: event_id {event_id} ya registrado; no se duplica.")
+					else:
+						inserted = True
+				else:
+					cursor.execute(f"INSERT INTO inbox ({columns}) VALUES (?, ?, ?, ?, ?, ?, ?)", values)
+					inserted = True
 				conn.commit()
 		except Exception as e:
 			logger.error(f"Failed to drop report in MinionInbox: {e}")
+			return
+
+		# Un reporte con alma despierta a su dueña por el coro (S2.1+). El JobRunner
+		# ya lo hace en `_report_job` con el aviso completo; los demás minions llegan
+		# aquí. Best-effort: un fallo del aviso no tumba al minion.
+		if (
+			inserted
+			and notify
+			and continuity_id
+			and source != "JobRunner"
+			and os.getenv("REDPILL_INBOX_NOTIFY_DISABLE") != "1"
+		):
+			try:
+				from red_pill.coro.notify import publish_notice
+
+				publish_notice(
+					continuity_id=str(continuity_id),
+					body=f"[MinionInbox] {source} · {status}: {raw_content[:600]}",
+					originator=originator or f"minion:{source}",
+				)
+			except Exception as e:
+				logger.debug(f"[inbox] aviso coro no publicado: {e}")
 
 	def get_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports WITHOUT marking them as read (non-destructive peek)."""

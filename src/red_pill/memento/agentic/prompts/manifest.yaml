@@ -34,6 +34,22 @@ prompts:
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
+  annotate_work_user_v3:
+    template: annotate_work_user_v3.txt
+    system: annotate_work_system.txt
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, work_scope, prompt_language, agent_name, operator_name]
+    runtime: [fragment]
+    select: annotate_prompt_set=v3
+
+  annotate_social_user_v3:
+    template: annotate_social_user_v3.txt
+    system: annotate_social_system.txt
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, social_scope, prompt_language, agent_name, operator_name]
+    runtime: [fragment]
+    select: annotate_prompt_set=v3
+
   annotate_social_user_v2:
     template: annotate_social_user_v2.txt
     system: annotate_social_system.txt

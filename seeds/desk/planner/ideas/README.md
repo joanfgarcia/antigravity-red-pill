@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, ideas]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: ideas
 
 Primer paso del flujo: **chispas y llamas** — una idea que despierta interés pero
@@ -28,3 +29,4 @@ Reglas:
 - **Flujo blando**: una idea puede saltarse `research/` e ir directa a `design/`
   (está clara) o a `pending/` (es una tarea concreta, no un estudio).
 - Este README es genérico; no lista ideas por nombre.
+<!-- REDPILL:END desk -->

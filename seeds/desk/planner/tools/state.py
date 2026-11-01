@@ -10,6 +10,13 @@ Se **genera** (no se mantiene a mano): regenéralo tras cambios relevantes.
 El digest OPEN LOOPS del handshake (kernel) cubre las notas/cola; aquí manda el desk.
 
 Uso: python3 planner/tools/state.py [-o STATE.md]
+
+Escribe SÓLO con `-o`. Sin `-o` imprime por stdout y no toca el disco, para que
+inspeccionar el estado no deje ficheros sueltos o pisados por accidente:
+
+    python3 planner/tools/state.py             # imprime (no escribe nada)
+    python3 planner/tools/state.py -o STATE.md # escribe donde digas
+    python3 planner/tools/state.py -o -        # stdout, explícito
 """
 
 from __future__ import annotations
@@ -82,12 +89,21 @@ def build(root: Path = ROOT) -> str:
 
 
 def main() -> int:
-	ap = argparse.ArgumentParser(description="Genera STATE.md (entrada en frío del desk).")
-	ap.add_argument("-o", "--output", help="Fichero destino (por defecto: stdout)")
+	ap = argparse.ArgumentParser(
+		description="Genera STATE.md (entrada en frío del desk).",
+		epilog=(
+			"ESCRIBE SÓLO CON -o: sin -o imprime por stdout y no toca el disco.\n"
+			"  state.py                imprime el estado (no escribe nada)\n"
+			"  state.py -o STATE.md    lo escribe en ese fichero\n"
+			"  state.py -o -           imprime, explícito\n"
+		),
+		formatter_class=argparse.RawDescriptionHelpFormatter,
+	)
+	ap.add_argument("-o", "--output", metavar="FICHERO", help="Fichero destino; '-' = stdout. Sin -o sólo imprime.")
 	ap.add_argument("--root", type=Path, default=ROOT)
 	args = ap.parse_args()
 	report = build(args.root)
-	if args.output:
+	if args.output and args.output != "-":
 		Path(args.output).write_text(report, encoding="utf-8")
 		print(f"STATE.md escrito en {args.output}")
 	else:

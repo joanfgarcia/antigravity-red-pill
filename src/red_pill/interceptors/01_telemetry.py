@@ -71,6 +71,17 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 
 			lines = ["[ESTADO BIOLÓGICO Y COLAS]"]
 
+			# Tiempo (2026-10-31): hora, delta del turno anterior y sesión.
+			# Nunca rompe el handshake: si pulse.json no está, sólo falta la línea.
+			try:
+				from red_pill.utils.pulse import time_line
+
+				reloj = time_line()
+				if reloj:
+					lines.append(reloj)
+			except Exception:
+				pass
+
 			# Hardware
 			gpu = state.get("nvidia", {})
 			if gpu.get("status") == "online":

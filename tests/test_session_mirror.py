@@ -122,7 +122,8 @@ class TestMirrorStore:
 		path = tmp_path / "session.db"
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 7
+		# v8 (AD-095) añadió la correspondencia del coro a `mission_events`.
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 8
 		assert con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session_mirror'").fetchone()
 		assert con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session_compactions'").fetchone()
 		con.close()
@@ -137,7 +138,8 @@ class TestMirrorStore:
 		con.close()
 		SessionRegistry(str(path))
 		con = sqlite3.connect(path)
-		assert con.execute("PRAGMA user_version").fetchone()[0] == 7
+		# v8 (AD-095) añadió la correspondencia del coro a `mission_events`.
+		assert con.execute("PRAGMA user_version").fetchone()[0] == 8
 		assert con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session_mirror'").fetchone()
 		con.close()
 

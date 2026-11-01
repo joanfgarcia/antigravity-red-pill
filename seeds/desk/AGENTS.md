@@ -9,6 +9,7 @@ project: aleth-core
 tags: [desk, convenciones, commits, agentes, soberania]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # AGENTS.md — convenciones del desk
 
 `/home/joan/Documents/IA/Aleth_Core` es la **mesa privada de Aleth**: notas,
@@ -47,3 +48,4 @@ Rule del kernel). Sin ceremonia: mensaje corto y ya.
 - **Las tools generales nuevas nacen en el germen**: se construyen aquí pero su
   fuente canónica es `sharing/seeds/desk/` del repo red-pill (se siembran en cada
   instalación) — ver `planner/pending/DESK-001-tools-generales-al-seed/`.
+<!-- REDPILL:END desk -->

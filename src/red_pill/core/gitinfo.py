@@ -20,7 +20,7 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 _TTL_S = 60.0
-_EMPTY: Dict[str, Optional[str]] = {"branch": None, "worktree": None, "head_commit": None}
+_EMPTY: Dict[str, Optional[str]] = {"branch": None, "worktree": None, "head_commit": None, "repo": None}
 # dir abspath -> (at, snapshot)
 _CACHE: Dict[str, tuple] = {}
 
@@ -42,12 +42,34 @@ def _git(args: list, cwd: str, timeout: float = 2.0) -> Optional[str]:
 	return value or None
 
 
+def _repo_name(path: str, worktree: str) -> Optional[str]:
+	"""Nombre del proyecto: el del repo PRINCIPAL, no el del worktree enlazado.
+
+	`--git-common-dir` apunta al `.git` compartido (relativo en el árbol principal,
+	absoluto desde un worktree), así que un worktree en
+	`…/worktrees/red-pill/feat-x` devuelve `red-pill`… o el nombre del directorio
+	dueño de ese `.git`. Si git no lo dice, se cae al nombre del `toplevel`.
+	"""
+	common = _git(["rev-parse", "--git-common-dir"], path)
+	if common:
+		resolved = common if os.path.isabs(common) else os.path.join(worktree or path, common)
+		owner = os.path.basename(os.path.dirname(os.path.abspath(resolved)))
+		if owner and owner not in (".", os.sep):
+			return owner
+	return os.path.basename(os.path.abspath(worktree)) if worktree else None
+
+
 def git_snapshot(workdir: Optional[str] = None, *, use_cache: bool = True) -> Dict[str, Optional[str]]:
-	"""`{branch, worktree, head_commit}` del repo que contiene `workdir`.
+	"""`{branch, worktree, head_commit, repo}` del repo que contiene `workdir`.
 
 	`worktree` es la raíz del árbol de trabajo (`--show-toplevel`; en un `git worktree`
 	enlazado es el directorio del worktree, no el repo principal). `branch` es la rama
-	actual (`None` si detached). `head_commit` es el sha de HEAD. Todos `None` si
+	actual (`None` si detached). `head_commit` es el sha de HEAD.
+
+	`repo` es el nombre del **repositorio** (el del `--git-common-dir`, o sea el
+	principal): en un worktree enlazado devuelve el mismo que en el árbol principal.
+	Es lo que identifica al proyecto cuando varios worktrees trabajan en paralelo
+	(AD-101: la misión es el repo; la rama es un atributo). Todos `None` si
 	`workdir` no es un directorio o no vive en un repo git.
 	"""
 	if not workdir:
@@ -68,7 +90,12 @@ def git_snapshot(workdir: Optional[str] = None, *, use_cache: bool = True) -> Di
 	branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], path)
 	if branch == "HEAD":  # detached HEAD: no hay rama
 		branch = None
-	snap = {"branch": branch, "worktree": worktree, "head_commit": _git(["rev-parse", "HEAD"], path)}
+	snap = {
+		"branch": branch,
+		"worktree": worktree,
+		"head_commit": _git(["rev-parse", "HEAD"], path),
+		"repo": _repo_name(path, worktree),
+	}
 	if use_cache:
 		_CACHE[path] = (now, snap)
 	return dict(snap)

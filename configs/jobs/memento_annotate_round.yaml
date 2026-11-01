@@ -1,0 +1,22 @@
+# Memento — ronda de NOTAS con un juez concreto (element_job).
+#
+# Hermana de `memento_redistill_bonsai.yaml`: aquélla rehace polaroids, ésta
+# rehace notas. Existe porque el pase va POR FASES (2026-10-30): cambiar de
+# juez es cambiar `task_profiles.yaml.annotate` y lanzar esta ronda. Ni una
+# línea de código.
+source: element_job
+priority: 4
+title: Memento ronda de notas (task annotate)
+mission_id: memento-annotate-round
+step_command: scripts/memento_redistill_one.sh
+elements_file: state/memento_annotate_round_elements.json
+defer_exit_code: 77
+pause_exit_code: 78
+llm:
+  task: annotate
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 20
+progress:
+  mode: element

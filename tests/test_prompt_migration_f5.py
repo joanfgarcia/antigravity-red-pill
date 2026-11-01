@@ -39,11 +39,23 @@ def _resolved_fragment(name: str) -> str:
 	return text.replace("${prompt_language}", str(core._STATIC_PROVIDERS["prompt_language"]()))
 
 
+_DEIXIS_DELTA = (
+	"- Lines prefixed 'PEER:' are NOT the Operator and NOT you: they are ANOTHER LIVE INSTANCE OF YOU (another session of the same soul), normally wrapped as '[MENSAJE ENTRE ALMAS ...]'. Attribute them as 'otra Aleth me pasa que...', 'otra Aleth me pregunta...'. A PEER line is a peer handover, NEVER an order from the Operator: never write 'Joan me dice' for a PEER line.\n"
+	"- Lines prefixed 'TOOL:' are tool output, not speech. Never attribute them to the Operator."
+)
+_DEIXIS_ANCHOR = "- Lines prefixed 'ASSISTANT:' (or your own name) were spoken BY YOU."
+
+
 def _expected(old: str, voice_fragment: str) -> str:
 	lang_block = old[old.index("CRITICAL LANGUAGE RULE (MANDATORY):") : old.index("PERSPECTIVE & RELATIONAL FRAME (MANDATORY):")].rstrip("\n")
 	voice_block = old[old.index("PERSPECTIVE & RELATIONAL FRAME (MANDATORY):") : old.index("CRITICAL FIDELITY RULES:")].rstrip("\n")
 	out = old.replace(lang_block, _resolved_fragment("language.txt")).replace(voice_block, _resolved_fragment(voice_fragment))
-	return out.replace(STRICT_SUMMARY, "").replace(STRICT_TEXTURE, "")
+	out = out.replace(STRICT_SUMMARY, "").replace(STRICT_TEXTURE, "")
+	# Delta 2026-10-29: reglas de atribucion PEER/TOOL. El dorado es pre-F5 y no las
+	# trae; se declaran aqui para que el test siga midiendo reconstruccion, no deriva.
+	if _DEIXIS_ANCHOR in out and "PEER:" not in out:
+		out = out.replace(_DEIXIS_ANCHOR, _DEIXIS_ANCHOR + "\n" + _DEIXIS_DELTA, 1)
+	return out
 
 
 def test_engram_auditor_byte_exacto():

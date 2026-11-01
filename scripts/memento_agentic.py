@@ -103,6 +103,12 @@ def main() -> None:
 		metavar="ISO",
 		help="Inicio de la ronda de re-destilación (ISO): con --force, SOLO reprocesa las sesiones con distilled_at anterior a la ronda — reanudación sin repetir lo ya re-procesado (watchdog, 2026-09-15)",
 	)
+	parser.add_argument(
+		"--phase",
+		choices=("distill", "annotate"),
+		default=None,
+		help="Ejecutar SOLO una fase del pase (2026-10-30). Cada fase puede servirse de un modelo distinto (task distill / annotate): intercaladas por sesión cuestan DOS cambios de modelo por sesión; por fases, dos por corrida. Sin este flag, el pase hace las dos por sesión (comportamiento histórico).",
+	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	parser.add_argument(
 		"--target",
@@ -122,7 +128,9 @@ def main() -> None:
 		return
 
 	root = get_memento_root()
-	pending = pending_agentic(registry, root=root, force=args.force, redistill_since=args.redistill_round)
+	pending = pending_agentic(
+		registry, root=root, force=args.force, redistill_since=args.redistill_round, phase=args.phase
+	)
 	# --only-long: quedarse solo con las sesiones cuyo work unit más largo excede
 	# el umbral (las truncadas por la ventana del modelo anterior). Requiere --force
 	# para que pending_agentic incluya las ya destiladas.
@@ -159,10 +167,19 @@ def main() -> None:
 	# Con --target el progreso lo lleva el checkpoint del job DAG fan-out, no el
 	# global de la ronda: run_agentic no escribe checkpoint del progress.
 	cp = None if args.target else _checkpoint_path()
-	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=cp, redistill_since=args.redistill_round)
+	stats = run_agentic(
+		root,
+		registry,
+		targets,
+		http_transport,
+		checkpoint_path=cp,
+		redistill_since=args.redistill_round,
+		phase=args.phase,
+	)
 	registry.save()
 	logger.info(
-		f"Agentic pass complete: {stats['processed']} session(s) distilled+refined, "
+		f"Agentic pass complete [{args.phase or 'both'}]: {stats['processed']} session(s) processed, "
+		f"{stats.get('skipped_distill', 0)} skipped (sin polaroids), "
 		f"{stats['failed']} failed, shadow would-ingest {stats['would_ingest']}/{stats['processed']}, "
 		f"static ascensions {stats.get('static_ascended', 0)}."
 	)

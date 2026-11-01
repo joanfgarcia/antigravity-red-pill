@@ -28,10 +28,16 @@ do
 		exit 1
 	fi
 
-	# 2. Prevent Force Push (Non-fast-forward check)
+	# 3. Prevent Force Push (Non-fast-forward check)
 	# Note: This is an approximation for local pre-push, as force-push detection 
 	# is more reliably done on server, but we can detect if local_sha is not an 
 	# ancestor of remote_sha if it's not a deletion.
+	# La guardia protege el remoto compartido. En 'next', el trabajo entra por
+	# squash y la reescritura de la propia rama es el rumbo normal (2026-10-31).
+	# 'main' sigue intocable por el guard 1.
+	if [ "$remote_ref" = "refs/heads/next" ]; then
+		continue
+	fi
 	if [ "$local_sha" != "$z40" ] && [ "$remote_sha" != "$z40" ]; then
 		# Check if remote_sha is an ancestor of local_sha
 		if [[ $(git merge-base "$local_sha" "$remote_sha") != "$remote_sha" ]]; then

@@ -34,3 +34,10 @@ def test_generated_daemon_importa_handlers_de_runtime():
 	assert "from red_pill.inference.runtime import" in source
 	assert "def _apply_chat_handler" not in source
 	assert "def _register_thinking_handlers" not in source
+
+
+def test_generated_daemon_pasa_la_decision_de_dispositivo_al_backend():
+	# Regresión de 8d78450: el daemon calculaba n_ctx/n_gpu_layers/flash_attn por
+	# dispositivo y `build_local_backend(resolved)` cargaba con los del perfil.
+	source = _generated_daemon()
+	assert "build_local_backend(resolved, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, flash_attn=flash_attn)" in source

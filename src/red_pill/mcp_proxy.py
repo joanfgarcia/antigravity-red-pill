@@ -41,27 +41,64 @@ def default_socket() -> str:
 	return str(state_dir() / "mcp.sock")
 
 
+def _instance_cwd() -> str:
+	"""cwd real de ESTA instancia del proxy (el workspace que sirve su pestaña).
+
+	opencode arranca un proxy por instancia y le fija el cwd al workspace (la app
+	de escritorio hospeda varias). Es el único discriminador per-instancia
+	disponible: el env NO trae el session id (config MCP estática) y `PWD` está
+	rancio (heredado del lanzador). Ver D-BRIDGE / core/bridge.py.
+	"""
+	try:
+		return os.getcwd()
+	except Exception:
+		return ""
+
+
 def identity_payload(harness: str | None = None) -> dict:
 	"""Identidad de la instancia para el backend (canal de confianza del proxy)."""
 	provider = (harness or os.getenv("REDPILL_HARNESS") or "opencode").strip() or "opencode"
 	originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip()
 	workdir = str(os.getenv("REDPILL_WORKSPACE") or "").strip()
+	project_dir = ""
 	continuity = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip()
 	mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip()
 	role = str(os.getenv("REDPILL_ROLE") or "task").strip() or "task"
 	if not originator and provider in ("opencode", "claude_code"):
+		# D-BRIDGE: primero la correlación por cwd (resuelve el cuerpo de ESTA
+		# instancia); el fichero global es la degradación (último escritor gana).
+		raw = None
+		ambiguous = False
 		try:
-			raw = json.loads((state_dir() / f"{provider}_session.json").read_text(encoding="utf-8"))
+			from red_pill.core.bridge import REASON_AMBIGUOUS, resolve_body
+
+			raw, reason = resolve_body(provider, _instance_cwd())
+			ambiguous = reason == REASON_AMBIGUOUS
+		except Exception:
+			raw, ambiguous = None, False
+		if ambiguous:
+			# Dos o más sesiones vivas en este mismo cwd: la correlación no decide
+			# y el global es "la última que escribió", que puede ser OTRA alma.
+			# Atribuir mal hace que los avisos y los jobs aterricen en un alma
+			# ajena (incidente 2026-10-28); sin cuerpo es degradación honesta
+			# (fail-closed: el backend no inventa alma).
+			logger.debug("[RedPill-Proxy] identidad ambigua en %s; sin cuerpo (no se usa el global)", _instance_cwd())
+		elif not raw:
+			try:
+				raw = json.loads((state_dir() / f"{provider}_session.json").read_text(encoding="utf-8"))
+			except Exception:
+				raw = None
+		if isinstance(raw, dict):
 			bridge_provider = str(raw.get("provider") or provider)
 			session_id = str(raw.get("session_id") or "")
 			if session_id:
 				originator = f"{bridge_provider}:{session_id}"
 			workdir = workdir or str(raw.get("workdir") or "")
-		except Exception:
-			pass
+			project_dir = str(raw.get("project_dir") or "")
 	return {
 		"originator": originator,
 		"workdir": workdir,
+		"project_dir": project_dir,
 		"harness": provider,
 		"continuity_id": continuity,
 		"mission_id": mission,

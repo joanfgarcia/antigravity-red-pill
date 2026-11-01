@@ -468,6 +468,52 @@ def test_memory_queue_source_groups_and_excludes(tmp_path):
 	assert plugin.load_raw(raw_file) == messages
 
 
+def test_memory_queue_source_excluye_por_prefijo_de_provider(tmp_path, monkeypatch):
+	"""(A3/B) `opencode:ses_x` se excluye por el provider `opencode` (lo que hay
+	antes de \":\"), no por cadena completa. Un provider no listado sigue entrando,
+	y la coincidencia exacta de la lista actual no se rompe."""
+	import sqlite3
+
+	import red_pill.config as cfg
+	from red_pill.chronicle_sources.memory_queue import MemoryQueueSourcePlugin
+
+	monkeypatch.setattr(cfg, "CHRONICLE_ARCHIVE_SOURCES", ["antigravity", "claude_code", "opencode"], raising=False)
+
+	db = tmp_path / "bunker_queue.db"
+	con = sqlite3.connect(db)
+	con.execute(
+		"CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, role TEXT, status TEXT, created_at REAL, originator TEXT)"
+	)
+	rows = [
+		("de opencode", "cubierto por su store", "user", "completed", 1787234700.0, "opencode:ses_abc"),
+		("legacy exacto", "sin prefijo", "user", "completed", 1787234700.0, "opencode"),
+		("de claude", "cubierto por su store", "user", "completed", 1787234700.0, "claude_code:ses_z"),
+		("de antigravity", "cubierto por su store", "user", "completed", 1787234700.0, "antigravity:ses_a"),
+		("provider no listado", "entra por la cola", "user", "completed", 1787234700.0, "telegram:1234"),
+		("surface sin provider", "cola canónica", "user", "completed", 1787234700.0, "Aleth (Test)"),
+		("sin originator", "eco", "user", "completed", 1787234700.0, None),
+	]
+	con.executemany("INSERT INTO memory_queue (prompt, response, role, status, created_at, originator) VALUES (?,?,?,?,?,?)", rows)
+	con.commit()
+	con.close()
+
+	plugin = MemoryQueueSourcePlugin(db_path=db)
+	discovered = dict(plugin.discover())
+	assert set(discovered) == {"telegram:1234:2026-08-20", "Aleth (Test):2026-08-20", "unknown:2026-08-20"}
+	assert plugin._is_excluded("opencode:ses_abc") is True
+	assert plugin._is_excluded("opencode") is True  # compatibilidad con la lista actual
+	assert plugin._is_excluded("telegram:1234") is False
+	assert plugin._is_excluded("Aleth (Test)") is False
+	assert plugin._is_excluded("unknown") is False
+	# El prefijo no es confuso: `opencodeur:ses_x` NO es el provider `opencode`.
+	assert plugin._is_excluded("opencodeur:ses_x") is False
+
+	# Con la lista por defecto (que incluye `telegram`), `telegram:<uuid>` también
+	# se excluye: su verbatim entra por la fuente `telegram` de chronicle.
+	monkeypatch.undo()
+	assert MemoryQueueSourcePlugin(db_path=db)._is_excluded("telegram:1234") is True
+
+
 def test_opencode_raw_roundtrip(tmp_path):
 	import json
 	import sqlite3

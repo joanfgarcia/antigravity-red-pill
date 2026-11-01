@@ -38,9 +38,9 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 			chunks.append(text[start:])
 			break
 
-		# Heuristic 0: Try finding turn/dialogue boundary markers (\nUSER:, \nASSISTANT:, \n---, \n\n)
+		# Heuristic 0: Try finding turn/dialogue boundary markers (\nUSER:, \nASSISTANT:, \nPEER:, \nTOOL:, \n---, \n\n)
 		turn_break = -1
-		for marker in ["\nUSER:", "\nASSISTANT:", "\nFixer:", "\nAleth:", "\n---", "\n\n"]:
+		for marker in ["\nUSER:", "\nASSISTANT:", "\nPEER:", "\nTOOL:", "\nFixer:", "\nAleth:", "\n---", "\n\n"]:
 			t_idx = text.rfind(marker, start, end)
 			if t_idx > turn_break:
 				turn_break = t_idx

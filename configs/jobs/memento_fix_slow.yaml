@@ -1,0 +1,30 @@
+# Memento — arreglo lento y a mano: las N sesiones peor puntuadas de la auditoría.
+#
+# No es un job nocturno y no debe serlo: reprocesar memoria con cicatrices es una
+# decisión, no una tarea de mantenimiento. Se lanza cuando el operador quiere
+# ("2 esta tarde"), procesa SOLO esas N y se para.
+#
+#   .venv/bin/red-pill job submit --recipe configs/jobs/memento_fix_slow.yaml
+#
+# La lista NO está clavada: `elements_command` recalcula la auditoría y propone las
+# N peores que aún no estén en el libro de procesadas. Como el score baja al
+# reprocesar, la siguiente tanda propone las siguientes. El libro
+# (`state/memento_fix_done.jsonl`) evita el bucle cuando una sesión sigue puntuando
+# alto por motivos legítimos (p.ej. es larga y técnica).
+#
+# `n` y `min-score` se ajustan aquí mismo: es la perilla del operador.
+source: element_job
+priority: 6
+title: Memento arreglo lento (N sesiones peor puntuadas)
+mission_id: memento-fix-slow
+step_command: scripts/memento_redistill_one.sh
+elements_command: .venv/bin/python scripts/memento_fix_queue.py --n 2 --min-score 20
+defer_exit_code: 77
+pause_exit_code: 78
+preflight:
+  llm_required: true
+control:
+  # Una sesión = polaroids (bonsai) + notas (K2). Con KV q8_0 son 2-5 min.
+  max_step_minutes: 30
+progress:
+  mode: element

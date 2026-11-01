@@ -1,6 +1,8 @@
+
+<!-- REDPILL:BEGIN desk v=1 -->
 # Frontmatter Template — Agent_Core Desk & Memory Banks
 
-Every Markdown document in the desk (`${AGENT_CORE_DIR}`) or in a memory bank
+Every Markdown document in the desk or in a memory bank
 (`.red-pill/memory/`, distilled memory docs) starts with a YAML metadata header
 (Obsidian-compatible), delimited by `---` at the top of the file. It lets a
 newcomer (or the Operator after months away) know at a glance **what the doc is,
@@ -95,3 +97,4 @@ El vocabulario de estados depende de la **fase** del ítem en el planner
   docs) with its conventions. See `sharing/docs/CORE/CONVENTIONS.md` §10.6.
 - YAML requires spaces for indentation (tabs are invalid); the rest of the
   document keeps the tabs mandated by the Protocol of Silence.
+<!-- REDPILL:END desk -->

@@ -25,6 +25,7 @@ a false GREEN, exactly the failure mode this exists to prevent.
 import logging
 import os
 import subprocess
+import time
 
 logger = logging.getLogger("redpill.doctor")
 
@@ -145,6 +146,104 @@ def _audit_plugins_no_heal() -> list:
 	return out
 
 
+def _check_coro() -> list:
+	"""Checks de la mensajería interna: recibos, hooks, outbox y versión de neon-link.
+
+	Cubre la deuda operativa de S2: una migración a medias, un hook viejo que ya no
+	acusa, un outbox soul atascado o un reconcile que se quedó atrás. No cura: dice
+	dónde mirar.
+	"""
+	out: list = []
+	# 1) Esquema de recibos y migración de event_deliveries.
+	try:
+		import sqlite3
+
+		from red_pill.core.paths import get_session_db
+
+		db = get_session_db()
+		if db.exists():
+			con = sqlite3.connect(str(db), timeout=2.0)
+			try:
+				tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+				if "event_deliveries" in tables:
+					out.append(("yellow", "event_deliveries sigue en session.db: ejecuta `red-pill coro reconcile` o reinicia el kernel para migrar a message_receipts."))
+				if "message_receipts" not in tables:
+					out.append(("yellow", "message_receipts no existe: el kernel aún no ha migrado los recibos."))
+				elif "mailbox_reconcile_state" in tables:
+					state = con.execute(
+						"SELECT last_seq FROM mailbox_reconcile_state WHERE id = 'outbox'"
+					).fetchone()
+					if state is not None:
+						last = int(state[0])
+						n = con.execute(
+							"SELECT COUNT(*) FROM mission_events e"
+							" LEFT JOIN message_receipts r ON r.event_id = e.event_id AND r.continuity_id = e.to_continuity"
+							" WHERE e.event_seq > ? AND e.to_continuity IS NOT NULL"
+							" AND e.verb IN ('notify','ask','reply') AND e.sealed = 0"
+							" AND r.event_id IS NULL",
+							(last,),
+						).fetchone()[0]
+						if n:
+							out.append(("yellow", f"{n} mensaje(s) dirigidos sin recibo tras la marca de agua: el reconciliador va atrasado (red-pill coro reconcile)."))
+			finally:
+				con.close()
+	except Exception as exc:
+		out.append(("info", f"No se pudo revisar el esquema del coro: {exc}"))
+
+	# 2) versión mínima de neon-link (canal soul).
+	try:
+		from importlib.metadata import version
+
+		raw = version("neon-link")
+		parts = tuple(int(x) for x in raw.split(".")[:2])
+		if parts < (0, 7):
+			out.append(("red", f"neon-link {raw} < 0.7.0: no tiene canal soul. Actualiza la dependencia."))
+		else:
+			out.append(("info", f"neon-link {raw}: canal soul disponible."))
+	except Exception as exc:
+		out.append(("yellow", f"No se pudo resolver la versión de neon-link: {exc}"))
+
+	# 3) hooks instalados: si son viejos, el acuse se pierde en silencio.
+	from red_pill.core.paths import get_harness_config_path
+
+	for path, label in (
+		(get_harness_config_path("opencode", "plugins", "redpill-scribe.js"), "opencode"),
+		(get_harness_config_path("claude", "hooks", "redpill_turn_start.py"), "claude"),
+	):
+		try:
+			if path.exists() and "message_receipts" not in path.read_text(encoding="utf-8", errors="replace"):
+				out.append(("red", f"hook {label} desactualizado ({path}): no escribe message_receipts; reseed el arnés."))
+		except Exception as exc:
+			out.append(("info", f"No se pudo leer el hook {label}: {exc}"))
+
+	# 4) outbox soul: atascos y DLQ.
+	try:
+		import sqlite3
+
+		from red_pill.core.paths import get_neon_link_db_path
+
+		db = get_neon_link_db_path()
+		if db.exists():
+			con = sqlite3.connect(str(db), timeout=2.0)
+			con.row_factory = sqlite3.Row
+			try:
+				row = con.execute(
+					"SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM outbox WHERE channel='soul' AND status='PENDING'"
+				).fetchone()
+				if row and row["n"]:
+					age = time.time() - float(row["oldest"] or time.time())
+					if age > 3600:
+						out.append(("yellow", f"{row['n']} sobre(s) soul PENDING; el más viejo lleva {age/60:.0f} min. Revisa el SoulHub."))
+				dead = con.execute("SELECT COUNT(*) FROM dead_letters WHERE channel='soul'").fetchone()[0]
+				if dead:
+					out.append(("yellow", f"{dead} dead letter(s) soul: revisa `neon-link redrive`."))
+			finally:
+				con.close()
+	except Exception as exc:
+		out.append(("info", f"No se pudo revisar el outbox soul: {exc}"))
+	return out
+
+
 def run_doctor(quiet: bool = False) -> int:
 	"""Run the synchronous health verification. Returns 0 (ok) / 1 (red)."""
 	reds: list = []
@@ -167,7 +266,7 @@ def run_doctor(quiet: bool = False) -> int:
 
 	# 2. Chequeos on-demand extra (lo que el flujo de fondo no enmarca como "verify").
 	buckets = {"red": reds, "yellow": yellows, "info": infos}
-	for sev, msg in _check_timers() + _check_model_match():
+	for sev, msg in _check_timers() + _check_model_match() + _check_coro():
 		buckets.get(sev, yellows).append(msg)
 
 	status = "red" if reds else ("yellow" if yellows else "green")

@@ -9,6 +9,7 @@ project: aleth-core
 tags: [planner, fase, research]
 ---
 
+<!-- REDPILL:BEGIN desk v=1 -->
 # Fase: research
 
 Segundo paso del flujo: **una idea que se investiga o refina, pero todavía no se
@@ -30,3 +31,4 @@ Reglas:
   `archive/`.
 - Puede agruparse por línea (`research/<linea>/`).
 - Este README es genérico; no lista investigaciones por nombre.
+<!-- REDPILL:END desk -->
