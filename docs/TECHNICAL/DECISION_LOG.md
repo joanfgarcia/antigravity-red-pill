@@ -3346,6 +3346,33 @@ esquema, los hooks o el outbox estaban sanos.
 
 ---
 
+## [AD-106] `Red Pill CI` corre también en `push` a `main`
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El gate de CI sólo existía en `pull_request`. Tras mergear #131..#134 `main` quedó sin ninguna verificación: `gh api repos/.../commits/main/check-runs` devuelve **cero** check-runs sobre `fad32a5` y `commits/main/status` responde `pending` (sin estados). Un vigilante que pregunte "¿está verde main?" no tiene a qué mirar, así que acaba leyendo un run viejo del PR: el job `ff2516a3` ("CI main tras merge #131") consultó el run `23504653996` — de un commit anterior del PR — y cantó `MAIN_CI_FAILED` tres veces siendo falso. Ese falso positivo es una de las tres entradas del dolor `jobs_frustrated`.
+**Decision**:
+1. `.github/workflows/ci.yml` añade el disparador `push: branches: ["main"]` junto al de `pull_request` ya existente. Mismo workflow, mismos steps, misma matriz.
+2. El `concurrency.group` ya es `${workflow}-${ref}`, así que el run de `main` y el del PR no se cancelan entre sí y el `cancel-in-progress` sigue evitando pilas por rama.
+3. Un run verde en el PR **no** sustituye al de `main`: el commit de merge (semántico, no fast-forward) se verifica por sí mismo.
+**Alternatives**:
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Confiar sólo en el gate de PR | rechazada | No cubre el commit de merge ni la deriva de base. |
+| Vigilar `integration.yml` como "CI de main" | rechazada | Es on-demand/Docker, no corre en cada push; sin señal. |
+| Arreglar sólo el vigilante | rechazada | El vigilante es un `step_command` inline: no deja artefacto durable. |
+| Añadir además `paths-ignore` para docs | aplazada | Optimización de minutos; primero tener la señal. |
+**Rationale / Evidence**:
+- `commits/main/check-runs` → vacío; `commits/main/status` → `pending` sobre `fad32a5`.
+- El run del PR #134 (`41361320971`) fue verde, pero nada re-verificó el merge.
+- `ff2516a3` (3 intentos, `error_log` con `MAIN_CI_FAILED`) apunta a `23504653996`, un run ajeno al head de main; sus logs ya devuelven `HTTP 410`.
+**Consequences**:
+- Coste: ~15 min de runner por merge a `main`. Aceptable frente a un `main` sin verificar.
+- Los vigilantes ya tienen un run de `main` que consultar; la clase de falso positivo "run de PR leído como run de main" desaparece.
+- Deuda: si el coste molesta, `paths-ignore` (docs/**, LORE) es el siguiente paso, no un cambio de política.
+**Implementation**: `0212e73` (trigger en `ci.yml`) + este AD. El AD se escribió en la rama `awaken/20261102_0200` (`24f2d25`) cuyo worktree en `/tmp` desapareció; el trigger llegó a esta rama por separado y el AD se recoge aquí con su evidencia.
+
+---
+
 ## [AD-107] El dolor `jobs_frustrated` dice QUIÉN lo sostiene (atribución, no recuento)
 **Date**: 2026-11-02
 **Status**: ACCEPTED & IMPLEMENTED.
