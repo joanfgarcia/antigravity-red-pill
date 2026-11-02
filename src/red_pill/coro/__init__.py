@@ -105,7 +105,7 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 		},
 	},
 	"send": {
-		"to": {"type": "string", "description": "continuity_id del alma destinataria (mírala en `board`)."},
+		"to": {"type": "string", "description": "continuity_id del alma destinataria (mírala en `board`), o `panel` para dejar una nota en el tablón (no viaja por el outbox)."},
 		"deliver_after": {
 			"type": "number",
 			"description": "epoch en el que el sobre debe entregarse (entrega diferida, RFC-OBS-006 F2).",

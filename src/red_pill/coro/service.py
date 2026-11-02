@@ -220,6 +220,28 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 			raise CoroError(f"`reply_to` no apunta a un mensaje: {reply_to!r}.")
 	if verb == protocol.VERB_REPLY and not parent:
 		raise CoroError("`reply` requiere `reply_to` (el mensaje que contestas).")
+	# El PANEL no es un cuerpo: es el tablón. Un mensaje dirigido al panel no viaja
+	# por el outbox (no hay a quién entregárselo): se convierte en nota, y con
+	# `deliver_in_days` nace sellada (RFC-OBS-006 F3).
+	if str(payload.get("to") or "").strip().lower() == "panel":
+		from red_pill.session import theatre
+
+		try:
+			note = theatre.post_note(
+				type=str(payload.get("note_type") or "notice"),
+				summary=body,
+				ref=payload.get("ref"),
+				continuity_id=me,
+				originator=originator,
+				mission_id=mission,
+				reveal_at=_resolve_delay(payload),
+			)
+		except ValueError as exc:
+			raise CoroError(str(exc)) from exc
+		sealed = ""
+		if note.get("sealed"):
+			sealed = " · sellada hasta " + time.strftime("%Y-%m-%d %H:%M", time.localtime(note["reveal_at"]))
+		return f"[CORO send] panel · nota={note['note_id'][:12]} · {note['type']}{sealed}"
 	if parent and parent.get("to_continuity") and parent.get("to_continuity") != me:
 		raise CoroError("ese mensaje no era para ti: no puedes contestarlo.")
 	target = _resolve_soul(registry, str(payload.get("to") or (parent or {}).get("continuity_id") or ""))
