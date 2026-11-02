@@ -3408,7 +3408,7 @@ esquema, los hooks o el outbox estaban sanos.
 
 ## [AD-108] Taxonomía del dolor: cada clase tiene su ley, no una tasa global
 **Date**: 2026-11-02
-**Status**: PROPOSED — clases propuestas; pendientes acantilados y semántica del acuse (revisión con el Operador).
+**Status**: ACCEPTED & IMPLEMENTED — cinco clases; números como primera parametrización (se ajustan en el YAML, sin tocar código).
 **Context**: `MemoryManager.inject_signal` escala cualquier señal `pain` sobre el punto existente: `intensity = min(10.0, current + SIGNAL_PAIN_ESCALATION_RATE)` (`config.py:1164`, `memory.py:1458`). El punto se direcciona por `sha256(name)`, así que **el mismo nombre reusa el punto** y la escalada es por nombre, no por instancia. Con `SIGNAL_PAIN_ESCALATION_RATE = 0.5` y `job_monitor` a `interval_s = 300 s`, un dolor que nace en 5.0 llega a 10.0 en **10 ticks (50 min)** y se queda ahí mientras la condición persista.
 
 El problema no es que suba: es que sube **según cuántas veces miramos**, no según cuánto duele. Consecuencia observada (2026-11-01/02): `jobs_frustrated` pasó la noche en **Int 10.0** sostenido por 3 jobs ya explicados — dos falsos positivos (CI main tras merge, sonda leyendo un run ajeno) y uno de cola muerta. El operador recibió tres despertares seguidos con la misma alarma anónima a intensidad máxima; la intensidad dejó de ordenar severidad y enseñó a ignorar el rojo.
@@ -3445,7 +3445,7 @@ si acantilado_h y edad_h >= acantilado_h:
 
 | clase | qué hace `ack` |
 |---|---|
-| sin acantilado (`irritacion`, `necesidad`) | congela la intensidad y silencia; se re-arma si cambia el diagnóstico (hash del mensaje, AD-107) |
+| sin acantilado (`irritacion`, `necesidad`) | congela la intensidad y silencia; se re-arma si cambia el **diagnóstico declarado** (`diagnosis`: p. ej. los ids de los jobs — nunca el mensaje, que lleva edades y rutas que cambian solas) |
 | con acantilado (`sed`, `herida`) | silencia el aviso pero **no para el reloj**: al cruzar el acantilado vuelve a 10 y se limpia el acuse — reconociste el ruido, no la consecuencia |
 
 ### Mapa de señales reales
@@ -3482,6 +3482,15 @@ Perfiles en `configs/signals/signal_profiles.yaml` (data-over-code): clase por s
 - `evaporate_signals` borra el punto y reinicia `first_seen_at`: un dolor que reaparece no arrastra la edad anterior (correcto para un fallo nuevo, incorrecto si era un flapping — decidir).
 - Test de regresión: dos ticks seguidos sin cambio no pueden mover la intensidad más de lo que fije la ley.
 
-**Pendiente de decisión del Operador**: (1) ¿cinco clases o se fusionan `necesidad` y `sed`?; (2) los acantilados reales (30 d para `sed` es el tope del buffer; ¿cuántos días para un backup roto?); (3) ¿el acuse congela o solo silencia en las clases sin acantilado?; (4) ¿el dashboard muestra `stage` o seguimos con el 0–10?
+**Pendiente de decisión del Operador**: resuelto el 2026-11-02 — (1) cinco clases; (2) los acantilados se quedan como primera parametrización y se ajustan sobre la marcha (no hay medición todavía: 30 d es el tope medido del buffer, 24 h el de las cartas `soul`, 7 d el del backup, 30 min el de una herida); (3) el acuse congela sin acantilado y solo silencia con acantilado; (4) dashboard con `stage` **y** la barra 0–10.
 
-**Implementación**: ninguna todavía. Con la tabla de clases aprobada, pasa a ACCEPTED y se implementa en tres piezas: `signal_profiles.yaml`, la ley en `inject_signal`, y `red-pill signal ack`.
+**Implementación (2026-11-02)**:
+- `configs/signals/signal_profiles.yaml`: clases, `stages` y mapa señal→clase. Override del Operador en `~/.config/red-pill/signal_profiles.yaml` (tiene precedencia; el default vive en el repo para que lo encuentre el cron desde cualquier cwd).
+- `src/red_pill/metabolism/signal_profiles.py`: catálogo con caché por mtime (hot reload), `compute_intensity` (la ley) y `stage_for`. El fallback interno solo existe para un install incompleto y un test fija que no diverja del YAML.
+- `inject_signal`: la escalada pasa a ser por edad real; el payload gana `first_seen_at`, `age_hours`, `signal_class`, `stage`, `diagnosis_hash`, `acked_at`, `acked_intensity`, `acknowledged` y `ack_mode`. `created_at` queda fijado al primer avistamiento (la edad es honesta); `updated_at` marca el último refresco. El acuse se re-arma solo con un `diagnosis` explícito distinto: hashear el mensaje re-armaba el acuse cada hora (las edades de los jobs cambian), que es exactamente lo contrario de lo que se quiere.
+- El mapa incluye los nombres reales del SentinelAuditor (`signal_<tipo>_failure`), no solo los nombres "de catálogo": sin eso, `service_down` caía en la clase por defecto y perdía su `fallo`.
+- `ack_signal` + `red-pill signal ack --name <señal>`; en clase `fallo` (evento) se rechaza: ya ocurrió.
+- `SIGNAL_PAIN_ESCALATION_RATE` queda DEPRECATED (ya no se aplica).
+- Bug encontrado al probarlo: el comando `signal` se ejecutaba **dos veces** (caía en el barrido por defecto de dos colecciones) — `push` notificaba doble y `ack` se aplicaba dos veces. Corregido en `cli.py` con una pasada única.
+- Tests: `tests/test_signal_profiles.py` (23 casos: catálogo, paridad YAML↔fallback, ley por clase, acantilados, acuse y re-armado). Suite completa: 4089 verdes.
+- Medido en vivo: `jobs_frustrated` pasó de 10.0 (escalada por tick) a **5.04 `warning`** en la primera inyección con la ley nueva; `signal ack` lo congeló en 5.04 y el tick siguiente no lo movió.

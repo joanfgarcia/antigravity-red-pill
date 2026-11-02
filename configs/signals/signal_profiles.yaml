@@ -1,0 +1,97 @@
+# Taxonomía del dolor (AD-108).
+
+# No todas las señales son el mismo dolor ni deben escalar igual: una picadura
+# de mosquito no se comporta como una hemorragia, y las ganas de orinar (que se
+# limpian) no se comportan como el hambre (que si no se atiende termina en
+# SYSTEM-FAILURE). Dos ejes separan las clases: velocidad de aparición y
+# reversibilidad de la consecuencia.
+#
+# Los números son una PRIMERA parametrización, no una medición: se ajustan aquí
+# sobre la marcha, sin tocar código.
+
+default_class: necesidad
+
+classes:
+  irritacion:
+    # Picadura: molesta, no tiene consecuencia. Nunca pasa de `info`.
+    base: 1.5
+    slope_per_hour: 0.0
+    ceiling: 3.0
+    cliff_hours: null
+    ack_mode: freeze
+  necesidad:
+    # Vejiga, intestino: escala, y si se ignora estás hecho una porquería...
+    # pero se limpia. Sin acantilado: no hay pérdida irreversible.
+    base: 2.5
+    slope_per_hour: 0.6
+    ceiling: 7.0
+    cliff_hours: null
+    ack_mode: freeze
+  sed:
+    # Hambre, sed: escala despacio y tiene un punto de no retorno. Cruzarlo es
+    # SYSTEM-FAILURE (p. ej. el buffer de interacción purga a los 30 días).
+    base: 2.5
+    slope_per_hour: 0.25
+    ceiling: 8.9
+    cliff_hours: 720
+    ack_mode: silence
+  herida:
+    # Sangrando: ya duele (no empieza en info) y el reloj corre en minutos.
+    base: 7.5
+    slope_per_hour: 0.0
+    ceiling: 8.5
+    cliff_hours: 0.5
+    ack_mode: silence
+  fallo:
+    # Desangrándose ahora: no escala, ya está en el máximo. Un evento, no un estado.
+    base: 10.0
+    slope_per_hour: 0.0
+    ceiling: 10.0
+    cliff_hours: null
+    ack_mode: none
+
+# Etiquetas legibles del 0–10 (conviven con la barra de intensidad).
+stages:
+  info: 0.0
+  warning: 4.0
+  error: 7.0
+  system_failure: 9.95
+
+# Mapa de las señales reales del kernel a su clase. `cliff_hours` permite el
+# override por señal cuando el daño medible tiene otra fecha.
+signals:
+  jobs_frustrated:
+    class: necesidad
+  korsakoff_amnesia:
+    class: necesidad
+  memory_bloat:
+    class: necesidad
+  runaway_cpu:
+    class: necesidad
+  session_mirror_stats:
+    class: irritacion
+  hung_service:
+    class: herida
+  cuda_cortex_failure:
+    class: herida
+  service_down:
+    class: fallo
+  chronicle_blocked_by_ide:
+    class: sed
+  interaction_unrendered_purged:
+    class: fallo
+  dead_letters_soul:
+    class: herida
+  sw_hub_coverage:
+    class: irritacion
+  # Nombres reales que emite el SentinelAuditor (`signal_<tipo>_failure`).
+  signal_service_down_failure:
+    class: fallo
+  signal_hung_service_failure:
+    class: herida
+  signal_sip_stuck_failure:
+    class: herida
+  signal_memory_bloat_failure:
+    class: necesidad
+  signal_runaway_cpu_failure:
+    class: necesidad

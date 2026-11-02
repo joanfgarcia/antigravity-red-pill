@@ -83,6 +83,7 @@ class JobMonitorPlugin(DaemonPlugin):
 				signal_type="pain",
 				source="JobMonitor",
 				message=frustrated_message(attribution),
+				diagnosis=",".join(str(job.get("id")) for job in attribution),
 			)
 		else:
 			self._mm.evaporate_signals("jobs_frustrated")

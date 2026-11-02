@@ -134,6 +134,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	sig_evap.add_argument("--name", help="Specific signal name to clear (e.g. 'torch_cuda_mismatch')")
 	sig_evap.add_argument("--all", action="store_true", help="Purge ALL active signals")
 
+	sig_ack = signal_sub.add_parser("ack", help="Acknowledge an active pain signal (AD-108)")
+	sig_ack.add_argument("--name", required=True, help="Signal name to acknowledge (e.g. 'jobs_frustrated')")
+
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
 
