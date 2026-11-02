@@ -14,6 +14,7 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from red_pill.core.service_contract import ServiceContract, load_manifest
@@ -22,7 +23,10 @@ from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
 
 # CPU / Memory thresholds (applied to all daemons)
 CPU_THRESHOLD_PCT = 50.0
-MEMORY_LIMIT_MB = 500
+# 640 MB de memoria privada anónima (RssAnon): el daemon vive en ~400 MB. Se
+# excluyen page cache y librerías mapeadas (torch + CUDA, ~270 MB que entran y
+# salen); el margen deja ver una fuga real sin despertar por contabilidad.
+MEMORY_LIMIT_MB = 640
 
 # El proxy de inferencia bloquea su hilo mientras carga un modelo (~5 GB desde
 # NVMe = decenas de segundos): con el timeout corto del resto de daemons, cada
@@ -113,7 +117,54 @@ class ServiceHealthCheck(SentinelPlugin):
 		except Exception:
 			return 0.0
 
+	def _unit_pids(self, unit: str) -> List[int]:
+		"""PIDs vivos del cgroup del servicio (wrapper + daemon + hijos)."""
+		try:
+			r = subprocess.run(
+				["systemctl", "--user", "show", unit, "--property=ControlGroup"],
+				capture_output=True,
+				text=True,
+				timeout=5,
+			)
+			cgroup = ""
+			for line in r.stdout.splitlines():
+				if line.startswith("ControlGroup="):
+					cgroup = line.split("=", 1)[1].strip()
+			if not cgroup:
+				return []
+			procs = Path("/sys/fs/cgroup") / cgroup.lstrip("/") / "cgroup.procs"
+			return [int(x) for x in procs.read_text(encoding="utf-8").split() if x.strip()]
+		except Exception:
+			return []
+
 	def _get_unit_rss_mb(self, unit: str) -> float:
+		"""Memoria privada anónima del servicio (suma de `RssAnon`).
+
+		Dos meter malos antes de este: `MemoryCurrent` del cgroup suma page cache
+		y picos de hijos transitorios (marcaba 500 MB con el daemon en 343 MB); el
+		VmRSS cuenta también las librerías mapeadas (torch + CUDA: ~270 MB que
+		entran y salen según se toquen las páginas). Lo que una fuga engorda es la
+		memoria privada, y eso es `RssAnon`.
+		"""
+		total_kb = 0.0
+		for pid in self._unit_pids(unit):
+			try:
+				with open(f"/proc/{pid}/status", encoding="utf-8") as fh:
+					rss_anon = None
+					vmrss_fallback = None
+					for line in fh:
+						if line.startswith("RssAnon:"):
+							rss_anon = float(line.split()[1])
+							break
+						if line.startswith("VmRSS:"):
+							vmrss_fallback = float(line.split()[1])
+					total_kb += rss_anon if rss_anon is not None else (vmrss_fallback or 0.0)
+			except (OSError, ValueError, IndexError):
+				continue
+		if total_kb > 0:
+			return total_kb / 1024.0
+
+		# Fallback: contador del cgroup (incluye cache) si el cgroup no es legible.
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "show", unit, "--property=MemoryCurrent"],
