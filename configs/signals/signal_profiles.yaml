@@ -130,3 +130,5 @@ signals:
   signal_interaction_unrendered_purged_failure:
     class: fallo
     reconcilable: false   # evento consumado: se atiende o se evapora a mano
+  interaction_expiring_soon:
+    class: sed             # caduca y se pierde: hay acantilado, no vuelve
