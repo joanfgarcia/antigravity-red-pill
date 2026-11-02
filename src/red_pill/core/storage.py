@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from functools import wraps
 from typing import Any, Callable, Generator, List, Optional, TypeVar
 
@@ -68,6 +69,10 @@ class StorageEngine:
 			if not is_local and not self.cfg.QDRANT_API_KEY:
 				logger.critical(f"SEC-CR-02: Qdrant at '{url}' is exposed to the network without an API key.")
 				raise RuntimeError("Aborting execution to protect Bünker sovereignty. Set QDRANT_API_KEY.")
+			# El Búnker exige key incluso en localhost (auth de Qdrant), así que el
+			# aviso de "api key sobre conexión insegura" es ruido en cada arranque:
+			# no cambia nada y ensucia todos los logs del cron.
+			warnings.filterwarnings("ignore", message="Api key is used with an insecure connection", category=UserWarning)
 			self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
 
 	@retry_on_qdrant_error

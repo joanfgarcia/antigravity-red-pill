@@ -134,6 +134,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	sig_evap.add_argument("--name", help="Specific signal name to clear (e.g. 'torch_cuda_mismatch')")
 	sig_evap.add_argument("--all", action="store_true", help="Purge ALL active signals")
 
+	sig_ack = signal_sub.add_parser("ack", help="Acknowledge an active pain signal (AD-108)")
+	sig_ack.add_argument("--name", required=True, help="Signal name to acknowledge (e.g. 'jobs_frustrated')")
+
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
 
@@ -234,6 +237,15 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	coro_reconcile.add_argument("--since-seq", type=int, default=None, help="Backfill explícito desde un event_seq (p.ej. 0)")
 	coro_reconcile.add_argument("--dry-run", action="store_true", help="Solo lista; no publica")
 	coro_reconcile.add_argument("--json", action="store_true", help="Salida JSON")
+
+	coro_note = coro_sub.add_parser("note", help="Deja un acta en el tablón (opcionalmente sellada hasta una fecha)")
+	coro_note.add_argument("summary", help="Texto del acta")
+	coro_note.add_argument("--type", default="notice", choices=["notice", "decision", "suspension", "waiver"])
+	coro_note.add_argument("--subject", default=None, help="task:… / signal:… (obligatorio en suspension/waiver)")
+	coro_note.add_argument("--ref", default=None, help="Referencia (ruta, commit, job…)")
+	coro_note.add_argument("--reveal-at", default=None, help="Cuándo se revela: AAAA-MM-DD[THH:MM] o epoch")
+	coro_note.add_argument("--reveal-in-days", type=float, default=None, help="Alternativa a --reveal-at: dentro de N días")
+	coro_note.add_argument("--expires-in-days", type=float, default=None, help="TTL del acta (días)")
 
 	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
 	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")

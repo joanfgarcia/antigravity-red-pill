@@ -21,11 +21,12 @@ Las tres formas, y son una sola
 -------------------------------
 `type` + `subject` + `expires_at` cubren lo que el Operador pidió:
 
-| Quiero | type | expires_at | Quién lo obedece |
+| Quiero | type | expires_at / reveal_at | Quién lo obedece |
 |---|---|---|---|
 | Solo dejar constancia | `notice` / `decision` | — | nadie: lo lees |
 | Suspender una tarea | `suspension` | opcional (TTL) | **la tarea**, antes de gastar |
 | Aceptar un defecto | `waiver` | opcional (TTL) | el emisor de la señal (futuro) |
+| Dejar una nota sellada | cualquiera | **`reveal_at`** | el tablón: no la muestra hasta esa fecha |
 
 **Suspender no es apagar.** El proceso sigue vivo (el timer late, el watchdog está
 contento); lo que no ocurre es el trabajo caro. Eso mantiene verdadero el invariante
@@ -38,6 +39,8 @@ eso el TTL es lo recomendado y lo permanente se reserva a lo estructural.
 
 from __future__ import annotations
 
+import contextlib
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -62,12 +65,16 @@ CREATE TABLE IF NOT EXISTS theatre_notes (
 	mission_id TEXT,
 	created_at REAL NOT NULL,
 	expires_at REAL,
+	reveal_at REAL,
 	revoked_at REAL,
 	revoked_reason TEXT
 )
 """
 
 _INDEX_DDL = "CREATE INDEX IF NOT EXISTS idx_theatre_subject ON theatre_notes(type, subject)"
+
+# Migración para BD ya creadas: `reveal_at` se añade sin recrear la tabla.
+_MIGRATION_DDL = "ALTER TABLE theatre_notes ADD COLUMN reveal_at REAL"
 
 
 def _connect(db_path: Optional[str]):
@@ -82,6 +89,8 @@ def ensure_schema(db_path: Optional[str] = None) -> None:
 		with _connect(db_path) as conn:
 			conn.execute(_TABLE_DDL)
 			conn.execute(_INDEX_DDL)
+			with contextlib.suppress(sqlite3.OperationalError):
+				conn.execute(_MIGRATION_DDL)
 			conn.commit()
 	except Exception:
 		pass
@@ -97,6 +106,7 @@ def post_note(
 	originator: Optional[str] = None,
 	mission_id: Optional[str] = None,
 	expires_at: Optional[float] = None,
+	reveal_at: Optional[float] = None,
 	db_path: Optional[str] = None,
 	now: Optional[float] = None,
 ) -> Dict[str, Any]:
@@ -121,9 +131,11 @@ def post_note(
 	with _connect(db_path) as conn:
 		conn.execute(_TABLE_DDL)
 		conn.execute(_INDEX_DDL)
+		with contextlib.suppress(sqlite3.OperationalError):
+			conn.execute(_MIGRATION_DDL)
 		conn.execute(
-			"INSERT INTO theatre_notes (note_id, type, subject, summary, ref, continuity_id, originator, mission_id, created_at, expires_at)"
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO theatre_notes (note_id, type, subject, summary, ref, continuity_id, originator, mission_id, created_at, expires_at, reveal_at)"
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			(
 				note_id,
 				kind,
@@ -135,6 +147,7 @@ def post_note(
 				mission_id,
 				stamp,
 				float(expires_at) if expires_at else None,
+				float(reveal_at) if reveal_at else None,
 			),
 		)
 		conn.commit()
@@ -144,12 +157,20 @@ def post_note(
 		"subject": subject_clean,
 		"summary": text,
 		"expires_at": float(expires_at) if expires_at else None,
+		"reveal_at": float(reveal_at) if reveal_at else None,
+		"sealed": bool(reveal_at and float(reveal_at) > stamp),
 		"created_at": stamp,
 	}
 
 
 def _is_active(note: Dict[str, Any], now: float) -> bool:
 	if note.get("revoked_at"):
+		return False
+	# Nota sellada (RFC-OBS-006): existe, pero no se revela hasta su fecha. Como
+	# este es el único portero, el sello vale para la lista, el digest y los
+	# suspensiones: nadie la ve antes de tiempo.
+	reveal = note.get("reveal_at")
+	if reveal and float(reveal) > now:
 		return False
 	expires = note.get("expires_at")
 	return not (expires and float(expires) <= now)

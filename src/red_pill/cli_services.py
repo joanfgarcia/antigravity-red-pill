@@ -789,10 +789,67 @@ def handle_memory(args) -> None:
 		print("Usage: red-pill memory [sync|optimize|enable|disable]")
 
 
+def _parse_when(raw: str) -> Optional[float]:
+	"""Fecha escrita a mano → epoch. Acepta epoch, ISO y AAAA-MM-DD (09:00 local)."""
+	text = str(raw or "").strip()
+	if not text:
+		return None
+	try:
+		return float(text)
+	except ValueError:
+		pass
+	from datetime import datetime
+
+	for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+		try:
+			moment = datetime.strptime(text, fmt)
+			if fmt == "%Y-%m-%d":
+				moment = moment.replace(hour=9, minute=0)
+			return moment.timestamp()
+		except ValueError:
+			continue
+	try:
+		return datetime.fromisoformat(text).timestamp()
+	except ValueError:
+		return None
+
+
+def _handle_coro_note(args: argparse.Namespace) -> None:
+	"""Nota del tablón, opcionalmente sellada (RFC-OBS-006)."""
+	import time
+
+	from red_pill.session import theatre
+
+	reveal = _parse_when(getattr(args, "reveal_at", None) or "")
+	if reveal is None and getattr(args, "reveal_in_days", None):
+		reveal = time.time() + float(args.reveal_in_days) * 86400.0
+	expires = None
+	if getattr(args, "expires_in_days", None):
+		expires = time.time() + float(args.expires_in_days) * 86400.0
+	try:
+		note = theatre.post_note(
+			type=str(getattr(args, "type", "notice") or "notice"),
+			summary=str(getattr(args, "summary", "") or ""),
+			subject=getattr(args, "subject", None),
+			ref=getattr(args, "ref", None),
+			reveal_at=reveal,
+			expires_at=expires,
+		)
+	except ValueError as exc:
+		print(f"[CORO note] {exc}")
+		return
+	stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(note["reveal_at"])) if note.get("sealed") else ""
+	sealed = f" · sellada hasta {stamp}" if stamp else ""
+	print(f"[CORO note] {note['type']} · nota={note['note_id'][:12]}{sealed}")
+
+
 def handle_coro(args: argparse.Namespace) -> None:
-	"""Comandos del coro que no son MCP: reconciliación del outbox."""
+	"""Comandos del coro que no son MCP: tablón (notas) y reconciliación del outbox."""
+	if getattr(args, "coro_cmd", None) == "note":
+		_handle_coro_note(args)
+		return
 	if getattr(args, "coro_cmd", None) != "reconcile":
-		print("[CORO] uso: red-pill coro reconcile [--hours N] [--dry-run] [--json]")
+		print("[CORO] uso: red-pill coro note <texto> [--reveal-at FECHA] | red-pill coro reconcile [--dry-run] [--json]")
 		return
 	import json
 

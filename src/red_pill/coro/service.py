@@ -176,6 +176,13 @@ def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: 
 	days = payload.get("expires_in_days")
 	if expires is None and days:
 		expires = time.time() + float(days) * 86400.0
+	# RFC-OBS-006: nota sellada. `reveal_at` (epoch) o `reveal_in_days`; hasta esa
+	# fecha el tablón no la muestra (y tampoco el digest ni `suspended()`).
+	reveal_raw = payload.get("reveal_at")
+	reveal: Optional[float] = float(reveal_raw) if reveal_raw else None
+	reveal_days = payload.get("reveal_in_days")
+	if reveal is None and reveal_days:
+		reveal = time.time() + float(reveal_days) * 86400.0
 	note = theatre.post_note(
 		type=kind,
 		summary=str(payload.get("summary") or payload.get("body") or ""),
@@ -185,10 +192,12 @@ def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: 
 		originator=originator,
 		mission_id=session.get("mission_id"),
 		expires_at=float(expires) if expires else None,
+		reveal_at=float(reveal) if reveal else None,
 	)
 	until = f" · hasta {time.strftime('%Y-%m-%d', time.localtime(note['expires_at']))}" if note.get("expires_at") else ""
+	sealed = f" · sellada hasta {time.strftime('%Y-%m-%d', time.localtime(note['reveal_at']))}" if note.get("sealed") else ""
 	subject = f" · {note['subject']}" if note.get("subject") else ""
-	return f"[CORO teatro] {note['type']}{subject} · nota={note['note_id'][:12]}{until}"
+	return f"[CORO teatro] {note['type']}{subject} · nota={note['note_id'][:12]}{until}{sealed}"
 
 
 async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
@@ -211,6 +220,28 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 			raise CoroError(f"`reply_to` no apunta a un mensaje: {reply_to!r}.")
 	if verb == protocol.VERB_REPLY and not parent:
 		raise CoroError("`reply` requiere `reply_to` (el mensaje que contestas).")
+	# El PANEL no es un cuerpo: es el tablón. Un mensaje dirigido al panel no viaja
+	# por el outbox (no hay a quién entregárselo): se convierte en nota, y con
+	# `deliver_in_days` nace sellada (RFC-OBS-006 F3).
+	if str(payload.get("to") or "").strip().lower() == "panel":
+		from red_pill.session import theatre
+
+		try:
+			note = theatre.post_note(
+				type=str(payload.get("note_type") or "notice"),
+				summary=body,
+				ref=payload.get("ref"),
+				continuity_id=me,
+				originator=originator,
+				mission_id=mission,
+				reveal_at=_resolve_delay(payload),
+			)
+		except ValueError as exc:
+			raise CoroError(str(exc)) from exc
+		sealed = ""
+		if note.get("sealed"):
+			sealed = " · sellada hasta " + time.strftime("%Y-%m-%d %H:%M", time.localtime(note["reveal_at"]))
+		return f"[CORO send] panel · nota={note['note_id'][:12]} · {note['type']}{sealed}"
 	if parent and parent.get("to_continuity") and parent.get("to_continuity") != me:
 		raise CoroError("ese mensaje no era para ti: no puedes contestarlo.")
 	target = _resolve_soul(registry, str(payload.get("to") or (parent or {}).get("continuity_id") or ""))
@@ -256,6 +287,11 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		expires_at=expires,
 	)
 
+	# Entrega diferida (RFC-OBS-006 F2): el sobre no se intenta hasta esa fecha.
+	delay = _resolve_delay(payload)
+	if delay:
+		event["deliver_after"] = delay
+
 	state, reason = "queued", ""
 	if verb in protocol.WAKE_VERBS:
 		# S2.1: el buzón único. El sobre va al outbox de neon-link (canal `soul`);
@@ -281,6 +317,23 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		f"estado={state}{reply_note} · expira en {protocol.budget_s(verb, value) / 86400:.0f}d · "
 		f"msg={event['event_id']} · seq={event['event_seq']}{why}"
 	)
+
+
+def _resolve_delay(payload: Dict[str, Any]) -> Optional[float]:
+	"""`deliver_after` (epoch) o `deliver_in_days` → epoch. None = ya."""
+	raw = payload.get("deliver_after")
+	if raw:
+		try:
+			return float(raw)
+		except (TypeError, ValueError):
+			return None
+	days = payload.get("deliver_in_days")
+	if days:
+		try:
+			return time.time() + float(days) * 86400.0
+		except (TypeError, ValueError):
+			return None
+	return None
 
 
 def _push(target: str) -> tuple[str, str]:

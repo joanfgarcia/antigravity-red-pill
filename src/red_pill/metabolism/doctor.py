@@ -26,8 +26,39 @@ import logging
 import os
 import subprocess
 import time
+from datetime import datetime, timezone
 
 logger = logging.getLogger("redpill.doctor")
+
+
+def _as_epoch(value) -> float | None:
+	"""Normaliza `created_at` a epoch.
+
+	neon-link escribe el outbox con la marca nativa de SQLite
+	('2026-11-01 20:27:13', TEXT en UTC), pero versiones antiguas guardaron
+	epoch REAL. Se aceptan ambos; `None` si el formato es desconocido (el
+	llamante decide, nunca revienta).
+	"""
+	if value is None:
+		return None
+	if isinstance(value, (int, float)):
+		return float(value)
+	text = str(value).strip()
+	if not text:
+		return None
+	try:
+		return float(text)
+	except ValueError:
+		pass
+	for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+		try:
+			return datetime.strptime(text[:26], fmt).replace(tzinfo=timezone.utc).timestamp()
+		except ValueError:
+			continue
+	try:
+		return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+	except ValueError:
+		return None
 
 
 def _check_timers() -> list:
@@ -61,7 +92,9 @@ def _check_model_match() -> list:
 	try:
 		from red_pill.core.model_registry import ModelRegistry
 
-		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE") or "samantha"
+		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE")
+		configured = bool(profile_name)
+		profile_name = profile_name or "samantha"
 		model_path = (ModelRegistry.get_profile(profile_name) or {}).get("model_path")
 		if not model_path:
 			out.append(("yellow", f"No se pudo resolver el modelo del perfil '{profile_name}' (revisar model_profiles.yaml)."))
@@ -86,21 +119,34 @@ def _check_model_match() -> list:
 			try:
 				resp = urllib.request.urlopen("http://127.0.0.1:8760/v1/models", timeout=30)
 				data = json.loads(resp.read().decode())
-				loaded_model = ""
-				if "data" in data and len(data["data"]) > 0:
-					loaded_model = os.path.basename(data["data"][0].get("id", ""))
-				if loaded_model:
-					if model_file == loaded_model:
-						out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
-					else:
-						out.append(
-							(
-								"red",
-								f"Modelo en ejecución NO coincide con el configurado (activo: '{loaded_model}', perfil '{profile_name}' → {model_file}).",
-							)
-						)
-				else:
+				entry = (data.get("data") or [{}])[0]
+				loaded_model = os.path.basename(entry.get("id", ""))
+				resident = entry.get("loaded")
+				if not loaded_model:
 					out.append(("yellow", "No se pudo recuperar el ID del modelo desde la API local."))
+				elif resident is False:
+					# El proxy carga modelos on-demand: "no residente" no es un mismatch,
+					# es el estado normal entre turnos.
+					out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}); el proxy no tiene modelo residente (carga on-demand)."))
+				elif model_file == loaded_model:
+					out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
+				elif not configured:
+					# Sin MINION_PROFILE explícito comparamos contra un default asumido:
+					# eso es incertidumbre, no un fallo de configuración.
+					out.append(
+						(
+							"yellow",
+							f"Modelo residente '{loaded_model}' ≠ perfil por defecto '{profile_name}' ({model_file});"
+							" define MINION_PROFILE si quieres que el doctor lo exija.",
+						)
+					)
+				else:
+					out.append(
+						(
+							"red",
+							f"Modelo en ejecución NO coincide con el configurado (activo: '{loaded_model}', perfil '{profile_name}' → {model_file}).",
+						)
+					)
 			except Exception as exc:
 				out.append(("yellow", f"Servidor dual-bind running pero no responde en puerto 8760: {exc}"))
 		elif running:
@@ -216,7 +262,8 @@ def _check_coro() -> list:
 		except Exception as exc:
 			out.append(("info", f"No se pudo leer el hook {label}: {exc}"))
 
-	# 4) outbox soul: atascos y DLQ.
+	# 4) outbox soul: atascos y DLQ. Cada consulta va aislada: una tabla ausente o
+	# un `created_at` con formato inesperado no pueden cegar el resto del chequeo.
 	try:
 		import sqlite3
 
@@ -227,14 +274,26 @@ def _check_coro() -> list:
 			con = sqlite3.connect(str(db), timeout=2.0)
 			con.row_factory = sqlite3.Row
 			try:
-				row = con.execute(
-					"SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM outbox WHERE channel='soul' AND status='PENDING'"
-				).fetchone()
+				try:
+					row = con.execute(
+						"SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM outbox WHERE channel='soul' AND status='PENDING'"
+					).fetchone()
+				except sqlite3.Error as exc:
+					out.append(("info", f"No se pudo leer el outbox soul: {exc}"))
+					row = None
 				if row and row["n"]:
-					age = time.time() - float(row["oldest"] or time.time())
-					if age > 3600:
-						out.append(("yellow", f"{row['n']} sobre(s) soul PENDING; el más viejo lleva {age/60:.0f} min. Revisa el SoulHub."))
-				dead = con.execute("SELECT COUNT(*) FROM dead_letters WHERE channel='soul'").fetchone()[0]
+					oldest = _as_epoch(row["oldest"])
+					if oldest is None:
+						out.append(("info", f"{row['n']} sobre(s) soul PENDING; edad desconocida (created_at ilegible: {row['oldest']!r})."))
+					else:
+						age = time.time() - oldest
+						if age > 3600:
+							out.append(("yellow", f"{row['n']} sobre(s) soul PENDING; el más viejo lleva {age/60:.0f} min. Revisa el SoulHub."))
+				try:
+					dead = con.execute("SELECT COUNT(*) FROM dead_letters WHERE channel='soul'").fetchone()[0]
+				except sqlite3.Error as exc:
+					out.append(("info", f"No se pudieron leer las dead letters soul: {exc}"))
+					dead = 0
 				if dead:
 					out.append(("yellow", f"{dead} dead letter(s) soul: revisa `neon-link redrive`."))
 			finally:

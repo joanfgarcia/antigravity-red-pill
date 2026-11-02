@@ -1419,10 +1419,15 @@ class MemoryManager:
 		originator: Optional[str] = None,
 		criticality: str = "WARNING",
 		message: Optional[str] = None,
+		diagnosis: Optional[str] = None,
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
 		If muted=True, the signal is written to the MinionInbox (SQLite) instead of Qdrant (Zero Context Bloat).
+
+		`diagnosis` es la huella ESTABLE del problema (p. ej. los ids de los jobs que
+		sostienen el dolor, AD-108): si cambia, se re-arma el acuse. El `message`
+		no sirve para eso — lleva edades y rutas que cambian solas.
 		"""
 		try:
 			from red_pill.core.inbox import MinionInbox
@@ -1445,38 +1450,144 @@ class MemoryManager:
 
 			from qdrant_client.http import models
 
+			from red_pill.metabolism.signal_profiles import ACK_FREEZE, ACK_NONE, ACK_SILENCE, compute_intensity, load_catalog
+
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
 
-			# Check for existing signal to apply Pain Escalation
+			# Estado previo del punto: la edad manda (AD-108), no el número de ticks.
+			previous: dict = {}
 			try:
 				existing = self.client.retrieve(collection_name="signal_memories", ids=[point_id])
-				if existing and len(existing) > 0 and existing[0].payload:
-					current_intensity = existing[0].payload.get("intensity", intensity)
-					if signal_type == "pain":
-						# Physical pain escalating over time
-						intensity = min(10.0, current_intensity + self.cfg.SIGNAL_PAIN_ESCALATION_RATE)
+				if existing:
+					previous = dict(existing[0].payload or {})
 			except Exception:
-				pass
+				previous = {}
 
+			now = datetime.now(timezone.utc)
+			first_seen_iso = previous.get("first_seen_at") or previous.get("created_at") or now.isoformat()
+			try:
+				first_seen_ts = datetime.fromisoformat(str(first_seen_iso).replace("Z", "+00:00")).timestamp()
+			except ValueError:
+				first_seen_ts = now.timestamp()
+			age_hours = max(0.0, (now.timestamp() - first_seen_ts) / 3600.0)
+
+			diagnosis_hash = hashlib.sha256(diagnosis.encode("utf-8")).hexdigest() if diagnosis else None
+			acked_at = previous.get("acked_at")
+			# Diagnóstico nuevo ⇒ se re-arma el acuse: lo reconocido era el ruido anterior.
+			if acked_at and diagnosis_hash and previous.get("diagnosis_hash") and diagnosis_hash != previous.get("diagnosis_hash"):
+				acked_at = None
+
+			signal_class = previous.get("signal_class")
+			stage = previous.get("stage") or "info"
+			ack_mode = None
+			if signal_type == "pain":
+				catalog = load_catalog()
+				profile, overrides = catalog.profile_for(name)
+				if overrides.get("cliff_hours") not in (None, "", 0):
+					from dataclasses import replace
+
+					profile = replace(profile, cliff_hours=float(overrides["cliff_hours"]))
+				base = float(intensity) if intensity is not None else profile.base
+				intensity, stage = compute_intensity(profile, base, age_hours)
+				signal_class = profile.name
+				ack_mode = profile.ack_mode
+				if acked_at:
+					if profile.ack_mode == ACK_FREEZE:
+						# Sin acantilado: el acuse para el reloj.
+						frozen = previous.get("acked_intensity")
+						if frozen is not None:
+							intensity = min(float(frozen), profile.ceiling)
+							stage = catalog.stage_for(intensity)
+					elif profile.ack_mode == ACK_SILENCE:
+						# Con acantilado solo silencia: la edad sigue corriendo.
+						pass
+			else:
+				from red_pill.metabolism.signal_profiles import stage_for
+
+				stage = stage_for(float(intensity))
+
+			acknowledged = bool(acked_at) and ack_mode != ACK_NONE
 			payload = {
 				"name": name,
 				"content": message or f"[{signal_type.upper()}] {name}",
 				"signal_type": signal_type,
 				"signal_source": source,
 				"intensity": intensity,
+				"stage": stage,
 				"criticality": criticality,
-				"created_at": datetime.now(timezone.utc).isoformat(),
+				"created_at": first_seen_iso,
+				"updated_at": now.isoformat(),
+				"first_seen_at": first_seen_iso,
+				"age_hours": round(age_hours, 2),
 				"originator": originator or "Legacy (Pre-Audit)",
 			}
+			if signal_class:
+				payload["signal_class"] = signal_class
+			if diagnosis_hash:
+				payload["diagnosis_hash"] = diagnosis_hash
+			if acked_at:
+				payload["acked_at"] = acked_at
+				payload["acknowledged"] = acknowledged
+				if ack_mode:
+					payload["ack_mode"] = ack_mode
+				if previous.get("acked_intensity") is not None:
+					payload["acked_intensity"] = previous.get("acked_intensity")
 
 			# Zero vector for purely semantic/flag signals
 			vector = [0.0] * self.cfg.VECTOR_SIZE
 
 			self.client.upsert(collection_name="signal_memories", points=[models.PointStruct(id=point_id, vector=vector, payload=payload)])
-			logger.info(f"Injected signal '{name}' (Intensity: {intensity})")
+			logger.info(f"Injected signal '{name}' [{stage}] (Intensity: {intensity:.1f}, age {age_hours:.1f}h)")
 		except Exception as e:
 			logger.error(f"Failed to inject signal '{name}': {e}")
+
+	def ack_signal(self, name: str) -> dict:
+		"""Reconoce un dolor activo (AD-108): el Operador lo ha visto.
+
+		`ack_mode: freeze` (clases sin acantilado) para el reloj: la intensidad se
+		congela donde estaba. `ack_mode: silence` (con acantilado) solo silencia el
+		aviso: la edad sigue corriendo y al cruzar el acantilado vuelve a 10.
+		`ack_mode: none` (eventos) no se reconoce: ya ocurrió.
+		"""
+		import hashlib
+		import uuid
+		from datetime import datetime, timezone
+
+		from qdrant_client.http import models
+
+		from red_pill.metabolism.signal_profiles import ACK_NONE, load_catalog
+
+		sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
+		point_id = str(uuid.UUID(sig_hash[:32]))
+		try:
+			existing = self.client.retrieve(collection_name="signal_memories", ids=[point_id])
+		except Exception as exc:
+			return {"status": "error", "name": name, "detail": str(exc)}
+		if not existing:
+			return {"status": "missing", "name": name}
+
+		profile = load_catalog().class_for(name)
+		if profile.ack_mode == ACK_NONE:
+			return {"status": "not_ackable", "name": name, "class": profile.name}
+
+		payload = dict(existing[0].payload or {})
+		payload["acked_at"] = datetime.now(timezone.utc).isoformat()
+		payload["acked_intensity"] = payload.get("intensity")
+		payload["acknowledged"] = True
+		payload["ack_mode"] = profile.ack_mode
+		self.client.upsert(
+			collection_name="signal_memories",
+			points=[models.PointStruct(id=point_id, vector=[0.0] * self.cfg.VECTOR_SIZE, payload=payload)],
+		)
+		logger.info(f"Acknowledged signal '{name}' ({profile.ack_mode}, frozen at {payload['acked_intensity']})")
+		return {
+			"status": "acked",
+			"name": name,
+			"class": profile.name,
+			"ack_mode": profile.ack_mode,
+			"frozen_intensity": payload.get("acked_intensity"),
+		}
 
 	def has_signal(self, name: str) -> bool:
 		"""
@@ -1493,10 +1604,34 @@ class MemoryManager:
 		except Exception:
 			return False
 
-	def evaporate_signals(self, name: Optional[str] = None) -> None:
+	def signals_by_source(self, source: str) -> list[dict]:
+		"""Señales activas emitidas por `source` (payload completo).
+
+		La propiedad por emisor es la guarda de la reconciliación (RFC-OBS-005 §4.5):
+		sin esto, un barrido por nombre podría tocar el dolor de otro.
 		"""
-		Evaporates a specific biological signal by name (curing the pain).
+		from qdrant_client.http import models
+
+		try:
+			points, _ = self.client.scroll(
+				collection_name="signal_memories",
+				scroll_filter=models.Filter(
+					must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]
+				),
+				limit=200,
+				with_payload=True,
+			)
+			return [dict(p.payload or {}) for p in points]
+		except Exception as exc:
+			logger.warning(f"No se pudieron leer las señales de '{source}': {exc}")
+			return []
+
+	def evaporate_signals(self, name: Optional[str] = None) -> int:
+		"""Evaporates a specific biological signal by name (curing the pain).
+
 		If name is None, clears ALL signals (Neural Reset).
+		Devuelve cuántos puntos borró de verdad: un log no prueba un borrado
+		(RFC-OBS-005 §8), y la reconciliación aborta si pidió borrar y borró 0.
 		"""
 		try:
 			from qdrant_client.http import models
@@ -1511,7 +1646,7 @@ class MemoryManager:
 				# Better way to delete all in Qdrant: Filter must_not with an impossible condition or just match_all
 				self.client.delete(collection_name="signal_memories", points_selector=models.Filter(must_not=[models.HasIdCondition(has_id=[])]))
 				logger.debug("Neural Reset: All signals evaporated.")
-				return
+				return 1
 
 			import hashlib
 			import uuid
@@ -1519,10 +1654,14 @@ class MemoryManager:
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
 
+			existed = bool(self.client.retrieve(collection_name="signal_memories", ids=[point_id]) or [])
 			self.client.delete(collection_name="signal_memories", points_selector=models.PointIdsList(points=[point_id]))
-			logger.debug(f"Evaporated signal '{name}'")
+			if existed:
+				logger.debug(f"Evaporated signal '{name}'")
+			return 1 if existed else 0
 		except Exception as e:
 			logger.warning(f"Failed to evaporate signal '{name}': {e}")
+			return 0
 
 	def retrieve_parent_context(self, child_id: str) -> Optional[Dict[str, Any]]:
 		"""

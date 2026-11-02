@@ -3343,3 +3343,190 @@ esquema, los hooks o el outbox estaban sanos.
 - El doctor no cura; el reseed de hooks sigue siendo una acción del instalador.
 - El catálogo MCP cacheado sigue siendo un papercut de UX hasta que el cliente
   recargue.
+
+---
+
+## [AD-106] `Red Pill CI` corre también en `push` a `main`
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El gate de CI sólo existía en `pull_request`. Tras mergear #131..#134 `main` quedó sin ninguna verificación: `gh api repos/.../commits/main/check-runs` devuelve **cero** check-runs sobre `fad32a5` y `commits/main/status` responde `pending` (sin estados). Un vigilante que pregunte "¿está verde main?" no tiene a qué mirar, así que acaba leyendo un run viejo del PR: el job `ff2516a3` ("CI main tras merge #131") consultó el run `23504653996` — de un commit anterior del PR — y cantó `MAIN_CI_FAILED` tres veces siendo falso. Ese falso positivo es una de las tres entradas del dolor `jobs_frustrated`.
+**Decision**:
+1. `.github/workflows/ci.yml` añade el disparador `push: branches: ["main"]` junto al de `pull_request` ya existente. Mismo workflow, mismos steps, misma matriz.
+2. El `concurrency.group` ya es `${workflow}-${ref}`, así que el run de `main` y el del PR no se cancelan entre sí y el `cancel-in-progress` sigue evitando pilas por rama.
+3. Un run verde en el PR **no** sustituye al de `main`: el commit de merge (semántico, no fast-forward) se verifica por sí mismo.
+**Alternatives**:
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Confiar sólo en el gate de PR | rechazada | No cubre el commit de merge ni la deriva de base. |
+| Vigilar `integration.yml` como "CI de main" | rechazada | Es on-demand/Docker, no corre en cada push; sin señal. |
+| Arreglar sólo el vigilante | rechazada | El vigilante es un `step_command` inline: no deja artefacto durable. |
+| Añadir además `paths-ignore` para docs | aplazada | Optimización de minutos; primero tener la señal. |
+**Rationale / Evidence**:
+- `commits/main/check-runs` → vacío; `commits/main/status` → `pending` sobre `fad32a5`.
+- El run del PR #134 (`41361320971`) fue verde, pero nada re-verificó el merge.
+- `ff2516a3` (3 intentos, `error_log` con `MAIN_CI_FAILED`) apunta a `23504653996`, un run ajeno al head de main; sus logs ya devuelven `HTTP 410`.
+**Consequences**:
+- Coste: ~15 min de runner por merge a `main`. Aceptable frente a un `main` sin verificar.
+- Los vigilantes ya tienen un run de `main` que consultar; la clase de falso positivo "run de PR leído como run de main" desaparece.
+- Deuda: si el coste molesta, `paths-ignore` (docs/**, LORE) es el siguiente paso, no un cambio de política.
+**Implementation**: `0212e73` (trigger en `ci.yml`) + este AD. El AD se escribió en la rama `awaken/20261102_0200` (`24f2d25`) cuyo worktree en `/tmp` desapareció; el trigger llegó a esta rama por separado y el AD se recoge aquí con su evidencia.
+
+---
+
+## [AD-107] El dolor `jobs_frustrated` dice QUIÉN lo sostiene (atribución, no recuento)
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: `JobMonitorPlugin` inyectaba `jobs_frustrated` con `intensity=5.0` y **sin mensaje**: el dashboard sólo recibía un recuento. Dos consecuencias observadas en dos despertares seguidos (2026-11-01 y 2026-11-02):
+1. **El dolor era anónimo.** Con `job_list` fuera de banda nadie sabía si el dolor lo sostenía un falso positivo (`ff2516a3`, "CI main tras merge #131", que leía un run ajeno porque `Red Pill CI` sólo dispara en `pull_request`) o una avería real.
+2. **El dolor satura.** `MemoryManager.inject_signal` escala el dolor sobre el punto existente (`SIGNAL_PAIN_ESCALATION_RATE`) en cada tick del monitor (300 s). Un dolor que nace en 5.0 llega a **10.0 en minutos** y se queda ahí: la intensidad deja de ordenar severidad y todas las alertas empatan en el máximo.
+
+**Decision**:
+1. `CognitiveQueueManager.frustrated_jobs(sources, limit=10)` — lectura nueva, **solo lectura**, devuelve `id`, `source`, `title` (de `json_extract(payload,'$.title')`) y `age_hours` de los FRUSTRATED del carril mecánico, más reciente primero.
+2. `job_monitor.frustrated_message(jobs)` compone el `message` del dolor: `[PAIN] jobs_frustrated — N job(s) FRUSTRATED: ff2516a3 'CI main tras merge #131', 11h · …`, con caída a `source` cuando el payload no trae título.
+3. `job_health()` **no cambia** de contrato (`{"stuck": int, "frustrated": int}`): hay consumidores y tests que comparan el dict completo. La atribución va por método aparte.
+4. El escalado de dolor **no se toca** aquí: es una decisión de política (¿escalar por tick o por hora?) que merece su propio AD con datos.
+
+**Alternatives**:
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Añadir la lista de jobs dentro de `job_health` | rechazada | Rompe el contrato `Dict[str, int]` y sus tests; mezcla recuento con detalle. |
+| Bajar la intensidad del dolor para que no sature | rechazada *aquí* | Cambia semántica de vigilancia sin datos; el escalado merece AD propio. |
+| Mencionar sólo el job más antiguo | rechazada | El operador necesita ver el conjunto para decidir qué re-encolar y qué es basura de cola. |
+| Silenciar `jobs_frustrated` cuando el job está "explicado" | rechazada | Exigiría un campo de diagnóstico en la cola; hoy no existe y sería inmutable a mano. |
+
+**Rationale / Evidence**:
+- `tests/test_job_monitor_attribution.py` (6 casos): atribución con id/título/edad, filtrado por status y por source, tope y orden, lista vacía sin sources, formato del mensaje con y sin título.
+- `tests/test_job_manager.py` + el nuevo fichero: **52 tests verdes** con `pythonpath = ["src"]` (pytest resuelve el `src` del worktree, no el checkout vivo).
+- `ruff check` limpio en los tres ficheros tocados.
+
+**Consequences y deuda**:
+- El payload del dolor crece a lo sumo 10 entradas (≈1 KB): suficiente para reconocer la cola, acotado para no inflar Qdrant.
+- `age_hours` usa `updated_at`, que es cuando el job se frustró (no `created_at`): es la edad del dolor, no del trabajo.
+- Sigue sin haber forma de **reconocer** una frustración ya diagnosticada; hoy caduca por `purge_hygiene(frustrated_days=14)` del janitor nocturno, lo que deja hasta dos semanas de dolor por un falso positivo. Candidato a AD futuro.
+
+---
+
+## [AD-108] Taxonomía del dolor: cada clase tiene su ley, no una tasa global
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED — cinco clases; números como primera parametrización (se ajustan en el YAML, sin tocar código).
+**Context**: `MemoryManager.inject_signal` escala cualquier señal `pain` sobre el punto existente: `intensity = min(10.0, current + SIGNAL_PAIN_ESCALATION_RATE)` (`config.py:1164`, `memory.py:1458`). El punto se direcciona por `sha256(name)`, así que **el mismo nombre reusa el punto** y la escalada es por nombre, no por instancia. Con `SIGNAL_PAIN_ESCALATION_RATE = 0.5` y `job_monitor` a `interval_s = 300 s`, un dolor que nace en 5.0 llega a 10.0 en **10 ticks (50 min)** y se queda ahí mientras la condición persista.
+
+El problema no es que suba: es que sube **según cuántas veces miramos**, no según cuánto duele. Consecuencia observada (2026-11-01/02): `jobs_frustrated` pasó la noche en **Int 10.0** sostenido por 3 jobs ya explicados — dos falsos positivos (CI main tras merge, sonda leyendo un run ajeno) y uno de cola muerta. El operador recibió tres despertares seguidos con la misma alarma anónima a intensidad máxima; la intensidad dejó de ordenar severidad y enseñó a ignorar el rojo.
+
+**Decisión propuesta (Operador, 2026-11-02)**: no todas las señales son el mismo dolor ni deben escalar igual. Una picadura de mosquito no se comporta como una hemorragia; las ganas de orinar o de comer empiezan como `info`, suben a `warning` si se ignoran, llegan a `error` —no te matan pero estás hecho una porquería— y, en el caso del hambre o la sed, si nunca se atienden terminan en `SYSTEM-FAILURE` y en una situación de no retorno. La escalada, por tanto, no es una tasa global: es una **ley por clase**, gobernada por dos ejes — **velocidad de aparición** y **reversibilidad de la consecuencia**.
+
+### Taxonomía (5 clases)
+
+| clase | analogía | base | pendiente | techo sin atender | acantilado → consecuencia |
+|---|---|---|---|---|---|
+| `irritacion` | picadura de mosquito | 0–2 | 0/h | 3 (`info` para siempre) | — |
+| `necesidad` | vejiga, intestino | 2.5 | +0.6/h | 7 (`error`) | — (la consecuencia se limpia) |
+| `sed` | hambre, sed | 2.5 | +0.25/h | 8.9 (`error`) | a **N días → 10 `SYSTEM-FAILURE` irreversible** |
+| `herida` | sangrando | 7.5 | 0/h | 8.5 | a **~30 min → 10 `SYSTEM-FAILURE`** |
+| `fallo` | desangrándose ahora | 10 | — | 10 | ya está ocurriendo |
+
+La diferencia entre `necesidad` y `sed` no es de intensidad: es que la de `necesidad` se puede limpiar (una cola atascada se purga) y la de `sed` **no** (un turno purgado a los 30 días no vuelve). Y la de `herida` no empieza baja: ya duele, y el reloj corre en minutos.
+
+### Ley de escalado (una, parametrizada por clase)
+
+```
+edad_h   = (ahora - first_seen_at) / 3600
+intensity = clamp(base + pendiente * edad_h, base, techo)
+si acantilado_h y edad_h >= acantilado_h:
+    intensity = 10.0 ; stage = system_failure   # irreversible
+```
+
+- El reloj es **tiempo real**, nunca ticks (el defecto que abrió este AD).
+- `first_seen_at` se fija la primera vez que aparece el nombre y **no** se toca mientras la señal siga viva; al evaporarse el punto, se reinicia.
+- El `intensity` que pase el productor se interpreta como **base**, no como valor absoluto: la clase manda en la pendiente y el techo.
+- `stage` se deriva: `info` < 4 · `warning` 4–6.9 · `error` 7–8.9 · `system_failure` = 10 por acantilado (o clase `fallo`).
+
+### Acuse (no es lo mismo silenciar que parar el reloj)
+
+| clase | qué hace `ack` |
+|---|---|
+| sin acantilado (`irritacion`, `necesidad`) | congela la intensidad y silencia; se re-arma si cambia el **diagnóstico declarado** (`diagnosis`: p. ej. los ids de los jobs — nunca el mensaje, que lleva edades y rutas que cambian solas) |
+| con acantilado (`sed`, `herida`) | silencia el aviso pero **no para el reloj**: al cruzar el acantilado vuelve a 10 y se limpia el acuse — reconociste el ruido, no la consecuencia |
+
+### Mapa de señales reales
+
+| clase | señales |
+|---|---|
+| `irritacion` | `sw_hub_coverage`, avisos de deprecación, ruido de lint |
+| `necesidad` | `jobs_frustrated`, `korsakoff_amnesia`, sobres `soul` PENDING, `memory_bloat`, `runaway_cpu` |
+| `sed` | `chronicle_blocked_by_ide` (los turnos se purgan a los 30 d), backup cloud fallando N días, dead letters acumuladas |
+| `herida` | `hung_service` sobre el MCP o el daemon, `dead_letters` de un mensaje perdido, `cuda_cortex_failure` |
+| `fallo` | `service_down`, `interaction_unrendered_purged` (la pérdida ya ocurrió), Qdrant inalcanzable |
+
+### Cómo materializarlo (las opciones anteriores siguen siendo la implementación)
+
+| # | Pieza | Papel en el modelo |
+|---|---|---|
+| A | Escalar por **tiempo transcurrido** | Es la ley; sin esto no hay taxonomía que valga |
+| B | **`diagnosis_hash`** | Re-arma el acuse y distingue "sigue igual" de "hay algo nuevo" |
+| C | **Sin escalado** | Válida solo para `irritacion` (pendiente 0) — no como política global |
+| D | **`ack`** | Obligatorio: sin él, `sed` y `necesidad` acaban en máximos y el operador aprende a ignorarlos |
+
+Perfiles en `configs/signals/signal_profiles.yaml` (data-over-code): clase por señal, con override de base/acantilado cuando haga falta. `inject_signal` resuelve la clase por nombre y cae a `necesidad` si no está mapeada.
+
+**Rationale / Evidence**:
+- `SIGNAL_PAIN_ESCALATION_RATE = 0.5` × tick 300 s × 10 = saturación en 50 min desde 5.0: hoy no hay clase, hay una tasa.
+- `signal_memories` guarda un punto por nombre: la escalada no distingue "sigue el mismo problema" de "hay uno nuevo".
+- Medido tras reiniciar con AD-107 (2026-11-02 10:12): `jobs_frustrated` en **10.0** citando 5 jobs, **los cinco ya explicados** — dos vigilantes de CI que leían un run ajeno, dos jobs de cola muerta y un DAG cerrado hace 107 h. Cancelar un job no lo saca del dolor: pasa a `FRUSTRATED` hasta `purge_hygiene` (14 días).
+- El escalado también toca sondas (`hung_service`, `memory_bloat`): un falso positivo que se reinyecta satura igual de rápido.
+- La metáfora ya existe en el sistema (`korsakoff_amnesia`, `cuda_cortex_failure`, `SIGNAL_AMNESIA_HOURS = 8`): esto la ordena en vez de inventar otra.
+
+**Consequences**:
+- La intensidad vuelve a ser comparable entre señales: 10 significará "esto es grave o ya no tiene vuelta", no "esto lleva un rato".
+- Hay que fijar por clase lo que hoy es un número global: techo, pendiente y acantilado (los valores de la tabla son una propuesta, no una medición).
+- `evaporate_signals` borra el punto y reinicia `first_seen_at`: un dolor que reaparece no arrastra la edad anterior (correcto para un fallo nuevo, incorrecto si era un flapping — decidir).
+- Test de regresión: dos ticks seguidos sin cambio no pueden mover la intensidad más de lo que fije la ley.
+
+**Pendiente de decisión del Operador**: resuelto el 2026-11-02 — (1) cinco clases; (2) los acantilados se quedan como primera parametrización y se ajustan sobre la marcha (no hay medición todavía: 30 d es el tope medido del buffer, 24 h el de las cartas `soul`, 7 d el del backup, 30 min el de una herida); (3) el acuse congela sin acantilado y solo silencia con acantilado; (4) dashboard con `stage` **y** la barra 0–10.
+
+**Deuda abierta (2026-11-02) — reloj frente a castigo**: el Operador señala que no es coherente que el dolor suba por igual en todas las clases cuando el tiempo pasa sin que nadie esté despierto para atenderlo. Son dos modelos distintos y hoy solo está implementado uno:
+
+- **Reloj físico**: la consecuencia irreversible avanza sola, la miremos o no (el buffer purga a los 30 días aunque Aleth duerma; una carta `soul` caduca a las 24 h). Correcto para `sed` y `herida`: el daño no espera a que haya observador.
+- **Castigo por decisión**: el dolor sube porque alguien lo vio y decidió no atenderlo. Necesita un evento de *oportunidad de actuar* (turno despierto, digest entregado, alerta leída) y solo tiene sentido para `irritacion` y `necesidad`, donde el daño real es deuda de atención, no pérdida.
+
+Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +29 en 48 h, topado en 7): la señal amanece en `error` sin que nadie haya decidido nada. Eso es el "castigo" que el Operador señala, y es cierto: castiga al sistema por la ausencia del observador. Se deja **como está** por decisión explícita (2026-11-02) hasta tener datos de cuántas señales llegan al techo sin intervención; la separación reloj/castigo (y el registro de "oportunidades de actuar") queda como candidata a revisión de este AD.
+
+**Implementación (2026-11-02)**:
+- `configs/signals/signal_profiles.yaml`: clases, `stages` y mapa señal→clase. Override del Operador en `~/.config/red-pill/signal_profiles.yaml` (tiene precedencia; el default vive en el repo para que lo encuentre el cron desde cualquier cwd).
+- `src/red_pill/metabolism/signal_profiles.py`: catálogo con caché por mtime (hot reload), `compute_intensity` (la ley) y `stage_for`. El fallback interno solo existe para un install incompleto y un test fija que no diverja del YAML.
+- `inject_signal`: la escalada pasa a ser por edad real; el payload gana `first_seen_at`, `age_hours`, `signal_class`, `stage`, `diagnosis_hash`, `acked_at`, `acked_intensity`, `acknowledged` y `ack_mode`. `created_at` queda fijado al primer avistamiento (la edad es honesta); `updated_at` marca el último refresco. El acuse se re-arma solo con un `diagnosis` explícito distinto: hashear el mensaje re-armaba el acuse cada hora (las edades de los jobs cambian), que es exactamente lo contrario de lo que se quiere.
+- El mapa incluye los nombres reales del SentinelAuditor (`signal_<tipo>_failure`), no solo los nombres "de catálogo": sin eso, `service_down` caía en la clase por defecto y perdía su `fallo`.
+- `ack_signal` + `red-pill signal ack --name <señal>`; en clase `fallo` (evento) se rechaza: ya ocurrió.
+- `SIGNAL_PAIN_ESCALATION_RATE` queda DEPRECATED (ya no se aplica).
+- Bug encontrado al probarlo: el comando `signal` se ejecutaba **dos veces** (caía en el barrido por defecto de dos colecciones) — `push` notificaba doble y `ack` se aplicaba dos veces. Corregido en `cli.py` con una pasada única.
+- Tests: `tests/test_signal_profiles.py` (23 casos: catálogo, paridad YAML↔fallback, ley por clase, acantilados, acuse y re-armado). Suite completa: 4089 verdes.
+- Medido en vivo: `jobs_frustrated` pasó de 10.0 (escalada por tick) a **5.04 `warning`** en la primera inyección con la ley nueva; `signal ack` lo congeló en 5.04 y el tick siguiente no lo movió.
+
+---
+
+## [AD-109] Dolor reconciliado: la señal del auditor muere cuando muere su causa (P0)
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED (P0, report-only).
+**Context**: Cuatro señales de intensidad 9–10 sobrevivieron horas o días a su causa (2026-11-02 12:00): `signal_service_down_failure` (10.0) con el proxy `active` y `/health` ok, `signal_sip_stuck_failure` (9.0) sin bucle, `signal_hung_service_failure` (9.0) con health 200 y `signal_memory_bloat_failure` (10.0) con 26 MB privados. `sync_to_thalamus` inyecta una señal por finding y **no existe el camino inverso** salvo el del journal (`auditor.py:461`); las curas evaporan a mano dentro de su propia rama y, a veces, nombres que no son suyos (`check_sip.py:125` evapora `hypervisor_unreachable`, que emite `drive_evaluator.py:251`).
+
+**Decision**: reconciliación declarativa al cerrar la ronda del auditor, con estas piezas:
+1. **La unidad es el segmento**, no el plugin: `audit_repo`/`audit_runtime`/`audit_vitals` emiten fuera del bucle de plugins (`auditor.py:214-294,377-461,533-576`). El inventario vive con el emisor (`SEGMENT_SIGNAL_NAMES`, `REPO_STEP_SIGNAL_NAMES`) y se publica al YAML con `scripts/signal_inventory.py` (generado, verificado por test).
+2. **La ronda existe** en `scripts/auditor_run.py` (el único sitio que ve las cuatro fases, que hoy hace cuatro `sync_to_thalamus` con `try/except` propios): `AuditRound` con veredicto por segmento, `flock` y artefacto `state/auditor_round.json`.
+3. **Álgebra**: `resto = candidatas(SentinelAuditor, reconcilable) - emitidas - preservadas`; se evapora a las `reconcile.absences` rondas consecutivas (2). `emitidas` sale del `audit()` crudo, no del report tras el heal (el report suprime lo curado, `auditor.py:516-529`).
+4. **Guardas**: sin veredicto no se borra (excepción, paso saltado por `_due()`, segmento deshabilitado → preservado); los eventos (`reconcilable: false`) no se reconcilian; solo `signal_source="SentinelAuditor"`; ronda incompleta no reconcilia.
+5. **P0 es report-only**: calcula, cuenta y escribe el artefacto; **no borra**. P1 activará la evaporación tras dos semanas de datos, con ventana de gracia de 24 h para no reiniciar `first_seen_at`/`acked_at` (AD-108).
+6. **Todo por config** (`configs/signals/signal_profiles.yaml`, hot reload por mtime): `reconcile.enabled`, `report_only`, `absences`, `grace_hours`, y `reconcilable`/`class` por nombre. En entorno solo quedan el kill switch y el modo report.
+
+**Alternatives rechazadas**: TTL por señal (ignora la causa), reconstruir el tablón cada ronda (rompe edad y acuse), que cada plugin evapore lo suyo (es lo que falla hoy), colgar la reconciliación de `sync_to_thalamus` (se llama cuatro veces por pasada: la primera fase borraría las de las otras tres).
+
+**Rationale / Evidence**:
+- `scripts/auditor_run.py:24-41` — cuatro `sync_to_thalamus` independientes, cada uno con su `try/except`.
+- `service_down` lo emiten `service_base.py:71` y `check_duplicate_services.py:268`; `amnesia` `check_qdrant.py:36` y `check_sqlite.py:88`: los nombres son compartidos y el punto es `sha256(name)`, así que la señal vive si **cualquiera** con veredicto la emite.
+- `auditor.py:161-181`: un paso saltado conserva su veredicto (invariante del propio código; ahora también se preserva su nombre).
+- Tests: `tests/test_signal_reconcile.py` (18 casos: report-only, dos ausencias, reset por emisión, guardas, activación con edad, integración contra Qdrant en memoria) y `tests/test_signal_inventory.py` (deriva del inventario).
+
+**Consequences**:
+- P0 no cambia lo que ve el tablón: solo deja `state/auditor_round.json` con candidatas, ausencias y "evaporaría". Durante dos semanas el Operador puede leerlo antes de activar P1.
+- `evaporate_signals` ahora devuelve cuántos puntos borró (antes se tragaba la excepción y el log no probaba nada); `signals_by_source` expone las señales por emisor.
+- Deuda asumida: el janitor emite cuatro señales y no evapora ninguna (shard aparte); `vitals` queda fuera del alcance (eventos).
+- Cuando P1 se active, `report_only: false` en el YAML y nada más: no hay código que tocar.

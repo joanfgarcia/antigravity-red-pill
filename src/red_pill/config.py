@@ -1161,7 +1161,7 @@ class RedPillConfig(BaseSettings):
 	SIGNAL_VISIBILITY_THRESHOLD: float = 5.0
 	SIGNAL_BASE_NOTIFICATION: float = 5.0
 	SIGNAL_BASE_PAIN_CUDA: float = 7.0
-	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5
+	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5  # DEPRECATED (AD-108): la ley vive por clase en configs/signals/signal_profiles.yaml
 	SIGNAL_AMNESIA_HOURS: int = 8
 	SIGNAL_MIGRAINE_VECTORS: int = 25000
 

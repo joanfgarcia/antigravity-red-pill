@@ -68,3 +68,31 @@ def test_publish_never_raises_on_bad_db(tmp_path):
 	bad.parent.mkdir(parents=True, exist_ok=True)
 	bad.write_text("not a sqlite db")
 	assert mailbox.publish_message(_event(), db_path=str(bad)) is False
+
+
+def _db_with_outbox(path, with_deliver_after: bool):
+	con = sqlite3.connect(path)
+	cols = "message_id TEXT, channel TEXT, channel_user_id TEXT, payload TEXT, status TEXT DEFAULT 'PENDING'"
+	if with_deliver_after:
+		cols += ", deliver_after REAL"
+	con.execute(f"CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, {cols})")
+	con.commit()
+	con.close()
+
+
+def test_entrega_diferida_escribe_la_columna(tmp_path):
+	"""RFC-OBS-006 F2: el sobre se guarda con su fecha, no se intenta antes."""
+	db = tmp_path / "events.db"
+	_db_with_outbox(db, with_deliver_after=True)
+	when = 1_900_000_000.0
+	assert mailbox.publish_message(_event(deliver_after=when), db_path=str(db)) is True
+	rows = _rows(db)
+	assert rows[0]["deliver_after"] == when
+
+
+def test_sin_columna_se_degrada_y_publica_igual(tmp_path):
+	"""Con neon-link 0.7.x (sin la columna) el mensaje sale ya, pero no se pierde."""
+	db = tmp_path / "events.db"
+	_db_with_outbox(db, with_deliver_after=False)
+	assert mailbox.publish_message(_event(deliver_after=1_900_000_000.0), db_path=str(db)) is True
+	assert len(_rows(db)) == 1

@@ -148,6 +148,11 @@ def main() -> None:
 		collections = [get_collection(args.type)]
 	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon", "memory", "config"]:
 		collections = []  # Not needed for these
+	elif args.command == "signal":
+		# `signal` no es por colección: una sola pasada (antes caía en el barrido
+		# por defecto de dos colecciones y ejecutaba el comando dos veces — dos
+		# notificaciones en `push`, dos inyecciones).
+		collections = ["signal"]
 	else:
 		# Default sweep for search/diag if no type specified
 		collections = ["work_memories", "social_memories"]
@@ -462,6 +467,18 @@ def main() -> None:
 						print(f"[SAS] Signal '{args.name}' evaporated.")
 					else:
 						print("[FAIL] Specify --name or --all to evaporate.")
+
+				elif args.sig_cmd == "ack":
+					result = manager.ack_signal(name=args.name)
+					if result["status"] == "acked":
+						extra = "congelada" if result["ack_mode"] == "freeze" else "silenciada (el reloj sigue)"
+						print(f"[SAS] '{args.name}' reconocida [{result['class']}]: intensidad {extra} en {result['frozen_intensity']}.")
+					elif result["status"] == "missing":
+						print(f"[FAIL] No hay señal activa llamada '{args.name}'.")
+					elif result["status"] == "not_ackable":
+						print(f"[FAIL] '{args.name}' es de clase '{result['class']}': un evento no se reconoce, ya ocurrió.")
+					else:
+						print(f"[FAIL] No se pudo reconocer '{args.name}': {result.get('detail')}")
 
 			else:
 				# --- Enterprise/Community Plugin Dispatch ---

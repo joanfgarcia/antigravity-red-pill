@@ -448,6 +448,22 @@ def get_model_profiles_path() -> Path:
 	return get_config_dir() / "model_profiles.yaml"
 
 
+def get_signal_profiles_path() -> Path:
+	"""Ruta de la taxonomía del dolor (AD-108).
+
+	Precedencia: override del Operador en `$XDG_CONFIG_HOME/red-pill/signal_profiles.yaml`
+	si existe; si no, el default canónico del repo (`configs/signals/signal_profiles.yaml`).
+	Anclado al repo para que el daemon y el cron lo encuentren desde cualquier cwd.
+	"""
+	override = get_config_dir() / "signal_profiles.yaml"
+	if override.exists():
+		return override
+	repo_default = Path(__file__).resolve().parents[3] / "configs" / "signals" / "signal_profiles.yaml"
+	if repo_default.exists():
+		return repo_default
+	return override
+
+
 def get_model_runtime_path() -> Path:
 	"""Ruta de la config en caliente del selector de inferencia
 	($XDG_CONFIG_HOME/red-pill/model_runtime.yaml).
