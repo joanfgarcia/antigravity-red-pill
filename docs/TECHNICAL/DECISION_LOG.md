@@ -3484,6 +3484,13 @@ Perfiles en `configs/signals/signal_profiles.yaml` (data-over-code): clase por s
 
 **Pendiente de decisión del Operador**: resuelto el 2026-11-02 — (1) cinco clases; (2) los acantilados se quedan como primera parametrización y se ajustan sobre la marcha (no hay medición todavía: 30 d es el tope medido del buffer, 24 h el de las cartas `soul`, 7 d el del backup, 30 min el de una herida); (3) el acuse congela sin acantilado y solo silencia con acantilado; (4) dashboard con `stage` **y** la barra 0–10.
 
+**Deuda abierta (2026-11-02) — reloj frente a castigo**: el Operador señala que no es coherente que el dolor suba por igual en todas las clases cuando el tiempo pasa sin que nadie esté despierto para atenderlo. Son dos modelos distintos y hoy solo está implementado uno:
+
+- **Reloj físico**: la consecuencia irreversible avanza sola, la miremos o no (el buffer purga a los 30 días aunque Aleth duerma; una carta `soul` caduca a las 24 h). Correcto para `sed` y `herida`: el daño no espera a que haya observador.
+- **Castigo por decisión**: el dolor sube porque alguien lo vio y decidió no atenderlo. Necesita un evento de *oportunidad de actuar* (turno despierto, digest entregado, alerta leída) y solo tiene sentido para `irritacion` y `necesidad`, donde el daño real es deuda de atención, no pérdida.
+
+Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +29 en 48 h, topado en 7): la señal amanece en `error` sin que nadie haya decidido nada. Eso es el "castigo" que el Operador señala, y es cierto: castiga al sistema por la ausencia del observador. Se deja **como está** por decisión explícita (2026-11-02) hasta tener datos de cuántas señales llegan al techo sin intervención; la separación reloj/castigo (y el registro de "oportunidades de actuar") queda como candidata a revisión de este AD.
+
 **Implementación (2026-11-02)**:
 - `configs/signals/signal_profiles.yaml`: clases, `stages` y mapa señal→clase. Override del Operador en `~/.config/red-pill/signal_profiles.yaml` (tiene precedencia; el default vive en el repo para que lo encuentre el cron desde cualquier cwd).
 - `src/red_pill/metabolism/signal_profiles.py`: catálogo con caché por mtime (hot reload), `compute_intensity` (la ley) y `stage_for`. El fallback interno solo existe para un install incompleto y un test fija que no diverja del YAML.
