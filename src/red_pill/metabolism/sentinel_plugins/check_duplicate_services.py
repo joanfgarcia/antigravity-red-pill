@@ -24,6 +24,23 @@ from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
 CPU_THRESHOLD_PCT = 50.0
 MEMORY_LIMIT_MB = 500
 
+# El proxy de inferencia bloquea su hilo mientras carga un modelo (~5 GB desde
+# NVMe = decenas de segundos): con el timeout corto del resto de daemons, cada
+# ciclo nocturno fabricaba un `hung_service` de severidad 9 que no era cierto.
+HEALTH_TIMEOUT_S = 5
+LLM_HEALTH_TIMEOUT_S = 60
+LLM_BUSY_SEVERITY = 4.0
+
+
+def _health_timeout(unit: str) -> int:
+	"""Margen de sondeo del health endpoint según el daemon."""
+	return LLM_HEALTH_TIMEOUT_S if unit == "redpill-llm.service" else HEALTH_TIMEOUT_S
+
+
+def _hung_severity(unit: str) -> float:
+	"""Un timeout del proxy de inferencia es 'ocupado', no 'colgado'."""
+	return LLM_BUSY_SEVERITY if unit == "redpill-llm.service" else 9.0
+
 
 class ServiceHealthCheck(SentinelPlugin):
 	"""
@@ -208,13 +225,13 @@ class ServiceHealthCheck(SentinelPlugin):
 			# 2. HEALTH ENDPOINT (daemon-loop and daemon-listener)
 			if contract.health_url:
 				try:
-					urllib.request.urlopen(contract.health_url, timeout=5)
+					urllib.request.urlopen(contract.health_url, timeout=_health_timeout(unit))
 				except Exception as e:
 					if not isinstance(e, urllib.error.HTTPError):
 						findings.append(
 							AuditFinding(
 								type="hung_service",
-								severity=9.0,
+								severity=_hung_severity(unit),
 								message=(f"Service '{unit}' is active but health endpoint '{contract.health_url}' is UNREACHABLE: {e}"),
 								metadata={"service": unit, "url": contract.health_url},
 							)
