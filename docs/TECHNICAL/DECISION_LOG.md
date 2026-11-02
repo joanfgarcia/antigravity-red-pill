@@ -3343,3 +3343,36 @@ esquema, los hooks o el outbox estaban sanos.
 - El doctor no cura; el reseed de hooks sigue siendo una acción del instalador.
 - El catálogo MCP cacheado sigue siendo un papercut de UX hasta que el cliente
   recargue.
+
+---
+
+## [AD-107] El dolor `jobs_frustrated` dice QUIÉN lo sostiene (atribución, no recuento)
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: `JobMonitorPlugin` inyectaba `jobs_frustrated` con `intensity=5.0` y **sin mensaje**: el dashboard sólo recibía un recuento. Dos consecuencias observadas en dos despertares seguidos (2026-11-01 y 2026-11-02):
+1. **El dolor era anónimo.** Con `job_list` fuera de banda nadie sabía si el dolor lo sostenía un falso positivo (`ff2516a3`, "CI main tras merge #131", que leía un run ajeno porque `Red Pill CI` sólo dispara en `pull_request`) o una avería real.
+2. **El dolor satura.** `MemoryManager.inject_signal` escala el dolor sobre el punto existente (`SIGNAL_PAIN_ESCALATION_RATE`) en cada tick del monitor (300 s). Un dolor que nace en 5.0 llega a **10.0 en minutos** y se queda ahí: la intensidad deja de ordenar severidad y todas las alertas empatan en el máximo.
+
+**Decision**:
+1. `CognitiveQueueManager.frustrated_jobs(sources, limit=10)` — lectura nueva, **solo lectura**, devuelve `id`, `source`, `title` (de `json_extract(payload,'$.title')`) y `age_hours` de los FRUSTRATED del carril mecánico, más reciente primero.
+2. `job_monitor.frustrated_message(jobs)` compone el `message` del dolor: `[PAIN] jobs_frustrated — N job(s) FRUSTRATED: ff2516a3 'CI main tras merge #131', 11h · …`, con caída a `source` cuando el payload no trae título.
+3. `job_health()` **no cambia** de contrato (`{"stuck": int, "frustrated": int}`): hay consumidores y tests que comparan el dict completo. La atribución va por método aparte.
+4. El escalado de dolor **no se toca** aquí: es una decisión de política (¿escalar por tick o por hora?) que merece su propio AD con datos.
+
+**Alternatives**:
+| Opción | Veredicto | Razón |
+|---|---|---|
+| Añadir la lista de jobs dentro de `job_health` | rechazada | Rompe el contrato `Dict[str, int]` y sus tests; mezcla recuento con detalle. |
+| Bajar la intensidad del dolor para que no sature | rechazada *aquí* | Cambia semántica de vigilancia sin datos; el escalado merece AD propio. |
+| Mencionar sólo el job más antiguo | rechazada | El operador necesita ver el conjunto para decidir qué re-encolar y qué es basura de cola. |
+| Silenciar `jobs_frustrated` cuando el job está "explicado" | rechazada | Exigiría un campo de diagnóstico en la cola; hoy no existe y sería inmutable a mano. |
+
+**Rationale / Evidence**:
+- `tests/test_job_monitor_attribution.py` (6 casos): atribución con id/título/edad, filtrado por status y por source, tope y orden, lista vacía sin sources, formato del mensaje con y sin título.
+- `tests/test_job_manager.py` + el nuevo fichero: **52 tests verdes** con `pythonpath = ["src"]` (pytest resuelve el `src` del worktree, no el checkout vivo).
+- `ruff check` limpio en los tres ficheros tocados.
+
+**Consequences y deuda**:
+- El payload del dolor crece a lo sumo 10 entradas (≈1 KB): suficiente para reconocer la cola, acotado para no inflar Qdrant.
+- `age_hours` usa `updated_at`, que es cuando el job se frustró (no `created_at`): es la edad del dolor, no del trabajo.
+- Sigue sin haber forma de **reconocer** una frustración ya diagnosticada; hoy caduca por `purge_hygiene(frustrated_days=14)` del janitor nocturno, lo que deja hasta dos semanas de dolor por un falso positivo. Candidato a AD futuro.

@@ -558,6 +558,32 @@ class CognitiveQueueManager:
 			).fetchone()[0]
 		return {"stuck": stuck, "frustrated": frustrated}
 
+	def frustrated_jobs(self, sources: List[str], limit: int = 10) -> List[Dict[str, Any]]:
+		"""Atribución de los jobs FRUSTRATED (solo lectura, para el DaemonPlugin job_monitor).
+
+		`job_health` da el recuento; esto da el QUIÉN: id, source y título (del payload)
+		de cada job que sostiene el dolor, con su edad en horas. Sin esto, el dolor
+		`jobs_frustrated` es un número anónimo (y, por escalado, un 10 fijo) que no dice
+		al operador qué encolar de nuevo ni qué es basura de cola.
+		"""
+		if not sources:
+			return []
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			rows = conn.execute(
+				f"""
+				SELECT id, source,
+					json_extract(payload, '$.title') AS title,
+					CAST((julianday('now') - julianday(updated_at)) * 24 AS INTEGER) AS age_hours
+				FROM cognitive_tasks
+				WHERE status = 'FRUSTRATED' AND source IN ({placeholders})
+				ORDER BY updated_at DESC
+				LIMIT ?
+				""",
+				(*sources, int(limit)),
+			).fetchall()
+		return [dict(row) for row in rows]
+
 	def purge_hygiene(self, completed_days: int = 7, frustrated_days: int = 14, stale_processing_hours: int = 24) -> Dict[str, int]:
 		"""Autolimpieza de la cola (invocada por el JanitorMinion nocturno):
 
