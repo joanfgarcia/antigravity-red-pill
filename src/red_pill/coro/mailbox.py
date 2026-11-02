@@ -71,6 +71,14 @@ def _db():
 	return neon_db
 
 
+def _outbox_has_deliver_after(conn) -> bool:
+	"""¿La DB de neon-link tiene ya la columna de entrega diferida (0.8+)?"""
+	try:
+		return any(str(row[1]) == "deliver_after" for row in conn.execute("PRAGMA table_info(outbox)"))
+	except Exception:
+		return False
+
+
 def publish_message(event: Dict[str, Any], *, db_path: Optional[str] = None) -> bool:
 	"""Publica un evento dirigido en el outbox `soul`. Idempotente por `event_id`.
 
@@ -100,10 +108,21 @@ def publish_message(event: Dict[str, Any], *, db_path: Optional[str] = None) -> 
 		else:
 			conn = _db().get_connection()
 		try:
+			columns = ["message_id", "channel", "channel_user_id", "payload"]
+			values: list = [event_id, CHANNEL, soul, json.dumps(envelope, ensure_ascii=False)]
+			delay = event.get("deliver_after")
+			if delay:
+				# Entrega diferida (RFC-OBS-006 F2): el hueco existe desde neon-link
+				# 0.8. Con 0.7.x la columna no está y el mensaje sale ya — se degrada
+				# avisando, en vez de romper la publicación.
+				if _outbox_has_deliver_after(conn):
+					columns.append("deliver_after")
+					values.append(float(delay))
+				else:
+					logger.warning("[coro.mailbox] neon-link sin `deliver_after`: el mensaje sale ya (actualiza neon-link)")
 			conn.execute(
-				"INSERT OR IGNORE INTO outbox (message_id, channel, channel_user_id, payload)"
-				" VALUES (?, ?, ?, ?)",
-				(event_id, CHANNEL, soul, json.dumps(envelope, ensure_ascii=False)),
+				f"INSERT OR IGNORE INTO outbox ({', '.join(columns)}) VALUES ({', '.join('?' * len(columns))})",
+				tuple(values),
 			)
 			conn.commit()
 		finally:

@@ -265,6 +265,11 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		expires_at=expires,
 	)
 
+	# Entrega diferida (RFC-OBS-006 F2): el sobre no se intenta hasta esa fecha.
+	delay = _resolve_delay(payload)
+	if delay:
+		event["deliver_after"] = delay
+
 	state, reason = "queued", ""
 	if verb in protocol.WAKE_VERBS:
 		# S2.1: el buzón único. El sobre va al outbox de neon-link (canal `soul`);
@@ -290,6 +295,23 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		f"estado={state}{reply_note} · expira en {protocol.budget_s(verb, value) / 86400:.0f}d · "
 		f"msg={event['event_id']} · seq={event['event_seq']}{why}"
 	)
+
+
+def _resolve_delay(payload: Dict[str, Any]) -> Optional[float]:
+	"""`deliver_after` (epoch) o `deliver_in_days` → epoch. None = ya."""
+	raw = payload.get("deliver_after")
+	if raw:
+		try:
+			return float(raw)
+		except (TypeError, ValueError):
+			return None
+	days = payload.get("deliver_in_days")
+	if days:
+		try:
+			return time.time() + float(days) * 86400.0
+		except (TypeError, ValueError):
+			return None
+	return None
 
 
 def _push(target: str) -> tuple[str, str]:
