@@ -37,9 +37,13 @@ def _pending(tmp_path: Path, count: int, age_days: float) -> list[Path]:
 
 class TestOfflineDebt:
 	def test_sin_pendientes_no_hay_senal(self, extractor, tmp_path):
-		with patch("red_pill.memory.MemoryManager") as mem:
+		"""Sin pendientes no se inyecta nada; y si había señal vieja, se entierra."""
+		mem = MagicMock()
+		mem.has_signal.return_value = False
+		with patch("red_pill.memory.MemoryManager", return_value=mem):
 			extractor._signal_offline_debt([])
-		mem.assert_not_called()
+		mem.inject_signal.assert_not_called()
+		mem.evaporate_signals.assert_not_called()
 
 	def test_ide_cerrado_declara_la_deuda(self, extractor, tmp_path):
 		pending = _pending(tmp_path, 3, age_days=1)
@@ -99,6 +103,7 @@ class TestOfflineDebt:
 		se declara una deuda que no se puede pagar (el log sí lo dice)."""
 		pending = _pending(tmp_path, 2, age_days=40)
 		mem = MagicMock()
+		mem.has_signal.return_value = False
 		with (
 			patch.object(extractor, "get_state_dir", return_value=tmp_path),
 			patch("red_pill.memory.MemoryManager", return_value=mem),
@@ -106,6 +111,36 @@ class TestOfflineDebt:
 			extractor._signal_offline_debt(pending)
 		mem.inject_signal.assert_not_called()
 		assert not (tmp_path / extractor.DEBT_STATE_FILE).exists()
+
+	def test_backlog_no_recuperable_entierra_la_senal_vieja(self, extractor, tmp_path):
+		"""Dolor huérfano (SIG-001): si la deuda ya no es pagable, la señal muere.
+
+		Una señal de 9.0 que sobrevive a su causa enseñó al operador a ignorar el
+		tablón; el extractor es quien la emitió, así que la entierra él.
+		"""
+		pending = _pending(tmp_path, 2, age_days=200)
+		mem = MagicMock()
+		mem.has_signal.return_value = True
+		with (
+			patch.object(extractor, "get_state_dir", return_value=tmp_path),
+			patch("red_pill.memory.MemoryManager", return_value=mem),
+		):
+			extractor._signal_offline_debt(pending)
+		mem.evaporate_signals.assert_called_once_with("chronicle_blocked_by_ide")
+
+	def test_idempotente_entierra_la_senal(self, extractor, tmp_path, monkeypatch):
+		"""Sin conversaciones pendientes tampoco hay deuda: se evapora."""
+		conv = tmp_path / "conv"
+		conv.mkdir()
+		out = tmp_path / "out"
+		out.mkdir()
+		monkeypatch.setattr(extractor, "get_antigravity_conversations_dir", lambda: conv)
+		monkeypatch.setattr(extractor, "get_unencrypted_conversations_dir", lambda: out)
+		mem = MagicMock()
+		mem.has_signal.return_value = True
+		with patch("red_pill.memory.MemoryManager", return_value=mem):
+			extractor.run_extraction()
+		mem.evaporate_signals.assert_called_once_with("chronicle_blocked_by_ide")
 
 	def test_canal_roto_no_rompe_el_cron(self, extractor, tmp_path):
 		pending = _pending(tmp_path, 1, age_days=3)

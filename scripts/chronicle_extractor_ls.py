@@ -33,6 +33,24 @@ except ImportError:
 	exit(1)
 
 
+def _evaporate_debt_signal() -> None:
+	"""Camino inverso: si ya no hay deuda recuperable, la señal no puede seguir viva.
+
+	Es el fallo que el despertar de las 12:00 documentó como `SIG-001` (dolor
+	huérfano): la señal de ayer sobrevive a su causa porque nadie la entierra.
+	Aquí se entierra desde quien la emite.
+	"""
+	try:
+		from red_pill.memory import MemoryManager
+
+		memory = MemoryManager()
+		if memory.has_signal("chronicle_blocked_by_ide"):
+			memory.evaporate_signals("chronicle_blocked_by_ide")
+			logger.info("Señal 'chronicle_blocked_by_ide' evaporada: no queda backlog recuperable.")
+	except Exception as exc:
+		logger.debug(f"No se pudo evaporar la señal de deuda: {exc}")
+
+
 def _signal_offline_debt(pending: list[Path]) -> None:
 	"""Declara la deuda cuando el IDE está cerrado.
 
@@ -43,21 +61,25 @@ def _signal_offline_debt(pending: list[Path]) -> None:
 	visible, con enfriamiento de 24 h para no inundar el tablón cada hora.
 	"""
 	if not pending:
+		_evaporate_debt_signal()
 		return
 	now = time.time()
 	ages = [(now - p.stat().st_mtime) / 86400.0 for p in pending]
 	age_days = max(0.0, max(ages))
 	recoverable = [p for p, age in zip(pending, ages, strict=True) if age < DEBT_RECOVERABLE_DAYS]
+	if not recoverable:
+		# Backlog permanente: no se declara una deuda que no se puede pagar, y la
+		# señal anterior (si la hubo) se entierra.
+		logger.info(
+			f"Backlog no recuperable: las {len(pending)} conversaciones superan {DEBT_RECOVERABLE_DAYS:.0f} d "
+			"y solo queda su puntero cifrado; se archivarán si el IDE vuelve a exponerlas."
+		)
+		_evaporate_debt_signal()
+		return
 	logger.warning(
 		f"LanguageServer no detectado (IDE cerrado): {len(pending)} conversación(es) sin volcar; "
 		f"la más antigua espera {age_days:.1f} d."
 	)
-	if not recoverable:
-		logger.warning(
-			f"Backlog no recuperable: las {len(pending)} conversaciones superan {DEBT_RECOVERABLE_DAYS:.0f} d "
-			"y sus turnos ya se purgaron del buffer. Se archivarán solo si el IDE vuelve a exponerlas."
-		)
-		return
 
 	state: Path = get_state_dir() / DEBT_STATE_FILE
 	try:
@@ -119,6 +141,7 @@ def run_extraction():
 
 	if not needs_export:
 		logger.info("Estado Idempotente: Ninguna conversación modificada. Saliendo limpiamente.")
+		_evaporate_debt_signal()
 		return
 
 	logger.info(f"Detectadas {len(needs_export)} conversaciones nuevas o modificadas.")
