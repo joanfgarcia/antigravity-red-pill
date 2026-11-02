@@ -106,6 +106,11 @@ class TestLey:
 		assert compute_intensity(profile, profile.base, 0.0) == (10.0, "system_failure")
 		assert profile.ack_mode == ACK_NONE
 
+	def test_un_evento_no_se_declara_mas_suave(self, catalog):
+		"""`fallo` es un evento: aunque el productor pase 4.0, ya ocurrió y va a 10."""
+		profile = catalog.classes["fallo"]
+		assert compute_intensity(profile, 4.0, 0.0) == (10.0, "system_failure")
+
 	def test_la_edad_negativa_no_resta(self, catalog):
 		profile = catalog.classes["necesidad"]
 		assert compute_intensity(profile, 5.0, -3.0)[0] == 5.0

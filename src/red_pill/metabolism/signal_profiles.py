@@ -97,8 +97,11 @@ def compute_intensity(profile: SignalClass, base: float, age_hours: float) -> Tu
 	age = max(0.0, float(age_hours))
 	if profile.age_to_cliff(age):
 		return 10.0, "system_failure"
-	grown = float(base) + profile.slope_per_hour * age
-	intensity = min(max(grown, float(base)), profile.ceiling)
+	# Clase `fallo`: es un evento que ya ocurrió, no un estado que se declare. Nace
+	# en su base (10) aunque el productor pase una severidad menor.
+	effective_base = profile.base if profile.ack_mode == ACK_NONE else float(base)
+	grown = effective_base + profile.slope_per_hour * age
+	intensity = min(max(grown, effective_base), profile.ceiling)
 	return intensity, stage_for(intensity)
 
 
