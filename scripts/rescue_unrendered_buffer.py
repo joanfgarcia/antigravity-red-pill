@@ -40,7 +40,7 @@ def _load_legacy(memory):
 			continue
 		if not str(payload.get("content") or "").strip():
 			continue
-		out.append((point, payload, meta))
+		out.append((point, payload, meta, None))
 	return out
 
 
