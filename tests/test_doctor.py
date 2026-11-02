@@ -1,9 +1,84 @@
 """Coverage boost for red_pill.metabolism.doctor — synchronous health verification."""
 
 import json
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from red_pill.metabolism.doctor import _check_model_match, _check_timers, run_doctor
+from red_pill.metabolism.doctor import _as_epoch, _check_coro, _check_model_match, _check_timers, run_doctor
+
+
+class TestAsEpoch:
+	"""`created_at` del outbox llega como TEXT de SQLite (UTC) o como epoch REAL."""
+
+	def test_epoch_float(self):
+		assert _as_epoch(1793600296.88) == 1793600296.88
+
+	def test_epoch_string(self):
+		assert _as_epoch("1793600296.88") == 1793600296.88
+
+	def test_texto_sqlite_es_utc(self):
+		got = _as_epoch("2026-11-01 20:27:13")
+		assert got == datetime(2026, 11, 1, 20, 27, 13, tzinfo=timezone.utc).timestamp()
+
+	def test_texto_iso_con_zona(self):
+		got = _as_epoch("2026-11-01T20:27:13+00:00")
+		assert got == datetime(2026, 11, 1, 20, 27, 13, tzinfo=timezone.utc).timestamp()
+
+	def test_basura_devuelve_none(self):
+		assert _as_epoch("ayer por la tarde") is None
+		assert _as_epoch("") is None
+		assert _as_epoch(None) is None
+
+
+def _neon_db(tmp_path, created_at: str, status: str = "PENDING", with_dead_letters: bool = True):
+	db = tmp_path / "neon_link.db"
+	con = sqlite3.connect(db)
+	con.execute("CREATE TABLE outbox (id INTEGER PRIMARY KEY, channel TEXT, status TEXT, created_at TEXT)")
+	con.execute("INSERT INTO outbox (channel, status, created_at) VALUES ('soul', ?, ?)", (status, created_at))
+	if with_dead_letters:
+		con.execute("CREATE TABLE dead_letters (id INTEGER PRIMARY KEY, channel TEXT)")
+	con.commit()
+	con.close()
+	return db
+
+
+class TestCoroOutbox:
+	"""El canal soul se audita de verdad: antes, un created_at TEXT lo cegaba entero."""
+
+	def _run(self, tmp_path, db):
+		with (
+			patch("red_pill.core.paths.get_session_db", return_value=tmp_path / "sin_session.db"),
+			patch("red_pill.core.paths.get_neon_link_db_path", return_value=db),
+			patch("red_pill.core.paths.get_harness_config_path", return_value=tmp_path / "sin_hook.js"),
+			patch("importlib.metadata.version", return_value="0.7.1"),
+		):
+			return _check_coro()
+
+	def test_created_at_texto_viejo_avisa(self, tmp_path):
+		stamp = datetime.now(timezone.utc) - timedelta(hours=2)
+		db = _neon_db(tmp_path, stamp.strftime("%Y-%m-%d %H:%M:%S"))
+		result = self._run(tmp_path, db)
+		assert any(r[0] == "yellow" and "PENDING" in r[1] for r in result), result
+		assert not any("No se pudo revisar el outbox soul" in r[1] for r in result)
+
+	def test_created_at_texto_reciente_no_avisa(self, tmp_path):
+		stamp = datetime.now(timezone.utc)
+		db = _neon_db(tmp_path, stamp.strftime("%Y-%m-%d %H:%M:%S"))
+		result = self._run(tmp_path, db)
+		assert not any("PENDING" in r[1] for r in result), result
+
+	def test_created_at_ilegible_avisa_sin_reventar(self, tmp_path):
+		db = _neon_db(tmp_path, "ayer por la tarde")
+		result = self._run(tmp_path, db)
+		assert any(r[0] == "info" and "edad desconocida" in r[1] for r in result), result
+
+	def test_sin_dead_letters_no_ciega_el_resto(self, tmp_path):
+		stamp = datetime.now(timezone.utc) - timedelta(hours=3)
+		db = _neon_db(tmp_path, stamp.strftime("%Y-%m-%d %H:%M:%S"), with_dead_letters=False)
+		result = self._run(tmp_path, db)
+		assert any("PENDING" in r[1] for r in result), result
+		assert any("dead letters" in r[1] for r in result), result
 
 
 class TestCheckTimers:
@@ -164,6 +239,45 @@ class TestCheckModelMatch:
 		mock_run.side_effect = [RuntimeError("boom"), MagicMock(stdout="")]
 		result = _check_model_match()
 		assert any(r[0] == "yellow" for r in result)
+
+
+	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
+	def test_dual_bind_no_residente_no_es_red(self, mock_getenv, mock_run):
+		"""El proxy carga on-demand: un modelo no residente no es un mismatch."""
+		mock_run.side_effect = [
+			MagicMock(stdout=""),
+			MagicMock(stdout="12345 python run_dual_bind.py\n"),
+		]
+		mock_response = MagicMock()
+		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf", "loaded": False}]}).encode()
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
+			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+			result = _check_model_match()
+			assert not any(r[0] == "red" for r in result), result
+			assert any("on-demand" in r[1] for r in result), result
+
+	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.metabolism.doctor.os.getenv", return_value=None)
+	def test_perfil_no_declarado_avisa_pero_no_acusa(self, mock_getenv, mock_run):
+		"""Sin MINION_PROFILE comparamos contra un default asumido: yellow, no red."""
+		mock_run.side_effect = [
+			MagicMock(stdout=""),
+			MagicMock(stdout="12345 python run_dual_bind.py\n"),
+		]
+		mock_response = MagicMock()
+		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf"}]}).encode()
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
+			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+			result = _check_model_match()
+			assert not any(r[0] == "red" for r in result), result
+			assert any(r[0] == "yellow" and "MINION_PROFILE" in r[1] for r in result), result
 
 
 class TestRunDoctor:
