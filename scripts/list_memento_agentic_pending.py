@@ -25,7 +25,8 @@ import sys
 def select_targets(pending, limit: int) -> list:
 	"""Selection mirroring `memento_agentic.py` without --target: stale first + cap."""
 	ordered = sorted(pending, key=lambda t: t[2] != "stale")
-	return [f"{src}:{sid}" for src, sid, _reason in ordered[:limit]]
+	chosen = ordered if limit <= 0 else ordered[:limit]
+	return [f"{src}:{sid}" for src, sid, _reason in chosen]
 
 
 def main() -> int:

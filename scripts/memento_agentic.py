@@ -153,7 +153,9 @@ def main() -> None:
 		limit = args.limit if args.limit is not None else int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_LIMIT", 20))
 		# stale primero (line refs muertos duelen más que secciones ausentes)
 		ordered = sorted(pending, key=lambda t: t[2] != "stale")
-		targets = [(source, session_id) for source, session_id, _reason in ordered[:limit]]
+		# `0` = sin tope (2026-11-02): el backlog no puede depender de una noche.
+		chosen = ordered if limit <= 0 else ordered[:limit]
+		targets = [(source, session_id) for source, session_id, _reason in chosen]
 
 	if not targets:
 		logger.info("Agentic pass: nothing pending.")

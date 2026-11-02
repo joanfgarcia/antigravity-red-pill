@@ -720,7 +720,7 @@ class RedPillConfig(BaseSettings):
 	# distinto). `min_significance` explícito en el submit los anula (reseeds/tests).
 	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
 	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
-	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
+	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 0  # 0 = sin tope: procesa todo el backlog. El coste se acota con el job (DAG fan-out) y su cota de step
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
