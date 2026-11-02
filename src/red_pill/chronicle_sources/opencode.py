@@ -32,6 +32,59 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		# suele estar cerrado, pero si está vivo el WAL sigue siendo legible.
 		return sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
 
+	@staticmethod
+	def _has_v2(con: sqlite3.Connection) -> bool:
+		"""¿La DB ya está en el esquema v2 (`session_message`)?"""
+		try:
+			row = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_message'").fetchone()
+			if not row:
+				return False
+			count = con.execute("SELECT COUNT(*) FROM session_message").fetchone()[0]
+			return int(count) > 0
+		except Exception:
+			# No poder comprobarlo no es un error: se sigue por el camino v1.
+			return False
+
+	@staticmethod
+	def _v2_turns(con: sqlite3.Connection, conversation_id: str) -> Tuple[List[Any], List[Any]]:
+		"""Remapea `session_message` (v2) a la forma message/part que ya sabemos pintar.
+
+		v2 guarda todo en una tabla: el rol es la columna `type`, el texto del user va
+		en `data.text` y los trozos del assistant en `data.content`, con las tools
+		como `{name, state}` (no `{tool, state}`). Sin este puente, toda sesión creada
+		después de la migración v2 quedaba invisible para Memento (medido 2026-11-02:
+		última sesión renderizada el 27-oct y 793 mensajes nuevos sin ver).
+		"""
+		msg_rows: List[Any] = []
+		part_rows: List[Any] = []
+		rows = con.execute(
+			"SELECT id, type, time_created, data FROM session_message WHERE session_id = ? ORDER BY seq",
+			(conversation_id,),
+		).fetchall()
+		for message_id, mtype, time_created, raw in rows:
+			if mtype not in ("user", "assistant"):
+				continue
+			try:
+				data = json.loads(raw)
+			except Exception:
+				continue
+			msg_rows.append((message_id, json.dumps({"role": mtype, "time": {"created": time_created}}), time_created))
+			if mtype == "user":
+				part_rows.append((message_id, json.dumps({"type": "text", "text": data.get("text", "") or ""})))
+				continue
+			for part in data.get("content") or []:
+				kind = part.get("type")
+				if kind == "tool":
+					part_rows.append(
+						(
+							message_id,
+							json.dumps({"type": "tool", "tool": part.get("name"), "state": part.get("state") or {}}),
+						)
+					)
+				elif kind == "text":
+					part_rows.append((message_id, json.dumps({"type": "text", "text": part.get("text", "") or ""})))
+		return msg_rows, part_rows
+
 	def discover(self) -> List[Tuple[str, int]]:
 		if not self.db_path.exists():
 			logger.info(f"[{self.name}] Database not found: {self.db_path}")
@@ -39,7 +92,12 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		try:
 			con = self._connect()
 			try:
-				rows = con.execute("SELECT session_id, COUNT(*) FROM message GROUP BY session_id ORDER BY session_id").fetchall()
+				if self._has_v2(con):
+					rows = con.execute(
+						"SELECT session_id, COUNT(*) FROM session_message WHERE type IN ('user','assistant') GROUP BY session_id ORDER BY session_id"
+					).fetchall()
+				else:
+					rows = con.execute("SELECT session_id, COUNT(*) FROM message GROUP BY session_id ORDER BY session_id").fetchall()
 			finally:
 				con.close()
 		except sqlite3.Error as e:
@@ -69,6 +127,8 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 	def _fetch_rows(self, conversation_id: str) -> Tuple[List[Any], List[Any]]:
 		con = self._connect()
 		try:
+			if self._has_v2(con):
+				return self._v2_turns(con, conversation_id)
 			msg_rows = con.execute(
 				"SELECT id, data, time_created FROM message WHERE session_id = ? ORDER BY time_created, id",
 				(conversation_id,),
