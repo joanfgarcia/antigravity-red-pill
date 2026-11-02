@@ -7,6 +7,10 @@ concurrency:
 on:
   pull_request:
     branches: [ "main" ]
+  # Señal post-merge real: sin este trigger, `gh run list --branch main` devuelve
+  # el último run de main (julio) y cualquier sonda tras el merge lee un rojo viejo.
+  push:
+    branches: [ "main" ]
 
 jobs:
   test:
