@@ -1604,10 +1604,34 @@ class MemoryManager:
 		except Exception:
 			return False
 
-	def evaporate_signals(self, name: Optional[str] = None) -> None:
+	def signals_by_source(self, source: str) -> list[dict]:
+		"""Señales activas emitidas por `source` (payload completo).
+
+		La propiedad por emisor es la guarda de la reconciliación (RFC-OBS-005 §4.5):
+		sin esto, un barrido por nombre podría tocar el dolor de otro.
 		"""
-		Evaporates a specific biological signal by name (curing the pain).
+		from qdrant_client.http import models
+
+		try:
+			points, _ = self.client.scroll(
+				collection_name="signal_memories",
+				scroll_filter=models.Filter(
+					must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]
+				),
+				limit=200,
+				with_payload=True,
+			)
+			return [dict(p.payload or {}) for p in points]
+		except Exception as exc:
+			logger.warning(f"No se pudieron leer las señales de '{source}': {exc}")
+			return []
+
+	def evaporate_signals(self, name: Optional[str] = None) -> int:
+		"""Evaporates a specific biological signal by name (curing the pain).
+
 		If name is None, clears ALL signals (Neural Reset).
+		Devuelve cuántos puntos borró de verdad: un log no prueba un borrado
+		(RFC-OBS-005 §8), y la reconciliación aborta si pidió borrar y borró 0.
 		"""
 		try:
 			from qdrant_client.http import models
@@ -1622,7 +1646,7 @@ class MemoryManager:
 				# Better way to delete all in Qdrant: Filter must_not with an impossible condition or just match_all
 				self.client.delete(collection_name="signal_memories", points_selector=models.Filter(must_not=[models.HasIdCondition(has_id=[])]))
 				logger.debug("Neural Reset: All signals evaporated.")
-				return
+				return 1
 
 			import hashlib
 			import uuid
@@ -1630,10 +1654,14 @@ class MemoryManager:
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
 
+			existed = bool(self.client.retrieve(collection_name="signal_memories", ids=[point_id]) or [])
 			self.client.delete(collection_name="signal_memories", points_selector=models.PointIdsList(points=[point_id]))
-			logger.debug(f"Evaporated signal '{name}'")
+			if existed:
+				logger.debug(f"Evaporated signal '{name}'")
+			return 1 if existed else 0
 		except Exception as e:
 			logger.warning(f"Failed to evaporate signal '{name}': {e}")
+			return 0
 
 	def retrieve_parent_context(self, child_id: str) -> Optional[Dict[str, Any]]:
 		"""

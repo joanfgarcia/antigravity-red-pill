@@ -11,6 +11,14 @@
 
 default_class: necesidad
 
+# Reconciliación del dolor (RFC-OBS-005). Todo lo ajustable vive aquí: cambiar
+# cualquiera de estos valores no requiere tocar código.
+reconcile:
+  enabled: true
+  report_only: true   # P0: calcula y registra, no borra (P1 lo apaga)
+  absences: 2         # rondas consecutivas sin emisión antes de evaporar
+  grace_hours: 24     # ventana que conserva edad y acuse tras evaporar
+
 classes:
   irritacion:
     # Picadura: molesta, no tiene consecuencia. Nunca pasa de `info`.
@@ -59,6 +67,25 @@ stages:
 
 # Mapa de las señales reales del kernel a su clase. `cliff_hours` permite el
 # override por señal cuando el daño medible tiene otra fecha.
+# BEGIN GENERATED: signal_inventory (scripts/signal_inventory.py --write)
+inventory:
+  # Generado desde los emisores; no editar a mano.
+  segments:
+    repo: [signal_formatting_failure, signal_infra_failure, signal_test_failure, signal_typing_failure]
+    runtime: [signal_daemon_failure, signal_journal_failure]
+    vitals: [signal_blindness_failure, signal_exhaustion_failure, signal_pain_failure]
+  repo_steps: {mypy: signal_typing_failure, ruff: signal_formatting_failure, tests: signal_test_failure}
+  plugins:
+    check_duplicate_services: [signal_config_missing_failure, signal_duplicate_service_failure, signal_hung_service_failure, signal_memory_bloat_failure, signal_runaway_cpu_failure, signal_service_down_failure, signal_service_unwanted_failure]
+    check_neon_link: [signal_neon_hung_failure]
+    check_qdrant: [signal_amnesia_failure]
+    check_sip: [signal_sip_loading_failure, signal_sip_stuck_failure, signal_sip_unhealthy_failure]
+    check_sip_provisioning: [signal_sip_corrupt_dual_bind_failure, signal_sip_missing_dual_bind_failure, signal_sip_missing_llama_cpp_failure, signal_sip_missing_model_file_failure, signal_sip_missing_model_profile_failure, signal_sip_missing_model_profiles_failure, signal_sip_missing_service_file_failure, signal_sip_missing_setup_script_failure, signal_sip_missing_start_sh_failure, signal_sip_missing_venv_failure, signal_sip_uds_mismatch_failure]
+    check_sqlite: [signal_amnesia_failure]
+    check_syntax: [signal_syntax_failure]
+    service_base: [signal_service_down_failure, signal_service_unwanted_failure]
+# END GENERATED: signal_inventory
+
 signals:
   jobs_frustrated:
     class: necesidad
@@ -86,12 +113,20 @@ signals:
     class: irritacion
   # Nombres reales que emite el SentinelAuditor (`signal_<tipo>_failure`).
   signal_service_down_failure:
-    class: fallo
+    class: herida        # D-08: es un ESTADO medido con is-active, no un evento
+    reconcilable: true
   signal_hung_service_failure:
     class: herida
+    reconcilable: true
   signal_sip_stuck_failure:
     class: herida
+    reconcilable: true
   signal_memory_bloat_failure:
     class: necesidad
+    reconcilable: true
   signal_runaway_cpu_failure:
     class: necesidad
+    reconcilable: true
+  signal_interaction_unrendered_purged_failure:
+    class: fallo
+    reconcilable: false   # evento consumado: se atiende o se evapora a mano

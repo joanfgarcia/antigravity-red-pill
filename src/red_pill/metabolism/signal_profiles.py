@@ -64,6 +64,7 @@ class SignalCatalog:
 	stages: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_STAGES))
 	default_class: str = "necesidad"
 	signals: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+	reconcile: Dict[str, Any] = field(default_factory=dict)
 
 	def class_for(self, signal_name: str) -> SignalClass:
 		entry = self.signals.get(signal_name) or {}
@@ -73,6 +74,23 @@ class SignalCatalog:
 	def profile_for(self, signal_name: str) -> Tuple[SignalClass, Dict[str, Any]]:
 		"""Clase efectiva + overrides por señal (p. ej. `cliff_hours` propio)."""
 		return self.class_for(signal_name), dict(self.signals.get(signal_name) or {})
+
+	def is_reconcilable(self, signal_name: str) -> bool:
+		"""¿Puede la reconciliación enterrar esta señal? (RFC-OBS-005).
+
+		Explicito gana; por defecto, un evento (`ack_mode: none`) NO se reconcilia:
+		ocurrió y se atiende o se evapora a mano.
+		"""
+		entry = self.signals.get(signal_name) or {}
+		if "reconcilable" in entry:
+			return bool(entry["reconcilable"])
+		return self.class_for(signal_name).ack_mode != ACK_NONE
+
+	def reconcile_policy(self) -> Dict[str, Any]:
+		"""Política de reconciliación (enabled, report_only, absences, grace_hours)."""
+		defaults = {"enabled": True, "report_only": True, "absences": 2, "grace_hours": 24}
+		defaults.update({k: v for k, v in (self.reconcile or {}).items() if v is not None})
+		return defaults
 
 	def stage_for(self, intensity: float) -> str:
 		return stage_for(intensity, self.stages)
@@ -130,6 +148,7 @@ def build_catalog(raw: Optional[Dict[str, Any]] = None) -> SignalCatalog:
 		stages={str(k): float(v) for k, v in (data.get("stages") or DEFAULT_STAGES).items()},
 		default_class=default,
 		signals={str(k): dict(v or {}) for k, v in (data.get("signals") or {}).items()},
+		reconcile=dict(data.get("reconcile") or {}),
 	)
 
 

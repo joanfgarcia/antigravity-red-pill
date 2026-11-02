@@ -10,7 +10,7 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass
@@ -26,6 +26,33 @@ class AuditReport:
 	status: str  # 'green' | 'yellow' | 'red'
 	findings: List[AuditFinding] = field(default_factory=list)
 	intensity: float = 0.0
+	# RFC-OBS-005: nombres de señal que esta pasada SOSTIENE (aunque el heal las
+	# cure: una señal curada sigue viva hasta que su causa desaparece de verdad) y
+	# las que no se pudieron evaluar (paso saltado por fingerprint).
+	emitted_signals: Set[str] = field(default_factory=set)
+	preserved_signals: Set[str] = field(default_factory=set)
+
+
+# RFC-OBS-005 §4.1: el inventario vive con el emisor. Los nombres de señal se
+# derivan del tipo de finding (`signal_<tipo>_failure`) y este mapa dice qué
+# segmento de la ronda puede emitir cada uno. `scripts/signal_inventory.py`
+# vuelca este inventario al YAML para que el Operador lo vea sin leer código.
+REPO_STEP_SIGNAL_NAMES: Dict[str, str] = {
+	"ruff": "signal_formatting_failure",
+	"mypy": "signal_typing_failure",
+	"tests": "signal_test_failure",
+}
+
+SEGMENT_SIGNAL_NAMES: Dict[str, frozenset] = {
+	"repo": frozenset({"signal_infra_failure", *REPO_STEP_SIGNAL_NAMES.values()}),
+	"runtime": frozenset({"signal_daemon_failure", "signal_journal_failure"}),
+	"vitals": frozenset({"signal_blindness_failure", "signal_exhaustion_failure", "signal_pain_failure"}),
+}
+
+
+def signal_name_for(finding_type: str) -> str:
+	"""Nombre canónico de la señal de un finding (misma fórmula que sync_to_thalamus)."""
+	return f"signal_{finding_type}_failure"
 
 
 def _git(repo_path: str, *args: str, timeout: float = 30) -> tuple:
@@ -168,6 +195,9 @@ class SentinelAuditor:
 			if self.force or not self._step_is_current(repo_path, step, fingerprint):
 				return True
 			self.logger.info(f"Skipping {step} for {repo_path} (unchanged since its last run)")
+			# RFC-OBS-005 §4.5: un paso saltado conserva su veredicto. Su nombre se
+			# preserva para que la reconciliación no lo tome por huérfano.
+			report.preserved_signals.add(REPO_STEP_SIGNAL_NAMES[step])
 			return False
 
 		# Each step runs only if the code changed since it last COMPLETED on this
@@ -517,6 +547,10 @@ class SentinelAuditor:
 								if plugin_findings:
 									for finding in plugin_findings:
 										self.logger.warning(f"Sentinel Auditor: Detected issue '{finding.type}': {finding.message}")
+										# RFC-OBS-005: el finding sostiene su señal aunque el
+										# heal lo cure; la señal muere cuando el finding deja
+										# de aparecer, no cuando se cura.
+										report.emitted_signals.add(signal_name_for(finding.type))
 										healed = self._heal_finding(plugin, config, finding)
 
 										if healed:
@@ -593,7 +627,8 @@ class SentinelAuditor:
 		for finding in report.findings:
 			if finding.severity >= 5.0:
 				# Deduce signal name and criticality
-				signal_name = f"signal_{finding.type}_failure"
+				signal_name = signal_name_for(finding.type)
+				report.emitted_signals.add(signal_name)
 				criticality = "CRITICAL" if finding.severity >= 8.0 else "WARNING"
 
 				self.logger.warning(f"Active Pain detected: {finding.message}")

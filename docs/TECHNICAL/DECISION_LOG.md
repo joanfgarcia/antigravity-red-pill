@@ -3501,3 +3501,32 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 - Bug encontrado al probarlo: el comando `signal` se ejecutaba **dos veces** (caía en el barrido por defecto de dos colecciones) — `push` notificaba doble y `ack` se aplicaba dos veces. Corregido en `cli.py` con una pasada única.
 - Tests: `tests/test_signal_profiles.py` (23 casos: catálogo, paridad YAML↔fallback, ley por clase, acantilados, acuse y re-armado). Suite completa: 4089 verdes.
 - Medido en vivo: `jobs_frustrated` pasó de 10.0 (escalada por tick) a **5.04 `warning`** en la primera inyección con la ley nueva; `signal ack` lo congeló en 5.04 y el tick siguiente no lo movió.
+
+---
+
+## [AD-109] Dolor reconciliado: la señal del auditor muere cuando muere su causa (P0)
+**Date**: 2026-11-02
+**Status**: ACCEPTED & IMPLEMENTED (P0, report-only).
+**Context**: Cuatro señales de intensidad 9–10 sobrevivieron horas o días a su causa (2026-11-02 12:00): `signal_service_down_failure` (10.0) con el proxy `active` y `/health` ok, `signal_sip_stuck_failure` (9.0) sin bucle, `signal_hung_service_failure` (9.0) con health 200 y `signal_memory_bloat_failure` (10.0) con 26 MB privados. `sync_to_thalamus` inyecta una señal por finding y **no existe el camino inverso** salvo el del journal (`auditor.py:461`); las curas evaporan a mano dentro de su propia rama y, a veces, nombres que no son suyos (`check_sip.py:125` evapora `hypervisor_unreachable`, que emite `drive_evaluator.py:251`).
+
+**Decision**: reconciliación declarativa al cerrar la ronda del auditor, con estas piezas:
+1. **La unidad es el segmento**, no el plugin: `audit_repo`/`audit_runtime`/`audit_vitals` emiten fuera del bucle de plugins (`auditor.py:214-294,377-461,533-576`). El inventario vive con el emisor (`SEGMENT_SIGNAL_NAMES`, `REPO_STEP_SIGNAL_NAMES`) y se publica al YAML con `scripts/signal_inventory.py` (generado, verificado por test).
+2. **La ronda existe** en `scripts/auditor_run.py` (el único sitio que ve las cuatro fases, que hoy hace cuatro `sync_to_thalamus` con `try/except` propios): `AuditRound` con veredicto por segmento, `flock` y artefacto `state/auditor_round.json`.
+3. **Álgebra**: `resto = candidatas(SentinelAuditor, reconcilable) - emitidas - preservadas`; se evapora a las `reconcile.absences` rondas consecutivas (2). `emitidas` sale del `audit()` crudo, no del report tras el heal (el report suprime lo curado, `auditor.py:516-529`).
+4. **Guardas**: sin veredicto no se borra (excepción, paso saltado por `_due()`, segmento deshabilitado → preservado); los eventos (`reconcilable: false`) no se reconcilian; solo `signal_source="SentinelAuditor"`; ronda incompleta no reconcilia.
+5. **P0 es report-only**: calcula, cuenta y escribe el artefacto; **no borra**. P1 activará la evaporación tras dos semanas de datos, con ventana de gracia de 24 h para no reiniciar `first_seen_at`/`acked_at` (AD-108).
+6. **Todo por config** (`configs/signals/signal_profiles.yaml`, hot reload por mtime): `reconcile.enabled`, `report_only`, `absences`, `grace_hours`, y `reconcilable`/`class` por nombre. En entorno solo quedan el kill switch y el modo report.
+
+**Alternatives rechazadas**: TTL por señal (ignora la causa), reconstruir el tablón cada ronda (rompe edad y acuse), que cada plugin evapore lo suyo (es lo que falla hoy), colgar la reconciliación de `sync_to_thalamus` (se llama cuatro veces por pasada: la primera fase borraría las de las otras tres).
+
+**Rationale / Evidence**:
+- `scripts/auditor_run.py:24-41` — cuatro `sync_to_thalamus` independientes, cada uno con su `try/except`.
+- `service_down` lo emiten `service_base.py:71` y `check_duplicate_services.py:268`; `amnesia` `check_qdrant.py:36` y `check_sqlite.py:88`: los nombres son compartidos y el punto es `sha256(name)`, así que la señal vive si **cualquiera** con veredicto la emite.
+- `auditor.py:161-181`: un paso saltado conserva su veredicto (invariante del propio código; ahora también se preserva su nombre).
+- Tests: `tests/test_signal_reconcile.py` (18 casos: report-only, dos ausencias, reset por emisión, guardas, activación con edad, integración contra Qdrant en memoria) y `tests/test_signal_inventory.py` (deriva del inventario).
+
+**Consequences**:
+- P0 no cambia lo que ve el tablón: solo deja `state/auditor_round.json` con candidatas, ausencias y "evaporaría". Durante dos semanas el Operador puede leerlo antes de activar P1.
+- `evaporate_signals` ahora devuelve cuántos puntos borró (antes se tragaba la excepción y el log no probaba nada); `signals_by_source` expone las señales por emisor.
+- Deuda asumida: el janitor emite cuatro señales y no evapora ninguna (shard aparte); `vitals` queda fuera del alcance (eventos).
+- Cuando P1 se active, `report_only: false` en el YAML y nada más: no hay código que tocar.
