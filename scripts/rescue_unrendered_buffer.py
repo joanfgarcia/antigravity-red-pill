@@ -44,11 +44,35 @@ def _load_legacy(memory):
 	return out
 
 
+def _load_legacy_with_sessions(memory) -> list:
+	"""Como `_load_legacy`, pero también los que tienen `session_id` sin renderizar.
+
+	Son turnos de fuentes que ya no los sirven (p. ej. sesiones `pi` que su store
+	no descubre). Se rescatan con su id real, marcados como reconstruidos.
+	"""
+	from red_pill.memento.registry import MementoRegistry
+
+	rendered = {k.split(":", 1)[1] if ":" in k else k for s in MementoRegistry().state["registry"].values() for k in s}
+	points, _ = memory.client.scroll("interaction_memories", limit=2000, with_payload=True)
+	out = []
+	for point in points:
+		payload = point.payload or {}
+		meta = payload.get("metadata") or {}
+		if not str(payload.get("content") or "").strip():
+			continue
+		sid = str(meta.get("session_id") or "")
+		raw = sid.split(":", 1)[1] if ":" in sid else sid
+		if raw and raw in rendered:
+			continue
+		out.append((point, payload, meta, sid))
+	return out
+
+
 def _session_for(ts: float) -> str:
 	return f"legacy-{datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d')}"
 
 
-def rescue(*, dry_run: bool = False, memory=None, memento_root: Path | None = None, registry_path: Path | None = None) -> dict:
+def rescue(*, dry_run: bool = False, include_sessions: bool = False, memory=None, memento_root: Path | None = None, registry_path: Path | None = None) -> dict:
 	from red_pill.memento import get_memento_root
 	from red_pill.memento.registry import MementoRegistry
 	from red_pill.memento.render import render_session, write_session
@@ -60,11 +84,11 @@ def rescue(*, dry_run: bool = False, memory=None, memento_root: Path | None = No
 	root = Path(memento_root or get_memento_root())
 	registry = MementoRegistry(path=registry_path) if registry_path else MementoRegistry()
 
-	legacy = _load_legacy(memory)
+	legacy = _load_legacy_with_sessions(memory) if include_sessions else _load_legacy(memory)
 	groups: dict[str, list] = defaultdict(list)
-	for point, payload, meta in legacy:
+	for point, payload, meta, sid in legacy:
 		ts = float(payload.get("timestamp") or 0) or time.time()
-		groups[_session_for(ts)].append((point, payload, meta, ts))
+		groups[sid or _session_for(ts)].append((point, payload, meta, ts))
 
 	report = {"dry_run": dry_run, "points": len(legacy), "sessions": [], "written": 0, "skipped": 0}
 	for session_id in sorted(groups):
@@ -74,10 +98,11 @@ def rescue(*, dry_run: bool = False, memory=None, memento_root: Path | None = No
 		if dry_run:
 			continue
 		if not again:
+			source = SOURCE if session_id.startswith("legacy-") else str(items[0][2].get("originator") or SOURCE).split(":")[0]
 			rendered = render_session(
 				session_id=session_id,
-				source=SOURCE,
-				originator=SOURCE,
+				source=source,
+				originator=source,
 				messages=[
 					{
 						# El blob trae las dos voces (USER/ASSISTANT) y no sabemos quién
@@ -91,7 +116,7 @@ def rescue(*, dry_run: bool = False, memory=None, memento_root: Path | None = No
 			)
 			write_session(root, rendered)
 			registry.upsert(
-				SOURCE,
+				source,
 				session_id,
 				{
 					"dir": rendered.dir_rel,
@@ -127,8 +152,9 @@ def rescue(*, dry_run: bool = False, memory=None, memento_root: Path | None = No
 def main() -> int:
 	parser = argparse.ArgumentParser(description="Rescata a Memento los turnos del buffer sin sesión")
 	parser.add_argument("--dry-run", action="store_true", help="solo informa; no escribe")
+	parser.add_argument("--include-sessions", action="store_true", help="rescata también los turnos con session_id cuya fuente ya no los sirve")
 	args = parser.parse_args()
-	report = rescue(dry_run=args.dry_run)
+	report = rescue(dry_run=args.dry_run, include_sessions=args.include_sessions)
 	state = " (dry-run)" if report["dry_run"] else ""
 	print(
 		f"[rescue] puntos legacy={report['points']} · sesiones={len(report['sessions'])}"
