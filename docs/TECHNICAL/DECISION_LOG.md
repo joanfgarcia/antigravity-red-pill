@@ -3403,3 +3403,85 @@ esquema, los hooks o el outbox estaban sanos.
 - El payload del dolor crece a lo sumo 10 entradas (≈1 KB): suficiente para reconocer la cola, acotado para no inflar Qdrant.
 - `age_hours` usa `updated_at`, que es cuando el job se frustró (no `created_at`): es la edad del dolor, no del trabajo.
 - Sigue sin haber forma de **reconocer** una frustración ya diagnosticada; hoy caduca por `purge_hygiene(frustrated_days=14)` del janitor nocturno, lo que deja hasta dos semanas de dolor por un falso positivo. Candidato a AD futuro.
+
+---
+
+## [AD-108] Taxonomía del dolor: cada clase tiene su ley, no una tasa global
+**Date**: 2026-11-02
+**Status**: PROPOSED — clases propuestas; pendientes acantilados y semántica del acuse (revisión con el Operador).
+**Context**: `MemoryManager.inject_signal` escala cualquier señal `pain` sobre el punto existente: `intensity = min(10.0, current + SIGNAL_PAIN_ESCALATION_RATE)` (`config.py:1164`, `memory.py:1458`). El punto se direcciona por `sha256(name)`, así que **el mismo nombre reusa el punto** y la escalada es por nombre, no por instancia. Con `SIGNAL_PAIN_ESCALATION_RATE = 0.5` y `job_monitor` a `interval_s = 300 s`, un dolor que nace en 5.0 llega a 10.0 en **10 ticks (50 min)** y se queda ahí mientras la condición persista.
+
+El problema no es que suba: es que sube **según cuántas veces miramos**, no según cuánto duele. Consecuencia observada (2026-11-01/02): `jobs_frustrated` pasó la noche en **Int 10.0** sostenido por 3 jobs ya explicados — dos falsos positivos (CI main tras merge, sonda leyendo un run ajeno) y uno de cola muerta. El operador recibió tres despertares seguidos con la misma alarma anónima a intensidad máxima; la intensidad dejó de ordenar severidad y enseñó a ignorar el rojo.
+
+**Decisión propuesta (Operador, 2026-11-02)**: no todas las señales son el mismo dolor ni deben escalar igual. Una picadura de mosquito no se comporta como una hemorragia; las ganas de orinar o de comer empiezan como `info`, suben a `warning` si se ignoran, llegan a `error` —no te matan pero estás hecho una porquería— y, en el caso del hambre o la sed, si nunca se atienden terminan en `SYSTEM-FAILURE` y en una situación de no retorno. La escalada, por tanto, no es una tasa global: es una **ley por clase**, gobernada por dos ejes — **velocidad de aparición** y **reversibilidad de la consecuencia**.
+
+### Taxonomía (5 clases)
+
+| clase | analogía | base | pendiente | techo sin atender | acantilado → consecuencia |
+|---|---|---|---|---|---|
+| `irritacion` | picadura de mosquito | 0–2 | 0/h | 3 (`info` para siempre) | — |
+| `necesidad` | vejiga, intestino | 2.5 | +0.6/h | 7 (`error`) | — (la consecuencia se limpia) |
+| `sed` | hambre, sed | 2.5 | +0.25/h | 8.9 (`error`) | a **N días → 10 `SYSTEM-FAILURE` irreversible** |
+| `herida` | sangrando | 7.5 | 0/h | 8.5 | a **~30 min → 10 `SYSTEM-FAILURE`** |
+| `fallo` | desangrándose ahora | 10 | — | 10 | ya está ocurriendo |
+
+La diferencia entre `necesidad` y `sed` no es de intensidad: es que la de `necesidad` se puede limpiar (una cola atascada se purga) y la de `sed` **no** (un turno purgado a los 30 días no vuelve). Y la de `herida` no empieza baja: ya duele, y el reloj corre en minutos.
+
+### Ley de escalado (una, parametrizada por clase)
+
+```
+edad_h   = (ahora - first_seen_at) / 3600
+intensity = clamp(base + pendiente * edad_h, base, techo)
+si acantilado_h y edad_h >= acantilado_h:
+    intensity = 10.0 ; stage = system_failure   # irreversible
+```
+
+- El reloj es **tiempo real**, nunca ticks (el defecto que abrió este AD).
+- `first_seen_at` se fija la primera vez que aparece el nombre y **no** se toca mientras la señal siga viva; al evaporarse el punto, se reinicia.
+- El `intensity` que pase el productor se interpreta como **base**, no como valor absoluto: la clase manda en la pendiente y el techo.
+- `stage` se deriva: `info` < 4 · `warning` 4–6.9 · `error` 7–8.9 · `system_failure` = 10 por acantilado (o clase `fallo`).
+
+### Acuse (no es lo mismo silenciar que parar el reloj)
+
+| clase | qué hace `ack` |
+|---|---|
+| sin acantilado (`irritacion`, `necesidad`) | congela la intensidad y silencia; se re-arma si cambia el diagnóstico (hash del mensaje, AD-107) |
+| con acantilado (`sed`, `herida`) | silencia el aviso pero **no para el reloj**: al cruzar el acantilado vuelve a 10 y se limpia el acuse — reconociste el ruido, no la consecuencia |
+
+### Mapa de señales reales
+
+| clase | señales |
+|---|---|
+| `irritacion` | `sw_hub_coverage`, avisos de deprecación, ruido de lint |
+| `necesidad` | `jobs_frustrated`, `korsakoff_amnesia`, sobres `soul` PENDING, `memory_bloat`, `runaway_cpu` |
+| `sed` | `chronicle_blocked_by_ide` (los turnos se purgan a los 30 d), backup cloud fallando N días, dead letters acumuladas |
+| `herida` | `hung_service` sobre el MCP o el daemon, `dead_letters` de un mensaje perdido, `cuda_cortex_failure` |
+| `fallo` | `service_down`, `interaction_unrendered_purged` (la pérdida ya ocurrió), Qdrant inalcanzable |
+
+### Cómo materializarlo (las opciones anteriores siguen siendo la implementación)
+
+| # | Pieza | Papel en el modelo |
+|---|---|---|
+| A | Escalar por **tiempo transcurrido** | Es la ley; sin esto no hay taxonomía que valga |
+| B | **`diagnosis_hash`** | Re-arma el acuse y distingue "sigue igual" de "hay algo nuevo" |
+| C | **Sin escalado** | Válida solo para `irritacion` (pendiente 0) — no como política global |
+| D | **`ack`** | Obligatorio: sin él, `sed` y `necesidad` acaban en máximos y el operador aprende a ignorarlos |
+
+Perfiles en `configs/signals/signal_profiles.yaml` (data-over-code): clase por señal, con override de base/acantilado cuando haga falta. `inject_signal` resuelve la clase por nombre y cae a `necesidad` si no está mapeada.
+
+**Rationale / Evidence**:
+- `SIGNAL_PAIN_ESCALATION_RATE = 0.5` × tick 300 s × 10 = saturación en 50 min desde 5.0: hoy no hay clase, hay una tasa.
+- `signal_memories` guarda un punto por nombre: la escalada no distingue "sigue el mismo problema" de "hay uno nuevo".
+- Medido tras reiniciar con AD-107 (2026-11-02 10:12): `jobs_frustrated` en **10.0** citando 5 jobs, **los cinco ya explicados** — dos vigilantes de CI que leían un run ajeno, dos jobs de cola muerta y un DAG cerrado hace 107 h. Cancelar un job no lo saca del dolor: pasa a `FRUSTRATED` hasta `purge_hygiene` (14 días).
+- El escalado también toca sondas (`hung_service`, `memory_bloat`): un falso positivo que se reinyecta satura igual de rápido.
+- La metáfora ya existe en el sistema (`korsakoff_amnesia`, `cuda_cortex_failure`, `SIGNAL_AMNESIA_HOURS = 8`): esto la ordena en vez de inventar otra.
+
+**Consequences**:
+- La intensidad vuelve a ser comparable entre señales: 10 significará "esto es grave o ya no tiene vuelta", no "esto lleva un rato".
+- Hay que fijar por clase lo que hoy es un número global: techo, pendiente y acantilado (los valores de la tabla son una propuesta, no una medición).
+- `evaporate_signals` borra el punto y reinicia `first_seen_at`: un dolor que reaparece no arrastra la edad anterior (correcto para un fallo nuevo, incorrecto si era un flapping — decidir).
+- Test de regresión: dos ticks seguidos sin cambio no pueden mover la intensidad más de lo que fije la ley.
+
+**Pendiente de decisión del Operador**: (1) ¿cinco clases o se fusionan `necesidad` y `sed`?; (2) los acantilados reales (30 d para `sed` es el tope del buffer; ¿cuántos días para un backup roto?); (3) ¿el acuse congela o solo silencia en las clases sin acantilado?; (4) ¿el dashboard muestra `stage` o seguimos con el 0–10?
+
+**Implementación**: ninguna todavía. Con la tabla de clases aprobada, pasa a ACCEPTED y se implementa en tres piezas: `signal_profiles.yaml`, la ley en `inject_signal`, y `red-pill signal ack`.
