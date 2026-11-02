@@ -176,6 +176,13 @@ def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: 
 	days = payload.get("expires_in_days")
 	if expires is None and days:
 		expires = time.time() + float(days) * 86400.0
+	# RFC-OBS-006: nota sellada. `reveal_at` (epoch) o `reveal_in_days`; hasta esa
+	# fecha el tablón no la muestra (y tampoco el digest ni `suspended()`).
+	reveal_raw = payload.get("reveal_at")
+	reveal: Optional[float] = float(reveal_raw) if reveal_raw else None
+	reveal_days = payload.get("reveal_in_days")
+	if reveal is None and reveal_days:
+		reveal = time.time() + float(reveal_days) * 86400.0
 	note = theatre.post_note(
 		type=kind,
 		summary=str(payload.get("summary") or payload.get("body") or ""),
@@ -185,10 +192,12 @@ def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: 
 		originator=originator,
 		mission_id=session.get("mission_id"),
 		expires_at=float(expires) if expires else None,
+		reveal_at=float(reveal) if reveal else None,
 	)
 	until = f" · hasta {time.strftime('%Y-%m-%d', time.localtime(note['expires_at']))}" if note.get("expires_at") else ""
+	sealed = f" · sellada hasta {time.strftime('%Y-%m-%d', time.localtime(note['reveal_at']))}" if note.get("sealed") else ""
 	subject = f" · {note['subject']}" if note.get("subject") else ""
-	return f"[CORO teatro] {note['type']}{subject} · nota={note['note_id'][:12]}{until}"
+	return f"[CORO teatro] {note['type']}{subject} · nota={note['note_id'][:12]}{until}{sealed}"
 
 
 async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:

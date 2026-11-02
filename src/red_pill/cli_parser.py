@@ -238,6 +238,15 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	coro_reconcile.add_argument("--dry-run", action="store_true", help="Solo lista; no publica")
 	coro_reconcile.add_argument("--json", action="store_true", help="Salida JSON")
 
+	coro_note = coro_sub.add_parser("note", help="Deja un acta en el tablón (opcionalmente sellada hasta una fecha)")
+	coro_note.add_argument("summary", help="Texto del acta")
+	coro_note.add_argument("--type", default="notice", choices=["notice", "decision", "suspension", "waiver"])
+	coro_note.add_argument("--subject", default=None, help="task:… / signal:… (obligatorio en suspension/waiver)")
+	coro_note.add_argument("--ref", default=None, help="Referencia (ruta, commit, job…)")
+	coro_note.add_argument("--reveal-at", default=None, help="Cuándo se revela: AAAA-MM-DD[THH:MM] o epoch")
+	coro_note.add_argument("--reveal-in-days", type=float, default=None, help="Alternativa a --reveal-at: dentro de N días")
+	coro_note.add_argument("--expires-in-days", type=float, default=None, help="TTL del acta (días)")
+
 	mcp_parser = subparsers.add_parser("mcp", help="MCP compartido (backend UDS + proxy stdio)")
 	mcp_sub = mcp_parser.add_subparsers(dest="mcp_cmd")
 	mcp_serve = mcp_sub.add_parser("serve", help="Backend MCP compartido sobre UDS")

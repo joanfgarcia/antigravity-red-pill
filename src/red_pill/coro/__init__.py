@@ -31,7 +31,8 @@ _DESCRIPTIONS: Dict[str, str] = {
 		"escribe un ACTA del teatro (notice/decision/suspension/waiver), legible por "
 		"todas las almas: ahí van las decisiones que no son de una misión. Una "
 		"`suspension`/`waiver` necesita `subject` (task:… / signal:…) y caduca con "
-		"`expires_in_days`."
+		"`expires_in_days`. Con `reveal_in_days` la nota queda SELLADA: existe, pero "
+		"el tablón no la muestra hasta esa fecha."
 	),
 	"send": (
 		"[OFFICIAL] Escribe a OTRA alma (continuity_id). Verbos: notify (despierta, sin "
@@ -92,6 +93,14 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 		"expires_in_days": {
 			"type": "number",
 			"description": "Solo teatro: caducidad del acta en días (recomendado en suspensiones).",
+		},
+		"reveal_at": {
+			"type": "number",
+			"description": "Solo teatro: epoch en el que la nota se revela (nota sellada, RFC-OBS-006).",
+		},
+		"reveal_in_days": {
+			"type": "number",
+			"description": "Solo teatro: alternativa a `reveal_at` — la nota no se ve hasta dentro de N días.",
 		},
 	},
 	"send": {

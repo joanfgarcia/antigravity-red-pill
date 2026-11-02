@@ -231,3 +231,52 @@ class TestElDespertarEnElTablon:
 		tool = [t for t in registry.get_tools() if t.name == "coro_api"][0]
 		scope = tool.inputSchema["properties"]["payload"]["properties"]["scope"]
 		assert {"mision", "teatro", "sesiones", "misiones"} <= set(scope["enum"])
+
+
+class TestNotaSellada:
+	"""`reveal_at` (RFC-OBS-006): la nota existe, pero no se ve hasta su fecha.
+
+	Es el mismo portero que `expires_at` (`_is_active`), así que el sello vale
+	para la lista, el digest y `suspended()`: nadie la ve antes de tiempo.
+	"""
+
+	def test_sellada_no_sale_antes_de_la_fecha(self, db):
+		now = 1_800_000_000.0
+		theatre.post_note(type="notice", summary="revisar P1", reveal_at=now + 86400.0, now=now)
+		assert theatre.list_notes(now=now) == []
+
+	def test_se_revela_al_llegar_la_fecha(self, db):
+		now = 1_800_000_000.0
+		theatre.post_note(type="notice", summary="revisar P1", reveal_at=now + 86400.0, now=now)
+		assert [n["summary"] for n in theatre.list_notes(now=now + 86400.0)] == ["revisar P1"]
+
+	def test_el_digest_no_cuenta_lo_sellado(self, db):
+		now = 1_800_000_000.0
+		theatre.post_note(type="notice", summary="visible", now=now)
+		theatre.post_note(type="notice", summary="sellada", reveal_at=now + 3600.0, now=now)
+		assert theatre.counts(now=now) == {"notice": 1, "total": 1}
+		assert theatre.counts(now=now + 3600.0) == {"notice": 2, "total": 2}
+
+	def test_la_nota_devuelve_su_sello(self, db):
+		now = 1_800_000_000.0
+		note = theatre.post_note(type="notice", summary="x", reveal_at=now + 60.0, now=now)
+		assert note["sealed"] is True
+		assert note["reveal_at"] == now + 60.0
+		assert theatre.post_note(type="notice", summary="y", now=now)["sealed"] is False
+
+	def test_migracion_de_una_bd_sin_reveal_at(self, tmp_path):
+		"""Una `session.db` anterior no tiene la columna: `ensure_schema` la añade."""
+		import sqlite3
+
+		path = str(tmp_path / "vieja.db")
+		con = sqlite3.connect(path)
+		con.execute(
+			"CREATE TABLE theatre_notes (note_id TEXT PRIMARY KEY, type TEXT NOT NULL, subject TEXT,"
+			" summary TEXT NOT NULL, ref TEXT, continuity_id TEXT, originator TEXT, mission_id TEXT,"
+			" created_at REAL NOT NULL, expires_at REAL, revoked_at REAL, revoked_reason TEXT)"
+		)
+		con.commit()
+		con.close()
+		theatre.ensure_schema(path)
+		note = theatre.post_note(type="notice", summary="tras migrar", reveal_at=1_900_000_000.0, db_path=path)
+		assert note["sealed"] is True
