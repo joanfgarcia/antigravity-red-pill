@@ -706,7 +706,9 @@ class RedPillConfig(BaseSettings):
 	# vía .env (MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export) — no por
 	# defecto, porque la ruta ~/.gemini/antigravity/conversations_export no existe
 	# en instalaciones limpias y es snapshot, no store vivo.
-	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
+	# `memory_queue` fuera (2026-11-02): 95 de sus 305 sesiones eran duplicados exactos
+	# de sesiones de opencode. Lo que no tiene provider store ya está renderizado.
+	MEMENTO_EXTRA_SOURCES: List[str] = []
 	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar
 	# PRE_HEATING_LOOKBACK_HOURS (única ventana del pre-heating desde que el
 	# hardcode del tier-2 se alineó a la config); el plugin se niega si no.
