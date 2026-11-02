@@ -150,3 +150,56 @@ class TestOfflineDebt:
 		):
 			extractor._signal_offline_debt(pending)  # no debe lanzar
 		assert not (tmp_path / extractor.DEBT_STATE_FILE).exists()
+
+
+class TestStubPointer:
+	"""Un `.pb` de unos cientos de bytes es un puntero sin trayectorias.
+
+	Medido 2026-11-02: 8 punteros de 180-866 B, 166 d de antigüedad y mtime más
+	nuevo que su `.json` vacío. Sin filtro, el cron los cuenta como pendientes en
+	cada pasada — para siempre — y el log miente cada hora.
+	"""
+
+	def _dirs(self, tmp_path: Path, monkeypatch, extractor):
+		conv = tmp_path / "conv"
+		conv.mkdir()
+		out = tmp_path / "out"
+		out.mkdir()
+		monkeypatch.setattr(extractor, "get_antigravity_conversations_dir", lambda: conv)
+		monkeypatch.setattr(extractor, "get_unencrypted_conversations_dir", lambda: out)
+		return conv, out
+
+	def test_puntero_seco_no_es_conversacion_pendiente(self, extractor, tmp_path, monkeypatch):
+		conv, out = self._dirs(tmp_path, monkeypatch, extractor)
+		pb = conv / "stub.pb"
+		pb.write_bytes(b"x" * 180)
+		(out / "stub.json").write_text("{}", encoding="utf-8")
+		stamp = time.time()
+		os.utime(pb, (stamp, stamp))
+		os.utime(out / "stub.json", (stamp - 86400, stamp - 86400))
+		mem = MagicMock()
+		discover = MagicMock()
+		monkeypatch.setattr(extractor, "discover_language_servers", discover)
+		with patch("red_pill.memory.MemoryManager", return_value=mem):
+			extractor.run_extraction()
+		discover.assert_not_called()
+		mem.inject_signal.assert_not_called()
+
+	def test_puntero_que_crece_vuelve_a_la_cola(self, extractor, tmp_path, monkeypatch):
+		"""El IDE rellena el puntero: el mismo fichero, ya con trayectorias, entra."""
+		conv, out = self._dirs(tmp_path, monkeypatch, extractor)
+		pb = conv / "real.pb"
+		pb.write_bytes(b"x" * (extractor.STUB_PB_MAX_BYTES + 1))
+		mem = MagicMock()
+		mem.has_signal.return_value = False
+		discover = MagicMock(return_value=[])
+		monkeypatch.setattr(extractor, "discover_language_servers", discover)
+		with (
+			patch.object(extractor, "get_state_dir", return_value=tmp_path),
+			patch("red_pill.memory.MemoryManager", return_value=mem),
+		):
+			extractor.run_extraction()
+		discover.assert_called_once()
+		# IDE cerrado y deuda < 30 d: se declara la señal con el pendiente real.
+		mem.inject_signal.assert_called_once()
+		assert mem.inject_signal.call_args.kwargs["name"] == "chronicle_blocked_by_ide"
