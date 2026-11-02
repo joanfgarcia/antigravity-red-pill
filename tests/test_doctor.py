@@ -361,3 +361,43 @@ class TestRunDoctor:
 		mock_auditor.audit_runtime.return_value.findings = []
 		with patch("red_pill.metabolism.auditor.SentinelAuditor", return_value=mock_auditor):
 			assert run_doctor(quiet=True) == 1
+
+
+class TestMementoRawCoverage:
+	"""El raw es la base para regenerar todo (2026-11-02): una sesión sin raw no está respaldada."""
+
+	def _registry(self, monkeypatch, root, sessions):
+		class FakeRegistry:
+			def __init__(self, path=None):
+				self.state = {"registry": sessions}
+
+		monkeypatch.setattr("red_pill.memento.get_memento_root", lambda: root)
+		monkeypatch.setattr("red_pill.memento.registry.MementoRegistry", FakeRegistry)
+
+	def test_sesion_sin_raw_es_rojo(self, tmp_path, monkeypatch):
+		from red_pill.metabolism.doctor import _check_memento_raw
+
+		(tmp_path / "2026-10/opencode/s1/memento").mkdir(parents=True)
+		self._registry(monkeypatch, tmp_path, {"opencode": {"opencode:s1": {"dir": "2026-10/opencode/s1"}}})
+		out = _check_memento_raw()
+		assert out[0][0] == "red" and "sin copia raw" in out[0][1]
+
+	def test_con_raw_es_info(self, tmp_path, monkeypatch):
+		from red_pill.metabolism.doctor import _check_memento_raw
+
+		raw = tmp_path / "2026-10/opencode/s1/raw"
+		raw.mkdir(parents=True)
+		(raw / "raw.json").write_text("{}", encoding="utf-8")
+		self._registry(monkeypatch, tmp_path, {"opencode": {"opencode:s1": {"dir": "2026-10/opencode/s1"}}})
+		out = _check_memento_raw()
+		assert out[0][0] == "info"
+
+	def test_reconstruida_cuenta_pero_se_declara(self, tmp_path, monkeypatch):
+		from red_pill.metabolism.doctor import _check_memento_raw
+
+		raw = tmp_path / "2026-05/telegram/s1/raw"
+		raw.mkdir(parents=True)
+		(raw / "reconstructed.md").write_text("derivado", encoding="utf-8")
+		self._registry(monkeypatch, tmp_path, {"telegram": {"telegram:s1": {"dir": "2026-05/telegram/s1"}}})
+		out = _check_memento_raw()
+		assert out[0][0] == "info" and "no verbatim" in out[0][1]

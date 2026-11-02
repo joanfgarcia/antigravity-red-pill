@@ -192,6 +192,51 @@ def _audit_plugins_no_heal() -> list:
 	return out
 
 
+def _check_memento_raw() -> list:
+	"""Memento: toda sesión registrada debe tener su copia verbatim en `raw/`.
+
+	El raw es la base para regenerarlo todo (2026-11-02). Una sesión sin raw no
+	está respaldada: si su fuente desaparece, solo queda el markdown derivado. Este
+	chequeo es el que impide que vuelva a pasar en silencio.
+	"""
+	out: list = []
+	try:
+		from pathlib import Path
+
+		from red_pill.memento import get_memento_root
+		from red_pill.memento.registry import MementoRegistry
+
+		root = Path(get_memento_root())
+		faltan: list = []
+		reconstruidas = 0
+		for source, sessions in MementoRegistry().state.get("registry", {}).items():
+			for session_id, entry in sessions.items():
+				rel = entry.get("dir")
+				if not rel:
+					continue
+				raw_dir = root / str(rel) / "raw"
+				files = [f for f in raw_dir.iterdir() if f.is_file() and f.name != "meta.json"] if raw_dir.is_dir() else []
+				if not files:
+					faltan.append(f"{source}:{session_id}")
+					continue
+				if files[0].name == "reconstructed.md":
+					reconstruidas += 1
+		if faltan:
+			out.append(
+				(
+					"red",
+					f"{len(faltan)} sesión(es) de Memento sin copia raw: el raw es la base para regenerar todo"
+					" (corre `memento_migrate.py --backfill-raw`). Primera: " + faltan[0],
+				)
+			)
+		else:
+			extra = f" ({reconstruidas} marcada(s) como no verbatim)" if reconstruidas else ""
+			out.append(("info", f"Memento: todas las sesiones tienen su copia raw{extra}."))
+	except Exception as exc:
+		out.append(("info", f"No se pudo auditar el raw de Memento: {exc}"))
+	return out
+
+
 def _check_coro() -> list:
 	"""Checks de la mensajería interna: recibos, hooks, outbox y versión de neon-link.
 
@@ -325,7 +370,7 @@ def run_doctor(quiet: bool = False) -> int:
 
 	# 2. Chequeos on-demand extra (lo que el flujo de fondo no enmarca como "verify").
 	buckets = {"red": reds, "yellow": yellows, "info": infos}
-	for sev, msg in _check_timers() + _check_model_match() + _check_coro():
+	for sev, msg in _check_timers() + _check_model_match() + _check_coro() + _check_memento_raw():
 		buckets.get(sev, yellows).append(msg)
 
 	status = "red" if reds else ("yellow" if yellows else "green")
