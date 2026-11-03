@@ -1,6 +1,6 @@
 """Fuente Pi (pi-coding-agent): sesiones JSONL de `~/.pi/agent/sessions/`.
 
-Formato (v3, verificado contra pi-coding-agent 0.85.1): la primera línea es el
+Formato (v3, verificado contra pi-coding-agent 0.85.1 y 1.4.0 — 2026-11-03): la primera línea es el
 header `{"type":"session",...}`; el resto son entries en árbol con `timestamp`
 ISO. Solo importan `type == "message"` con `message.role` en (user, assistant);
 el `toolResult` se compacta a `[TOOL: <toolName>] <texto>` para que el ruido de
