@@ -1,4 +1,4 @@
-## Unreleased
+## [8.3.0] - 2026-11-03 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
 
 ### 🧠 Memoria — el buffer deja de perder turnos
 

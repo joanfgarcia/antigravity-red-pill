@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.2.0 (Composición por imagen en el arnés media + media-gen --config)
+**System Version**: v8.3.0 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 
