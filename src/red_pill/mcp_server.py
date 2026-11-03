@@ -3415,6 +3415,40 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"[ERROR] job_submit falló: {e}")]
 
 
+def _live_progress(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+	"""Latido fino del fichero de control para un job en vuelo (RFC-JOBDAG-002 Fase 4).
+
+	El `progress` de la DB solo se escribe en frontera de step: en una etapa de horas
+	queda congelado y quien monitoriza lee "sin latido" donde el hijo lleva trabajando
+	tres horas. El fichero lo reescribe el propio hijo; su edad es prueba de vida.
+	"""
+	if task.get("status") != "PROCESSING":
+		return None
+	job_id = str(task.get("id") or "")
+	try:
+		from red_pill.core.progress import job_progress_age_s, read_job_progress
+
+		fine = read_job_progress(job_id)
+		age = job_progress_age_s(job_id)
+	except Exception:
+		return None
+	if not isinstance(fine, dict) and age is None:
+		return None
+	out: Dict[str, Any] = dict(fine or {})
+	out["age_s"] = age
+	return out
+
+
+def _fmt_beat_age(age: Optional[float]) -> str:
+	if age is None:
+		return "sin fichero"
+	if age < 90:
+		return f"hace {int(age)}s"
+	if age < 5400:
+		return f"hace {int(age // 60)}m"
+	return f"hace {age / 3600:.1f}h"
+
+
 @registry.register_action(
 	parent="job_manager_api",
 	action="job_list",
@@ -3458,6 +3492,7 @@ async def handle_job_list(arguments: Dict[str, Any]):
 								"parent_task_id": t.get("parent_task_id"),
 								"title": t.get("title"),
 								"progress": t.get("progress"),
+								"live_progress": _live_progress(t),
 								"attempts": t["attempts"],
 								"updated_at": t.get("updated_at"),
 								"dirty_kill": t.get("dirty_kill"),
@@ -3486,6 +3521,20 @@ async def handle_job_list(arguments: Dict[str, Any]):
 				f"{(t.get('mission_id') or '-')[:8]:<9} {parent:<9} {prog_txt:>6} {t['attempts']:>3} "
 				f"{updated:<16} {title}"
 			)
+		# Latido fino (solo en vuelo): la fila sola no distingue "lento" de "muerto".
+		beats = []
+		for t in tasks:
+			live = _live_progress(t)
+			if not live:
+				continue
+			segs = []
+			if live.get("label") is not None:
+				segs.append(f"{live['label']} {live.get('current')}/{live.get('total')}")
+			segs.append(_fmt_beat_age(live.get("age_s")))
+			beats.append(f"latido {t['id'][:8]}: {' · '.join(segs)}")
+		if beats:
+			lines.append("")
+			lines.extend(beats)
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_list falló: {e}")]
@@ -3534,6 +3583,7 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),
+			"live_progress": _live_progress(task),
 			"error_log": task.get("error_log"),
 		}
 		return [types.TextContent(type="text", text=_json.dumps(summary, ensure_ascii=False, indent=2, default=str))]
