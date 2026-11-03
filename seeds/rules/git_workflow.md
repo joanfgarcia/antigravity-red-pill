@@ -46,6 +46,10 @@ profile in `.env` and re-seed (`red-pill bunker update` or the installer).
 - A branch cut **before** the release bump (e.g. an `awaken/*` based on the old `next`) enters
   the new `next` by **cherry-pick or rebase** — never by squash-merging its whole tree, which
   would revert the version bump.
+- **The cycle that starts with no `next` creates it from the new `main`**
+  (`git switch -c next origin/main`). This includes the first autonomous awakening after a
+  release: an awakening that finds no `origin/next` must not fail, must not point to the old
+  branch, and must not resurrect it — it cuts the new `next` from `main` and works from there.
 - **Hotfix**: `fix/<slug>` from `main` → PR → `main`, then merge `main` back into `next`.
 <!-- profile:solo:end -->
 

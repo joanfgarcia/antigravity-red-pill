@@ -163,7 +163,10 @@ contact.
 4. **Squash and merge** — `main` gets a single release commit; the detail lives in the PR,
    the CHANGELOG and the tag.
 5. **Delete `next`** (local and remote) right after the merge. The next cycle recreates it
-   from the new `main`. This is deliberate: a stale `next` silently diverges.
+   from the new `main`. This is deliberate: a stale `next` silently diverges. The cycle that
+   starts with no `next` — including the first autonomous awakening after a release — creates
+   it with `git switch -c next origin/main`; it never resurrects the old branch nor merges
+   `main` into it.
 6. Tag `vX.Y.Z` on the resulting `main` commit.
 
 **Hotfix during a cycle**
