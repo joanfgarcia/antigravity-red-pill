@@ -901,6 +901,14 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
+	# AFFECT_FROM_QUEUE (2026-11-03): el afecto se lee de los turnos VIVOS
+	# (`memory_queue.prompt`, lo que escribe el Operador), no de los engramas
+	# ascendidos (`work/social_memories`, que son de la noche anterior o más
+	# viejos si la ingesta se para). Paleta y léxico en `data/affect_lexicon.yaml`.
+	AFFECT_FROM_QUEUE: bool = True
+	AFFECT_TTL_MIN: int = 15  # edad del estado antes de recalcular
+	AFFECT_WINDOW_MIN: int = 180  # ventana de turnos que se miran
+	AFFECT_TURNS: int = 8  # máximo de prompts por pasada
 	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
 	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
