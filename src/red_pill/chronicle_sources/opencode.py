@@ -103,15 +103,11 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		except sqlite3.Error as e:
 			logger.warning(f"[{self.name}] Could not read database: {e}")
 			return []
-		# AD-034/D15: las sesiones de Telegram corren vía opencode pero tienen su
-		# propio source (telegram) — se excluyen aquí para no renderizar doble.
-		try:
-			from red_pill.swarm.bridges.opencode import read_opencode_origins
-
-			origins = read_opencode_origins()
-		except Exception:
-			origins = {}
-		return [(str(sid), int(count)) for sid, count in rows if sid and (origins.get(str(sid), {}) or {}).get("origin") != "telegram"]
+		# Precedencia provider-first (2026-11-03): si la sesión existe en el store
+		# del provider, se renderiza desde aquí — venga de Telegram o no. El source
+		# `telegram` solo sirve lo que ningún provider cubre (su store de
+		# conversaciones), así que no hay doble render: el que tiene el raw manda.
+		return [(str(sid), int(count)) for sid, count in rows if sid]
 
 	def _render_part(self, part: Dict[str, Any]) -> str:
 		p_type = part.get("type")

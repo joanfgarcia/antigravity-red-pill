@@ -18,6 +18,31 @@ from red_pill.chronicle_sources.base import ChronicleSourcePlugin
 logger = logging.getLogger(__name__)
 
 
+def _covered_by_provider(conversation_id: str) -> bool:
+	"""¿Esta conversación la sirve ya un provider? (precedencia provider-first).
+
+	El bridge registra en `session_origins` el `session_id` del provider que
+	ejecutó una conversación; si el id de la conversación aparece ahí, el provider
+	tiene el raw y este source sobra. Sin coincidencia (hoy: todos), Telegram es
+	el único hogar y se renderiza.
+	"""
+	try:
+		from red_pill.core.origins import (
+			PROVIDER_ANTIGRAVITY,
+			PROVIDER_CLAUDE,
+			PROVIDER_OPENCODE,
+			PROVIDER_PI,
+			read_origins,
+		)
+
+		return any(
+			conversation_id in read_origins(provider)
+			for provider in (PROVIDER_OPENCODE, PROVIDER_CLAUDE, PROVIDER_PI, PROVIDER_ANTIGRAVITY)
+		)
+	except Exception:
+		return False
+
+
 class TelegramSourcePlugin(ChronicleSourcePlugin):
 	name = "telegram"
 	session_prefix = "telegram:"
@@ -39,8 +64,9 @@ class TelegramSourcePlugin(ChronicleSourcePlugin):
 			except Exception:
 				continue
 			steps = d.get("steps") or []
-			if steps:
-				out.append((str(d.get("id") or f.stem), len(steps)))
+			cid = str(d.get("id") or f.stem)
+			if steps and not _covered_by_provider(cid):
+				out.append((cid, len(steps)))
 		return out
 
 	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
