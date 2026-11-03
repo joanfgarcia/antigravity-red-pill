@@ -258,18 +258,30 @@ class DagScheduleMixin:
 					f"y ninguna dependencia satisfecha (deps imposibles o checkpoint corrupto)"
 				)
 			self._publish_stage_events(payload, identity, before_completed, list(completed), done=True)
+			# Deuda acumulada de on_fail=warn: un job "completo" con ítems
+			# degradados no puede sellarse como si nada hubiera pasado.
+			final_soft = dict(checkpoint_data.get("soft_failures") or {})
+			if final_soft:
+				logger.error(
+					f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): "
+					f"{', '.join(sorted(final_soft))}"
+				)
+			final_ckpt = {
+				**checkpoint_data,
+				**identity,
+				"completed_stage_ids": list(completed),
+				"fanout_items": fanout_items,
+			}
+			if final_soft:
+				final_ckpt["soft_failures"] = final_soft
 			return StepOutcome(
 				completed=True,
 				# el árbol ya no incluye las plantillas skipped (lista vacía):
 				# persistir el skip y la lista congelada en el checkpoint final
 				# para que el estado sea consistente con lo ejecutado.
-				new_checkpoint={
-					**checkpoint_data,
-					**identity,
-					"completed_stage_ids": list(completed),
-					"fanout_items": fanout_items,
-				},
-				summary="dag complete",
+				new_checkpoint=final_ckpt,
+				summary="dag complete"
+				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else ""),
 				progress={
 					"current": leaves_done,
 					"total": total_leaves,
@@ -284,10 +296,18 @@ class DagScheduleMixin:
 				},
 			)
 
-		def _exec_one(path: str, stage: Dict[str, Any], gate: Any = None) -> Tuple[str, str, bool]:
-			"""Devuelve (path, summary, failed). El fallo se controla por on_fail."""
+		def _exec_one(path: str, stage: Dict[str, Any], gate: Any = None) -> Tuple[str, str, bool, Optional[str]]:
+			"""Devuelve (path, summary, failed, soft_error).
+
+			`failed` es el disyuntor (on_fail=stop): corta el job. `soft_error`
+			es una etapa degradada con on_fail=warn: se sigue, pero el fallo
+			NO puede quedarse solo en el log — se persiste en el checkpoint
+			(`soft_failures`) y viaja en el summary final del job. Antes, un
+			ítem de fan-out caído dejaba `error_log: null` y un checkpoint con
+			la etapa en `done`: el único rastro era el string de `results`.
+			"""
 			try:
-				return path, self._run_atomic(payload, stage, path, gate), False
+				return path, self._run_atomic(payload, stage, path, gate), False, None
 			except JobPauseRequested:
 				# Pausa del operador a mitad de fase (sonda del drenaje): NUNCA es
 				# un fallo de etapa — propaga al runner, que sella PAUSED con el
@@ -302,9 +322,9 @@ class DagScheduleMixin:
 				raise
 			except Exception as e:
 				if _resolve_on_fail(stages, path) == "stop":
-					return path, str(e), True
+					return path, str(e), True, None
 				logger.warning(f"[DagJob] {self.short_id} etapa {path} fallida (warn): {e}")
-				return path, f"{path}: FAILED ({str(e)[:80]})", False
+				return path, f"{path}: FAILED ({str(e)[:80]})", False, str(e)[:200]
 
 		# Agrupar el frente por compuesto padre (prefix) para el paralelismo.
 		# Sub-etapas del MISMO nodo compuesto `parallel: true` (nivel ≤ cota) se
@@ -315,11 +335,11 @@ class DagScheduleMixin:
 
 		max_conc = int(payload.get("max_concurrency", _MAX_CONCURRENCY_DEFAULT))
 		max_parallel_level = int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT))
-		all_tasks: List[Tuple[str, str, bool]] = []
+		all_tasks: List[Tuple[str, str, bool, Optional[str]]] = []
 		parallel_groups = 0
 		parallel_stages = 0
 
-		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool, Optional[str]]:
+		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool, Optional[str]]], bool, Optional[str]]:
 			"""Corre un grupo paralelo con la puerta de pausa compartida.
 
 			Devuelve (tareas_completadas, pausa_honrada, motivo_deferral). La
@@ -331,7 +351,7 @@ class DagScheduleMixin:
 			step (ceder con lo hecho, o re-lanzar si no hubo progreso).
 			"""
 			gate = _GroupPauseGate(group)
-			tasks: List[Tuple[str, str, bool]] = []
+			tasks: List[Tuple[str, str, bool, Optional[str]]] = []
 			paused = False
 			deferred: Optional[str] = None
 			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
@@ -421,9 +441,14 @@ class DagScheduleMixin:
 		new_results = dict(results)
 		new_flags = dict(flags)
 		new_completed = list(completed)
-		for path, summary, failed in all_tasks:
+		new_soft = dict(checkpoint_data.get("soft_failures") or {})
+		for path, summary, failed, soft_error in all_tasks:
 			if failed:
 				raise RuntimeError(f"dag stage '{path}' failed with on_fail=stop: {summary}")
+			if soft_error is not None:
+				# on_fail=warn: la etapa sigue (fail-soft), pero el fallo queda
+				# escrito y agregado — no se disuelve en un `done` limpio.
+				new_soft[path] = soft_error
 			new_results[path] = summary
 			new_flags[path] = "done"
 			new_completed.append(path)
@@ -468,6 +493,10 @@ class DagScheduleMixin:
 			"sleep_cutoff_ts": self._sleep_cutoff_ts,
 			"fanout_items": fanout_items,
 		}
+		if new_soft:
+			# Solo cuando hay algo que contar: un checkpoint limpio no engorda
+			# y los consumidores existentes no ven una clave vacía nueva.
+			checkpoint["soft_failures"] = new_soft
 		if paused:
 			logger.info(
 				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
@@ -475,7 +504,7 @@ class DagScheduleMixin:
 			)
 		leaf_paths = {lp for lp, _ in _iter_leaves(stages)}
 		new_leaves = [p for p in new_completed if p in leaf_paths]
-		failed_paths = [path for path, _summary, failed in all_tasks if failed]
+		failed_paths = [path for path, _summary, failed, _soft in all_tasks if failed]
 		self._publish_stage_events(
 			payload,
 			identity,
@@ -487,7 +516,9 @@ class DagScheduleMixin:
 		return StepOutcome(
 			completed=done and not paused,
 			new_checkpoint=checkpoint,
-			summary=f"dag {leaves_done}/{total_leaves}" + (" (pausado a mitad de step)" if paused else ""),
+			summary=f"dag {leaves_done}/{total_leaves}"
+			+ (" (pausado a mitad de step)" if paused else "")
+			+ (f" · {len(new_soft)} etapa(s) degradada(s) (on_fail=warn)" if new_soft else ""),
 			progress={
 				"current": leaves_done,
 				"total": total_leaves,
