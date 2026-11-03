@@ -2710,9 +2710,11 @@ reabre una segunda vía de transporte. Suite del worktree: 3786 passed.
 ## [AD-095] El coro tiene una sola puerta: `coro_api`, tablón + correspondencia + buzón
 
 **Date**: 2026-10-29
-**Status**: ACEPTADO (contrato) e **IMPLEMENTADO en S1** (`72c4b09`; migración a
-prueba de BD existente en `f5d1b59`). **S2** (canal `soul` en neon-link) y **S3**
-(presencia en el digest) pendientes. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md`.
+**Status**: ACEPTADO (contrato) e **IMPLEMENTADO en S1 y S2** (`72c4b09`; migración a
+prueba de BD existente en `f5d1b59`; S2.1 canal `soul` y S2.2 buzón único,
+2026-11-01). **S3** (que el `[CORO]` del handshake cuente el `inbox` pendiente)
+sigue pendiente: hoy esa línea cuenta actas del teatro, misiones vivas y
+novedades, no la correspondencia directa. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md`.
 
 ### 1. The Problem
 El protocolo entre almas estaba **firmado** (D-01…D-13 del hilo E-001/E-002/E-003) pero
