@@ -722,12 +722,18 @@ class RedPillConfig(BaseSettings):
 	# distinto). `min_significance` explícito en el submit los anula (reseeds/tests).
 	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
 	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
-	# Tope de sesiones por ciclo nocturno (distill+annotate). Medido 2026-11-03 sobre
-	# 82 días del registro: mediana 8/día, media 10,8, p90 20, máximo 59. 30 cubre un
-	# día normal entero (hasta el p90 con margen) y absorbe un pico en 2 noches
-	# (59 → 30+29; 46 → 30+16; 40 → 30+10). El orden es stale-first: el backlog
-	# viejo sale antes que lo de anoche. 0 = sin tope (solo para rescates manuales).
+	# Topes del ciclo nocturno (distill+annotate). El coste tiene DOS sumandos: uno
+	# fijo por sesión (una llamada de distill + una de annotate, ~2,6 min de
+	# mediana) y uno variable por mensaje (~2 s/msg medidos en el ciclo de 126).
+	# Se aplican los dos y gana el que se cruce primero:
+	# - `NIGHT_LIMIT` (sesiones) acota el fijo. Medido 2026-11-03 sobre 82 días:
+	#   mediana 8/día, media 10,8, p90 20, máx 59.
+	# - `NIGHT_MSG_LIMIT` (mensajes) acota el variable. 3.000 deja en una noche el
+	#   79/81 de los días; el peor (8.731 msgs, día de misión) cae en 3 noches.
+	# El orden es stale-first: el backlog viejo sale antes que lo de anoche.
+	# 0 = sin tope (solo para rescates manuales).
 	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 30
+	MEMENTO_AGENTIC_NIGHT_MSG_LIMIT: int = 3000
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0

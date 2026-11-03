@@ -13,6 +13,14 @@
   gemelas exactas de `memory_queue` (sin borrar nada).
 - **[FIX] Aviso previo**: `interaction_ttl` avisa (`interaction_expiring_soon`) de
   lo que va a caducar por el tope duro de 30 días antes de perderlo.
+- **[NEW] Contador del backlog**: al cerrar el chronicle se emite
+  `memento_backlog` con las sesiones que el tope nocturno dejó fuera (acumulativo,
+  con la edad de la más antigua) y se evapora a 0. Clase `sed`: escala con el
+  tiempo hasta el acantilado de 30 d del buffer.
+- **[NEW] Tope doble del ciclo**: 30 sesiones y 3.000 mensajes por noche (gana el
+  que se cruce primero) — el coste tiene un sumando fijo por sesión y otro
+  variable por mensaje, y un tope solo por sesiones dejaba pasar una de 1.500
+  mensajes como si fuera una de 10.
 
 ### ⚙️ Cola y DAG
 

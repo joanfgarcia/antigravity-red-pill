@@ -22,10 +22,36 @@ import json
 import sys
 
 
-def select_targets(pending, limit: int) -> list:
-	"""Selection mirroring `memento_agentic.py` without --target: stale first + cap."""
+def _message_count(registry, source: str, session_id: str) -> int:
+	"""Tamaño de la sesión en mensajes (0 si no se puede leer)."""
+	if registry is None:
+		return 0
+	try:
+		entry = (registry.state.get("registry", {}).get(source, {}) or {}).get(session_id) or {}
+		return int(entry.get("message_count") or 0)
+	except Exception:
+		return 0
+
+
+def select_targets(pending, limit: int, msg_limit: int = 0, registry=None) -> list:
+	"""Selección stale-first con DOS topes de coste (2026-11-03).
+
+	`limit` acota sesiones (coste fijo: distill + annotate por sesión) y
+	`msg_limit` acota mensajes (coste variable: el tamaño manda en el tiempo del
+	LLM). Gana el que se cruce primero. La primera sesión entra siempre: un ítem
+	mayor que el presupuesto no puede quedarse fuera para siempre.
+	"""
 	ordered = sorted(pending, key=lambda t: t[2] != "stale")
-	chosen = ordered if limit <= 0 else ordered[:limit]
+	chosen = []
+	total_msgs = 0
+	for source, session_id, reason in ordered:
+		if limit > 0 and len(chosen) >= limit:
+			break
+		msgs = _message_count(registry, source, session_id)
+		if msg_limit > 0 and chosen and total_msgs + msgs > msg_limit:
+			break
+		chosen.append((source, session_id, reason))
+		total_msgs += msgs
 	return [f"{src}:{sid}" for src, sid, _reason in chosen]
 
 
@@ -44,7 +70,14 @@ def main() -> int:
 	root = get_memento_root()
 	pending = pending_agentic(registry, root=root, force=False, redistill_since=None)
 	limit = args.limit if args.limit is not None else int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_LIMIT", 20))
-	print(json.dumps({"items": select_targets(pending, limit)}, ensure_ascii=False))
+	msg_limit = int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_MSG_LIMIT", 0))
+	items = select_targets(pending, limit, msg_limit=msg_limit, registry=registry)
+	print(
+		json.dumps(
+			{"items": items, "total": len(pending), "selected": len(items), "left": max(0, len(pending) - len(items))},
+			ensure_ascii=False,
+		)
+	)
 	return 0
 
 
