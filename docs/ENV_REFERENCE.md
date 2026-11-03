@@ -345,6 +345,10 @@ Plugins 05–10. Each is independently toggleable.
 | `AFFECT_CUSTOM_OVERRIDES`| `{}` | A JSON Dictionary mapping emotions to custom Valence/Arousal weights. Only triggers if `AFFECT_MODEL=CUSTOM`. |
 | `DYNAMIC_EMOTION_SYNC`| `True` | Let the agent auto-derive its Skin based on the dominant emotional context of recent interactions. |
 | `MULTI_EMOTION_INFERENCE`| `True` | Enables deriving a primary and secondary emotion for high-complexity engrams. |
+| `AFFECT_FROM_QUEUE` | `True` | El afecto del turno se lee de los prompts vivos de `memory_queue` (`utils/operator_affect.py`), no de los engramas ascendidos. Paleta y léxico en `data/affect_lexicon.yaml` (anger/fear → red, anxiety → orange, joy → yellow, calm → cyan, neutral → gray). `false` = camino antiguo (engramas). |
+| `AFFECT_TTL_MIN` | `15` | Edad (min) del `state/affect.json` antes de recalcular. Dentro del TTL, los cuatro interceptores leen el fichero sin tocar la cola. |
+| `AFFECT_WINDOW_MIN` | `180` | Ventana (min) de turnos vivos que mira el clasificador. Fuera de ella, un turno no cuenta. |
+| `AFFECT_TURNS` | `8` | Máximo de prompts por pasada. |
 
 ---
 

@@ -1,5 +1,59 @@
 ## Unreleased
 
+### 🧠 Memoria — el buffer deja de perder turnos
+
+- **[FIX] opencode v2**: el lector de sesiones volvió a ver `session_message`
+  (82 sesiones / 9.418 mensajes recuperados); el buffer pasó de 4 a 508 de 551
+  puntos renderizados.
+- **[FIX] Cobertura raw**: 1.315 raws verbatim + 24 reconstruidos, **0 sin raw**;
+  `doctor` lo verifica.
+- **[FIX] Rescate**: `rescue_unrendered_buffer.py --include-sessions` recupera los
+  turnos con `session_id` cuya fuente ya no los sirve, y
+  `memento_drop_duplicates.py` retira a `memento_archive/duplicados/` las 95
+  gemelas exactas de `memory_queue` (sin borrar nada).
+- **[FIX] Aviso previo**: `interaction_ttl` avisa (`interaction_expiring_soon`) de
+  lo que va a caducar por el tope duro de 30 días antes de perderlo.
+
+### ⚙️ Cola y DAG
+
+- **[NEW] `REVIEW` y `CANCELLED`** (AD-110): reservar un `FRUSTRATED` de la purga
+  (`job review`), devolverlo a `PENDING` (`job resume`) o cerrarlo definitivamente
+  (`job discard`). La purga automática no los toca.
+- **[FIX] Fan-out con espacios**: el item de un `command` se cita con
+  `shlex.quote` (el ítem `memory_queue:mcp:Aleth (Gemini…):2026-10-27` dejó de
+  perderse).
+- **[FIX] `on_fail=warn` deja de ser fail-silent**: `soft_failures` viaja en el
+  checkpoint y en el summary final del job.
+- **[FIX] Latido del job**: `job_list`/`job_status` exponen `live_progress` desde
+  el fichero del hijo, y `job_health` ya no llama "atascado" a un paso largo con
+  el fichero fresco (`jobs_stuck` falso positivo).
+
+### 🌉 Coro
+
+- **[NEW] Fase 5/C3 completa**: `session wake-policy`, `session inbound`,
+  `set_inbound` (MCP) y la guardia de entrada en el push directo de
+  `soul_notify`.
+- **[NEW] S3**: el `[CORO]` del handshake cuenta el `inbox` pendiente y muestra el
+  sobre (`respuesta: SÍ/NO`).
+- **[NEW] Cartas revividas**: una carta `soul` agotada por `no_live_body` vuelve
+  sola cuando el alma despierta.
+
+### 💓 Afecto
+
+- **[FIX] El chroma sale de los turnos vivos** (AD-111): `memory_queue.prompt` con
+  léxico y paleta en `data/affect_lexicon.yaml`; `state/affect.json` con TTL.
+
+### 🛡️ Sentinel
+
+- **[FIX] Ocupado no es atascado**: el probe del SIP consulta `/slots` y espera
+  cola (65 s) antes de declarar `sip_stuck`.
+
+### 🧹 Housekeeping
+
+- **[FIX] Precedencia provider-first** (AD-112): el provider que tiene el raw
+  manda; `telegram` es el respaldo.
+- **[DOC] pi 1.4.0**: la fuente v3 verificada con una sesión real.
+
 ## [8.2.0] - 2026-11-02 (Alma y coro cerrados: la identidad sobrevive al cuerpo, los claims federados se certifican y el coro vive en el transporte)
 
 > Release acumulada: el número 8.2.0 se fijó el 2026-10-15 (composición por imagen) y no llegó a etiquetarse, así que esta es su primera publicación oficial e incluye todo lo posterior. El bloque de media conserva su fecha original al final.

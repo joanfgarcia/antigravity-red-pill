@@ -2710,11 +2710,11 @@ reabre una segunda vía de transporte. Suite del worktree: 3786 passed.
 ## [AD-095] El coro tiene una sola puerta: `coro_api`, tablón + correspondencia + buzón
 
 **Date**: 2026-10-29
-**Status**: ACEPTADO (contrato) e **IMPLEMENTADO en S1 y S2** (`72c4b09`; migración a
-prueba de BD existente en `f5d1b59`; S2.1 canal `soul` y S2.2 buzón único,
-2026-11-01). **S3** (que el `[CORO]` del handshake cuente el `inbox` pendiente)
-sigue pendiente: hoy esa línea cuenta actas del teatro, misiones vivas y
-novedades, no la correspondencia directa. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md`.
+**Status**: ACEPTADO (contrato) e **IMPLEMENTADO en S1, S2 y S3** (`72c4b09`;
+migración a prueba de BD existente en `f5d1b59`; S2.1 canal `soul` y S2.2 buzón
+único, 2026-11-01; S3 el `[CORO]` del handshake cuenta el `inbox` y muestra el
+sobre, 2026-11-03). Superficies: `session wake-policy` / `session inbound` (CLI)
+y la acción MCP `set_inbound`. Contrato: `docs/TECHNICAL/CORO_PROTOCOL.md`.
 
 ### 1. The Problem
 El protocolo entre almas estaba **firmado** (D-01…D-13 del hilo E-001/E-002/E-003) pero
@@ -3293,8 +3293,9 @@ reconciliaba: solo el pull lo salvaba.
   instalados deben reseedearse con la nueva `ACK_SQL` (los seeds ya la llevan).
 - El reconciliador mira las últimas 24 h; un fallo más antiguo que la ventana
   queda para pull/`redrive` manual. Es una decisión, no un olvido.
-- Sigue pendiente el caso «carta `soul` agotada por `no_live_body` 24 h →
-  dead letter → `redrive`» (el camino DLQ está probado con fallo permanente).
+- ~~Sigue pendiente el caso «carta `soul` agotada por `no_live_body` 24 h →
+  dead letter → `redrive`»~~ **cerrado el 2026-11-03**: `coro reconcile` revive
+  las cartas de un alma que ya tiene cuerpo (ver AD-104 §5 y `mailbox.py`).
 
 ---
 
@@ -3532,3 +3533,47 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 - `evaporate_signals` ahora devuelve cuántos puntos borró (antes se tragaba la excepción y el log no probaba nada); `signals_by_source` expone las señales por emisor.
 - Deuda asumida: el janitor emite cuatro señales y no evapora ninguna (shard aparte); `vitals` queda fuera del alcance (eventos).
 - Cuando P1 se active, `report_only: false` en el YAML y nada más: no hay código que tocar.
+
+## [AD-110] `REVIEW` y `CANCELLED`: reservar un frustrado de la purga y cerrar lo revisado
+**Date**: 2026-11-03
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: Un job `FRUSTRATED` caduca a los 14 días y el janitor lo borra sin que nadie lo haya mirado. El dolor `jobs_frustrated` lo cuenta, pero el reloj corre igual. Y "cancelar" no era un estado: `job cancel`/`kill --discard` sellan `FRUSTRATED` con `cancel_requested_at`, así que un fallo real tras tres intentos y una cancelación deliberada del Operador acababan en el mismo cubo. Medido el 2026-11-03: de 6 frustrados, 4 eran basura (tres CI de un PR ya mergeado, un backfill cancelado), 1 había que reservarlo (BIT-003) y 1 necesitaba revisión (cierre ALMA_Y_CORO).
+
+**Decision**: dos estados nuevos en la cola, con transiciones explícitas:
+1. **`REVIEW`** — aparcamiento del Operador, solo desde `FRUSTRATED` (`job review`, `job_review` en MCP). El runner no lo ejecuta (no es `PENDING`), `purge_hygiene` y `purge --terminal` no lo tocan, y `job_health` deja de contarlo como dolor. Salidas: `job resume` → `PENDING` (se reprocesa, `attempts` a cero) y `job discard` → `CANCELLED`. `--undo` lo devuelve a `FRUSTRATED` (vuelve al pool de la purga).
+2. **`CANCELLED`** — terminal y decidido: no se ejecuta, no cuenta como dolor y la purga automática no lo borra (es el registro de una decisión; se retira a mano con `job purge <id>`). Sus hijos `BLOCKED` se cancelan en cascada a `CANCELLED`, no quedan `FRUSTRATED` esperando una revisión que nadie va a hacer.
+
+**Alternatives rechazadas**: un flag `reserved` en el payload (la purga tendría que leerlo; el estado es más barato de ver y de consultar); borrar los frustrados viejos a mano (pierde el registro); reutilizar `PAUSED` (un pausado es trabajo reanudable, no un triaje).
+
+**Rationale / Evidence**: `tests/test_job_review_state.py` (11 casos: transiciones, idempotencia, cascada, `resume` sin `attempts`, las dos purgas sin tocar `REVIEW`/`CANCELLED`). `red-pill job list` los muestra por defecto (`REVIEW`) y con `--all` (`CANCELLED`).
+
+**Consequences**: reservar un frustrado lo saca del dolor `jobs_frustrated` (ya lo has visto) y de la purga. `job cancel` sigue sellando `FRUSTRATED` para un job vivo — no se cambió su semántica.
+
+## [AD-111] El afecto se lee de los turnos vivos, no de los engramas ascendidos
+**Date**: 2026-11-03
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: El chroma que pinta cada turno salía de `get_dominant_mood()` → últimos engramas de `work_memories`/`social_memories`. Eso es lo que **ascendió la noche anterior** (o más viejo si la ingesta se para): medido el 2026-11-02, `work_memories` iba **148,8 h** por detrás del último turno, y el Operador estaba escribiendo enfado y susto que el sistema no veía. Se le estaba pidiendo el parte de mañana al periódico de ayer.
+
+**Decision**: `utils/operator_affect.py` lee la única fuente que se escribe por turno — la columna `prompt` de `memory_queue` (las palabras del Operador; `response` es del agente) — y publica `state/affect.json` con TTL. Clasificación por léxico determinista (sin LLM en el camino caliente), paleta y palabras en `data/affect_lexicon.yaml` (datos, no código): `anger`/`fear` → red, `anxiety` → orange, `joy` → yellow, `calm` → cyan, `neutral` → gray; desempate por peso. `get_current_sync_state()` lo prefiere y cae al camino de engramas si no hay estado o falla. Kill switch: `AFFECT_FROM_QUEUE=false`.
+
+**Alternatives rechazadas**: LLM por turno (latencia y coste en cada lectura de los cuatro interceptores); seguir con engramas (es el bug); un cron aparte (el estado se actualiza cuando se lee, no cuando conviene).
+
+**Rationale / Evidence**: `tests/test_affect_from_queue.py` (10 casos: clasificación de las cinco emociones, TTL, caducidad, sin turnos, filtrado de bloques inyectados, integración). Medido en vivo: 6 turnos → `neutral/gray` (la conversación era técnica); con las frases del 02-11 habría dado `red`.
+
+**Consequences**: un silencio no es una emoción nueva (sin turnos en la ventana se conserva el último estado). Los bloques que inyecta el arnés (`<user_rules>…`, a veces entrecomillados) se ignoran: no son la voz del Operador y metían ruido (un "calma" de las reglas pintaba cian). `utils/affect.py` (valence/arousal + FSRS) no se toca.
+
+## [AD-112] Precedencia provider-first: el que tiene el raw manda
+**Date**: 2026-11-03
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: AD-034/D15 decidió que las sesiones con `origin=telegram` las sirviera el source `telegram`, y los providers (opencode, pi, antigravity) las excluían al descubrir. El Operador recordaba la regla al revés: "o se toma de telegram o del provider conectado a telegram… decidimos sacarlo de telegram por si algún día metíamos inferencia local". Medido: 16 sesiones `origin=telegram` en el registro y **0** presentes en `opencode.db`; el source `telegram` tiene 12 conversaciones (UUID) y los providers ids `ses_…`.
+
+**Decision**: el provider que tiene la sesión en su store la renderiza, venga de Telegram o no; `telegram` sirve solo lo que ningún provider cubre (salta las conversaciones cuyo id ya está en el registro de orígenes de un provider). Aplicado a opencode, pi y antigravity.
+
+**Alternatives rechazadas**: mantener la exclusión (el día que un bridge vuelva a ejecutar por provider, la conversación no se lee de su store); deduplicar por contenido (caro y frágil).
+
+**Rationale / Evidence**: medido antes/después: opencode 819 · pi 26 · telegram 12, idéntico (hoy es un no-op). `tests/test_origin_precedence.py` (4 casos) + los tests de descubrimiento actualizados. La sesión real de pi 1.4.0 confirmó el formato v3 y el parseo (docstring de la fuente).
+
+**Consequences**: el respaldo sigue cubriendo las 12 conversaciones reales. Deuda acotada: si el bridge ejecuta un provider con un `session_id` distinto del id de la conversación, hace falta registrar el vínculo (`record_origin(provider, conversation_id, "telegram")`) para que Telegram sepa que está cubierta.

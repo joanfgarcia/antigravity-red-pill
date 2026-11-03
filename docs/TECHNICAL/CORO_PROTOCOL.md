@@ -244,9 +244,11 @@ transporte es del `outbox` de neon-link. El reconciliador
 `red-pill coro reconcile` publica los mensajes dirigidos que se quedaron sin
 sobre; el `SoulHub` lo lanza cada 60 s (`NEON_LINK_SOUL_RECONCILE_S`). El E2E
 entre dos almas vivas (ida/vuelta, receptor cerrado, no-duplicación y
-DLQ/`redrive`) está medido: ver `DECISION_LOG` **AD-102 §6**. Queda solo el caso
-de una carta `soul` que envejece hasta `dead_letters` por `no_live_body` (24 h)
-y su `redrive`.
+DLQ/`redrive`) está medido: ver `DECISION_LOG` **AD-102 §6**. El último caso
+—una carta `soul` que envejece hasta `dead_letters` por `no_live_body`— está
+**cerrado desde el 2026-11-03**: en cada pasada de `coro reconcile`, si el alma
+ya tiene cuerpo, su carta vuelve a la cola sola (los fallos reales de transporte
+y las almas dormidas siguen en dead letter).
 
 ### 7.2 Callbacks: jobs, CI y MinionInbox despiertan por el coro (2026-11-01)
 
@@ -299,7 +301,7 @@ trabajos que sobreviven al turno.
 |---|---|---|
 | **S1 — el sustrato y la puerta** ✅ HECHO (`72c4b09`, migración `f5d1b59`) | `session.db` v8 (§9); `src/red_pill/coro/` con `coro_api`; `send/inbox/ack/fetch/post/board`; `delivery.py` cambia el destinatario a `to_continuity`; **purga** de las cuatro tools viejas | `pytest -k coro` verde; el catálogo MCP **no** contiene `announce_intent`/`fetch_events`/`check_parallel_sessions`/`session_board`; E2E de dos sesiones: `send(verb=ask)` llega, `reply` vuelve, y con el receptor cerrado el mensaje queda `queued` y aparece en su `inbox` al volver |
 | **S2 — el buzón único** ✅ HECHO (S2.1 + S2.2, 2026-11-01) | Publicación al `outbox` desde `coro_api.send`, `plugins/soul.py`, `session deliver --event --broker`; `message_receipts` sustituye a `event_deliveries`; `red-pill coro reconcile` y loop del SoulHub | `neon-link` entrega con el receptor cerrado y con el proveedor seco (RETRY, no pérdida); `redrive` devuelve la carta; dos entregadores no duplican |
-| **S3 — presencia en la interfaz** | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente) | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
+| **S3 — presencia en la interfaz** ✅ HECHO (2026-11-03) | el `[CORO]` del handshake cuenta `inbox` pendiente además de novedades; render de D-13 (`respuesta: NO` evidente). Superficies: `session wake-policy`, `session inbound` y la acción MCP `set_inbound` | Test del digest con 1 mensaje pendiente; el texto inyectado lleva el sobre completo |
 
 S1 no depende de S2: la entrega ya existe por el seam `_TRANSPORTS` (CLI) y el
 `park` garantiza el camino barato. S2 es la durabilidad, no el protocolo.
