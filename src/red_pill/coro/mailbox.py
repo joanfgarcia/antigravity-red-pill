@@ -133,6 +133,56 @@ def publish_message(event: Dict[str, Any], *, db_path: Optional[str] = None) -> 
 		return False
 
 
+def _revive_soul_dead_letters(*, dry_run: bool = False) -> Dict[str, int]:
+	"""Devuelve a la cola las cartas `soul` de un alma que ya tiene cuerpo vivo.
+
+	Una carta que envejeció hasta `dead_letters` por `no_live_body` (o por un
+	receptor `ttl=expired`) no es un fallo de transporte: el destinatario no
+	estaba. Cuando vuelve a estarlo, se reintenta sola — sin `neon-link redrive`
+	a mano. Los fallos de transporte reales NO se reviven: esos sí son deuda.
+	"""
+	out = {"checked": 0, "revived": 0, "skipped": 0}
+	try:
+		import sqlite3
+
+		from neon_link.core.manager import redrive_outbox_dead_letters
+
+		from red_pill.core import soul_notify
+		from red_pill.core.paths import get_neon_link_db_path
+
+		db = get_neon_link_db_path()
+		if not db.exists():
+			return out
+		conn = sqlite3.connect(str(db))
+		try:
+			rows = conn.execute(
+				"SELECT id, channel_user_id, error_reason FROM dead_letters WHERE original_table = 'outbox' AND channel = 'soul'"
+			).fetchall()
+			out["checked"] = len(rows)
+			ids = []
+			for letter_id, soul, reason in rows:
+				texto = str(reason or "").lower()
+				if "no_live_body" not in texto and "ttl" not in texto:
+					out["skipped"] += 1
+					continue
+				try:
+					vivo = bool(soul_notify.resolve_live_leg(str(soul or "")))
+				except Exception:
+					vivo = False
+				if not vivo:
+					out["skipped"] += 1
+					continue
+				ids.append(int(letter_id))
+			if ids and not dry_run:
+				revived, _missing = redrive_outbox_dead_letters(conn, ids)
+				out["revived"] = int(revived)
+		finally:
+			conn.close()
+	except Exception as e:
+		logger.warning(f"[coro.mailbox] no se pudieron revivir cartas soul: {e}")
+	return out
+
+
 def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False, since_seq: Optional[int] = None) -> Dict[str, Any]:
 	"""Reconcilia `mission_events -> outbox` con marca de agua (no reenvía historia).
 
@@ -162,6 +212,11 @@ def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False, s
 		"baseline": False,
 		"last_seq": 0,
 	}
+	# Independiente de la marca de agua: si un alma volvió a tener cuerpo, sus
+	# cartas agotadas por `no_live_body` vuelven a la cola ya.
+	revive = _revive_soul_dead_letters(dry_run=bool(dry_run))
+	out["revived"] = revive["revived"]
+	out["dead_letters_checked"] = revive["checked"]
 	try:
 		with connect_session_db(str(get_session_db())) as conn:
 			conn.execute(
