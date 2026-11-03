@@ -1014,6 +1014,29 @@ class SessionRegistry:
 			out.append(event)
 		return out
 
+	def count_inbox(self, continuity_id: str, *, include_expired: bool = False) -> int:
+		"""Cuántos mensajes esperan a `continuity_id` (S3): COUNT barato, sin cuerpos.
+
+		Mismo WHERE que `fetch_inbox` (sellados y moderados fuera) para que el
+		digest del handshake no anuncie cartas que el buzón luego no da.
+		"""
+		soul = _clean_key(continuity_id)
+		if not soul:
+			return 0
+		params: list = [soul]
+		sql = (
+			"SELECT COUNT(*) FROM mission_events e "
+			"LEFT JOIN note_status ns ON ns.event_id = e.event_id "
+			"WHERE e.to_continuity = ? AND e.sealed = 0"
+			" AND COALESCE(ns.status, 'visible') NOT IN ('hidden', 'retracted')"
+		)
+		if not include_expired:
+			sql += " AND (e.expires_at IS NULL OR e.expires_at > ?)"
+			params.append(time.time())
+		with self._connect() as conn:
+			row = conn.execute(sql, tuple(params)).fetchone()
+		return int(row[0] or 0) if row else 0
+
 	def event_exists(self, *, mission_id: str, event_type: str, ref: str, summary: str) -> bool:
 		"""Idempotencia de eventos de job (S2): misma señal, mismo ref/summary."""
 		with self._connect() as conn:

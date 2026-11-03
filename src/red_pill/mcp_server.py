@@ -2158,6 +2158,34 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	if digest_mode == "none":
 		return None
 	registry_obj = SessionRegistry()
+	# S3 (AD-095): la correspondencia directa no es de la misión, es del alma.
+	# El digest la cuenta y muestra el sobre de las primeras: si alguien te habla,
+	# el turno lo sabe sin abrir el buzón (y `respuesta: SÍ/NO` se ve en el sobre).
+	soul = str(identity.get("continuity_id") or "").strip()
+	inbox_count = 0
+	inbox_lines: List[str] = []
+	if soul:
+		try:
+			inbox_count = registry_obj.count_inbox(soul)
+			if inbox_count:
+				from red_pill.coro import protocol
+
+				for ev in registry_obj.fetch_inbox(soul, limit=3):
+					inbox_lines.append(
+						protocol.envelope(
+							verb=str(ev.get("verb") or "notify"),
+							thread_id=ev.get("thread_id"),
+							hop=ev.get("hop"),
+							hop_max_value=ev.get("hop_max"),
+							expects_reply=ev.get("expects_reply"),
+							value=ev.get("value_class"),
+							from_mark=protocol.soul_mark(ev.get("continuity_id")),
+							mission_id=ev.get("mission_id"),
+							expires_at=ev.get("expires_at"),
+						)
+					)
+		except Exception:
+			inbox_count = 0
 	since = int(identity.get("previous_event_seq") or 0)
 	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
 	awaiting = registry_obj.count_events(mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator)
@@ -2185,9 +2213,11 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		theatre_counts = theatre.counts()
 	except Exception:
 		theatre_counts = {}
-	if not novelties and not awaiting and not parallel and not global_missions and not theatre_counts.get("total"):
+	if not novelties and not awaiting and not parallel and not global_missions and not theatre_counts.get("total") and not inbox_count:
 		return None
 	parts = []
+	if inbox_count:
+		parts.append(f"{inbox_count} carta{'s' if inbox_count != 1 else ''} sin abrir (inbox)")
 	if theatre_counts.get("total"):
 		susp = int(theatre_counts.get("suspension") or 0)
 		waiv = int(theatre_counts.get("waiver") or 0)
@@ -2206,7 +2236,11 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		parts.append(f"{awaiting} awaiting_operator")
 	if parallel:
 		parts.append("1 sesión paralela" if parallel == 1 else f"{parallel} sesiones paralelas")
-	return "[CORO] " + " · ".join(parts) + " (coro_api.fetch / coro_api.board)"
+	head = "[CORO] " + " · ".join(parts) + " (coro_api.fetch / coro_api.board)"
+	if inbox_lines:
+		tail = f"\n… y {inbox_count - len(inbox_lines)} más" if inbox_count > len(inbox_lines) else ""
+		return head + "\n" + "\n".join(inbox_lines) + tail
+	return head
 
 
 def _reconcile_pull_first(identity: Dict[str, Any], until_seq: int) -> None:
