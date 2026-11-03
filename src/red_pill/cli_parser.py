@@ -225,6 +225,21 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_deliver.add_argument("--summary", action="store_true", help="Conteos por estado de entrega del alma")
 	session_deliver.add_argument("--broker", action="store_true", help="Invocación del broker local (neon-link); requiere REDPILL_BROKER=1")
 	session_deliver.add_argument("--json", action="store_true", help="Salida JSON")
+	session_wake = session_sub.add_parser(
+		"wake-policy",
+		help="Política de despertar por rol (D-07, WAKE_POLICY) vigente y sus relaciones (Fase 5)",
+	)
+	session_wake.add_argument("--json", action="store_true", help="Salida JSON")
+	session_inbound = session_sub.add_parser(
+		"inbound",
+		help="Declarar/leer los controles de entrada de una sesión: accept/hold/refuse (Fase 5)",
+	)
+	session_inbound.add_argument("state", nargs="?", choices=["accept", "hold", "refuse"], help="Postura a declarar; omit para leer la vigente")
+	session_inbound.add_argument("--continuity", default=None, help="Alma (default: la del entorno, REDPILL_CONTINUITY_ID)")
+	session_inbound.add_argument("--originator", default=None, help="Leg concreto (opcional; sin él, el alma entera)")
+	session_inbound.add_argument("--reason", default="", help="Motivo (queda auditado)")
+	session_inbound.add_argument("--list", action="store_true", help="Todas las declaraciones de la alma (o globales)")
+	session_inbound.add_argument("--json", action="store_true", help="Salida JSON")
 
 	coro_parser = subparsers.add_parser("coro", help="Coro: tablón, correo y reconciliación del outbox")
 	coro_sub = coro_parser.add_subparsers(dest="coro_cmd")

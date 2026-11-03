@@ -440,6 +440,9 @@ def handle_session(args: argparse.Namespace) -> None:
 		if getattr(args, "json", False):
 			print(json.dumps(delivery_report, ensure_ascii=False, indent=2, default=str))
 			return
+		policy = delivery_report.get("policy") or {}
+		if policy.get("error"):
+			print(f"[DELIVER] FAIL-CLOSED: WAKE_POLICY inválida ({policy['error']}): no se despierta a nadie.")
 		print(
 			f"[DELIVER] alma={soul[:8]} · cuerpo={delivery_report.get('leg') or '(ninguno)'} · "
 			f"al_transporte={len(delivery_report.get('handed_off', []))} · diferidos={len(delivery_report.get('deferred', []))} · "
@@ -451,6 +454,66 @@ def handle_session(args: argparse.Namespace) -> None:
 		for bucket in ("deferred", "skipped", "given_up"):
 			for item in delivery_report.get(bucket, []):
 				print(f"  {bucket}: {str(item.get('event_id'))[:12]} · {item.get('reason')}")
+		return
+	if getattr(args, "session_cmd", None) == "wake-policy":
+		import json
+
+		from red_pill.session import wake_policy as _wake
+
+		info = _wake.describe()
+		if getattr(args, "json", False):
+			print(json.dumps(info, ensure_ascii=False, indent=2))
+			return
+		print(f"[WAKE] {info['config_key']} = {', '.join(info['rules']) or '(sin reglas)'}")
+		if info["error"]:
+			print(f"[WAKE] FAIL-CLOSED: {info['error']} → no se despierta a nadie (todo queda en pull).")
+		else:
+			print(f"[WAKE] relaciones: {', '.join(info['relations'])} · entrada: {', '.join(info['inbound_states'])}")
+		print("[WAKE] controles de entrada por sesión: red-pill session inbound [accept|hold|refuse]")
+		return
+	if getattr(args, "session_cmd", None) == "inbound":
+		import json
+
+		from red_pill.session import wake_policy as _wake
+
+		env_soul = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip()
+		soul = str(getattr(args, "continuity", None) or "").strip() or env_soul
+		leg = str(getattr(args, "originator", None) or "").strip()
+		state = str(getattr(args, "state", None) or "").strip()
+		if getattr(args, "list", False):
+			rows = _wake.list_inbound(continuity_id=soul)
+			if getattr(args, "json", False):
+				print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+				return
+			if not rows:
+				print("[INBOUND] sin declaraciones registradas." + ("" if soul else " (todas las almas)"))
+			else:
+				for row in rows:
+					scope = row.get("originator") or "(alma entera)"
+					print(f"[INBOUND] {row.get('continuity_id')} · {scope} · {row.get('state')}" + (f" · {row.get('reason')}" if row.get("reason") else ""))
+			return
+		if not soul:
+			print("[INBOUND] falta el alma: --continuity ID o REDPILL_CONTINUITY_ID en el entorno.")
+			return
+		if state:
+			# Una sesión declara por sí misma; declarar por otra es meterse en su
+			# escudo (aceptar por ella) o ponérselo (callarla): solo el Operador.
+			if soul != env_soul and os.getenv("REDPILL_OPERATOR") != "1":
+				print("[INBOUND] una sesión declara por sí misma (REDPILL_CONTINUITY_ID); para otra, Operador (REDPILL_OPERATOR=1).")
+				return
+			ok = _wake.set_inbound(soul, state, originator=leg, reason=str(getattr(args, "reason", "") or ""))
+			if getattr(args, "json", False):
+				print(json.dumps({"ok": ok, "continuity_id": soul, "originator": leg, "state": state}, ensure_ascii=False))
+			elif ok:
+				print(f"[INBOUND] {soul[:8]}{'/' + leg if leg else ''} → {state}" + (f" ({args.reason})" if getattr(args, "reason", "") else ""))
+			else:
+				print(f"[INBOUND] no se pudo declarar {state} para {soul[:8]} (estado inválido o BD).")
+			return
+		current = _wake.get_inbound(soul, originator=leg)
+		if getattr(args, "json", False):
+			print(json.dumps({"continuity_id": soul, "originator": leg, "state": current}, ensure_ascii=False))
+		else:
+			print(f"[INBOUND] {soul[:8]}{'/' + leg if leg else ''} → {current}")
 		return
 	print("[MIRROR] uso: red-pill session mirror sync [--continuity ID | --originator LEG]")
 

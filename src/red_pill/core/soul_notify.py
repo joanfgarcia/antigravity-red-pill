@@ -505,6 +505,21 @@ def notify_soul(
 	if not leg or ":" not in leg:
 		logger.debug(f"[soul-notify] alma {continuity_id[:8]} sin cuerpo entregable; queda en el inbox (pull)")
 		return False
+	# C3 (D-07): controles de entrada del destinatario. Un job es hijo del alma
+	# que lo lanzó —cadena de mando propia— así que la matriz de roles no aplica
+	# aquí; la palabra del destino (hold/refuse) sí. Fail-closed: si el estado no
+	# se puede leer ni calcular, no se despierta (el reporte ya está en el inbox
+	# y lo recoge el pull).
+	try:
+		from red_pill.session.wake_policy import inbound_blocked
+
+		blocked = inbound_blocked(continuity_id, originator=leg)
+	except Exception as e:
+		logger.warning(f"[soul-notify] estado de entrada ilegible ({e}); fail-closed: no se despierta")
+		blocked = "inbound_unknown"
+	if blocked:
+		logger.debug(f"[soul-notify] alma {continuity_id[:8]} en {blocked}; queda en el inbox (pull)")
+		return False
 	provider, _, session_id = leg.partition(":")
 	if not session_id:
 		return False

@@ -745,6 +745,45 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 
 
 @registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="set_inbound",
+	description=(
+		"[OFFICIAL] Declara la postura de ENTRADA de TU sesión (accept/hold/refuse, D-07/C3): "
+		"si admite que la despierten con un push (nudge de evento o aviso de job). "
+		"`hold` difiere el wake (queda el pull); `refuse` lo cierra hasta que ella misma lo "
+		"revierta. La identidad sale del canal de confianza (bridge/env), nunca de los argumentos."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"state": {"type": "string", "enum": ["accept", "hold", "refuse"], "description": "Postura de entrada deseada."},
+			"reason": {"type": "string", "description": "Motivo breve (queda auditado; sin secretos)."},
+		},
+		"required": ["state"],
+	},
+)
+async def handle_set_inbound(arguments: Dict[str, Any]):
+	import mcp.types as types
+
+	from red_pill.session import wake_policy as _wake
+
+	try:
+		session = await _caller_session(arguments)
+	except Exception as e:  # la política no tumba turnos ajenos
+		return [types.TextContent(type="text", text=f"[INBOUND] sin identidad confiable ({e}); no se declara nada.")]
+	continuity = str(session.get("continuity_id") or "")
+	originator = str(session.get("originator") or "")
+	if not continuity or ":" not in originator:
+		return [types.TextContent(type="text", text="[INBOUND] sin cuerpo/alma (bridge/env); no se declara nada (fail-closed).")]
+	state = str(arguments.get("state") or "").strip().lower()
+	if state not in _wake.INBOUND_STATES:
+		return [types.TextContent(type="text", text=f"[INBOUND] estado desconocido: {state!r} (aceptados: accept, hold, refuse).")]
+	if not _wake.set_inbound(continuity, state, originator=originator, reason=str(arguments.get("reason") or "")):
+		return [types.TextContent(type="text", text=f"[INBOUND] no se pudo registrar la postura para {continuity[:8]} (BD).")]
+	return [types.TextContent(type="text", text=f"[INBOUND] {continuity[:8]}/{originator} → {state}")]
+
+
+@registry.register_action(
 	parent="metabolism_health_api",
 	action="fetch_signal_memories",
 	description="[OFFICIAL] Read the latest system pain signals and alerts (Cortex Status).",
