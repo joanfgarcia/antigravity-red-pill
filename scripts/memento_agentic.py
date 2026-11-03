@@ -28,6 +28,8 @@ logger = logging.getLogger("memento_agentic")
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from red_pill.memento.agentic.selection import select_targets  # noqa: E402  (tras insertar src en sys.path)
+
 
 def _shadow_report(registry) -> str:
 	entries = [
@@ -151,10 +153,10 @@ def main() -> None:
 		targets = [(source, session_id) for source, session_id, reason in pending if reason == "stale"]
 	else:
 		limit = args.limit if args.limit is not None else int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_LIMIT", 20))
-		# stale primero (line refs muertos duelen más que secciones ausentes)
-		ordered = sorted(pending, key=lambda t: t[2] != "stale")
-		# `0` = sin tope (2026-11-02): el backlog no puede depender de una noche.
-		chosen = ordered if limit <= 0 else ordered[:limit]
+		msg_limit = int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_MSG_LIMIT", 3000))
+		# Misma política que el `discover` del DAG (agentic/selection.py): stale primero,
+		# dos presupuestos (sesiones + mensajes) y `limit=0` = sin tope de verdad.
+		chosen = select_targets(pending, limit, msg_limit=msg_limit, registry=registry)
 		targets = [(source, session_id) for source, session_id, _reason in chosen]
 
 	if not targets:

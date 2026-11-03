@@ -6,7 +6,8 @@ selection as `memento_agentic.py` WITHOUT `--target`:
 
 	pending = pending_agentic(force=False)   # delta (no re-distill)
 	order   = stale first                    # dead line refs first
-	cap     = MEMENTO_AGENTIC_NIGHT_LIMIT     # same as the classic pass
+	cap     = MEMENTO_AGENTIC_NIGHT_LIMIT     # misma política que el pase clásico
+	cap_msgs = MEMENTO_AGENTIC_NIGHT_MSG_LIMIT #   (la selección vive en agentic/selection.py)
 
 Emits `{"items": ["source:session_id", ...]}` on stdout (the fan-out source
 contract of the dag_job item fan-out, RFC-JOBDAG-001 §4.6). This way EACH session
@@ -22,37 +23,17 @@ import json
 import sys
 
 
-def _message_count(registry, source: str, session_id: str) -> int:
-	"""Tamaño de la sesión en mensajes (0 si no se puede leer)."""
-	if registry is None:
-		return 0
-	try:
-		entry = (registry.state.get("registry", {}).get(source, {}) or {}).get(session_id) or {}
-		return int(entry.get("message_count") or 0)
-	except Exception:
-		return 0
-
-
 def select_targets(pending, limit: int, msg_limit: int = 0, registry=None) -> list:
-	"""Selección stale-first con DOS topes de coste (2026-11-03).
+	"""Selección stale-first con DOS topes de coste (fuente: `agentic.selection`).
 
-	`limit` acota sesiones (coste fijo: distill + annotate por sesión) y
-	`msg_limit` acota mensajes (coste variable: el tamaño manda en el tiempo del
-	LLM). Gana el que se cruce primero. La primera sesión entra siempre: un ítem
-	mayor que el presupuesto no puede quedarse fuera para siempre.
+	Delegado a `red_pill.memento.agentic.selection`: la política vive en UN sitio
+	para que el pase clásico (`memento_agentic.py` sin `--target`) no pueda divergir
+	del discover — que es exactamente lo que pasaba con el tope por mensajes recién
+	añadido (el `discover` lo aplicaba, el pase clásico no).
 	"""
-	ordered = sorted(pending, key=lambda t: t[2] != "stale")
-	chosen = []
-	total_msgs = 0
-	for source, session_id, reason in ordered:
-		if limit > 0 and len(chosen) >= limit:
-			break
-		msgs = _message_count(registry, source, session_id)
-		if msg_limit > 0 and chosen and total_msgs + msgs > msg_limit:
-			break
-		chosen.append((source, session_id, reason))
-		total_msgs += msgs
-	return [f"{src}:{sid}" for src, sid, _reason in chosen]
+	from red_pill.memento.agentic.selection import select_targets as _select
+
+	return [f"{src}:{sid}" for src, sid, _reason in _select(pending, limit, msg_limit=msg_limit, registry=registry)]
 
 
 def main() -> int:

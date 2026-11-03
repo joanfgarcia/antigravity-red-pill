@@ -1,3 +1,13 @@
+## Unreleased
+
+### 🧠 Memoria — el tope doble llega también al pase clásico
+
+- **[FIX] Un solo tope, dos puertas**: la selección con los dos presupuestos vive
+  ahora en `memento/agentic/selection.py` y la usan tanto el `discover` del DAG
+  como el pase clásico (`memento_agentic.py` sin `--target`), que se había
+  quedado con el tope de sesiones solo. `--limit 0` apaga **ambos** topes, como
+  dice la config.
+
 ## [8.3.0] - 2026-11-03 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
 
 ### 🧠 Memoria — el buffer deja de perder turnos
