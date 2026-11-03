@@ -722,7 +722,12 @@ class RedPillConfig(BaseSettings):
 	# distinto). `min_significance` explícito en el submit los anula (reseeds/tests).
 	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
 	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
-	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 0  # 0 = sin tope: procesa todo el backlog. El coste se acota con el job (DAG fan-out) y su cota de step
+	# Tope de sesiones por ciclo nocturno (distill+annotate). Medido 2026-11-03 sobre
+	# 82 días del registro: mediana 8/día, media 10,8, p90 20, máximo 59. 30 cubre un
+	# día normal entero (hasta el p90 con margen) y absorbe un pico en 2 noches
+	# (59 → 30+29; 46 → 30+16; 40 → 30+10). El orden es stale-first: el backlog
+	# viejo sale antes que lo de anoche. 0 = sin tope (solo para rescates manuales).
+	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 30
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0

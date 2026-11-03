@@ -270,7 +270,7 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_QUEUE_RETENTION_DAYS` | `7` | Safety margin before purging completed memory_queue rows whose group is already rendered. |
 | `MEMENTO_REFINE_MIN_SIGNIFICANCE` | `0.3` | Below this, refine writes no file for the section (permissive selection). |
 | `MEMENTO_GATE_MIN_SIGNIFICANCE` | `0.5` | **Provisional (Q4 open)**: threshold of the shadow would-ingest decision. |
-| `MEMENTO_AGENTIC_NIGHT_LIMIT` | `20` | Sessions distilled+refined per nightly chronicle run (bounds local-LLM cost). |
+| `MEMENTO_AGENTIC_NIGHT_LIMIT` | `30` | Sesiones distill+annotate por ciclo nocturno. Medido (82 días): mediana 8/día, media 10,8, p90 20, máx 59. 30 cubre un día normal entero y absorbe un pico en 2 noches; el orden es stale-first (backlog viejo antes que lo de anoche). `0` = sin tope, solo para rescates manuales. |
 | `MEMENTO_ANNOTATE_FROM_RAW` | `False` | **MEM-006 stage switch.** ON: the agentic pass writes `annotate/` (idea-level notes from the RAW, one compression) instead of the legacy `refine/` (re-summaries of distill sections). OFF keeps legacy. |
 | `MEMENTO_ANNOTATE_VOICE_REWRITE` | `False` | Within annotate: rewrite notes that are not first-person (MEM-006 Q8 lever). The identity Bio alone does not fix voice with granite; pilot: 36% → 100% first person. |
 | `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
