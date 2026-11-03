@@ -36,8 +36,20 @@ profile in `.env` and re-seed (`red-pill bunker update` or the installer).
 - Sync with `main` by **merge**, never rebase (`git merge origin/main`). The pre-push hook
   rejects non-fast-forward updates.
 - **Release**: sync `main` into `next` → bump version + CHANGELOG → one PR `next → main` →
-  **squash merge** → delete `next` (local and remote) → tag `vX.Y.Z` on `main`. The next
-  cycle recreates `next` from the new `main`.
+  **squash merge** (GitHub auto-deletes the head branch) → delete `next` locally too → tag
+  `vX.Y.Z` on `main`. The next cycle recreates `next` **fresh from `main`**.
+- **A missing `origin/next` after a release PR is the expected state, not a bug.** Do not
+  recreate it with its old history, do not merge `main` back into it, and do not "repair"
+  it: the next cycle cuts a new `next` from the new `main`. (Incident 2026-11-03: an agent
+  reconciled the deleted `next` after the 8.3.0 squash — the flow was right, the reflex was
+  wrong.)
+- A branch cut **before** the release bump (e.g. an `awaken/*` based on the old `next`) enters
+  the new `next` by **cherry-pick or rebase** — never by squash-merging its whole tree, which
+  would revert the version bump.
+- **The cycle that starts with no `next` creates it from the new `main`**
+  (`git switch -c next origin/main`). This includes the first autonomous awakening after a
+  release: an awakening that finds no `origin/next` must not fail, must not point to the old
+  branch, and must not resurrect it — it cuts the new `next` from `main` and works from there.
 - **Hotfix**: `fix/<slug>` from `main` → PR → `main`, then merge `main` back into `next`.
 <!-- profile:solo:end -->
 
