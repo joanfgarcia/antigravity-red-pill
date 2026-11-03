@@ -538,24 +538,40 @@ class CognitiveQueueManager:
 
 	def job_health(self, sources: List[str], stuck_after_seconds: int = 1800) -> Dict[str, int]:
 		"""Salud del carril mecánico (solo lectura, para el DaemonPlugin job_monitor):
-		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado)."""
+		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado).
+
+		El latido no es solo `updated_at`: esa columna se escribe en frontera de step
+		y se congela durante horas en una etapa larga. Si el hijo publica progreso
+		fino en su fichero de control y ese fichero está fresco, el job está vivo
+		aunque la fila esté quieta. Sin esta comprobación, cualquier paso de más de
+		`stuck_after_seconds` encendía `jobs_stuck` (falso positivo medido el
+		2026-11-03: el ciclo nocturno pasó horas en un `annotate` de 1.500 mensajes).
+		"""
 		if not sources:
 			return {"stuck": 0, "frustrated": 0}
 		placeholders = ",".join(["?"] * len(sources))
 		with self._get_connection() as conn:
-			stuck = conn.execute(
+			quiet = conn.execute(
 				f"""
-				SELECT COUNT(*) FROM cognitive_tasks
+				SELECT id FROM cognitive_tasks
 				WHERE status = 'PROCESSING' AND source IN ({placeholders})
 					AND cancel_requested_at IS NULL
 					AND updated_at < datetime('now', ?)
 				""",
 				(*sources, f"-{int(stuck_after_seconds)} seconds"),
-			).fetchone()[0]
+			).fetchall()
 			frustrated = conn.execute(
 				f"SELECT COUNT(*) FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND source IN ({placeholders})",
 				(*sources,),
 			).fetchone()[0]
+		from red_pill.core.progress import job_progress_age_s
+
+		stuck = 0
+		for row in quiet:
+			age = job_progress_age_s(str(row["id"]))
+			if age is not None and age < stuck_after_seconds:
+				continue  # el hijo late por el fichero: la fila quieta no es un atasco
+			stuck += 1
 		return {"stuck": stuck, "frustrated": frustrated}
 
 	def frustrated_jobs(self, sources: List[str], limit: int = 10) -> List[Dict[str, Any]]:
