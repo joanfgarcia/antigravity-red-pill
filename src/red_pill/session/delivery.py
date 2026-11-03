@@ -408,6 +408,12 @@ def deliver_events(
 	}
 	if not soul:
 		return report
+
+	# Diagnóstico de la política (Fase 5/C3): `session deliver` avisa si WAKE_POLICY
+	# está mal formada — fail-closed no es mudo. La config se lee una vez aquí; la
+	# decisión por evento la toma `_wake_verdict` (que la relee si cambió).
+	rules, policy_error = wake_policy.load_policy()
+	report["policy"] = {"rules": [f"{frm}:{rel}" for frm, rel in rules], "error": policy_error}
 	if soul_notify.notify_disabled():
 		report["deferred"].append({"event_id": "*", "reason": "kill_switch"})
 		return report
