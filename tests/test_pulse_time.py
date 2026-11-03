@@ -47,7 +47,11 @@ def test_delta_en_segundos_cuando_son_dos_turnos_seguidos(heartbeat):
 
 
 def test_record_interaction_conserva_la_sesion_si_el_hueco_es_corto(heartbeat):
-	now = 1793500000.0
+	# `record_interaction` usa el reloj real: una constante fija caduca (el hueco
+	# crece con los días y la sesión se reinicia) — el test se rompía solo.
+	import time
+
+	now = time.time()
 	inicio = now - 7200
 	_escribir(heartbeat, last_interaction=now - 60, prev_interaction=now - 600, session_start=inicio)
 	pulse.record_interaction()
