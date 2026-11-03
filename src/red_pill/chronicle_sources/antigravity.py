@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from red_pill.chronicle_sources.base import ChronicleSourcePlugin
-from red_pill.core.origins import PROVIDER_ANTIGRAVITY, telegram_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +29,11 @@ class AntigravitySourcePlugin(ChronicleSourcePlugin):
 			logger.info(f"[{self.name}] Conversations dir not found: {convo_dir}")
 			return []
 
-		telegram = telegram_sessions(PROVIDER_ANTIGRAVITY)
+		# Provider-first (2026-11-03): si la conversación está en el store de este
+		# provider, se renderiza desde aquí aunque su origen sea Telegram; el
+		# source `telegram` solo sirve lo que ningún provider cubre.
 		discovered = []
 		for json_file in sorted(convo_dir.glob("*.json")):
-			if json_file.stem in telegram:
-				continue
 			try:
 				data = json.loads(json_file.read_text(encoding="utf-8"))
 				discovered.append((json_file.stem, int(data.get("step_count", 0))))

@@ -745,6 +745,45 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 
 
 @registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="set_inbound",
+	description=(
+		"[OFFICIAL] Declara la postura de ENTRADA de TU sesión (accept/hold/refuse, D-07/C3): "
+		"si admite que la despierten con un push (nudge de evento o aviso de job). "
+		"`hold` difiere el wake (queda el pull); `refuse` lo cierra hasta que ella misma lo "
+		"revierta. La identidad sale del canal de confianza (bridge/env), nunca de los argumentos."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"state": {"type": "string", "enum": ["accept", "hold", "refuse"], "description": "Postura de entrada deseada."},
+			"reason": {"type": "string", "description": "Motivo breve (queda auditado; sin secretos)."},
+		},
+		"required": ["state"],
+	},
+)
+async def handle_set_inbound(arguments: Dict[str, Any]):
+	import mcp.types as types
+
+	from red_pill.session import wake_policy as _wake
+
+	try:
+		session = await _caller_session(arguments)
+	except Exception as e:  # la política no tumba turnos ajenos
+		return [types.TextContent(type="text", text=f"[INBOUND] sin identidad confiable ({e}); no se declara nada.")]
+	continuity = str(session.get("continuity_id") or "")
+	originator = str(session.get("originator") or "")
+	if not continuity or ":" not in originator:
+		return [types.TextContent(type="text", text="[INBOUND] sin cuerpo/alma (bridge/env); no se declara nada (fail-closed).")]
+	state = str(arguments.get("state") or "").strip().lower()
+	if state not in _wake.INBOUND_STATES:
+		return [types.TextContent(type="text", text=f"[INBOUND] estado desconocido: {state!r} (aceptados: accept, hold, refuse).")]
+	if not _wake.set_inbound(continuity, state, originator=originator, reason=str(arguments.get("reason") or "")):
+		return [types.TextContent(type="text", text=f"[INBOUND] no se pudo registrar la postura para {continuity[:8]} (BD).")]
+	return [types.TextContent(type="text", text=f"[INBOUND] {continuity[:8]}/{originator} → {state}")]
+
+
+@registry.register_action(
 	parent="metabolism_health_api",
 	action="fetch_signal_memories",
 	description="[OFFICIAL] Read the latest system pain signals and alerts (Cortex Status).",
@@ -2119,6 +2158,34 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 	if digest_mode == "none":
 		return None
 	registry_obj = SessionRegistry()
+	# S3 (AD-095): la correspondencia directa no es de la misión, es del alma.
+	# El digest la cuenta y muestra el sobre de las primeras: si alguien te habla,
+	# el turno lo sabe sin abrir el buzón (y `respuesta: SÍ/NO` se ve en el sobre).
+	soul = str(identity.get("continuity_id") or "").strip()
+	inbox_count = 0
+	inbox_lines: List[str] = []
+	if soul:
+		try:
+			inbox_count = registry_obj.count_inbox(soul)
+			if inbox_count:
+				from red_pill.coro import protocol
+
+				for ev in registry_obj.fetch_inbox(soul, limit=3):
+					inbox_lines.append(
+						protocol.envelope(
+							verb=str(ev.get("verb") or "notify"),
+							thread_id=ev.get("thread_id"),
+							hop=ev.get("hop"),
+							hop_max_value=ev.get("hop_max"),
+							expects_reply=ev.get("expects_reply"),
+							value=ev.get("value_class"),
+							from_mark=protocol.soul_mark(ev.get("continuity_id")),
+							mission_id=ev.get("mission_id"),
+							expires_at=ev.get("expires_at"),
+						)
+					)
+		except Exception:
+			inbox_count = 0
 	since = int(identity.get("previous_event_seq") or 0)
 	novelties = registry_obj.count_events(mission, since_seq=since, until_seq=until_seq, viewer_originator=originator)
 	awaiting = registry_obj.count_events(mission, since_seq=0, types=["awaiting_operator"], viewer_originator=originator)
@@ -2146,9 +2213,11 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		theatre_counts = theatre.counts()
 	except Exception:
 		theatre_counts = {}
-	if not novelties and not awaiting and not parallel and not global_missions and not theatre_counts.get("total"):
+	if not novelties and not awaiting and not parallel and not global_missions and not theatre_counts.get("total") and not inbox_count:
 		return None
 	parts = []
+	if inbox_count:
+		parts.append(f"{inbox_count} carta{'s' if inbox_count != 1 else ''} sin abrir (inbox)")
 	if theatre_counts.get("total"):
 		susp = int(theatre_counts.get("suspension") or 0)
 		waiv = int(theatre_counts.get("waiver") or 0)
@@ -2167,7 +2236,11 @@ def _coro_digest(identity: Dict[str, Any], until_seq: int) -> Optional[str]:
 		parts.append(f"{awaiting} awaiting_operator")
 	if parallel:
 		parts.append("1 sesión paralela" if parallel == 1 else f"{parallel} sesiones paralelas")
-	return "[CORO] " + " · ".join(parts) + " (coro_api.fetch / coro_api.board)"
+	head = "[CORO] " + " · ".join(parts) + " (coro_api.fetch / coro_api.board)"
+	if inbox_lines:
+		tail = f"\n… y {inbox_count - len(inbox_lines)} más" if inbox_count > len(inbox_lines) else ""
+		return head + "\n" + "\n".join(inbox_lines) + tail
+	return head
 
 
 def _reconcile_pull_first(identity: Dict[str, Any], until_seq: int) -> None:
@@ -3038,7 +3111,7 @@ def _queue() -> Any:
 	return CognitiveQueueManager()
 
 
-_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
+_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW", "CANCELLED", "COMPLETED"]
 
 
 def _has_mission_lease(task_or_source: Any) -> bool:
@@ -3179,13 +3252,13 @@ def _ensure_job_mission_lease(task: Dict[str, Any], *, allow_takeover: bool = Fa
 	return None
 
 
-def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador") -> None:
-	"""Cierre de un job matado sin runner en vuelo: result.json + leg muerto."""
+def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador", status: str = "killed") -> None:
+	"""Cierre de un job matado o descartado sin runner en vuelo: result.json + leg muerto."""
 	try:
 		from red_pill.jobs.artifacts import write_job_result
 		from red_pill.session.store import SessionRegistry
 
-		write_job_result(task, status="killed", summary=reason, error=reason)
+		write_job_result(task, status=status, summary=reason, error=reason)
 		if str(task.get("source") or "") == "dag_job":
 			SessionRegistry().unregister_session(f"dag:{task['id']}")
 	except Exception as exc:
@@ -3415,6 +3488,40 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"[ERROR] job_submit falló: {e}")]
 
 
+def _live_progress(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+	"""Latido fino del fichero de control para un job en vuelo (RFC-JOBDAG-002 Fase 4).
+
+	El `progress` de la DB solo se escribe en frontera de step: en una etapa de horas
+	queda congelado y quien monitoriza lee "sin latido" donde el hijo lleva trabajando
+	tres horas. El fichero lo reescribe el propio hijo; su edad es prueba de vida.
+	"""
+	if task.get("status") != "PROCESSING":
+		return None
+	job_id = str(task.get("id") or "")
+	try:
+		from red_pill.core.progress import job_progress_age_s, read_job_progress
+
+		fine = read_job_progress(job_id)
+		age = job_progress_age_s(job_id)
+	except Exception:
+		return None
+	if not isinstance(fine, dict) and age is None:
+		return None
+	out: Dict[str, Any] = dict(fine or {})
+	out["age_s"] = age
+	return out
+
+
+def _fmt_beat_age(age: Optional[float]) -> str:
+	if age is None:
+		return "sin fichero"
+	if age < 90:
+		return f"hace {int(age)}s"
+	if age < 5400:
+		return f"hace {int(age // 60)}m"
+	return f"hace {age / 3600:.1f}h"
+
+
 @registry.register_action(
 	parent="job_manager_api",
 	action="job_list",
@@ -3434,7 +3541,7 @@ async def handle_job_list(arguments: Dict[str, Any]):
 
 		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
 		# la lista completa explícita o el flag es un no-op.
-		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW"]
 		tasks = _queue().list_tasks(
 			statuses=statuses,
 			mission_id=arguments.get("mission_id"),
@@ -3458,6 +3565,7 @@ async def handle_job_list(arguments: Dict[str, Any]):
 								"parent_task_id": t.get("parent_task_id"),
 								"title": t.get("title"),
 								"progress": t.get("progress"),
+								"live_progress": _live_progress(t),
 								"attempts": t["attempts"],
 								"updated_at": t.get("updated_at"),
 								"dirty_kill": t.get("dirty_kill"),
@@ -3486,6 +3594,20 @@ async def handle_job_list(arguments: Dict[str, Any]):
 				f"{(t.get('mission_id') or '-')[:8]:<9} {parent:<9} {prog_txt:>6} {t['attempts']:>3} "
 				f"{updated:<16} {title}"
 			)
+		# Latido fino (solo en vuelo): la fila sola no distingue "lento" de "muerto".
+		beats = []
+		for t in tasks:
+			live = _live_progress(t)
+			if not live:
+				continue
+			segs = []
+			if live.get("label") is not None:
+				segs.append(f"{live['label']} {live.get('current')}/{live.get('total')}")
+			segs.append(_fmt_beat_age(live.get("age_s")))
+			beats.append(f"latido {t['id'][:8]}: {' · '.join(segs)}")
+		if beats:
+			lines.append("")
+			lines.extend(beats)
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_list falló: {e}")]
@@ -3534,6 +3656,7 @@ async def handle_job_status(arguments: Dict[str, Any]):
 			"title": task.get("payload", {}).get("title"),
 			"checkpoint": task.get("checkpoint_data"),
 			"progress": task.get("progress"),
+			"live_progress": _live_progress(task),
 			"error_log": task.get("error_log"),
 		}
 		return [types.TextContent(type="text", text=_json.dumps(summary, ensure_ascii=False, indent=2, default=str))]
@@ -3710,6 +3833,91 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_review",
+	description=(
+		"[OFFICIAL] Reserva un job FRUSTRATED para revisión humana (REVIEW): la purga automática "
+		"y el dolor `jobs_frustrated` dejan de tocarlo. Salidas: job_resume (PENDING) o job_discard (CANCELLED)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+			"undo": {"type": "boolean", "description": "True = retirar la reserva y devolverlo a FRUSTRATED."},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_review(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_review")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		undo = bool(arguments.get("undo"))
+		if qm.mark_review(task["id"], undo=undo):
+			if undo:
+				return [
+					types.TextContent(
+						type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga."
+					)
+				]
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						f"[OK] Job {task['id'][:8]} reservado para revisión (REVIEW). La purga automática no lo toca. "
+						"Salidas: job_resume (reprocesar) o job_discard (cerrar)."
+					),
+				)
+			]
+		esperado = "REVIEW" if undo else "FRUSTRATED"
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_review falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_discard",
+	description=(
+		"[OFFICIAL] Cierra definitivamente un job revisado (CANCELLED): no se ejecuta, no cuenta como dolor "
+		"y la purga automática no lo toca. Solo desde REVIEW o FRUSTRATED."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_discard(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_discard")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		if qm.mark_cancelled(task["id"]):
+			_release_job_mission_lease(task, reason="operator_discard")
+			_finalize_killed_job(task, reason="descartado tras revisión", status="cancelled")
+			return [
+				types.TextContent(
+					type="text", text=f"[OK] Job {task['id'][:8]} cerrado definitivamente (CANCELLED). No se ejecutará ni contará como dolor."
+				)
+			]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_discard falló: {e}")]
 
 
 @registry.register_action(

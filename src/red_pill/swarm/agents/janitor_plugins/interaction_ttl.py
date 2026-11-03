@@ -86,6 +86,50 @@ class InteractionTTLPlugin(JanitorPlugin):
 				if offset is None:
 					break
 
+			# Nunca purgar en silencio (2026-11-02): antes del tope duro, avisa de lo
+			# que está a punto de perderse, con desglose por origen. Los turnos sin
+			# `session_id` (legacy) no se pueden renderizar: su pérdida es definitiva
+			# y hasta ahora ocurría sin que nadie se enterara (6 turnos el 00:22).
+			warn_days = int(getattr(cfg, "INTERACTION_WARN_BEFORE_DAYS", 7))
+			max_age_days = int(getattr(cfg, "INTERACTION_MAX_AGE_DAYS", 30))
+			if warn_days > 0 and max_age_days > warn_days:
+				warn_cutoff = time.time() - (max_age_days - warn_days) * 86400
+				expiring = models.Filter(
+					should=[
+						models.FieldCondition(key="timestamp", range=models.Range(lt=warn_cutoff)),
+						models.FieldCondition(key="created_at", range=models.Range(lt=warn_cutoff)),
+					]
+				)
+				por_origen: Dict[str, int] = {}
+				offset = None
+				while True:
+					points, offset = mem.client.scroll(collection, scroll_filter=expiring, limit=500, offset=offset, with_payload=True)
+					for p in points:
+						meta = (p.payload or {}).get("metadata") or {}
+						sid = meta.get("session_id")
+						if sid and str(sid) in rendered:
+							continue  # ya vive en Memento: el buffer puede soltarlo
+						origen = str(meta.get("originator") or "desconocido").split(":")[0]
+						por_origen[origen] = por_origen.get(origen, 0) + 1
+					if offset is None:
+						break
+				total = sum(por_origen.values())
+				if total:
+					detalle = ", ".join(f"{k} {v}" for k, v in sorted(por_origen.items(), key=lambda kv: -kv[1]))
+					mem.inject_signal(
+						name="interaction_expiring_soon",
+						intensity=5.0,
+						signal_type="pain",
+						source="Janitor",
+						message=(
+							f"{total} turno(s) sin renderizar caducan en <= {warn_days} d"
+							f" y se pierden para siempre (origen: {detalle})."
+						),
+					)
+					janitor.log(f"[Janitor] interaction_ttl: {total} turno(s) a punto de caducar ({detalle}).")
+				else:
+					mem.evaporate_signals("interaction_expiring_soon")
+
 			# Tope duro de edad (D18/F4): lo NO renderizado más viejo que el cap se
 			# purga igualmente (el buffer no puede crecer sin fin), y se emite una
 			# señal de dolor para que el operador sepa que el chronicle va atrasado.

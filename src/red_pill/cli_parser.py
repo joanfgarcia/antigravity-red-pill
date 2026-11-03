@@ -225,6 +225,21 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	session_deliver.add_argument("--summary", action="store_true", help="Conteos por estado de entrega del alma")
 	session_deliver.add_argument("--broker", action="store_true", help="Invocación del broker local (neon-link); requiere REDPILL_BROKER=1")
 	session_deliver.add_argument("--json", action="store_true", help="Salida JSON")
+	session_wake = session_sub.add_parser(
+		"wake-policy",
+		help="Política de despertar por rol (D-07, WAKE_POLICY) vigente y sus relaciones (Fase 5)",
+	)
+	session_wake.add_argument("--json", action="store_true", help="Salida JSON")
+	session_inbound = session_sub.add_parser(
+		"inbound",
+		help="Declarar/leer los controles de entrada de una sesión: accept/hold/refuse (Fase 5)",
+	)
+	session_inbound.add_argument("state", nargs="?", choices=["accept", "hold", "refuse"], help="Postura a declarar; omit para leer la vigente")
+	session_inbound.add_argument("--continuity", default=None, help="Alma (default: la del entorno, REDPILL_CONTINUITY_ID)")
+	session_inbound.add_argument("--originator", default=None, help="Leg concreto (opcional; sin él, el alma entera)")
+	session_inbound.add_argument("--reason", default="", help="Motivo (queda auditado)")
+	session_inbound.add_argument("--list", action="store_true", help="Todas las declaraciones de la alma (o globales)")
+	session_inbound.add_argument("--json", action="store_true", help="Salida JSON")
 
 	coro_parser = subparsers.add_parser("coro", help="Coro: tablón, correo y reconciliación del outbox")
 	coro_sub = coro_parser.add_subparsers(dest="coro_cmd")
@@ -396,6 +411,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
 	job_cancel = job_sub.add_parser("cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED")
 	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_review = job_sub.add_parser(
+		"review", help="Reservar un job FRUSTRATED para revisión (REVIEW): la purga automática y el dolor no lo tocan"
+	)
+	job_review.add_argument("job_id", help="Id completo o prefijo corto")
+	job_review.add_argument(
+		"--undo", action="store_true", help="Liberar la reserva: vuelve a FRUSTRATED (de nuevo en el pool de la purga)"
+	)
+
+	job_discard = job_sub.add_parser("discard", help="Cerrar un job revisado definitivamente (CANCELLED): no se ejecuta y no cuenta como dolor")
+	job_discard.add_argument("job_id", help="Id completo o prefijo corto")
 
 	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
 	job_logs.add_argument("job_id", help="Id completo o prefijo corto")

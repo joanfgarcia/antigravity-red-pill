@@ -35,6 +35,45 @@ def test_discover_tope_limita():
 	assert len(m.select_targets(pending, 3)) == 3
 
 
+class _RegistryFake:
+	"""Solo lo que `select_targets` necesita: message_count por sesión."""
+
+	def __init__(self, msgs):
+		self.state = {"registry": {"opencode": {f"s{i}": {"message_count": n} for i, n in enumerate(msgs)}}}
+
+
+def test_el_tope_por_mensajes_manda_sobre_el_de_sesiones():
+	m = _load_discover()
+	reg = _RegistryFake([1000, 1000, 1000])
+	pending = [("opencode", f"s{i}", "new") for i in range(3)]
+
+	# 2.500 de presupuesto: entran 2 sesiones (2.000), la tercera rompería.
+	assert m.select_targets(pending, 10, msg_limit=2500, registry=reg) == ["opencode:s0", "opencode:s1"]
+
+
+def test_el_tope_por_sesiones_manda_cuando_son_pequeñas():
+	m = _load_discover()
+	reg = _RegistryFake([10, 10, 10, 10, 10])
+	pending = [("opencode", f"s{i}", "new") for i in range(5)]
+
+	assert len(m.select_targets(pending, 3, msg_limit=10_000, registry=reg)) == 3
+
+
+def test_una_sesion_mas_grande_que_el_presupuesto_entra_igual():
+	"""Si no, un ítem enorme no se procesaría nunca (hambruna)."""
+	m = _load_discover()
+	reg = _RegistryFake([9000, 100])
+	pending = [("opencode", "s0", "stale"), ("opencode", "s1", "new")]
+
+	assert m.select_targets(pending, 10, msg_limit=3000, registry=reg) == ["opencode:s0"]
+
+
+def test_sin_registro_el_tope_por_mensajes_no_aplica():
+	m = _load_discover()
+	pending = [("opencode", f"s{i}", "new") for i in range(3)]
+	assert len(m.select_targets(pending, 10, msg_limit=1)) == 3
+
+
 def test_chronicle_usa_fanout_por_sesion():
 	cfg = yaml.safe_load((REPO / "configs" / "jobs" / "chronicle.yaml").read_text(encoding="utf-8"))
 	stages = cfg["manifest"]["stages"]

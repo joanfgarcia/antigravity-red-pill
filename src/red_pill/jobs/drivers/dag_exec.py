@@ -381,7 +381,9 @@ class DagExecMixin:
 				identity["parent_mission_id"] = str(parent)
 			kwargs.update(identity)
 		if item is not None:
-			task = _render_item(task, item)
+			# El `command` se parte con shlex.split en el minion de script: el item
+			# debe llegar como UN token, no como N. El prompt agéntico va crudo.
+			task = _render_item(task, item, shell_safe=bool(stage.get("command")))
 			kwargs["item"] = item
 		for key in ("backend", "model", "effort", "mode"):
 			if stage.get(key) or payload.get(key):

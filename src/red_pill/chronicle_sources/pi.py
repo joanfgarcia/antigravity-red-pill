@@ -1,6 +1,6 @@
 """Fuente Pi (pi-coding-agent): sesiones JSONL de `~/.pi/agent/sessions/`.
 
-Formato (v3, verificado contra pi-coding-agent 0.85.1): la primera línea es el
+Formato (v3, verificado contra pi-coding-agent 0.85.1 y 1.4.0 — 2026-11-03): la primera línea es el
 header `{"type":"session",...}`; el resto son entries en árbol con `timestamp`
 ISO. Solo importan `type == "message"` con `message.role` en (user, assistant);
 el `toolResult` se compacta a `[TOOL: <toolName>] <texto>` para que el ruido de
@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from red_pill.chronicle_sources.base import ChronicleSourcePlugin, canonical_ts
-from red_pill.core.origins import PROVIDER_PI, telegram_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +66,15 @@ class PiSourcePlugin(ChronicleSourcePlugin):
 		return path if path is not None and path.exists() else None
 
 	def discover(self) -> List[Tuple[str, int]]:
-		telegram = telegram_sessions(PROVIDER_PI)
+		# Provider-first (2026-11-03): el source que tiene el raw manda; Telegram
+		# solo es respaldo de lo que ningún provider cubre. Ya no se excluyen aquí
+		# las sesiones con origen `telegram` (eran un no-op: no están en el store).
 		discovered = []
 		seen = set()
 		for cid, path in self._index_sessions().items():
 			if path in seen:
 				continue  # el alias UUID no duplica la conversación
 			seen.add(path)
-			if cid in telegram:
-				continue
 			try:
 				with open(path, "rb") as f:
 					step_count = sum(1 for _ in f)

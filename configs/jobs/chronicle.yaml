@@ -75,3 +75,14 @@ manifest:
       timeout: 5400
       on_fail: warn
       depends_on: [memento-distill]
+    # Contador del backlog (2026-11-03): lo que el tope dejó fuera de esta noche.
+    # Acumulativo por naturaleza — lo que no se procesa sigue pendiente — y
+    # visible en el tablón (`memento_backlog`, clase `sed`: escala con el tiempo
+    # y su acantilado son los 30 d del tope duro del buffer). Se evapora solo
+    # cuando el backlog llega a 0.
+    - id: memento-backlog
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/report_memento_backlog.py
+      on_fail: warn
+      depends_on: [memento-annotate]

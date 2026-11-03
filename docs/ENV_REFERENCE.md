@@ -226,6 +226,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SESSION_LIVENESS_TTL_H` | `48` | Retención (h) de los ficheros de latido de sesión antes de que el Janitor (`session_liveness`) los limpie. |
 | `SESSION_SYNC_MODE` | `silent` | Interceptor 12 (`12_session_sync`, D16): digest global de la sala de guerra al abrir turno. `silent` = `""` con cero I/O (ni el caché se mira); `minimal` = una línea (`otras vivas + global_turn`); `header` = bloque por misión con origen/rol/estado y pendientes. Modo desconocido cae a `silent`. Presupuesto p99 < 20 ms (medido: peor caso 2.294 ms, AD-093). |
 | `SESSION_SYNC_TTL_S` | `8.0` | TTL (s) de la caché del digest del interceptor 12. Dentro del TTL el turno sirve de memoria (~0.02 ms p99); fuera paga el cold (iterdir de latidos + SELECTs indexados). Válida 0 < ttl ≤ 300; fuera de rango cae a `8.0`. |
+| `WAKE_POLICY` | `*:self,orchestrator:chain,*:same_mission` | Política de despertar (push) por rol (D-07, Fase 5/C3). Reglas `from:relation` en CSV, evaluadas en orden; la primera que casa permite. Relaciones: `self` (la propia alma/leg), `chain` (orquestador → su cadena de mando: misión/campaña/linaje comunes), `same_mission`, `same_campaign`, `any` (despierta a cualquiera; opt-in explícito). El rol `*` vale para cualquier emisor. Vacía, mal formada (token sin `:`, relación desconocida) o config inaccesible → **FAIL-CLOSED: no se despierta a nadie** (todo queda en pull); nunca se cae a un default permisivo. La política solo gobierna el empuje: no toca el texto del mensaje (D-09, un aviso es DATO) y no puede reabrir lo que el kill switch `REDPILL_SOUL_NOTIFY_DISABLE` cerró. Los controles de entrada del destinatario (`accept`/`hold`/`refuse`, tabla `session_inbound` de `session.db`) **mandan sobre esta matriz**: `refuse` cierra el push (terminal), `hold` lo difiere (queda pendiente). Declararlos: `red-pill session inbound [accept|hold|refuse] [--continuity ID] [--originator LEG]`; leer la política vigente: `red-pill session wake-policy`. Implementación: `session/wake_policy.py`, consumo: `session/delivery.py` (eventos) y `core/soul_notify.py` (avisos de job). |
 | `HEARTBEAT_LEASE` | `900` | Lease (s) del hilo de latido del worker (D21): late mientras el bucle principal haya tocado la actividad dentro de este plazo; un bucle muerto deja de latir y neon-link detecta el offline real. |
 | `LOCAL_ALLOWED_FOR_HEAVY` | `False` | D5: con `False`, los targets `local` se filtran de `TELEGRAM_BRIDGE_CASCADE` y, si el worker cae al `IDE_BACKEND` porque los puentes no se construyen, un `IDE_BACKEND=local` tampoco sirve Telegram. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
@@ -269,7 +270,8 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_QUEUE_RETENTION_DAYS` | `7` | Safety margin before purging completed memory_queue rows whose group is already rendered. |
 | `MEMENTO_REFINE_MIN_SIGNIFICANCE` | `0.3` | Below this, refine writes no file for the section (permissive selection). |
 | `MEMENTO_GATE_MIN_SIGNIFICANCE` | `0.5` | **Provisional (Q4 open)**: threshold of the shadow would-ingest decision. |
-| `MEMENTO_AGENTIC_NIGHT_LIMIT` | `20` | Sessions distilled+refined per nightly chronicle run (bounds local-LLM cost). |
+| `MEMENTO_AGENTIC_NIGHT_LIMIT` | `30` | Tope de **sesiones** por ciclo nocturno (coste fijo: una llamada de distill + una de annotate por sesión, ~2,6 min de mediana). Medido (82 días): mediana 8/día, media 10,8, p90 20, máx 59. El orden es stale-first (backlog viejo antes que lo de anoche). `0` = sin tope. |
+| `MEMENTO_AGENTIC_NIGHT_MSG_LIMIT` | `3000` | Tope de **mensajes** por ciclo nocturno (coste variable: ~2 s/msg medidos). Se aplica junto al de sesiones y gana el que se cruce primero; la primera sesión entra siempre. 3.000 deja en una noche el 79/81 de los días; el peor (8.731 msgs) cae en 3. `0` = sin tope. |
 | `MEMENTO_ANNOTATE_FROM_RAW` | `False` | **MEM-006 stage switch.** ON: the agentic pass writes `annotate/` (idea-level notes from the RAW, one compression) instead of the legacy `refine/` (re-summaries of distill sections). OFF keeps legacy. |
 | `MEMENTO_ANNOTATE_VOICE_REWRITE` | `False` | Within annotate: rewrite notes that are not first-person (MEM-006 Q8 lever). The identity Bio alone does not fix voice with granite; pilot: 36% → 100% first person. |
 | `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
@@ -344,6 +346,10 @@ Plugins 05–10. Each is independently toggleable.
 | `AFFECT_CUSTOM_OVERRIDES`| `{}` | A JSON Dictionary mapping emotions to custom Valence/Arousal weights. Only triggers if `AFFECT_MODEL=CUSTOM`. |
 | `DYNAMIC_EMOTION_SYNC`| `True` | Let the agent auto-derive its Skin based on the dominant emotional context of recent interactions. |
 | `MULTI_EMOTION_INFERENCE`| `True` | Enables deriving a primary and secondary emotion for high-complexity engrams. |
+| `AFFECT_FROM_QUEUE` | `True` | El afecto del turno se lee de los prompts vivos de `memory_queue` (`utils/operator_affect.py`), no de los engramas ascendidos. Paleta y léxico en `data/affect_lexicon.yaml` (anger/fear → red, anxiety → orange, joy → yellow, calm → cyan, neutral → gray). `false` = camino antiguo (engramas). |
+| `AFFECT_TTL_MIN` | `15` | Edad (min) del `state/affect.json` antes de recalcular. Dentro del TTL, los cuatro interceptores leen el fichero sin tocar la cola. |
+| `AFFECT_WINDOW_MIN` | `180` | Ventana (min) de turnos vivos que mira el clasificador. Fuera de ella, un turno no cuenta. |
+| `AFFECT_TURNS` | `8` | Máximo de prompts por pasada. |
 
 ---
 

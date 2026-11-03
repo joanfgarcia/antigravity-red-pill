@@ -36,7 +36,10 @@ def test_telegram_source_discover_load_y_prefix(tmp_path):
 	assert sp.workspace_of("abc") is None
 
 
-def test_opencode_source_excluye_sesiones_telegram(tmp_path, monkeypatch):
+def test_opencode_source_ya_no_excluye_sesiones_telegram(tmp_path, monkeypatch):
+	"""Provider-first (2026-11-03): si el store del provider tiene la sesión, se
+	renderiza desde aquí aunque su origen sea Telegram; el source `telegram` es el
+	respaldo de lo que ningún provider cubre (ver `test_origin_precedence.py`)."""
 	import red_pill.swarm.bridges.opencode as br
 	from red_pill.chronicle_sources import opencode as oc
 
@@ -53,4 +56,4 @@ def test_opencode_source_excluye_sesiones_telegram(tmp_path, monkeypatch):
 
 	monkeypatch.setattr(src, "_connect", lambda: FakeCon())
 	monkeypatch.setattr(br, "read_opencode_origins", lambda: {"sid1": {"origin": "telegram"}})
-	assert src.discover() == [("sid2", 3)]
+	assert src.discover() == [("sid1", 5), ("sid2", 3)]

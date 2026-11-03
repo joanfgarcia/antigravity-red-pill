@@ -52,7 +52,9 @@ def test_claude_code_source_excluye_telegram(tmp_path, monkeypatch):
 	assert src.discover() == [("sid2", 1)]
 
 
-def test_pi_source_excluye_telegram(tmp_path, monkeypatch):
+def test_pi_source_ya_no_excluye_telegram(tmp_path, monkeypatch):
+	"""Provider-first (2026-11-03): si el store del provider tiene la sesión, se
+	renderiza desde él; Telegram es el respaldo (ver `test_origin_precedence.py`)."""
 	from red_pill.chronicle_sources import pi as pi_src
 
 	sess = tmp_path / "sess"
@@ -60,16 +62,14 @@ def test_pi_source_excluye_telegram(tmp_path, monkeypatch):
 	(sess / "sid1.jsonl").write_text("{}\n")
 	(sess / "sid2.jsonl").write_text("{}\n{}\n")
 	src = pi_src.PiSourcePlugin(base_dir=tmp_path)
-	monkeypatch.setattr(pi_src, "telegram_sessions", lambda provider: {"sess/sid1"})
-	assert src.discover() == [("sess/sid2", 2)]
+	assert src.discover() == [("sess/sid1", 1), ("sess/sid2", 2)]
 
 
-def test_antigravity_source_excluye_telegram(tmp_path, monkeypatch):
+def test_antigravity_source_ya_no_excluye_telegram(tmp_path, monkeypatch):
 	from red_pill.chronicle_sources import antigravity as ag
 
 	(tmp_path / "sid1.json").write_text(json.dumps({"step_count": 3}))
 	(tmp_path / "sid2.json").write_text(json.dumps({"step_count": 1}))
 	src = ag.AntigravitySourcePlugin()
 	monkeypatch.setattr(src, "_conversations_dir", lambda: tmp_path)
-	monkeypatch.setattr(ag, "telegram_sessions", lambda provider: {"sid1"})
-	assert src.discover() == [("sid2", 1)]
+	assert src.discover() == [("sid1", 3), ("sid2", 1)]

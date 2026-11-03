@@ -22,6 +22,13 @@ DEBT_PURGE_WARN_DAYS = 21.0
 # Por encima de este umbral el buffer de interacción ya purgó esos turnos: la
 # conversación solo se recuperaría abriendo el IDE con esas trazas aún indexadas.
 DEBT_RECOVERABLE_DAYS = 30.0
+# Un `.pb` de unos cientos de bytes es solo un puntero cifrado sin trayectorias:
+# no hay nada que extraer. Pero como su mtime es más nuevo que el `.json`, entra
+# en `needs_export` en CADA pasada (medido 2026-11-02: 8 punteros de 180-866 B,
+# 166 d de antigüedad) y convierte el cron en "8 conversaciones nuevas o
+# modificadas" eternas. Un puntero que crece (el IDE lo rellena) vuelve solo a la
+# cola, así que saltarlos no pierde nada. Las conversaciones reales pesan MB.
+STUB_PB_MAX_BYTES = 4096
 
 try:
 	from red_pill.utils.antigravity_history.api import get_all_trajectories_merged, get_trajectory_steps
@@ -132,15 +139,24 @@ def run_extraction():
 
 	# 1. Comprobar Idempotencia (mtime)
 	needs_export: list[Path] = []
+	stubs = 0
 	for pb_file in conv_dir.glob("*.pb"):
 		json_file = out_dir / f"{pb_file.stem}.json"
+
+		# Un puntero cifrado no se puede exportar: no es una conversación pendiente.
+		if pb_file.stat().st_size <= STUB_PB_MAX_BYTES:
+			stubs += 1
+			continue
 
 		# Si el JSON no existe, o si el PB es más nuevo
 		if not json_file.exists() or pb_file.stat().st_mtime > json_file.stat().st_mtime:
 			needs_export.append(pb_file)
 
 	if not needs_export:
-		logger.info("Estado Idempotente: Ninguna conversación modificada. Saliendo limpiamente.")
+		if stubs:
+			logger.info(f"Estado Idempotente: ninguna conversación exportable ({stubs} puntero(s) sin trayectorias ignorados). Saliendo limpiamente.")
+		else:
+			logger.info("Estado Idempotente: Ninguna conversación modificada. Saliendo limpiamente.")
 		_evaporate_debt_signal()
 		return
 

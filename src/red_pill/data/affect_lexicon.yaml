@@ -1,0 +1,40 @@
+# Léxico del afecto del Operador (AFFECT_FROM_QUEUE).
+#
+# Se aplica sobre la columna `prompt` de `memory_queue` (lo que ESCRIBE el
+# Operador, no lo que responde el agente). Las palabras van en minúsculas y sin
+# acentos: el normalizador del clasificador quita tildes y diacríticos. Son
+# raíces (prefijos), no palabras exactas: "enfad" casa con enfadado/enfado.
+#
+# `color` es la chroma que pinta el turno; los colores válidos son los de
+# `CHROMA_TONE_MAPPING` (config.py). `peso` desempata cuando hay varias
+# emociones en el mismo texto.
+
+anger:
+  color: red
+  peso: 3
+  palabras: [enfad, cabre, furios, rabia, hart, indignad, furia, mosque, hostigad, grit, cabr]
+
+fear:
+  color: red
+  peso: 3
+  palabras: [miedo, asust, susto, acojon, panico, temor, aterrad, terror, miedito, tembl]
+
+anxiety:
+  color: orange
+  peso: 2
+  palabras: [ansios, ansiedad, nervios, agobiad, agobio, preocupad, angustia, inquiet, tenso, estres, desbordad]
+
+joy:
+  color: yellow
+  peso: 2
+  palabras: [content, feliz, alegr, ilusion, entusiasm, genial, maravillos, orgullo, celebrac, bienvenid, gracias]
+
+calm:
+  color: cyan
+  peso: 1
+  palabras: [tranquil, calm, relajad, seren, sosegad, descans, respirac]
+
+neutral:
+  color: gray
+  peso: 0
+  palabras: []

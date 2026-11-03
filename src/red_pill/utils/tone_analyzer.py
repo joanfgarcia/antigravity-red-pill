@@ -146,6 +146,21 @@ def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[st
 	if not cfg.DYNAMIC_EMOTION_SYNC:
 		return {"mood": cfg.DEFAULT_COLOR, "directive": cfg.CHROMA_TONE_MAPPING[cfg.DEFAULT_COLOR]}
 
+	# Afecto de los turnos vivos (2026-11-03): la cola se escribe por turno; los
+	# engramas son lo que ascendió anoche. Si el clasificador no da nada, se cae
+	# al camino antiguo — degradar, nunca romper el turno.
+	if bool(getattr(cfg, "AFFECT_FROM_QUEUE", False)):
+		try:
+			from red_pill.utils import operator_affect
+
+			estado = operator_affect.current()
+			if estado:
+				mood = str(estado.get("color") or cfg.DEFAULT_COLOR)
+				logger.debug(f"Afecto (cola viva): {estado.get('emotion')} → {mood} ({estado.get('turns')} turnos)")
+				return {"mood": mood, "directive": ToneAnalyzer.get_tone_directive(mood)}
+		except Exception as e:
+			logger.debug(f"Afecto desde la cola falló ({e}); se usa el camino de engramas")
+
 	mood = ToneAnalyzer.get_dominant_mood(manager=manager)
 	directive = ToneAnalyzer.get_tone_directive(mood)
 	return {"mood": mood, "directive": directive}

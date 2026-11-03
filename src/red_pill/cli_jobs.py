@@ -144,7 +144,11 @@ def handle_job(args: argparse.Namespace) -> None:
 			_kick_queue()
 
 	elif args.job_cmd == "list":
-		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
+		statuses = (
+			["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW", "CANCELLED", "COMPLETED"]
+			if args.all
+			else None
+		)
 		tasks = queue.list_tasks(
 			statuses=statuses,
 			mission_id=getattr(args, "mission", None),
@@ -240,6 +244,34 @@ def handle_job(args: argparse.Namespace) -> None:
 		# cascada a hijos BLOCKED: equivalente a `kill --discard`.
 		_kill_job(queue, task, discard=True)
 
+	elif args.job_cmd == "review":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		undo = bool(getattr(args, "undo", False))
+		if queue.mark_review(task["id"], undo=undo):
+			if undo:
+				print(f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga.")
+			else:
+				print(
+					f"[OK] Job {task['id'][:8]} reservado para revisión (REVIEW). "
+					f"La purga automática no lo toca. Salidas: 'job resume' (reprocesar) o 'job discard' (cerrar)."
+				)
+		else:
+			esperado = "REVIEW" if undo else "FRUSTRATED"
+			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': solo se reserva (o libera) desde {esperado}.")
+
+	elif args.job_cmd == "discard":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		if queue.mark_cancelled(task["id"]):
+			print(f"[OK] Job {task['id'][:8]} cerrado definitivamente (CANCELLED). No se ejecutará ni contará como dolor.")
+		else:
+			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")
+
 	elif args.job_cmd == "logs":
 		task = _find_job(queue, args.job_id)
 		if not task:
@@ -262,7 +294,7 @@ def handle_job(args: argparse.Namespace) -> None:
 	elif args.job_cmd == "kick":
 		_kick_queue()
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|cancel|logs|purge|process-queue|kick}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|cancel|review|discard|logs|purge|process-queue|kick}")
 
 
 def _kick_queue() -> None:

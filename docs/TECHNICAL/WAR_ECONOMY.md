@@ -203,7 +203,7 @@ A single SQLite table that transports tasks between all subsystems:
 | Entropy scan | `entropy` | Memory compression | Daemon → Flash |
 | Manual (MCP) | `operator` | Manual tasks | Worker → Flash |
 
-**Economy**: A single table, a single protocol (PENDING → PROCESSING → COMPLETED/FRUSTRATED). The frustration circuit breaker (3 attempts → FRUSTRATED) protects against infinite loops in ANY producer. There is no separate queue per subsystem.
+**Economy**: A single table, a single protocol (PENDING → PROCESSING → COMPLETED/FRUSTRATED; plus REVIEW/CANCELLED for triage and close-out — AD-110). The frustration circuit breaker (3 attempts → FRUSTRATED) protects against infinite loops in ANY producer. There is no separate queue per subsystem.
 
 ---
 
@@ -735,7 +735,7 @@ Una sola tabla SQLite que transporta tareas entre todos los subsistemas:
 | Entropy scan | `entropy` | Compresión memoria | Daemon → Flash |
 | Manual (MCP) | `operator` | Tareas manuales | Worker → Flash |
 
-**Economía**: Una sola tabla, un solo protocolo (PENDING → PROCESSING → COMPLETED/FRUSTRATED). El circuit breaker de frustración (3 intentos → FRUSTRATED) protege contra loops infinitos en CUALQUIER productor. No hay cola separada por subsistema.
+**Economía**: Una sola tabla, un solo protocolo (PENDING → PROCESSING → COMPLETED/FRUSTRATED; más REVIEW/CANCELLED para el triaje y el cierre — AD-110). El circuit breaker de frustración (3 intentos → FRUSTRATED) protege contra loops infinitos en CUALQUIER productor. No hay cola separada por subsistema.
 
 ---
 

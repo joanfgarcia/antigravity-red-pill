@@ -6,6 +6,8 @@ Specific checks when running:
 2. Stuck inference detection (high CPU + unresponsive to requests)
 """
 
+import json
+import time
 import urllib.error
 import urllib.request
 from typing import Any, List, Optional
@@ -15,6 +17,11 @@ from red_pill.metabolism.sentinel_plugins.service_base import ServiceSentinelPlu
 
 HEALTH_TIMEOUT_S = 30
 INFERENCE_TEST_TIMEOUT_S = 5
+# El slot del SIP es único (`-np 1`): un probe de 5 s expira detrás de una
+# generación legítima y el centinela cantaba "stuck" sobre un servidor que
+# servía una completion cada 27 s (2026-11-03, CPU 653%). El presupuesto cubre
+# el turno más largo medido en cola; si el slot está libre, no hay cola.
+INFERENCE_PROBE_BUDGET_S = 65.0
 CPU_STUCK_THRESHOLD = 200.0
 
 
@@ -165,8 +172,30 @@ class SipCheck(ServiceSentinelPlugin):
 			return 0.0
 
 	def _is_inference_stuck(self, port: int) -> bool:
-		import json
+		"""Stuck = el servidor no completa ni un turno corto, ni siquiera esperando cola.
 
+		Antes el probe era uno solo con 5 s de techo. Con `-np 1` compite por el
+		único slot: si ya hay una generación en curso, expira y el centinela
+		cantaba CRITICAL sobre un servidor sano. El presupuesto ahora cubre un
+		turno en cola; si el slot está libre no hay cola y la detección es corta.
+		"""
+		slot_busy = self._slot_busy(port)
+		budget = INFERENCE_TEST_TIMEOUT_S if slot_busy is False else INFERENCE_PROBE_BUDGET_S
+		return not self._probe_completes(port, budget)
+
+	def _slot_busy(self, port: int) -> Optional[bool]:
+		"""¿Hay alguna petición en vuelo? None si el servidor no lo dice."""
+		try:
+			with urllib.request.urlopen(f"http://127.0.0.1:{port}/slots", timeout=INFERENCE_TEST_TIMEOUT_S) as resp:
+				slots = json.loads(resp.read().decode())
+		except Exception:
+			return None
+		if not isinstance(slots, list):
+			return None
+		return any(isinstance(slot, dict) and slot.get("is_processing") for slot in slots)
+
+	def _probe_completes(self, port: int, budget_s: float) -> bool:
+		"""Un turno de 1 token, reintentando mientras quede presupuesto."""
 		req_data = json.dumps(
 			{
 				# Sin model (AD-030): el probe cae al default y no
@@ -175,14 +204,21 @@ class SipCheck(ServiceSentinelPlugin):
 				"max_tokens": 1,
 			}
 		).encode()
-		req = urllib.request.Request(
-			f"http://127.0.0.1:{port}/v1/chat/completions", data=req_data, headers={"Content-Type": "application/json"}, method="POST"
-		)
-		try:
-			urllib.request.urlopen(req, timeout=INFERENCE_TEST_TIMEOUT_S)
-			return False
-		except Exception:
-			return True
+		deadline = time.monotonic() + budget_s
+		while True:
+			remaining = max(1.0, deadline - time.monotonic())
+			req = urllib.request.Request(
+				f"http://127.0.0.1:{port}/v1/chat/completions",
+				data=req_data,
+				headers={"Content-Type": "application/json"},
+				method="POST",
+			)
+			try:
+				urllib.request.urlopen(req, timeout=remaining)
+				return True
+			except Exception:
+				if time.monotonic() >= deadline:
+					return False
 
 	def _get_service_uptime(self) -> float | None:
 		"""Returns seconds since the service entered 'active' state, or None if unknown."""

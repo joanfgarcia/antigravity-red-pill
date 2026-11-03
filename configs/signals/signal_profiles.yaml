@@ -87,6 +87,10 @@ inventory:
 # END GENERATED: signal_inventory
 
 signals:
+  memento_backlog:
+    # Backlog de sesiones sin destilar: escala con el tiempo y su acantilado son
+    # los 30 d del tope duro del buffer (cuando cruza, SYSTEM-FAILURE).
+    class: sed
   jobs_frustrated:
     class: necesidad
   korsakoff_amnesia:
@@ -130,3 +134,5 @@ signals:
   signal_interaction_unrendered_purged_failure:
     class: fallo
     reconcilable: false   # evento consumado: se atiende o se evapora a mano
+  interaction_expiring_soon:
+    class: sed             # caduca y se pierde: hay acantilado, no vuelve

@@ -706,7 +706,9 @@ class RedPillConfig(BaseSettings):
 	# vía .env (MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export) — no por
 	# defecto, porque la ruta ~/.gemini/antigravity/conversations_export no existe
 	# en instalaciones limpias y es snapshot, no store vivo.
-	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
+	# `memory_queue` fuera (2026-11-02): 95 de sus 305 sesiones eran duplicados exactos
+	# de sesiones de opencode. Lo que no tiene provider store ya está renderizado.
+	MEMENTO_EXTRA_SOURCES: List[str] = []
 	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar
 	# PRE_HEATING_LOOKBACK_HOURS (única ventana del pre-heating desde que el
 	# hardcode del tier-2 se alineó a la config); el plugin se niega si no.
@@ -720,7 +722,18 @@ class RedPillConfig(BaseSettings):
 	# distinto). `min_significance` explícito en el submit los anula (reseeds/tests).
 	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
 	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
-	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
+	# Topes del ciclo nocturno (distill+annotate). El coste tiene DOS sumandos: uno
+	# fijo por sesión (una llamada de distill + una de annotate, ~2,6 min de
+	# mediana) y uno variable por mensaje (~2 s/msg medidos en el ciclo de 126).
+	# Se aplican los dos y gana el que se cruce primero:
+	# - `NIGHT_LIMIT` (sesiones) acota el fijo. Medido 2026-11-03 sobre 82 días:
+	#   mediana 8/día, media 10,8, p90 20, máx 59.
+	# - `NIGHT_MSG_LIMIT` (mensajes) acota el variable. 3.000 deja en una noche el
+	#   79/81 de los días; el peor (8.731 msgs, día de misión) cae en 3 noches.
+	# El orden es stale-first: el backlog viejo sale antes que lo de anoche.
+	# 0 = sin tope (solo para rescates manuales).
+	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 30
+	MEMENTO_AGENTIC_NIGHT_MSG_LIMIT: int = 3000
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
@@ -734,6 +747,8 @@ class RedPillConfig(BaseSettings):
 	SW_AFFINITY_ENABLED: bool = False  # captura session_id+affinity (memory_queue → interaction_memories)
 	SW_PURGE_GATE_ENABLED: bool = False  # interaction_ttl purga solo sesiones ya renderizadas en Memento
 	INTERACTION_MAX_AGE_DAYS: int = 30  # tope duro: lo no renderizado más viejo se purga (con señal)
+	# Aviso previo a la purga: nunca soltar turnos en silencio (2026-11-02).
+	INTERACTION_WARN_BEFORE_DAYS: int = 7
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
 	# Tope de sesiones sintetizadas por ciclo de sueño (0 = sin tope). Necesario
@@ -897,6 +912,14 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
+	# AFFECT_FROM_QUEUE (2026-11-03): el afecto se lee de los turnos VIVOS
+	# (`memory_queue.prompt`, lo que escribe el Operador), no de los engramas
+	# ascendidos (`work/social_memories`, que son de la noche anterior o más
+	# viejos si la ingesta se para). Paleta y léxico en `data/affect_lexicon.yaml`.
+	AFFECT_FROM_QUEUE: bool = True
+	AFFECT_TTL_MIN: int = 15  # edad del estado antes de recalcular
+	AFFECT_WINDOW_MIN: int = 180  # ventana de turnos que se miran
+	AFFECT_TURNS: int = 8  # máximo de prompts por pasada
 	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
 	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"

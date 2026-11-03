@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from typing import Any, Dict, List, Optional, Set
 
 # Tipos de etapa del manifest (ampliados por decisión de operador 2026-08-07:
@@ -125,16 +126,24 @@ def _id_path_map(stages: List[Dict[str, Any]], prefix: str = "") -> Dict[str, st
 	return out
 
 
-def _render_item(text: Any, item: Any) -> Any:
+def _render_item(text: Any, item: Any, shell_safe: bool = False) -> Any:
 	"""Sustituye `{{item}}` y `{{item.<clave>}}` en strings (prompt/command/params)
-	por el item del fan-out. Los no-strings se devuelven intactos."""
+	por el item del fan-out. Los no-strings se devuelven intactos.
+
+	`shell_safe=True` cita el item para el intérprete de argv: un `command` se
+	parte con `shlex.split` DESPUÉS del render, así que un item con espacios
+	(`memory_queue:mcp:Aleth (Gemini 1.5 Flash):2026-10-27`) se convertía en
+	cinco argumentos y el script moría con `usage:` — fallo real del ciclo
+	nocturno 2026-11-03, etapa `memento-distill-83`. El prompt agéntico NO se
+	cita: ahí las comillas serían prosa."""
 	if not isinstance(text, str) or "{{item" not in text:
 		return text
+	quote = shlex.quote if shell_safe else (lambda v: v)
 	if isinstance(item, dict):
 		for k, v in item.items():
-			text = text.replace("{{item." + str(k) + "}}", str(v))
-		return text.replace("{{item}}", json.dumps(item, ensure_ascii=False))
-	return text.replace("{{item}}", str(item))
+			text = text.replace("{{item." + str(k) + "}}", quote(str(v)))
+		return text.replace("{{item}}", quote(json.dumps(item, ensure_ascii=False)))
+	return text.replace("{{item}}", quote(str(item)))
 
 
 def _apply_recipe_defaults(stages: List[Dict[str, Any]], defaults: Dict[str, Any]) -> None:

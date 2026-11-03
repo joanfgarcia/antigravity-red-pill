@@ -66,8 +66,52 @@ def _enabled_plugins(only: List[str]) -> List[Any]:
 	return plugins
 
 
-def _find_pending(registry: Any, plugins: List[Any], force_all: bool) -> List[Tuple[Any, str, str, int]]:
-	"""[(plugin, conversation_id, qualified_session_id, step_count)] pendientes de render."""
+def _write_reconstructed_raw(session_dir: Path, *, source: str, session_id: str, now: str) -> bool:
+	"""Copia de emergencia cuando la fuente ya no expone la sesión (ni hay raw previo).
+
+	NO es verbatim: se reconstruye desde el `index.md` renderizado y queda marcado
+	como tal en `meta.json`. Es la diferencia entre "tengo copia con procedencia
+	declarada" y "no tengo nada". Tres sesiones de telegram de mayo de 2026 están
+	así: la fuente ya no las sirve y se renderizaron antes de que existiera el raw.
+	"""
+	index = session_dir / "memento" / "index.md"
+	if not index.exists():
+		return False
+	import json as _json
+
+	raw_dir = session_dir / "raw"
+	raw_dir.mkdir(parents=True, exist_ok=True)
+	(raw_dir / "reconstructed.md").write_text(index.read_text(encoding="utf-8"), encoding="utf-8")
+	meta = {
+		"session_id": session_id,
+		"source": source,
+		"verbatim": False,
+		"reconstructed_from": "memento/index.md",
+		"exported_at": now,
+	}
+	(raw_dir / "meta.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+	return True
+
+
+def _has_raw_file(session_dir: Path) -> bool:
+	"""¿La sesión tiene copia verbatim? (`raw/` con algo que no sea meta.json).
+
+	Contar solo `raw.json` fue un error de medición el 2026-11-02: claude_code y pi
+	exportan `raw.jsonl` y antigravity_export, `.md`. La red existe si hay fichero.
+	"""
+	raw_dir = session_dir / "raw"
+	if not raw_dir.is_dir():
+		return False
+	return any(f.is_file() and f.name != "meta.json" for f in raw_dir.iterdir())
+
+
+def _find_pending(registry: Any, plugins: List[Any], force_all: bool, force_missing_raw: bool = False, root: Optional[Path] = None) -> List[Tuple[Any, str, str, int]]:
+	"""[(plugin, conversation_id, qualified_session_id, step_count)] pendientes de render.
+
+	`force_missing_raw`: re-renderiza las sesiones ya registradas que **no tienen
+	`raw/`**. Son las que se renderizaron antes de que existiera la copia verbatim:
+	sin raw no hay red, y el raw es la base para regenerarlo todo (2026-11-02).
+	"""
 	pending = []
 	for plugin in plugins:
 		try:
@@ -79,7 +123,10 @@ def _find_pending(registry: Any, plugins: List[Any], force_all: bool) -> List[Tu
 		for cid, step_count in discovered:
 			session_id = plugin.qualify(cid)
 			entry = known.get(session_id)
-			if force_all or entry is None or step_count > int(entry.get("step_count") or -1):
+			missing_raw = False
+			if force_missing_raw and root is not None and entry and entry.get("dir"):
+				missing_raw = not _has_raw_file(Path(root) / str(entry["dir"]))
+			if force_all or missing_raw or entry is None or step_count > int(entry.get("step_count") or -1):
 				pending.append((plugin, cid, session_id, step_count))
 	return pending
 
@@ -260,6 +307,7 @@ def main() -> None:
 	parser = argparse.ArgumentParser(description="Memento Chronicle backfill & delta render (RFC-002)")
 	parser.add_argument("--all", action="store_true", help="Force full reprocess of every session of every enabled source")
 	parser.add_argument("--dry-run", action="store_true", help="Report pending work and memory_queue census without writing")
+	parser.add_argument("--backfill-raw", action="store_true", help="Re-renderiza las sesiones registradas que no tienen `raw/` (copia verbatim)")
 	parser.add_argument("--source", action="append", default=[], help="Limit to a specific source (repeatable)")
 	parser.add_argument("--cata", action="store_true", help="Print the Q8 calibration report (markdown) and exit")
 	parser.add_argument(
@@ -298,7 +346,7 @@ def main() -> None:
 		return
 
 	root = get_memento_root()
-	pending = _find_pending(registry, plugins, force_all=args.all)
+	pending = _find_pending(registry, plugins, force_all=args.all, force_missing_raw=args.backfill_raw, root=root)
 	per_source = Counter(plugin.name for plugin, _cid, _sid, _steps in pending)
 	summary = ", ".join(f"{name}={count}" for name, count in sorted(per_source.items())) or "nada pendiente"
 	logger.info(f"Memento root: {root} — pending: {summary}")
@@ -390,6 +438,24 @@ def main() -> None:
 		from red_pill.memento.indexes import rebuild_indexes
 
 		logger.info(f"Rebuilt {rebuild_indexes(root, registry)} index file(s).")
+
+	# Garantía "ningún raw perdido": toda sesión registrada con dir debe tener copia.
+	# Si la fuente ya no la sirve, se reconstruye desde el index y se marca como tal.
+	if args.backfill_raw:
+		reconstructed_n = 0
+		still_missing = 0
+		for source, sessions in registry.state.get("registry", {}).items():
+			for session_id, entry in sessions.items():
+				session_dir = root / str(entry.get("dir") or "")
+				if not entry.get("dir") or not session_dir.exists() or _has_raw_file(session_dir):
+					continue
+				if _write_reconstructed_raw(session_dir, source=source, session_id=session_id, now=now):
+					reconstructed_n += 1
+					logger.warning(f"[{source}] {session_id}: sin fuente y sin raw — copia reconstruida (NO verbatim)")
+				else:
+					still_missing += 1
+					logger.error(f"[{source}] {session_id}: sin fuente, sin raw y sin index — nada que copiar")
+		logger.info(f"Raw backfill: {reconstructed_n} reconstruida(s), {still_missing} sin nada.")
 
 	registry.save()
 	logger.info(f"Memento render complete: {rendered_count} session(s) rendered, {skipped} empty/failed.")
