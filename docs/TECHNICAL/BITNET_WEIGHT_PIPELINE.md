@@ -4,6 +4,9 @@
 > las transformaciones que requiere cada backend, y las intervenciones manuales que hemos
 > tenido que hacer para que funcione en la RTX 5070. Este documento existe para que no
 > tengamos que redescubrir todo esto cada vez.
+>
+> **Ver también**: [BITNET_FLAVORS.md](./BITNET_FLAVORS.md) — mapa de fuentes (qué fork,
+> qué rama, qué commit), sabores y receta para recrear los motores en otra máquina.
 
 ## Table of Contents
 

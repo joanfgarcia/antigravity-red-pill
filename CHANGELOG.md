@@ -11,6 +11,11 @@
 - **[NEW] `scripts/bitnet_build.sh`**: compila un sabor (`cpu|cuda|vulkan`) tras
   verificar el árbol e imprimir la cadena de pins; dice `npu` no soportado en vez
   de fingirlo. Los binarios siguen siendo locales por diseño.
+- **[NEW] `scripts/llama_official_build.sh`**: el mismo trato para el llama.cpp
+  general (modelos GGUF no ternarios), con `--check` para validar el pin.
+- **[DOC] `BITNET_FLAVORS.md`**: mapa de fuentes (qué repo, rama y commit sirve
+  cada motor), receta para recrearlos —incluido qué hacer cuando el upstream se
+  mueve— y la comprobación de que un pin es reproducible.
 
 ### 🧠 Memoria — el tope doble llega también al pase clásico
 

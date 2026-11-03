@@ -70,6 +70,9 @@ bash scripts/bitnet_build.sh cuda         # builds this machine: cpu | cuda | vu
 
 Weights are never taken from third parties: they are quantized locally with
 `setup_env.py` (see [BITNET_WEIGHT_PIPELINE.md](docs/TECHNICAL/BITNET_WEIGHT_PIPELINE.md)).
+The full source map — which fork, branch and commit serves each engine, and how to
+recreate it after an upstream move — is in
+[BITNET_FLAVORS.md](docs/TECHNICAL/BITNET_FLAVORS.md).
 If the tree is incomplete, the script stops and tells you which submodule to fetch
 instead of failing halfway through a compile.
 
@@ -206,6 +209,9 @@ bash scripts/bitnet_build.sh cuda         # compila en esta máquina: cpu | cuda
 
 Los pesos nunca se toman de terceros: se cuantizan en local con `setup_env.py`
 (ver [BITNET_WEIGHT_PIPELINE.md](docs/TECHNICAL/BITNET_WEIGHT_PIPELINE.md)).
+El mapa completo de fuentes — qué fork, rama y commit sirve cada motor, y cómo
+recrearlo cuando el upstream se mueve — está en
+[BITNET_FLAVORS.md](docs/TECHNICAL/BITNET_FLAVORS.md).
 Si el árbol está incompleto, el script se para y dice qué submódulo falta, en vez
 de fallar a mitad de la compilación.
 
