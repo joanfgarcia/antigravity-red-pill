@@ -397,6 +397,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	job_cancel = job_sub.add_parser("cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED")
 	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
 
+	job_review = job_sub.add_parser(
+		"review", help="Reservar un job FRUSTRATED para revisión (REVIEW): la purga automática y el dolor no lo tocan"
+	)
+	job_review.add_argument("job_id", help="Id completo o prefijo corto")
+	job_review.add_argument(
+		"--undo", action="store_true", help="Liberar la reserva: vuelve a FRUSTRATED (de nuevo en el pool de la purga)"
+	)
+
+	job_discard = job_sub.add_parser("discard", help="Cerrar un job revisado definitivamente (CANCELLED): no se ejecuta y no cuenta como dolor")
+	job_discard.add_argument("job_id", help="Id completo o prefijo corto")
+
 	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
 	job_logs.add_argument("job_id", help="Id completo o prefijo corto")
 	job_logs.add_argument("--tail", type=int, default=50, help="Últimas N líneas (default 50)")

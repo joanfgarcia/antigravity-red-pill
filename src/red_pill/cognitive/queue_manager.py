@@ -500,7 +500,7 @@ class CognitiveQueueManager:
 		por el delivery de Telegram (mission_id `telegram:...`). None = sin filtro.
 		"""
 		if statuses is None:
-			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW"]
 		placeholders = ",".join(["?"] * len(statuses))
 		query = f"""
 			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
@@ -591,7 +591,10 @@ class CognitiveQueueManager:
 		- borra FRUSTRATED con más de `frustrated_days` días (dead-letter caducado);
 		- PROCESSING sin latido > `stale_processing_hours` = colgado → FRUSTRATED, visible en `job list` hasta que la purga lo retire. El carril mecánico nunca llega aquí (requeue_stale lo recupera a los 15 min); esto caza los huérfanos de los demás carriles (samantha, cognitivo).
 
-		Nunca toca PENDING, PAUSED ni BLOCKED. Devuelve contadores por operación.
+		Nunca toca PENDING, PAUSED ni BLOCKED. Tampoco REVIEW (un frustrado
+		reservado por el Operador: la purga no puede retirar lo que está en
+		revisión) ni CANCELLED (el registro de una decisión, no basura de cola).
+		Devuelve contadores por operación.
 		"""
 		with self._get_connection() as conn:
 			completed = conn.execute(
@@ -635,13 +638,15 @@ class CognitiveQueueManager:
 	def purge_task(self, task_id: str, force: bool = False) -> bool:
 		"""Retira una fila de la cola por orden del operador (`job purge`).
 
-		Solo estados terminales — FRUSTRATED y COMPLETED; PAUSED únicamente con
-		`force` (un pausado es trabajo reanudable, no basura). PENDING/PROCESSING
-		jamás: un job vivo se pausa o se abate, nunca se borra debajo del runner.
+		Solo estados terminales — FRUSTRATED y COMPLETED —, más REVIEW y
+		CANCELLED (ambos son actos explícitos del Operador: retirar la reserva
+		o el registro de lo descartado); PAUSED únicamente con `force` (un
+		pausado es trabajo reanudable, no basura). PENDING/PROCESSING jamás: un
+		job vivo se pausa o se abate, nunca se borra debajo del runner.
 		Complementa a purge_hygiene (temporal, nocturna): esto es la versión en
 		caliente y dirigida.
 		"""
-		allowed = ("FRUSTRATED", "COMPLETED", "PAUSED", "BLOCKED") if force else ("FRUSTRATED", "COMPLETED")
+		allowed = ("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED", "PAUSED", "BLOCKED") if force else ("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED")
 		placeholders = ",".join("?" for _ in allowed)
 		with self._get_connection() as conn:
 			# Auditoría adversarial (2026-09-23): borrar un padre PAUSED/BLOCKED con
@@ -819,9 +824,14 @@ class CognitiveQueueManager:
 			conn.commit()
 			return True, current
 
-	def _cancel_blocked_children(self, conn: Any, parent_id: str) -> int:
+	def _cancel_blocked_children(self, conn: Any, parent_id: str, status: str = "FRUSTRATED") -> int:
 		"""Cancela en cascada los hijos BLOCKED de un job descartado (ninguno
-		resucitará: el desbloqueo filtra status='BLOCKED')."""
+		resucitará: el desbloqueo filtra status='BLOCKED').
+
+		`status` es el estado final de los hijos: FRUSTRATED por defecto (purga de
+		un padre terminal) y CANCELLED cuando el padre se descarta tras revisión —
+		un hijo de un job cancelado no es un fallo que revisar.
+		"""
 		queue = [parent_id]
 		cancelled = 0
 		while queue:
@@ -829,9 +839,9 @@ class CognitiveQueueManager:
 			rows = conn.execute("SELECT id FROM cognitive_tasks WHERE parent_task_id = ? AND status = 'BLOCKED'", (current,)).fetchall()
 			for r in rows:
 				conn.execute(
-					"UPDATE cognitive_tasks SET status = 'FRUSTRATED', error_log = 'parent cancelled', "
+					"UPDATE cognitive_tasks SET status = ?, error_log = 'parent cancelled', "
 					"cancel_requested_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-					(time.time(), r["id"]),
+					(status, time.time(), r["id"]),
 				)
 				cancelled += 1
 				queue.append(r["id"])
@@ -868,11 +878,52 @@ class CognitiveQueueManager:
 			)
 			return cursor.rowcount > 0
 
+	def mark_review(self, task_id: str, undo: bool = False) -> bool:
+		"""Reserva un job FRUSTRATED para revisión humana (`job review`), o libera la reserva.
+
+		REVIEW no es un estado de ejecución: el runner no lo mira (no es PENDING),
+		la purga automática (`purge_hygiene` / `purge_terminal`) no lo toca y
+		`job_health` deja de contarlo como dolor. Es un aparcamiento explícito
+		del Operador para que un frustrado no caduque mientras decide qué hacer
+		con él (reprocesar o descartar).
+
+		Salidas: `job resume` (REVIEW → PENDING, se reprocesa) y `job discard`
+		(REVIEW → CANCELLED, se cierra definitivamente). `undo` devuelve la
+		fila a FRUSTRATED, de vuelta al pool de la purga.
+		"""
+		target, origin = ("FRUSTRATED", "REVIEW") if undo else ("REVIEW", "FRUSTRATED")
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?",
+				(target, task_id, origin),
+			)
+			return cursor.rowcount > 0
+
+	def mark_cancelled(self, task_id: str) -> bool:
+		"""Cierra definitivamente un job revisado (`job discard`): REVIEW/FRUSTRATED → CANCELLED.
+
+		CANCELLED es terminal y decidido: no se ejecuta, no cuenta como dolor y
+		la purga automática no lo toca (el registro de la decisión se retira a
+		mano con `job purge <id>`). Sus hijos BLOCKED se cancelan en cascada —
+		un padre descartado no los va a desbloquear nunca.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if row is None or str(row["status"]) not in ("REVIEW", "FRUSTRATED"):
+				return False
+			self._cancel_blocked_children(conn, task_id, status="CANCELLED")
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
 	def resume_task(self, task_id: str) -> bool:
 		"""Reanuda o cancela la pausa de un job.
 
 		- PAUSING → PROCESSING: cancela la solicitud de pausa en vuelo antes del fin del step.
-		- PAUSED / FRUSTRATED / stuck PROCESSING (>900s) → PENDING: reanuda en el siguiente disparo del runner.
+		- PAUSED / FRUSTRATED / REVIEW / stuck PROCESSING (>900s) → PENDING: reanuda en el siguiente disparo del runner.
+		(REVIEW es la salida "revisado, se reprocesa": vuelve a la cola con attempts a cero.)
 		Devuelve True si se reanudó/canceló la pausa, o False si no aplica.
 		"""
 		with self._get_connection() as conn:
@@ -897,7 +948,7 @@ class CognitiveQueueManager:
 				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0,
 					cancel_requested_at = NULL, updated_at = CURRENT_TIMESTAMP
 				WHERE id = ? AND (
-					status IN ('PAUSED', 'FRUSTRATED')
+					status IN ('PAUSED', 'FRUSTRATED', 'REVIEW')
 					OR (status = 'PROCESSING' AND updated_at < datetime('now', '-900 seconds'))
 				)
 				""",
@@ -909,7 +960,7 @@ class CognitiveQueueManager:
 		"""Marca el siguiente elemento/step para saltar (operador, `job_skip`).
 
 		Escribe `skip_next: true` en el checkpoint (read-modify-write, sin tocar el
-		resto del avance) y, si el job estaba PAUSED/FRUSTRATED, lo devuelve a
+		resto del avance) y, si el job estaba PAUSED/FRUSTRATED/REVIEW, lo devuelve a
 		PENDING con attempts a cero para que el runner lo recoja. Un job en vuelo
 		(PROCESSING/PAUSING) solo se marca: el runner relee `skip_next` en la
 		frontera del step (R3) y el driver lo consume (avanza índice + `skipped`).
@@ -924,7 +975,7 @@ class CognitiveQueueManager:
 				checkpoint = {}
 			checkpoint["skip_next"] = True
 			status = row["status"]
-			if status in ("PAUSED", "FRUSTRATED"):
+			if status in ("PAUSED", "FRUSTRATED", "REVIEW"):
 				# A4: saltar es una orden explícita del Operador sobre un job
 				# detenido → también es puerta legítima para limpiar la marca.
 				conn.execute(

@@ -3038,7 +3038,7 @@ def _queue() -> Any:
 	return CognitiveQueueManager()
 
 
-_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
+_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW", "CANCELLED", "COMPLETED"]
 
 
 def _has_mission_lease(task_or_source: Any) -> bool:
@@ -3179,13 +3179,13 @@ def _ensure_job_mission_lease(task: Dict[str, Any], *, allow_takeover: bool = Fa
 	return None
 
 
-def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador") -> None:
-	"""Cierre de un job matado sin runner en vuelo: result.json + leg muerto."""
+def _finalize_killed_job(task: Dict[str, Any], reason: str = "interrumpido por el Operador", status: str = "killed") -> None:
+	"""Cierre de un job matado o descartado sin runner en vuelo: result.json + leg muerto."""
 	try:
 		from red_pill.jobs.artifacts import write_job_result
 		from red_pill.session.store import SessionRegistry
 
-		write_job_result(task, status="killed", summary=reason, error=reason)
+		write_job_result(task, status=status, summary=reason, error=reason)
 		if str(task.get("source") or "") == "dag_job":
 			SessionRegistry().unregister_session(f"dag:{task['id']}")
 	except Exception as exc:
@@ -3468,7 +3468,7 @@ async def handle_job_list(arguments: Dict[str, Any]):
 
 		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
 		# la lista completa explícita o el flag es un no-op.
-		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW"]
 		tasks = _queue().list_tasks(
 			statuses=statuses,
 			mission_id=arguments.get("mission_id"),
@@ -3760,6 +3760,91 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_review",
+	description=(
+		"[OFFICIAL] Reserva un job FRUSTRATED para revisión humana (REVIEW): la purga automática "
+		"y el dolor `jobs_frustrated` dejan de tocarlo. Salidas: job_resume (PENDING) o job_discard (CANCELLED)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+			"undo": {"type": "boolean", "description": "True = retirar la reserva y devolverlo a FRUSTRATED."},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_review(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_review")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		undo = bool(arguments.get("undo"))
+		if qm.mark_review(task["id"], undo=undo):
+			if undo:
+				return [
+					types.TextContent(
+						type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga."
+					)
+				]
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						f"[OK] Job {task['id'][:8]} reservado para revisión (REVIEW). La purga automática no lo toca. "
+						"Salidas: job_resume (reprocesar) o job_discard (cerrar)."
+					),
+				)
+			]
+		esperado = "REVIEW" if undo else "FRUSTRATED"
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_review falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_discard",
+	description=(
+		"[OFFICIAL] Cierra definitivamente un job revisado (CANCELLED): no se ejecuta, no cuenta como dolor "
+		"y la purga automática no lo toca. Solo desde REVIEW o FRUSTRATED."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_discard(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		denied = await _authorize_job_mutation(task, "job_discard")
+		if denied:
+			return [types.TextContent(type="text", text=denied)]
+		if qm.mark_cancelled(task["id"]):
+			_release_job_mission_lease(task, reason="operator_discard")
+			_finalize_killed_job(task, reason="descartado tras revisión", status="cancelled")
+			return [
+				types.TextContent(
+					type="text", text=f"[OK] Job {task['id'][:8]} cerrado definitivamente (CANCELLED). No se ejecutará ni contará como dolor."
+				)
+			]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_discard falló: {e}")]
 
 
 @registry.register_action(
