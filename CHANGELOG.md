@@ -1,5 +1,17 @@
 ## Unreleased
 
+### 🔧 Instalación — el pin de BitNet compila en cualquier máquina
+
+- **[FIX] Cadena de pins reproducible**: `3rdparty/BitNet-1.58b` apuntaba a un
+  árbol que solo compilaba aquí (sus `build_*` estaban versionados y el
+  `llama.cpp` anidado incluía `bitnet_porter.cu` sin los headers que incluye). El
+  fork deja de versionar la compilación (3.210 ficheros → 77), el pin anidado
+  apunta a un commit que compila y su `.gitmodules` pasa a un fork público por
+  HTTPS: `git submodule update --init --recursive` funciona en otra máquina.
+- **[NEW] `scripts/bitnet_build.sh`**: compila un sabor (`cpu|cuda|vulkan`) tras
+  verificar el árbol e imprimir la cadena de pins; dice `npu` no soportado en vez
+  de fingirlo. Los binarios siguen siendo locales por diseño.
+
 ### 🧠 Memoria — el tope doble llega también al pase clásico
 
 - **[FIX] Un solo tope, dos puertas**: la selección con los dos presupuestos vive
