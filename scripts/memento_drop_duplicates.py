@@ -22,8 +22,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-DEST = Path.home() / ".local" / "share" / "red-pill" / "memento_archive" / "duplicados"
-
 
 def find_duplicates(registry) -> list:
 	"""[(source, session_id, dir_rel)] de memory_queue duplicando una sesión de opencode."""
@@ -51,6 +49,9 @@ def main() -> int:
 	from red_pill.memento.registry import MementoRegistry
 
 	root = Path(get_memento_root())
+	# El archivo vive junto al árbol vivo; la ruta canónica la resuelve Memento
+	# (MEMENTO_ROOT o get_data_dir()), nunca `Path.home()` a mano.
+	dest_root = root.parent / "memento_archive" / "duplicados"
 	registry = MementoRegistry()
 	dups = find_duplicates(registry)
 	print(f"[duplicados] {len(dups)} sesión(es) memory_queue con gemela en opencode{' (dry-run)' if args.dry_run else ''}")
@@ -62,7 +63,7 @@ def main() -> int:
 	moved = 0
 	for _source, session_id, rel in dups:
 		if rel and (root / rel).exists():
-			dest = DEST / rel
+			dest = dest_root / rel
 			dest.parent.mkdir(parents=True, exist_ok=True)
 			shutil.move(str(root / rel), str(dest))
 			moved += 1
@@ -75,7 +76,7 @@ def main() -> int:
 		rebuild_indexes(root, registry)
 	except Exception as exc:
 		print(f"[duplicados] índices no reconstruidos: {exc}")
-	print(f"[duplicados] retiradas {len(dups)} entradas · {moved} directorio(s) movidos a {DEST}")
+	print(f"[duplicados] retiradas {len(dups)} entradas · {moved} directorio(s) movidos a {dest_root}")
 	return 0
 
 
