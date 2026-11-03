@@ -60,6 +60,22 @@ def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
 	return None
 
 
+def job_progress_age_s(job_id: str) -> Optional[float]:
+	"""Segundos desde el último latido del fichero (None si no existe o no se puede leer).
+
+	El latido no es el `updated_at` de la DB — ese solo cambia en frontera de step y
+	se congela durante horas en las etapas largas. El fichero lo reescribe el hijo
+	mientras trabaja: su mtime es la única prueba de vida fina.
+	"""
+	try:
+		path = job_progress_path(job_id)
+		if not path.is_file():
+			return None
+		return max(0.0, time.time() - path.stat().st_mtime)
+	except Exception:
+		return None
+
+
 def report_stage_progress(**data: Any) -> None:
 	"""Publish fine progress to `$RP_PROGRESS_FILE` (no-op if the channel is off).
 
