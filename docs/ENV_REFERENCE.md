@@ -287,8 +287,13 @@ Plugins 05–10. Each is independently toggleable.
 | `SW_HUBS_ENABLED` | `False` | Síntesis de hubs de sesión sobre engramas curados (idempotente por `hub_input_hash`). |
 | `SW_HUBS_MAX_SESSIONS_PER_CYCLE` | `0` | Tope de sesiones sintetizadas por ciclo (0 = sin tope). Acota el backfill inicial. |
 | `SLEEP_MAX_HUB_INPUT_CHARS` | `8000` | Presupuesto de chars por llamada de hub. Si el prompt no cabe, `synthesize_hub_v2` aplica map-reduce (no trunca). No es el `n_ctx` del modelo. |
-| `SLEEP_HUB_MAP_REDUCE_ENABLED` | `True` | Activa la síntesis jerárquica (lotes → parciales → reducción en árbol). OFF restaura el recorte legacy marcado `hub_truncated`. |
+| `SLEEP_HUB_MAP_REDUCE_ENABLED` | `True` | **Deprecated.** El over-budget SIEMPRE se resuelve con map-reduce (lotes → parciales → reducción en árbol); ya no existe el recorte legacy. |
 | `SLEEP_HUB_MAX_CHUNKS_PER_BATCH` | `48` | Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de chars). |
+| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `900` | Target del summary maestro. Si se supera, se reescribe (compaction); si no baja, se conserva intacto y se marca `summary_over_budget`. |
+| `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura del summary antes de rendirse (nunca se recorta). |
+| `SLEEP_HUB_LARGE_INPUT_CHARS` | `100000` | Umbral del híbrido: prompts renderizados ≥ este tamaño usan `SLEEP_HUB_LARGE_MODEL` + prompt concise. `0` = off. |
+| `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para hubs grandes (candidato del perfil `hub`; `thinking: off`). |
+| `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para hubs grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |

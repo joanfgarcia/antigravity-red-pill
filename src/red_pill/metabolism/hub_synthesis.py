@@ -183,6 +183,10 @@ def _synthesize_one(
 	metadata["hub_texture_over_target"] = bool(hub.get("texture_over_target", False))
 	metadata["hub_compaction_calls"] = int(hub.get("compaction_calls") or 0)
 	metadata["hub_compaction_latency_s"] = float(hub.get("compaction_latency_s") or 0.0)
+	# Híbrido (AD-115): modelo/prompt efectivos del maestro en hubs grandes.
+	metadata["hub_large_path"] = bool(hub.get("large_path", False))
+	metadata["hub_model"] = str(hub.get("model") or "")
+	metadata["hub_prompt_file"] = str(hub.get("prompt_file") or "")
 	metadata["hub_synth_version"] = HUB_SYNTH_VERSION
 	try:
 		from red_pill.metabolism.distiller import merge_relics

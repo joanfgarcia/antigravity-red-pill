@@ -769,7 +769,7 @@ def synthesize_hub_v2(
 	`SLEEP_HUB_SUMMARY_TARGET_CHARS`; si aun así sigue largo, se deja intacto y
 	se marca `summary_over_budget` (el detalle vive en `partitions`).
 	"""
-	from red_pill.core.providers import ProviderRegistry
+	from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
 
 	cfg_params = load_distiller_config(config_yaml_path).synthesize_hub_v2
 	params = cfg_params.model_dump()
@@ -802,6 +802,26 @@ def synthesize_hub_v2(
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
 	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
+	# Híbrido (AD-115): los hubs muy grandes usan otro modelo + prompt concise;
+	# el resto sigue el default del perfil `hub`. Solo con el provider de
+	# producción (`provider_alias=sip`): un alias explícito (bake-off) manda.
+	large_threshold = max(0, int(getattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 0) or 0))
+	large_model = str(getattr(cfg, "SLEEP_HUB_LARGE_MODEL", "") or "").strip()
+	large_prompt_file = str(getattr(cfg, "SLEEP_HUB_LARGE_PROMPT", "") or "").strip()
+	large_path = bool(
+		large_threshold
+		and large_model
+		and str(params.get("provider_alias") or "") == "sip"
+		and len(full_prompt) >= large_threshold
+	)
+	large_prompt_used = ""
+	if large_path and large_prompt_file and not override_prompt and prompt_file == "hub_synthesis_v2.txt":
+		system_prompt = load_prompt_text(large_prompt_file)
+		large_prompt_used = large_prompt_file
+		if dominant_lang and "DOMINANT language" not in system_prompt:
+			system_prompt += (
+				f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
+			)
 
 	def _make_fallback() -> Dict[str, Any]:
 		fallback_text = synthesize_hub([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
@@ -819,6 +839,7 @@ def synthesize_hub_v2(
 		return _make_fallback()
 
 	def _call(system: str, user: str) -> str:
+		call_model = large_model if large_path and isinstance(provider, SipInferenceProvider) else ""
 		try:
 			return str(
 				provider.generate(
@@ -828,6 +849,8 @@ def synthesize_hub_v2(
 					# AD-030: el proveedor SIP defaultea a `conversation`. El hub
 					# debe resolverse por SU task (modelo/thinking/max_tokens).
 					task="hub",
+					# AD-115: el híbrido fija el modelo por llamada; vacío = task.
+					**({"model": call_model} if call_model else {}),
 				)
 			)
 		except Exception as e:
@@ -876,6 +899,10 @@ def synthesize_hub_v2(
 		hub["texture_over_target"] = bool(hub.get("texture_over_target"))
 		hub["compaction_calls"] = compaction_stats["calls"]
 		hub["compaction_latency_s"] = round(compaction_stats["latency_s"], 2)
+		# Auditoría del híbrido: modelo/prompt efectivos del maestro.
+		hub["large_path"] = bool(large_path)
+		hub["model"] = large_model if large_path else ""
+		hub["prompt_file"] = large_prompt_used or prompt_file
 		return hub
 
 	# Caso normal: cabe en una llamada (sin truncar; si no cupiera, map-reduce).

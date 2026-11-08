@@ -110,6 +110,53 @@ def _patch_custom(monkeypatch, provider):
 	monkeypatch.setattr(providers.ProviderRegistry, "get_inference_provider", classmethod(lambda cls, name=None: provider))
 
 
+def _sip_provider(monkeypatch, payload):
+	"""Provider SIP real (isinstance) con `generate` interceptado."""
+	from red_pill.core import providers
+	from red_pill.core.providers import SipInferenceProvider
+
+	provider = SipInferenceProvider(socket_path="/tmp/no.sock")
+	calls: list[dict] = []
+
+	def fake_generate(prompt, messages=None, temperature=0.1, **kwargs):
+		calls.append({"prompt": prompt, "messages": messages, **kwargs})
+		return json.dumps(payload)
+
+	monkeypatch.setattr(provider, "generate", fake_generate)
+	monkeypatch.setattr(providers.ProviderRegistry, "get_inference_provider", classmethod(lambda cls, name=None: provider))
+	return provider, calls
+
+
+def test_synthesize_hub_v2_hybrid_large_uses_model_and_concise(monkeypatch):
+	import red_pill.config as cfg
+
+	_provider, calls = _sip_provider(monkeypatch, {"title": "T", "summary": "S", "texture": "", "lang": "es"})
+	monkeypatch.setattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 1)
+	monkeypatch.setattr(cfg, "SLEEP_HUB_LARGE_MODEL", "k2_test")
+	monkeypatch.setattr(cfg, "SLEEP_HUB_LARGE_PROMPT", "hub_synthesis_v2_concise.txt")
+
+	hub = synthesize_hub_v2(CHUNKS)
+	assert hub["large_path"] is True
+	assert hub["model"] == "k2_test"
+	assert hub["truncated"] is False
+	assert calls[0]["model"] == "k2_test"
+	assert "CONCISE" in calls[0]["messages"][0]["content"]
+
+
+def test_synthesize_hub_v2_hybrid_small_keeps_default(monkeypatch):
+	import red_pill.config as cfg
+
+	_provider, calls = _sip_provider(monkeypatch, {"title": "T", "summary": "S", "texture": "", "lang": "es"})
+	monkeypatch.setattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 10**9)
+	monkeypatch.setattr(cfg, "SLEEP_HUB_LARGE_MODEL", "k2_test")
+
+	hub = synthesize_hub_v2(CHUNKS)
+	assert hub["large_path"] is False
+	assert hub["model"] == ""
+	assert "model" not in calls[0]
+	assert "CONCISE" not in calls[0]["messages"][0]["content"]
+
+
 def test_synthesize_hub_v2_compacts_over_budget_summary(monkeypatch):
 	provider = _CompactProvider("resumen compacto")
 	_patch_custom(monkeypatch, provider)

@@ -1077,6 +1077,13 @@ class RedPillConfig(BaseSettings):
 	# `summary_over_budget` (nunca se pierde contenido).
 	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
 	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
+	# Híbrido de modelos (AD-115): los hubs cuyo prompt renderizado supera este
+	# umbral se sintetizan con otro modelo + prompt concise; el resto sigue el
+	# default del perfil `hub` (Granite). Solo aplica al provider de producción
+	# (`provider_alias=sip`); un alias explícito (bake-off) manda. 0 = off.
+	SLEEP_HUB_LARGE_INPUT_CHARS: int = 100000
+	SLEEP_HUB_LARGE_MODEL: str = "k2_horizon_7b"
+	SLEEP_HUB_LARGE_PROMPT: str = "hub_synthesis_v2_concise.txt"
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 

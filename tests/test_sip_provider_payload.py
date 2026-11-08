@@ -23,6 +23,19 @@ def test_payload_incluye_model_si_set():
 	assert pl["model"] == "granite_8b"
 
 
+def test_payload_model_por_llamada_gana_sobre_el_del_provider():
+	# AD-115: el híbrido de hubs fija el modelo por llamada.
+	p = SipInferenceProvider(socket_path="/tmp/no.sock", model="granite_8b")
+	pl = p._build_payload(task="hub", messages=[], temperature=0.1, model="k2_horizon_7b")
+	assert pl["model"] == "k2_horizon_7b"
+
+
+def test_payload_model_vacio_no_pisa_el_del_provider():
+	p = SipInferenceProvider(socket_path="/tmp/no.sock", model="granite_8b")
+	pl = p._build_payload(task="hub", messages=[], temperature=0.1, model="")
+	assert pl["model"] == "granite_8b"
+
+
 def test_payload_extra_solo_si_presentes():
 	p = SipInferenceProvider(socket_path="/tmp/no.sock")
 	pl = p._build_payload(task="minion_tool", messages=[], temperature=0.2, max_tokens=8, stop=None, tools=[{"x": 1}])
