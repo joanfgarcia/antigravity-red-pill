@@ -9,6 +9,24 @@
   salían como `implemented` sin evidencia: 14 banderas altas desde el kernel y 12
   desde el desk, frente a 9 con la unión. El repo del cwd entra siempre (si es
   git) y los `--repo` se añaden, con dedupe por ruta resuelta.
+- **[FIX] La evidencia por familia del id**: los commits rara vez citan el id
+  completo (citan la familia: el sufijo con su número), así que el pre-pase daba
+  por vacío trabajo real. Ahora prueba el id exacto, sus prefijos por la derecha y
+  el id sin prefijo de familia, **nunca** un token sin dígito (que arrastraría
+  medio repo y mentiría al revés). La evidencia hallada bajo otro token se declara
+  `weak-evidence` (medium, «confirma a mano antes de degradar»), no `no-evidence`
+  (high, «degrada a draft»), y el render dice bajo qué token apareció.
+- **[FIX] La evidencia que el documento ya declara**: `evidence: ["repo:sha", …]`
+  del frontmatter cuenta — pero no a ciegas: el sha tiene que existir en el repo
+  (`git cat-file -e`). La prosa («R5 del 2026-10-14») se ignora: aceptarla sería
+  mentir en la otra dirección.
+- **[FIX] El repo del proyecto, y `unscanned-project`**: el pre-pase resuelve el
+  repo por el `project:` del documento (hermanos del desk y `projects/`, con alias
+  `red-pill`→`sharing`) y, si no lo encuentra, dice «NO medido» (`low`) en vez de
+  vender la ausencia como `no-evidence`. Además, `closed` se verifica también por
+  un commit ya contenido en una rama viva: el release squash-mergea y no deja
+  merge que citar. Efecto medido: 14 propuestas → 8, y un doc cerrado de otro
+  proyecto deja de salir «sin evidencia» cuando su trabajo sí existe.
 
 ### 🧭 Despertar — «pendiente de aterrizar» se mide, no se recuerda
 

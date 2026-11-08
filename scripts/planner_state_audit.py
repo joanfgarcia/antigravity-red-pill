@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """A-4 (AWAKEN-002): pre-pase determinista de estados del planner.
 
-Sin LLM. Lee el frontmatter (`id`, `status`) de los documentos del planner del
-desk y lo compara con la evidencia real en los repos git (ramas, commits y
-ficheros que mencionan el id). Emite una lista de DISCREPANCIAS propuestas —
-nunca aplica cambios.
+Sin LLM. Lee el frontmatter (`id`, `status`, `evidence`) de los documentos del
+planner del desk y lo compara con la evidencia real en los repos git (ramas,
+commits y ficheros que mencionan el id, más los commits que el propio documento
+declara). Emite una lista de DISCREPANCIAS propuestas — nunca aplica cambios.
 
 El despertar (o el operador) revisa solo lo marcado: un draft con rama/commit es
 candidato a `in-progress`; un `implemented` sin merge, un `closed` sin evidencia o
@@ -36,6 +36,16 @@ IMPLEMENTATION_STATUSES = {"in-progress", "implemented", "closed", "archived"}
 NO_EVIDENCE_STATUSES = {"in-progress", "implemented", "closed"}
 _ID_LIKE = re.compile(r"[A-Za-z].*[0-9]")
 _GENERIC_STEMS = {"readme", "index", "design", "descripcion", "notas", "notes"}
+# Prefijos de familia que no aportan identidad propia: `PLAN-CURATION-001` se
+# cita en git como `CURATION-001`.
+_GENERIC_PREFIXES = {"SPEC", "PLAN", "RFC", "AUDIT", "DESIGN", "DOC", "ADR", "MEM"}
+# Evidencia declarada por el documento: `<repo>:<sha>` o un sha suelto. La prosa
+# («R5 del 2026-10-14») no es verificable y no entra: aceptarla sería mentir al revés.
+_DECLARED_SHA = re.compile(r"^(?:([A-Za-z0-9_.\-]+):)?([0-9a-f]{7,40})$")
+# El `project:` del frontmatter no siempre se llama como su repo git: el kernel
+# (proyecto `red-pill`) vive en el repo `sharing`, y sus evidencias se declaran
+# `sharing:<sha>`. Sin este mapa, todo doc del kernel se leería como otro proyecto.
+PROJECT_REPO_ALIASES = {"red-pill": "sharing"}
 
 
 def _token_for(doc: Path, fm: dict) -> str:
@@ -47,6 +57,33 @@ def _token_for(doc: Path, fm: dict) -> str:
 		return tid
 	candidate = doc.parent.name if doc.stem.lower() in _GENERIC_STEMS else doc.stem
 	return candidate if _ID_LIKE.search(candidate) else ""
+
+
+def _token_candidates(token: str) -> list[str]:
+	"""El id exacto y sus prefijos por la derecha, del más específico al más corto.
+
+	Un commit rara vez cita el id completo (`AWAKEN-002-DESIGN`); cita la familia
+	(`AWAKEN-002`). Buscar solo el id exacto convertía trabajo real en
+	`no-evidence` falsos. Solo se acepta un prefijo que aún lleve dígito: sin esa
+	condición `SPEC`/`PLAN` arrastrarían medio repo y el pre-pase mentiría al revés.
+	"""
+	if not token:
+		return []
+	out = [token]
+	parts = token.split("-")
+	while len(parts) > 1:
+		parts = parts[:-1]
+		candidate = "-".join(parts)
+		if not _ID_LIKE.search(candidate):
+			break
+		out.append(candidate)
+	# Y sin el prefijo genérico: `PLAN-CURATION-001` → `CURATION-001`.
+	segments = token.split("-")
+	if len(segments) > 2 and segments[0].upper() in _GENERIC_PREFIXES:
+		candidate = "-".join(segments[1:])
+		if candidate not in out and candidate[:1].isalpha() and _ID_LIKE.search(candidate):
+			out.append(candidate)
+	return out
 
 
 def _git(repo: Path, *args: str) -> list[str]:
@@ -70,6 +107,142 @@ def _git_root(path: Path) -> Path | None:
 	return Path(lines[0]) if lines else None
 
 
+def _live_refs(repo: Path) -> list[str]:
+	"""Ramas donde aterriza el trabajo: la del remoto por defecto y las vivas.
+
+	El flujo del kernel squash-mergea: un PR no deja commit de merge, así que
+	`--merges --grep` NO ve nada y todo `closed` quedaba 'sin merge verificable'.
+	Y `frankenswarm` publica en `next`, no en `main`. Se pregunta a git, no se
+	adivina: primero `origin/HEAD`, luego las ramas que existan.
+	"""
+	out: list[str] = []
+	out.extend(_git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"))
+	for name in ("origin/main", "origin/next", "main", "next"):
+		if name not in out and _git(repo, "rev-parse", "--verify", "--quiet", f"{name}^{{commit}}"):
+			out.append(name)
+	return out
+
+
+def _is_ancestor(repo: Path, sha: str, ref: str) -> bool:
+	"""¿`sha` está contenido en `ref`? `merge-base --is-ancestor` habla por exit code."""
+	try:
+		out = subprocess.run(
+			["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, ref],
+			capture_output=True,
+			text=True,
+			timeout=30,
+			check=False,
+		)
+	except (OSError, subprocess.SubprocessError):
+		return False
+	return out.returncode == 0
+
+
+def _landed(repos: list[Path], commits: list[str], limit: int = 5) -> list[str]:
+	"""De `repo:sha subject`, los que YA están en una rama viva del repo."""
+	out: list[str] = []
+	for entry in commits[:limit]:
+		repo_name, _, rest = entry.partition(":")
+		sha = rest.split(" ", 1)[0] if rest else ""
+		if not _DECLARED_SHA.match(sha or ""):
+			continue
+		candidates = [r for r in repos if r.name == repo_name] or list(repos)
+		for repo in candidates:
+			if not _has_commit(repo, sha):
+				continue
+			if any(_is_ancestor(repo, sha, ref) for ref in _live_refs(repo)):
+				out.append(f"{repo.name}:{sha}")
+				break
+	return out
+
+
+def _project_slug(fm: dict) -> str:
+	"""Slug del `project:` del frontmatter, normalizado (`Red-Pill` → `red-pill`)."""
+	raw = str(fm.get("project") or "").strip()
+	return re.sub(r"[^a-z0-9_\-]+", "-", raw.casefold()) if raw else ""
+
+
+def _project_repo(desk: Path, slug: str) -> Path | None:
+	"""Repo git del proyecto del doc, si vive junto al desk.
+
+	El pre-pase audita desde UN repo (el del cwd) y solo veía ese: un doc de
+	`frankenswarm` salía `no-evidence` high aunque su trabajo estuviera a un
+	directorio de distancia. Se busca de forma determinista —hermanos del desk y
+	`<hermanos>/projects/`— y solo si el candidato es la RAÍZ de un repo git
+	(si no, el toplevel es otro y se estaría mirando el repo equivocado).
+	"""
+	name = PROJECT_REPO_ALIASES.get(slug, slug)
+	if not name:
+		return None
+	base = Path(desk).resolve().parent
+	for candidate in (base / name, base / "projects" / name):
+		if not candidate.is_dir():
+			continue
+		root = _git_root(candidate)
+		if root and root.resolve() == candidate.resolve():
+			return root.resolve()
+	return None
+
+
+def _covers_project(repos: list[Path], slug: str) -> bool:
+	"""¿Alguno de los repos escaneados es el del proyecto declarado?
+
+	Falso ⇒ no se ha mirado: la ausencia de evidencia NO está medida y el
+	pre-pase no puede venderla como `no-evidence`.
+	"""
+	if not slug:
+		return True
+	name = PROJECT_REPO_ALIASES.get(slug, slug)
+	return any(repo.name == name for repo in repos)
+
+
+def _has_commit(repo: Path, sha: str) -> bool:
+	"""¿Existe `sha` como commit en `repo`? `git cat-file -e` no imprime nada."""
+	try:
+		out = subprocess.run(
+			["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"],
+			capture_output=True,
+			text=True,
+			timeout=30,
+			check=False,
+		)
+	except (OSError, subprocess.SubprocessError):
+		return False
+	return out.returncode == 0
+
+
+def _declared_evidence(repos: list[Path], raw: object) -> list[str]:
+	"""Commits que el documento declara en `evidence:` y que existen de verdad.
+
+	Un doc `implemented` que nombra sus commits en el frontmatter salía como
+	`no-evidence` high: el pre-pase solo buscaba el id en los mensajes de git. La
+	declaración **no se acepta a ciegas** — el sha tiene que existir en alguno de
+	los repos escaneados. Se prefiere el repo que casa con el prefijo declarado
+	(`sharing:abc123`); un worktree del mismo repo tiene otro nombre, así que si
+	ninguno casa se prueba en el resto. Devuelve `repo:sha` normalizado.
+	"""
+	if isinstance(raw, str):
+		items = [raw]
+	elif isinstance(raw, (list, tuple)):
+		items = [str(x) for x in raw]
+	else:
+		return []
+	out: list[str] = []
+	for item in items:
+		match = _DECLARED_SHA.match(item.strip())
+		if not match:
+			continue
+		hint, sha = match.group(1), match.group(2)
+		preferred = [r for r in repos if hint and r.name == hint] if hint else []
+		for repo in [*preferred, *(r for r in repos if r not in preferred)]:
+			if _has_commit(repo, sha):
+				entry = f"{repo.name}:{sha}"
+				if entry not in out:
+					out.append(entry)
+				break
+	return out
+
+
 def _scanner_docs(planner_root: Path) -> list[Path]:
 	docs: list[Path] = []
 	for f in sorted(planner_root.rglob("*.md")):
@@ -81,6 +254,21 @@ def _scanner_docs(planner_root: Path) -> list[Path]:
 
 
 def _evidence(repos: list[Path], token: str, max_commits: int) -> dict:
+	"""Evidencia de `token` en los repos, probando primero el id exacto.
+
+	Devuelve `token_used`: el token con el que se encontró (el id o un prefijo
+	suyo). Si `token_used != token` la evidencia es **débil** — existe, pero bajo
+	la familia — y el pre-pase lo dice en vez de dar por vacío el trabajo.
+	"""
+	for candidate in _token_candidates(token):
+		ev = _evidence_exact(repos, candidate, max_commits)
+		if ev["commits"] or ev["files"] or ev["branches"]:
+			ev["token_used"] = candidate
+			return ev
+	return {"branches": [], "commits": [], "merges": [], "files": [], "token_used": token}
+
+
+def _evidence_exact(repos: list[Path], token: str, max_commits: int) -> dict:
 	branches: list[str] = []
 	commits: list[str] = []
 	merges: list[str] = []
@@ -93,7 +281,15 @@ def _evidence(repos: list[Path], token: str, max_commits: int) -> dict:
 	return {"branches": branches, "commits": commits, "merges": merges, "files": files}
 
 
-def _propose(status: str, ev: dict, has_reason: bool, has_token: bool = True) -> list[dict]:
+def _propose(
+	status: str,
+	ev: dict,
+	has_reason: bool,
+	has_token: bool = True,
+	weak: bool = False,
+	project_covered: bool = True,
+	project: str = "",
+) -> list[dict]:
 	status = (status or "").strip().lower()
 	out: list[dict] = []
 	has_impl_evidence = bool(ev["commits"] or ev["files"])
@@ -102,12 +298,15 @@ def _propose(status: str, ev: dict, has_reason: bool, has_token: bool = True) ->
 	if not has_token:
 		return out
 	if status == "draft" and has_impl_evidence:
+		reason = "draft sin evidencia de trabajo, pero hay rama/commit/fichero"
+		if weak:
+			reason += f" (bajo `{ev['token_used']}`, no el id exacto)"
 		out.append(
 			{
 				"kind": "stale-status",
 				"severity": "medium",
 				"suggest": "in-progress",
-				"reason": "draft sin evidencia de trabajo, pero hay rama/commit/fichero",
+				"reason": reason,
 			}
 		)
 	if status == "ready" and has_impl_evidence:
@@ -115,9 +314,38 @@ def _propose(status: str, ev: dict, has_reason: bool, has_token: bool = True) ->
 	if status == "in-progress" and ev["merges"]:
 		out.append({"kind": "advance", "severity": "medium", "suggest": "implemented", "reason": "merge(s) que mencionan el id"})
 	if status in NO_EVIDENCE_STATUSES and not has_impl_evidence and not ev["branches"]:
-		out.append({"kind": "no-evidence", "severity": "high", "suggest": "draft", "reason": f"{status} sin rama/commit/fichero verificable"})
-	if status == "closed" and not ev["merges"]:
-		out.append({"kind": "unverified-closed", "severity": "high", "suggest": status, "reason": "closed sin merge verificable"})
+		if project_covered:
+			out.append({"kind": "no-evidence", "severity": "high", "suggest": "draft", "reason": f"{status} sin rama/commit/fichero verificable"})
+		else:
+			out.append(
+				{
+					"kind": "unscanned-project",
+					"severity": "low",
+					"suggest": status,
+					"reason": f"proyecto `{project}` fuera de los repos escaneados: NO medido (la ausencia no está probada)",
+				}
+			)
+	elif status in NO_EVIDENCE_STATUSES and weak:
+		out.append(
+			{
+				"kind": "weak-evidence",
+				"severity": "medium",
+				"suggest": status,
+				"reason": f"{status} sin evidencia del id exacto; solo bajo `{ev['token_used']}` — confirma a mano antes de degradar",
+			}
+		)
+	if status == "closed" and not ev["merges"] and not ev.get("landed"):
+		if project_covered:
+			out.append({"kind": "unverified-closed", "severity": "high", "suggest": status, "reason": "closed sin merge verificable"})
+		elif not any(p["kind"] == "unscanned-project" for p in out):
+			out.append(
+				{
+					"kind": "unscanned-project",
+					"severity": "low",
+					"suggest": status,
+					"reason": f"proyecto `{project}` fuera de los repos escaneados: merge no verificado por falta de repo",
+				}
+			)
 	return out
 
 
@@ -140,14 +368,29 @@ def audit(desk: Path, repos: list[Path], only: str | None = None, max_commits: i
 		if only and token.casefold() != only.casefold():
 			continue
 		has_reason = any(fm.get(k) for k in ("reason", "blocked_reason", "paused_reason"))
-		ev = _evidence(repos, token, max_commits) if token else {"branches": [], "commits": [], "merges": [], "files": []}
-		props = _propose(status, ev, has_reason, has_token=bool(token))
+		slug = _project_slug(fm)
+		doc_repos = list(repos)
+		if slug and not _covers_project(doc_repos, slug):
+			own = _project_repo(desk, slug)
+			if own and own not in doc_repos:
+				doc_repos.append(own)
+		covered = _covers_project(doc_repos, slug)
+		ev = _evidence(doc_repos, token, max_commits) if token else {"branches": [], "commits": [], "merges": [], "files": [], "token_used": ""}
+		declared = _declared_evidence(doc_repos, fm.get("evidence")) if token else []
+		if declared:
+			ev["declared"] = declared
+			ev["commits"] = [*ev["commits"], *(c for c in declared if c not in ev["commits"])]
+		if ev["commits"]:
+			ev["landed"] = _landed(doc_repos, ev["commits"])
+		weak = bool(token) and ev.get("token_used") != token and not declared
+		props = _propose(status, ev, has_reason, has_token=bool(token), weak=weak, project_covered=covered, project=slug)
 		if props:
 			results.append(
 				{
 					"doc": str(doc),
 					"id": token or doc.stem,
 					"status": status,
+					"project": slug,
 					"evidence": ev,
 					"proposals": props,
 				}
@@ -167,11 +410,20 @@ def render_markdown(results: list[dict], desk: Path, repos: list[Path]) -> str:
 		lines.append("Sin discrepancias. Nada que proponer.")
 		return "\n".join(lines)
 	for r in results:
-		lines.append(f"## {r['id']} — `{r['status']}` → {', '.join(p['suggest'] for p in r['proposals'])}")
+		# Solo se anuncia lo que CAMBIA el estado; una propuesta que lo mantiene
+		# (`weak-evidence`, `unverified-closed`) es una petición de revisión, no un destino.
+		changes = [p["suggest"] for p in r["proposals"] if p["suggest"] != r["status"]]
+		lines.append(f"## {r['id']} — `{r['status']}` → {', '.join(changes) if changes else 'sin cambio (revisar a mano)'}")
 		lines.append(f"`{r['doc']}`")
 		for p in r["proposals"]:
 			lines.append(f"- **{p['kind']}** ({p['severity']}): {p['reason']} → propone `{p['suggest']}`")
 		ev = r["evidence"]
+		if ev.get("token_used") and ev["token_used"] != r["id"]:
+			lines.append(f"  - token de evidencia: `{ev['token_used']}` (el id exacto no aparece en git)")
+		if ev.get("declared"):
+			lines.append("  - evidencia declarada en el frontmatter (verificada en git): " + ", ".join(f"`{x}`" for x in ev["declared"][:5]))
+		if ev.get("landed"):
+			lines.append("  - ya en una rama viva (sin commit de merge: el release squash-mergea): " + ", ".join(f"`{x}`" for x in ev["landed"][:5]))
 		for key, label in (("branches", "rama(s)"), ("commits", "commit(s)"), ("merges", "merge(s)"), ("files", "fichero(s)")):
 			if ev[key]:
 				lines.append(f"  - {label}: " + ", ".join(f"`{x}`" for x in ev[key][:5]))
