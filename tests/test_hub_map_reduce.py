@@ -226,3 +226,20 @@ def test_find_oversized_sessions_skips_already_remediated():
 	# Sin hub (pendiente) sí entra aunque only_pending=True.
 	memory.client.retrieve.return_value = []
 	assert len(find_oversized_sessions(memory, collections=("work_memories",), budget=100)) == 1
+
+
+def test_hub_partitions_pass_schema_validation():
+	"""El esquema de metadata acepta hub_partitions (dicts planos) y rechaza anidados."""
+	from red_pill.schemas import CreateEngramRequest
+
+	req = CreateEngramRequest(
+		content="x",
+		metadata={"hub_partitions": [{"index": 1, "total": 2, "summary": "s", "texture": "", "lang": "es"}]},
+	)
+	assert req.metadata["hub_partitions"][0]["index"] == 1
+	try:
+		CreateEngramRequest(content="x", metadata={"hub_partitions": [{"nested": {"x": 1}}]})
+	except ValueError:
+		pass
+	else:
+		raise AssertionError("hub_partitions debe rechazar valores anidados")

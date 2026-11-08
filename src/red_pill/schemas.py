@@ -68,6 +68,12 @@ class CreateEngramRequest(BaseModel):
 					for item in val:
 						if key == "emotional_profile" and isinstance(item, dict):
 							continue
+						if key == "hub_partitions" and isinstance(item, dict):
+							# AD-113: nivel intermedio del hub (index/total/summary/texture/lang),
+							# mismo contrato plano que emotional_profile.
+							if any(not isinstance(fv, (str, int, float, bool)) for fv in item.values()):
+								raise ValueError("Complex type in hub_partitions")
+							continue
 						if isinstance(item, dict) or not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")
 				elif isinstance(val, dict):
