@@ -61,6 +61,10 @@ _make_runtime_dir(_SESSION_LOCATIONS)
 os.environ.update(_SESSION_LOCATIONS)
 # An operator shell that exported its .env must not aim the worker at the real events.db.
 os.environ.pop("NEON_LINK_DB_PATH", None)
+# El arnés real exporta el id de SU pestaña (OPENCODE_SESSION_ID). La suite no
+# debe heredarlo: los tests que prueban la identidad del proxy lo fijan a mano.
+os.environ.pop("OPENCODE_SESSION_ID", None)
+os.environ.pop("OPENCODE_SESSION", None)
 os.environ["REDPILL_TESTING"] = "1"
 
 # Identidad de TEST fija (datos de prueba, no identidad real): los prompts resuelven

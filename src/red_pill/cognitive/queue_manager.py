@@ -80,6 +80,10 @@ class CognitiveQueueManager:
 			for ddl in (
 				"ALTER TABLE cognitive_tasks ADD COLUMN continuity_id TEXT DEFAULT NULL",
 				"ALTER TABLE cognitive_tasks ADD COLUMN parent_mission_id TEXT DEFAULT NULL",
+				# Auditoría de procedencia (2026-11-09): quién envió realmente el job.
+				# El continuity_id puede ser heredado/ambiguo; estos campos no.
+				"ALTER TABLE cognitive_tasks ADD COLUMN origin_session_id TEXT DEFAULT NULL",
+				"ALTER TABLE cognitive_tasks ADD COLUMN submitted_by TEXT DEFAULT NULL",
 			):
 				try:
 					conn.execute(ddl)
@@ -126,6 +130,8 @@ class CognitiveQueueManager:
 		mission = mission_id or payload.get("mission_id")
 		continuity = payload.get("continuity_id")
 		parent_mission = payload.get("parent_mission_id")
+		origin_session_id = payload.get("origin_session_id")
+		submitted_by = payload.get("submitted_by")
 
 		with self._get_connection() as conn:
 			if parent_task_id:
@@ -147,10 +153,22 @@ class CognitiveQueueManager:
 				"""
 				INSERT INTO cognitive_tasks (
 					id, source, priority, payload, status, parent_task_id, mission_id,
-					continuity_id, parent_mission_id
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					continuity_id, parent_mission_id, origin_session_id, submitted_by
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
-				(task_id, source, priority, payload_str, initial_status, parent_task_id, mission, continuity, parent_mission),
+				(
+					task_id,
+					source,
+					priority,
+					payload_str,
+					initial_status,
+					parent_task_id,
+					mission,
+					continuity,
+					parent_mission,
+					origin_session_id,
+					submitted_by,
+				),
 			)
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id

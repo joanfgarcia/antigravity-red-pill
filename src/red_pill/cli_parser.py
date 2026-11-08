@@ -378,6 +378,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
+	job_submit.add_argument(
+		"--continuity",
+		help=(
+			"Atribuir el job a un alma concreta (continuity_id; canal de Operador). "
+			"Útil cuando el proxy MCP no puede desambiguar dos pestañas en el mismo workspace."
+		),
+	)
 	job_submit.add_argument("--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`.")
 	job_submit.add_argument(
 		"--allow-tmp", action="store_true", help="Permitir rutas volátiles (/tmp, /dev/shm, /run/user) en el payload: no sobreviven a un reinicio."

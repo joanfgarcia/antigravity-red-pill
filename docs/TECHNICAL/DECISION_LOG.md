@@ -3597,3 +3597,21 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 **Rationale / Evidence**: `tests/test_hub_map_reduce.py` (partición por presupuesto, un solo batch sin regresión, map-reduce sin truncado, niveles de reducción, fallo parcial mecánico, fallo final, metadata, force, textura). Suite sleep/hub: **106 passed**. Smoke real sin escritura: sesión de 8.241 chars → 2 parciales, `truncated=false`; sesión de 41.994 chars → 6 parciales, `truncated=false`, summary 1.235 chars. `--list` en vivo: 48 sesiones afectadas.
 
 **Consequences**: ningún hub nuevo se trunca en silencio; las sesiones largas obtienen un maestro + parciales navegables (los `members` siguen accesibles). `hub_partitions` añade payload acotado (cada parcial ≤1.500 chars). Coste de la re-síntesis completa: ~180-390 llamadas LLM (lotes de 8k-16k), 30-90 min; se ejecuta como job reanudable, no en el turno. La deuda de AD-023 queda cerrada; `hub_rebuild_pending` ya no es un marcador sin consumidor.
+
+## [AD-114] Identidad del llamante en `job_submit`: ambigüedad fail-closed + auditoría
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/caller-identity`).
+
+**Context**: el job de descarga de MOSS (`a7c9e3c6`, misión `media-moss-eval`) se encoló con el `continuity_id` de la sesión `ses_e435…` (`repo:sharing`) en vez de la sesión `ses_e42ab8ea…` (“Comparar MOSS-Image-SFT-GGUF”, alma `01a1bd54…`). El aviso de fin de job se entregó a la sesión equivocada. Es una **recurrencia del incidente 2026-10-28** documentado en `core/bridge.py`: el proxy ya distinguía AMBIGUO de NO-SÉ y no usaba el global con ambigüedad, pero el **backend** (`_resolve_session_identity`) volvía a caer al bridge global (`opencode_session.json`, “último escritor gana”) cuando el proxy no traía `originator`. El anti-spoof de `job_submit` no podía detectarlo: para él, el llamante era la sesión que el backend había resuelto. La prueba reveló además que el arnés real **sí exporta `OPENCODE_SESSION_ID`** al proxy; era la señal fuerte que faltaba.
+
+**Decision**:
+- `mcp_proxy.identity_payload` prefiere **`OPENCODE_SESSION_ID`/`OPENCODE_SESSION`** (lee el bridge por sesión); después la correlación por cwd (`resolve_body`); el global solo si no hay pistas. Si hay ambigüedad, **no usa el global**, y envía `ambiguous: true`.
+- El backend expone `proxy_ambiguous` en `_resolve_session_identity`/`_caller_session`. `job_submit` **falla cerrado** ante ambigüedad salvo `REDPILL_OPERATOR=1`; el escape normal del Operador es `red-pill job submit --continuity <alma>` (resuelve la misión/sesión desde el registro).
+- **Auditoría de procedencia**: `origin_session_id` y `submitted_by` se guardan en el payload, `cognitive_tasks` (migración aditiva), y el `job_identity`/artefacto. El `continuity_id` sigue siendo el destinatario del aviso; los nuevos campos dicen quién envió realmente. Avisos si el llamante no tiene fila en el registro o su misión no coincide con la de confianza.
+- **El router de notify no se toca**: entrega al `continuity_id` del job. El bug estaba en el encolado, no en la entrega.
+
+**Alternatives rechazadas**: fail-closed en `handshake`/lecturas (rompe ambas pestañas mientras haya dos vivas; el fix del bootstrap requiere que el proxy reciba el session id, ya cubierto por la nueva preferencia); confiar en argumentos del modelo (anti-spoof papel mojado); enrutar por misión (las dos sesiones son `repo:sharing`).
+
+**Rationale / Evidence**: `tests/test_caller_identity_job.py` (rechazo ambiguo, auditoría en payload, columnas de cola, `job_identity`) y `tests/test_mcp_proxy_identity.py` (ambigüedad sin global, preferencia por `OPENCODE_SESSION_ID`). `tests/test_bridge_per_session.py`, `test_mcp_server.py`, `test_mcp_shared.py`, `test_cli_jobs_smoke.py`: **129 passed, 2 skipped**. `conftest.py` deja de heredar el `OPENCODE_SESSION_ID` del operador (suite hermética).
+
+**Consequences**: los `job_submit` MCP con dos pestañas en el mismo cwd se rechazan con un error legible en vez de atribuirse a un alma ajena; el Operador puede usar `--continuity`. La procedencia queda auditada. El `handshake` y las lecturas conservan el comportamiento previo; la desambiguación completa de esas rutas depende de que el arnés exporte el session id (ya preferido) o de cerrar la pestaña hermana.

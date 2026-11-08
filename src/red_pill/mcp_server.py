@@ -1958,13 +1958,18 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
 	# aunque el originator venga explícito.
 	shared = _shared_identity_var.get()
+	shared_originator = str((shared or {}).get("originator") or "").strip() or None
+	# El proxy es el canal de confianza: si dice que la identidad es ambigua
+	# (varias pestañas vivas en el mismo cwd) o no trae cuerpo, el backend NO
+	# debe inventar alma cayendo al global. `job_submit` lo usa para fallar
+	# cerrado; el handshake/lecturas conservan su comportamiento actual.
+	proxy_ambiguous = bool(shared is not None and (bool((shared or {}).get("ambiguous")) or not shared_originator))
 	explicit_originator = str(arguments.get("originator") or "").strip() or None
 	env_originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
 	harness_env = os.getenv("REDPILL_HARNESS") or None
 	if shared:
 		# Canal de confianza del proxy (AD-018): sustituye env/bridge del backend
 		# compartido, que es común a todas las instancias.
-		shared_originator = str(shared.get("originator") or "").strip() or None
 		if shared_originator:
 			explicit_originator = shared_originator
 			env_originator = shared_originator
@@ -2135,6 +2140,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		"role": role,
 		"affinity": affinity,
 		"previous_event_seq": previous_event_seq,
+		"proxy_ambiguous": proxy_ambiguous,
 	}
 
 
@@ -2440,18 +2446,26 @@ async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 	manifest_mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip() or None
 	ident = await _resolve_session_identity({}, persist=False)
 	originator = ident.get("originator")
+	proxy_ambiguous = bool(ident.get("proxy_ambiguous"))
 	row = SessionRegistry().get_by_originator(originator) if originator else None
+	if originator and not row:
+		logger.warning(f"[caller-session] originator {str(originator)[:40]} sin fila en el registro (job soulless / D-02)")
 	# La misión autoritativa sale del canal de confianza (env o rama), NUNCA de la
 	# fila: la escribe el modelo en el handshake y puede envenenarse. La campaña
 	# de la fila solo se usa si su misión coincide con la de confianza.
 	trusted_mission = manifest_mission or ident.get("mission_id")
 	row_mission = (row or {}).get("mission_id")
+	if row and row_mission and trusted_mission and str(row_mission) != str(trusted_mission):
+		logger.warning(
+			f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}"
+		)
 	return {
 		"originator": originator,
 		"continuity_id": (row or {}).get("continuity_id"),
 		"mission_id": trusted_mission,
 		"campaign_id": (row or {}).get("campaign_id") if row_mission == trusted_mission else None,
 		"role": (row or {}).get("role") or ident.get("role"),
+		"proxy_ambiguous": proxy_ambiguous,
 	}
 
 
@@ -3386,6 +3400,25 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		trusted_continuity = str(session.get("continuity_id") or "").strip()
 		trusted_mission = str(session.get("mission_id") or "").strip()
 		operator = os.getenv("REDPILL_OPERATOR") == "1"
+		if session.get("proxy_ambiguous") and not operator:
+			logger.warning("[job_submit] identidad ambigua (varias pestañas en el mismo cwd); job rechazado")
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						"[ERROR] identidad de sesión ambigua: hay dos o más pestañas vivas en el mismo "
+						"workspace y el proxy no puede atribuir este job con seguridad. Cierra una "
+						"pestaña o usa `red-pill job submit --continuity <alma>` como Operador."
+					),
+				)
+			]
+		# Auditoría de procedencia: el continuity_id puede ser heredado/ambiguo,
+		# pero el cuerpo que envió el job queda registrado en la cola y el payload.
+		caller_originator = str(session.get("originator") or "").strip()
+		payload["submitted_by"] = f"mcp:{caller_originator or 'unknown'}"
+		payload["origin_session_id"] = caller_originator.split(":", 1)[1] if ":" in caller_originator else ""
+		if caller_originator and not trusted_continuity:
+			logger.warning(f"[job_submit] {caller_originator[:40]} sin alma en el registro; job soulless (D-02)")
 		provided_continuity = str(payload.get("continuity_id") or "").strip()
 		if provided_continuity and not operator:
 			if not trusted_continuity or provided_continuity != trusted_continuity:
