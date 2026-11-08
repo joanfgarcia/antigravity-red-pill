@@ -178,6 +178,11 @@ def _synthesize_one(
 		metadata["hub_map_reduce_levels"] = int(hub.get("map_reduce_levels") or 0)
 	metadata["hub_truncated"] = bool(hub.get("truncated", False))
 	metadata["hub_input_chars"] = int(hub.get("input_chars") or 0)
+	metadata["hub_summary_compacted"] = bool(hub.get("summary_compacted", False))
+	metadata["hub_summary_over_budget"] = bool(hub.get("summary_over_budget", False))
+	metadata["hub_texture_over_target"] = bool(hub.get("texture_over_target", False))
+	metadata["hub_compaction_calls"] = int(hub.get("compaction_calls") or 0)
+	metadata["hub_compaction_latency_s"] = float(hub.get("compaction_latency_s") or 0.0)
 	metadata["hub_synth_version"] = HUB_SYNTH_VERSION
 	try:
 		from red_pill.metabolism.distiller import merge_relics

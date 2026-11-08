@@ -1068,10 +1068,15 @@ class RedPillConfig(BaseSettings):
 	# la salida (max_tokens del perfil). Subirlo acelera el map-reduce; el
 	# presupuesto real de cada lote se mide sobre el prompt renderizado.
 	SLEEP_MAX_HUB_INPUT_CHARS: int = 8000
-	SLEEP_HUB_MAP_REDUCE_ENABLED: bool = True
+	SLEEP_HUB_MAP_REDUCE_ENABLED: bool = True  # deprecated: el over-budget SIEMPRE map-reduce (no truncar)
 	# Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de
 	# chars). Evita lotes de cientos de fragmentos diminutos poco coherentes.
 	SLEEP_HUB_MAX_CHUNKS_PER_BATCH: int = 48
+	# Concision del maestro: si supera el target, se REESCRIBE (compaction), no
+	# se recorta. Si tras N intentos sigue largo, se deja intacto y se marca
+	# `summary_over_budget` (nunca se pierde contenido).
+	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
+	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 

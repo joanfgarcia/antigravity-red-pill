@@ -44,10 +44,11 @@ sys.path.insert(0, str(ROOT / "src"))
 import red_pill.config as cfg  # noqa: E402
 from red_pill.core.providers import ProviderRegistry, SipInferenceProvider  # noqa: E402
 from red_pill.memory import MemoryManager  # noqa: E402
-from red_pill.metabolism.distiller import render_hub_items, synthesize_hub_v2  # noqa: E402
+from red_pill.metabolism.distiller import load_prompt_text, render_hub_items, synthesize_hub_v2  # noqa: E402
 from red_pill.metabolism.hub_synthesis import load_session_members, members_to_chunks  # noqa: E402
 
 MODELS = ("granite_8b", "bonsai_2_27b", "k2_horizon_7b")
+CONCISE_PROMPT = "hub_synthesis_v2_concise.txt"
 SESSIONS = (
 	{"label": "small-8k", "collection": "work_memories", "session_id": "01a16785-9a3a-7279-8f01-1d1b2da6c5c5"},
 	{"label": "medium-42k", "collection": "work_memories", "session_id": "opencode:ses_e8c768addffe28my8l2TBryWnj"},
@@ -109,13 +110,24 @@ def _existing() -> set:
 	return done
 
 
-def _measure(session: Dict[str, Any], model: str, memory: MemoryManager) -> Dict[str, Any]:
+def _measure(session: Dict[str, Any], model: str, memory: MemoryManager, concise: bool = False, suffix: str = "") -> Dict[str, Any]:
 	members = load_session_members(memory, session["collection"], session["session_id"])
 	chunks = members_to_chunks(members)
 	input_chars = len(render_hub_items(chunks))
+	label_parts = [model]
+	if concise:
+		label_parts.append("concise")
+	if suffix:
+		label_parts.append(suffix)
+	label_model = "_".join(label_parts)
+	override_prompt = load_prompt_text(CONCISE_PROMPT) if concise else None
 	t0 = time.time()
 	try:
-		hub = synthesize_hub_v2(chunks, override_params={"provider_alias": _alias(model)})
+		hub = synthesize_hub_v2(
+			chunks,
+			override_prompt=override_prompt,
+			override_params={"provider_alias": _alias(model)},
+		)
 		error = ""
 	except Exception as e:  # fail-soft: un combo roto no invalida los demás
 		hub = {}
@@ -125,7 +137,8 @@ def _measure(session: Dict[str, Any], model: str, memory: MemoryManager) -> Dict
 	partitions = hub.get("partitions") or []
 	source_terms = _terms([str(c.get("summary") or "") for c in chunks])
 	return {
-		"model": model,
+		"model": label_model,
+		"variant": "concise" if concise else "default",
 		"label": session["label"],
 		"collection": session["collection"],
 		"session_id": session["session_id"],
@@ -146,6 +159,11 @@ def _measure(session: Dict[str, Any], model: str, memory: MemoryManager) -> Dict
 		"summary_head": summary[:700],
 		"partition_head": str((partitions[0] or {}).get("summary") or "")[:400] if partitions else "",
 		"latency_s": latency,
+		"compaction_calls": int(hub.get("compaction_calls") or 0),
+		"compaction_latency_s": float(hub.get("compaction_latency_s") or 0.0),
+		"summary_compacted": bool(hub.get("summary_compacted", False)),
+		"summary_over_budget": bool(hub.get("summary_over_budget", False)),
+		"texture_over_target": bool(hub.get("texture_over_target", False)),
 	}
 
 
@@ -179,10 +197,12 @@ def _report() -> None:
 		"",
 		"Mismo input real, mismo prompt (map-reduce AD-113) y `task=hub`; solo cambia el modelo. Sin escritura de hubs.",
 		"",
+		"**Ninguna fila trunca** (`truncated=false`). Las variantes `_concise` usan el prompt de 700-900 chars; `_concise_compacted` añade la compaction por reescritura (si no reduce, el summary se conserva y se marca `summary_over_budget`).",
+		"",
 		"## Agregado por modelo",
 		"",
-		"| Modelo | n | ok | coverage media | summary chars | particiones | latencia media |",
-		"| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+		"| Modelo | n | ok | coverage media | summary chars | particiones | latencia media | compact calls | extra compact |",
+		"| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
 	]
 	for model in models:
 		mrows = [r for r in rows if r["model"] == model]
@@ -192,15 +212,17 @@ def _report() -> None:
 		chars = round(sum(int(r.get("summary_chars") or 0) for r in mrows) / n)
 		parts = round(sum(int(r.get("partition_count") or 0) for r in mrows) / n, 1)
 		lat = round(sum(float(r.get("latency_s") or 0) for r in mrows) / n, 1)
-		lines.append(f"| {model} | {n} | {ok}/{n} | {cov} | {chars} | {parts} | {lat}s |")
-	lines += ["", "## Por sesión", "", "| Sesión | Modelo | ok | coverage | summary | particiones | latencia |", "| :--- | :--- | ---: | ---: | ---: | ---: | ---: |"]
+		ccalls = round(sum(int(r.get("compaction_calls") or 0) for r in mrows) / n, 1)
+		cextra = round(sum(float(r.get("compaction_latency_s") or 0) for r in mrows) / n, 1)
+		lines.append(f"| {model} | {n} | {ok}/{n} | {cov} | {chars} | {parts} | {lat}s | {ccalls} | {cextra}s |")
+	lines += ["", "## Por sesión", "", "| Sesión | Modelo | ok | coverage | summary | particiones | latencia | compact |", "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |"]
 	for label in labels:
 		for model in models:
 			r = next((x for x in rows if x["label"] == label and x["model"] == model), None)
 			if not r:
 				continue
 			lines.append(
-				f"| {label} | {model} | {'✅' if r.get('ok') else '❌'} | {r.get('coverage')} | {r.get('summary_chars')} | {r.get('partition_count')} | {r.get('latency_s')}s |"
+				f"| {label} | {model} | {'✅' if r.get('ok') else '❌'} | {r.get('coverage')} | {r.get('summary_chars')} | {r.get('partition_count')} | {r.get('latency_s')}s | {r.get('compaction_calls', 0)} / {r.get('compaction_latency_s', 0.0)}s |"
 			)
 	lines += ["", "## Muestras (lectura del Operador)", ""]
 	for label in labels:
@@ -209,9 +231,9 @@ def _report() -> None:
 			r = next((x for x in rows if x["label"] == label and x["model"] == model), None)
 			if not r:
 				continue
-			lines += [f"**{model}** — {r.get('title') or '(sin título)'}", "", f"> {r.get('summary_head') or r.get('error')}", ""]
+			lines += [f"**{model}** — {r.get('title') or '(sin título)'}", "", f"> {str(r.get('summary_head') or r.get('error') or '').rstrip()}", ""]
 			if r.get("partition_head"):
-				lines += [f"_partición 1_: {r['partition_head']}", ""]
+				lines += [f"_partición 1_: {str(r['partition_head']).rstrip()}", ""]
 	REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 	print(f"report: {REPORT}")
 
@@ -223,6 +245,8 @@ def main() -> None:
 	parser.add_argument("--list", action="store_true", help="Imprime los combos como JSON (elements_command).")
 	parser.add_argument("--report", action="store_true", help="Genera el markdown desde el JSONL.")
 	parser.add_argument("--dry-run", action="store_true", help="Imprime el plan sin LLM.")
+	parser.add_argument("--concise", action="store_true", help="Usa el prompt CONCISE (700-900 chars) en el maestro.")
+	parser.add_argument("--suffix", default="", help="Sufijo de la variante en el label (p. ej. compacted).")
 	parser.add_argument("--models", default=",".join(MODELS), help="Modelos separados por coma.")
 	parser.add_argument("--sessions", default=",".join(s["label"] for s in SESSIONS), help="Labels separados por coma.")
 	args = parser.parse_args()
@@ -239,7 +263,7 @@ def main() -> None:
 		return
 	if args.dry_run or not (args.run or args.run_element):
 		for e in elements:
-			print(f"{e['label']:>12} | {e['model']:>15} | {e['collection']} | {e['session_id']}")
+			print(f"{e['label']:>12} | {e['model']:>15} | {'concise' if args.concise else 'default'} | {e['collection']} | {e['session_id']}")
 		return
 
 	memory = MemoryManager()
@@ -260,7 +284,17 @@ def main() -> None:
 		if session is None:
 			print(f"[ERROR] elemento fuera de la lista congelada: {element}", file=sys.stderr)
 			raise SystemExit(2)
-		row = _measure(session, str(element.get("model") or ""), memory)
+		base_model = str(element.get("model") or "")
+		label_parts = [base_model]
+		if args.concise:
+			label_parts.append("concise")
+		if args.suffix:
+			label_parts.append(args.suffix)
+		label_model = "_".join(label_parts)
+		if (session["collection"], session["session_id"], label_model) in _existing():
+			print(f"skip {session['label']} / {label_model} (ya medido)")
+			return
+		row = _measure(session, base_model, memory, concise=args.concise, suffix=args.suffix)
 		_append(row)
 		_report()
 		print(
@@ -275,12 +309,19 @@ def main() -> None:
 
 	done = _existing()
 	for e in elements:
-		key = (e["collection"], e["session_id"], e["model"])
+		base_model = e["model"]
+		label_parts = [base_model]
+		if args.concise:
+			label_parts.append("concise")
+		if args.suffix:
+			label_parts.append(args.suffix)
+		label_model = "_".join(label_parts)
+		key = (e["collection"], e["session_id"], label_model)
 		if key in done:
-			print(f"skip {e['label']} / {e['model']} (ya medido)")
+			print(f"skip {e['label']} / {label_model} (ya medido)")
 			continue
-		print(f"measure {e['label']} / {e['model']} …", flush=True)
-		row = _measure(e, e["model"], memory)
+		print(f"measure {e['label']} / {label_model} …", flush=True)
+		row = _measure(e, base_model, memory, concise=args.concise, suffix=args.suffix)
 		_append(row)
 		print(
 			f"  → ok={row['ok']} coverage={row['coverage']} parts={row['partition_count']} "

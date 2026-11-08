@@ -3615,3 +3615,19 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 **Rationale / Evidence**: `tests/test_caller_identity_job.py` (rechazo ambiguo, auditoría en payload, columnas de cola, `job_identity`) y `tests/test_mcp_proxy_identity.py` (ambigüedad sin global, preferencia por `OPENCODE_SESSION_ID`). `tests/test_bridge_per_session.py`, `test_mcp_server.py`, `test_mcp_shared.py`, `test_cli_jobs_smoke.py`: **129 passed, 2 skipped**. `conftest.py` deja de heredar el `OPENCODE_SESSION_ID` del operador (suite hermética).
 
 **Consequences**: los `job_submit` MCP con dos pestañas en el mismo cwd se rechazan con un error legible en vez de atribuirse a un alma ajena; el Operador puede usar `--continuity`. La procedencia queda auditada. El `handshake` y las lecturas conservan el comportamiento previo; la desambiguación completa de esas rutas depende de que el arnés exporte el session id (ya preferido) o de cerrar la pestaña hermana.
+
+## [AD-115] Hubs: cero truncamiento y compaction blanda (medición K2 vs Granite)
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `next`).
+
+**Context**: AD-113 introdujo el map-reduce, pero quedaban dos recortes silenciosos en el camino: la textura se cortaba a `HUB_TEXTURE_MAX_CHARS` (800) y, con `SLEEP_HUB_MAP_REDUCE_ENABLED=false`, el prompt se recortaba a `SLEEP_MAX_HUB_INPUT_CHARS`; además el fallback mecánico cortaba a 1.500 chars. El bake-off Bonsai/K2 vs Granite mostró que K2 gana cobertura pero tarda ~2×, y que la compaction de K2 no siempre reduce. El contrato del Operador es explícito: **no truncar nunca**.
+
+**Decision**:
+- `synthesize_hub_v2` **siempre** aplica map-reduce cuando el prompt renderizado no cabe (el flag queda *deprecated*); el fallback mecánico ya no recorta; la textura por encima del target se conserva intacta y se marca `texture_over_target`.
+- El maestro se **compacta por reescritura** (`hub_summary_compact.txt`) si supera `SLEEP_HUB_SUMMARY_TARGET_CHARS` (900), con `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` (2). Si tras los intentos no baja, se conserva el texto original y se marca `summary_over_budget`; **nunca se corta**.
+- La procedencia de la compaction se persiste en el hub: `hub_summary_compacted`, `hub_summary_over_budget`, `hub_texture_over_target`, `hub_compaction_calls`, `hub_compaction_latency_s`.
+- Se añade el prompt `hub_synthesis_v2_concise` (presupuesto 700-900 chars) y las variantes `--concise`/`--suffix compacted` del harness para medir sin escribir hubs.
+
+**Evidence** (bake-off 2026-11-08, 15/15 OK, `truncated=false` en todas): Granite 75,2 s / 770 chars / coverage 0,233; K2 178,4 s / 1.549 / 0,322; K2 concise 148,6 s / 1.204 / **0,389**; K2 concise+compaction 203,9 s / 1.216 / 0,300 (8,6 s extra); Bonsai 259,7 s / 832 / 0,267. La compaction de K2 falló en 42k (1.427 chars, `summary_compacted=false`) y fue parcial en 166k (1.374 chars): es un lever blando. Ciclo nocturno `6ecdfe81`: 1 h 57 min; fase `consolidation` ~10,5 min para 84 hubs; K2 concise+compaction añadiría ~12-19 min. Detalle en `DISTILLER_SELECTION.md` y `docs/BENCHMARKS/HUB_BAKEOFF.md`.
+
+**Consequences**: ningún hub se trunca, ni en el prompt, ni en la textura, ni en el summary; lo que no se puede compactar queda largo y auditado. El default de `hub` sigue en **Granite**; K2 concise queda como candidato (mejor cobertura a ~2× latencia) y el híbrido (K2 solo para hubs grandes) queda pendiente de implementación. La decisión de default es del Operador.

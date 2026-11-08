@@ -80,10 +80,56 @@ def test_synthesize_hub_v2_uses_hub_task(monkeypatch):
 	assert provider.generate.call_args.kwargs.get("task") == "hub"
 
 
-def test_synthesize_hub_v2_truncates_concatenated_texture(monkeypatch):
+def test_synthesize_hub_v2_keeps_texture_over_target(monkeypatch):
 	_mock_provider(monkeypatch, {"title": "T", "summary": "S", "texture": "x" * 2000, "lang": "es"})
 	hub = synthesize_hub_v2(CHUNKS)
-	assert len(hub["texture"]) == HUB_TEXTURE_MAX_CHARS
+	assert len(hub["texture"]) == 2000
+	assert len(hub["texture"]) > HUB_TEXTURE_MAX_CHARS
+	assert hub["texture_over_target"] is True
+	assert hub["truncated"] is False
+
+
+class _CompactProvider:
+	"""Primera llamada: summary largo. Compaction: summary corto (texto plano)."""
+
+	def __init__(self, compact: str = "resumen compacto"):
+		self.compact = compact
+		self.calls: list[str] = []
+
+	def generate(self, prompt, messages=None, temperature=0.1, **kwargs):
+		system = str((messages or [{}])[0].get("content") or "")
+		self.calls.append(system)
+		if "HUB_SUMMARY_COMPACT" in system:
+			return self.compact
+		return json.dumps({"title": "T", "summary": "L" * 1500, "texture": "", "lang": "es"})
+
+
+def _patch_custom(monkeypatch, provider):
+	from red_pill.core import providers
+
+	monkeypatch.setattr(providers.ProviderRegistry, "get_inference_provider", classmethod(lambda cls, name=None: provider))
+
+
+def test_synthesize_hub_v2_compacts_over_budget_summary(monkeypatch):
+	provider = _CompactProvider("resumen compacto")
+	_patch_custom(monkeypatch, provider)
+	hub = synthesize_hub_v2(CHUNKS)
+	assert hub["summary"] == "resumen compacto"
+	assert hub["summary_compacted"] is True
+	assert hub["summary_over_budget"] is False
+	assert hub["compaction_calls"] == 1
+	assert hub["truncated"] is False
+
+
+def test_synthesize_hub_v2_keeps_long_summary_if_compaction_fails(monkeypatch):
+	# La compaction devuelve lo mismo (no reduce): se deja intacto y se marca.
+	provider = _CompactProvider(compact="L" * 1500)
+	_patch_custom(monkeypatch, provider)
+	hub = synthesize_hub_v2(CHUNKS)
+	assert len(hub["summary"]) == 1500
+	assert hub["summary_compacted"] is False
+	assert hub["summary_over_budget"] is True
+	assert hub["truncated"] is False
 
 
 def test_synthesize_hub_v2_falls_back_on_garbage(monkeypatch):

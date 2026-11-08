@@ -134,15 +134,31 @@ El bake-off **no sustituyó Granite globalmente**: dividió los carriles. La fue
 
 **Medición realizada (2026-11-08)**: harness `scripts/hub_bakeoff.py` + job `configs/jobs/hub_bakeoff.yaml` (Granite vs Bonsai 2 27B vs K2-Horizon 7B sobre 3 sesiones reales de 8k/42k/166k; `task=hub`; sin escribir hubs). Candidatos Bonsai/K2 declarados **NO-default** en `hub`; el default sigue siendo Granite hasta que el Operador lea el bake-off (`docs/BENCHMARKS/HUB_BAKEOFF.md`).
 
-**Resultado del bake-off de hubs (2026-11-08)**: 9/9 combinaciones OK, sin truncado.
+**Resultado del bake-off de hubs (2026-11-08)**: **15/15 combinaciones OK, sin truncado** (`truncated=false` en todas). Además del bake-off base se midieron dos variantes de K2: prompt **concise** (presupuesto 700-900 chars) y concise + **compaction** por reescritura.
 
-| Modelo | ok | coverage media | summary chars | latencia media |
-| :--- | ---: | ---: | ---: | ---: |
-| **k2_horizon_7b** | 3/3 | **0.322** | 1.549 | 178.4 s |
-| **bonsai_2_27b** | 3/3 | 0.267 | 832 | 259.7 s |
-| **granite_8b** | 3/3 | 0.233 | 770 | **75.2 s** |
+| Modelo / variante | ok | coverage media | summary chars | latencia media | compact calls | extra compact |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **granite_8b** | 3/3 | 0.233 | 770 | **75.2 s** | 0 | 0.0 s |
+| **k2_horizon_7b** | 3/3 | 0.322 | 1.549 | 178.4 s | 0 | 0.0 s |
+| **k2_horizon_7b_concise** | 3/3 | **0.389** | 1.204 | 148.6 s | 0 | 0.0 s |
+| **k2_horizon_7b_concise_compacted** | 3/3 | 0.300 | 1.216 | 203.9 s | 1.0 | 8.6 s |
+| **bonsai_2_27b** | 3/3 | 0.267 | 832 | 259.7 s | 0 | 0.0 s |
 
-Lectura: **K2** gana cobertura y detalle (y es consistente con el carril annotate, que ya usa K2); **Granite** gana latencia y concisión; **Bonsai** es el más lento y su cobertura es mixta (0.1 en la sesión de 42k). En la sesión grande —la que sufría el truncado— K2 (0.367) y Bonsai (0.333) superan claramente a Granite (0.1). Recomendación: **K2 para `hub`** si priorizamos calidad/consistencia; **Granite** si priorizamos latencia/concisión. El default no se cambia hasta que el Operador lo decida. Muestras completas en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
+Lectura: **K2 concise** da la mejor cobertura (0.389) con menos longitud que K2 default (1.204 vs 1.549) y ~2× la latencia de Granite. **Granite** sigue siendo el más rápido y conciso. **Bonsai** es el más lento y su cobertura es mixta (0.1 en 42k). En la sesión grande —la que sufría el truncado— K2 concise (0.467) y K2 default (0.367) superan claramente a Granite (0.1); la compaction baja la cobertura a 0.300 y no garantiza acortar.
+
+**Tiempo en el ciclo nocturno (medido)**:
+- Ciclo `6ecdfe81` (2026-11-08): 07:49:02 → 09:46:06 UTC = **1 h 57 min**. La fase `consolidation` (Granite) corrió de 10:35:18 a 10:45:48 local = **~10 min 30 s** y escribió **84 hubs** → **~7,5 s/hub** (incluye el tejido de hilos de la misma fase; es una cota superior de la síntesis).
+- Multiplicadores del bake-off por sesión: K2 **2,37×** Granite; K2 concise **1,98×**; K2 concise+compaction **2,71×**.
+- Extrapolación al ciclo nocturno: con la fase actual de ~10,5 min, K2 añadiría **~10-14 min**, K2 concise **~10 min**, y la compaction **~2-5 min** más si el 20-30 % de los hubs supera el target (8,2 s por hub en 42k; 17,6 s en 166k). Total K2 concise+compaction: **~12-19 min** sobre el ciclo de ~2 h. La carga/cambio de modelo (~8 s) ya está dentro de la latencia del bake-off.
+- Remediation de backlog (referencia, no ciclo nocturno): 45 sesiones con Granite tardaron **47 min 48 s** (~64 s/sesión); con K2 serían **~1 h 53 min** (+65 min). Por eso la re-síntesis corre como job reanudable y no dentro del turno.
+
+**Fiabilidad de la compaction (K2)**: la compaction es un **lever blando**, no una garantía.
+- 8k: no se invoca (848 < 900), 0 s.
+- 42k: 1 llamada, 8,2 s; el summary quedó en **1.427 chars** (target 900), `summary_compacted=false` y `summary_over_budget=true`: K2 **ignoró** la instrucción de reescritura.
+- 166k: 2 llamadas, 17,6 s; `summary_compacted=true` pero **1.374 chars**, todavía por encima del target.
+- En ningún caso se recorta: si la compaction no reduce, el summary se conserva **intacto** y se marca `summary_over_budget`; la textura por encima del target también se conserva y se marca `texture_over_target`. El detalle sigue en `hub_partitions`.
+
+**Recomendación**: mantener **Granite** como default si priorizamos el ciclo de ~2 h y hubs concisos; **K2 concise** si priorizamos cobertura y aceptamos +10-15 min; **híbrido** (K2 concise solo para hubs grandes, input ≳40k, donde Granite cae a 0.1 y K2 llega a 0.467) pendiente de implementar, añadiría ~2-4 min en vez de +10-15. **Bonsai no recomendado** (el más lento y cobertura mixta). El default no se cambia hasta que el Operador lo decida. Muestras completas en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
 
 ---
 
@@ -263,8 +279,7 @@ ronda de medidas del 29-30/10:
   en `_meta`.
 - **`refine` → Granite 8B** (sin cambio). Es el carril legacy; el pase nuevo
   (annotate) lo sustituye y no se escriben refine nuevos desde octubre.
-- **`hub` (sueño) → Granite 8B** (sin cambio). No estaba en el alcance del
-  bake-off de Memento; queda pendiente medir Bonsai/K2 para la síntesis de hubs.
+- **`hub` (sueño) → Granite 8B** (sin cambio de default). Medido el 2026-11-08: K2 concise gana cobertura (0.389 vs 0.233) a ~2× latencia; la compaction de K2 no es fiable (ignoró el target en 42k) y nunca se trunca. La decisión de default (Granite / K2 concise / híbrido) queda en manos del Operador.
 
 Evidencia: conteos de `engine` por mes (sept/oct transición; nov 270/270 Bonsai
 en distill y 704/704 K2 en annotate) y `_meta.json` de nov-2026. La decisión del

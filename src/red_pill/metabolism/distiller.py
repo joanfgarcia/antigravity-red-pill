@@ -557,7 +557,7 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 
 # ─────────────────────── HUB v2 (ADR-AXON-001 / Eje 1) ───────────────────────
 
-HUB_TEXTURE_MAX_CHARS = 800
+HUB_TEXTURE_MAX_CHARS = 800  # target de textura; si se pasa, se avisa y se deja intacta (sin truncar)
 
 
 def derive_hub_affect(chunks: List[Dict[str, Any]]) -> tuple:
@@ -604,7 +604,8 @@ def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, 
 # parciales y se reducen en árbol hasta un hub maestro. Los parciales quedan en
 # `hub_partitions` para navegar el detalle. Fin del truncado silencioso.
 HUB_PARTIAL_PROMPT = "hub_synthesis_v2_partial.txt"
-HUB_PARTIAL_MAX_CHARS = 1500
+HUB_SUMMARY_COMPACT_PROMPT = "hub_summary_compact.txt"
+HUB_PARTIAL_MAX_CHARS = 1500  # target orientativo del parcial; el árbol reduce lo que se pase (sin truncar)
 HUB_MAP_REDUCE_MAX_LEVELS = 8
 
 
@@ -724,25 +725,30 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 	if _is_template_echo(texture):
 		texture = ""
 	if len(texture) > HUB_TEXTURE_MAX_CHARS:
+		# Nunca se recorta: se avisa y se deja intacta. El maestro es un índice;
+		# la textura larga no pierde contenido, solo ocupa payload.
 		logger.warning(
-			f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture)}) — truncating (compression instruction ignored)."
+			f"[HUB-V2] texture over target {HUB_TEXTURE_MAX_CHARS} chars ({len(texture)}) — kept intact (no truncation)."
 		)
-		texture = texture[:HUB_TEXTURE_MAX_CHARS]
 	lang = str(parsed.get("lang") or fallback_lang).lower().strip()[:2]
 	return {
 		"title": str(parsed.get("title") or "").strip(),
 		"summary": summary,
 		"texture": texture,
 		"lang": lang,
+		"texture_over_target": len(texture) > HUB_TEXTURE_MAX_CHARS,
 	}
 
 
 def _mechanical_partial(items: List[Dict[str, Any]], lang: str = "") -> Dict[str, Any]:
-	"""Resumen mecánico de una parte si el LLM falla (nunca pierde el contenido)."""
+	"""Resumen mecánico de una parte si el LLM falla (nunca pierde el contenido).
+
+	No se recorta: si es largo, el árbol de reducción lo segmenta y lo compacta.
+	"""
 	joined = "\n".join(_chunk_summary(c) for c in items if _chunk_summary(c))
 	return {
 		"title": "",
-		"summary": joined[:HUB_PARTIAL_MAX_CHARS],
+		"summary": joined,
 		"texture": "",
 		"lang": lang,
 		"_is_fallback": True,
@@ -757,11 +763,11 @@ def synthesize_hub_v2(
 ) -> Dict[str, Any]:
 	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
 
-	Si el prompt completo no cabe en `SLEEP_MAX_HUB_INPUT_CHARS`, aplica
-	map-reduce: lotes -> hubs parciales -> reducción en árbol. El resultado
-	maestro incluye `partitions` (nivel intermedio) para navegar el detalle.
-	Sin map-reduce (flag OFF), mantiene el recorte como última red — y lo marca
-	en `truncated`.
+	Si el prompt completo no cabe en `SLEEP_MAX_HUB_INPUT_CHARS`, SIEMPRE aplica
+	map-reduce: lotes -> hubs parciales -> reducción en árbol. Nunca trunca la
+	entrada. El maestro se compacta por reescritura si supera
+	`SLEEP_HUB_SUMMARY_TARGET_CHARS`; si aun así sigue largo, se deja intacto y
+	se marca `summary_over_budget` (el detalle vive en `partitions`).
 	"""
 	from red_pill.core.providers import ProviderRegistry
 
@@ -772,7 +778,8 @@ def synthesize_hub_v2(
 
 	prompt_file = params.get("prompt_file", "hub_synthesis_v2.txt")
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
-	partial_system_prompt = load_prompt_text(HUB_PARTIAL_PROMPT) if hub_map_reduce_enabled() else system_prompt
+	partial_system_prompt = load_prompt_text(HUB_PARTIAL_PROMPT)
+	compact_system_prompt = load_prompt_text(HUB_SUMMARY_COMPACT_PROMPT, fallback_prompt="")
 
 	langs = []
 	for c in chunks:
@@ -793,6 +800,8 @@ def synthesize_hub_v2(
 	full_prompt = render_hub_items(chunks)
 	budget = hub_budget()
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
+	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
 
 	def _make_fallback() -> Dict[str, Any]:
 		fallback_text = synthesize_hub([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
@@ -825,22 +834,57 @@ def synthesize_hub_v2(
 			logger.warning(f"[HUB-V2] LLM call failed ({e}).")
 			return ""
 
-	# Caso normal: cabe en una llamada (comportamiento histórico).
-	if not hub_map_reduce_enabled() or len(full_prompt) <= budget:
-		user_prompt = full_prompt
-		truncated = False
-		if len(user_prompt) > budget:
+	def _compact(text: str) -> str:
+		"""Reescribe (no recorta) un summary largo para acercarlo al target."""
+		if not compact_system_prompt or len(text) <= summary_target:
+			return text
+		system = compact_system_prompt.replace("{target}", str(summary_target))
+		t0 = time.time()
+		content = _call(system, text).strip()
+		compaction_stats["calls"] += 1
+		compaction_stats["latency_s"] += time.time() - t0
+		if not content:
+			return text
+		if content.startswith("{"):
+			parsed_json = _parse_hub_payload(content, dominant_lang)
+			if parsed_json and parsed_json.get("summary"):
+				content = str(parsed_json["summary"])
+		content = content.strip().strip('"').strip()
+		return content or text
+
+	compaction_stats = {"calls": 0, "latency_s": 0.0}
+
+	def _finalize(hub: Dict[str, Any]) -> Dict[str, Any]:
+		"""Compacta el maestro si se pasa; si no cabe, lo deja intacto y lo marca."""
+		original = str(hub.get("summary") or "")
+		current = original
+		for _ in range(compact_attempts):
+			if len(current) <= summary_target:
+				break
+			compacted = _compact(current)
+			if not compacted or len(compacted) >= len(current):
+				break
+			current = compacted
+		hub["summary"] = current
+		hub["summary_compacted"] = current != original
+		hub["summary_over_budget"] = len(current) > summary_target
+		if hub["summary_over_budget"]:
 			logger.warning(
-				f"[DISTILLER] Hub synthesis input ({len(user_prompt)} chars) exceeds context safety limit ({budget} chars). Truncating user prompt."
+				f"[HUB-V2] summary over target after compaction ({len(current)}>{summary_target}); kept intact (no truncation)."
 			)
-			user_prompt = user_prompt[:budget]
-			truncated = True
-		parsed = _parse_hub_payload(_call(system_prompt, user_prompt), dominant_lang)
+		hub["truncated"] = False
+		hub["texture_over_target"] = bool(hub.get("texture_over_target"))
+		hub["compaction_calls"] = compaction_stats["calls"]
+		hub["compaction_latency_s"] = round(compaction_stats["latency_s"], 2)
+		return hub
+
+	# Caso normal: cabe en una llamada (sin truncar; si no cupiera, map-reduce).
+	if len(full_prompt) <= budget:
+		parsed = _parse_hub_payload(_call(system_prompt, full_prompt), dominant_lang)
 		if parsed is None:
 			return _make_fallback()
-		parsed["truncated"] = truncated
 		parsed["input_chars"] = len(full_prompt)
-		return parsed
+		return _finalize(parsed)
 
 	# Map: lotes que quepan, cada uno con su propio resumen denso.
 	pack_budget = max(500, budget - 96)  # margen para la cabecera PART i/N
@@ -851,8 +895,6 @@ def synthesize_hub_v2(
 		parsed = _parse_hub_payload(_call(partial_system_prompt, header + render_hub_items(batch)), dominant_lang)
 		if parsed is None:
 			parsed = _mechanical_partial(batch, dominant_lang)
-		parsed["summary"] = str(parsed.get("summary") or "")[:HUB_PARTIAL_MAX_CHARS]
-		parsed["texture"] = str(parsed.get("texture") or "")[:HUB_TEXTURE_MAX_CHARS]
 		partials.append(parsed)
 
 	# Reduce: árbol hasta que el prompt de los parciales quepa.
@@ -871,8 +913,6 @@ def synthesize_hub_v2(
 			parsed = _parse_hub_payload(_call(system_prompt, render_hub_items(group)), dominant_lang)
 			if parsed is None:
 				parsed = _mechanical_partial(group, dominant_lang)
-			parsed["summary"] = str(parsed.get("summary") or "")[:HUB_PARTIAL_MAX_CHARS]
-			parsed["texture"] = str(parsed.get("texture") or "")[:HUB_TEXTURE_MAX_CHARS]
 			next_level.append(parsed)
 		current = next_level
 		levels += 1
@@ -893,8 +933,7 @@ def synthesize_hub_v2(
 	]
 	final["map_reduce_levels"] = levels
 	final["input_chars"] = len(full_prompt)
-	final["truncated"] = False
-	return final
+	return _finalize(final)
 
 
 def classify_category(

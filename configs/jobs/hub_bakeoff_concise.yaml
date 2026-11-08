@@ -1,0 +1,20 @@
+# Hub bake-off — K2 con prompt CONCISE (700-900 chars).
+#
+# Mismo harness que `hub_bakeoff.yaml`, pero el maestro usa
+# `hub_synthesis_v2_concise.txt` (presupuesto duro + "merge, no enumeres" +
+# "el detalle vive en las particiones"). Solo K2: es el que se iba a 2.300
+# chars en la sesión de 8k. Un step = una sesión; checkpoint por elemento.
+#
+# Lanzar: `job submit --recipe hub_bakeoff_concise` (tras el bake-off base).
+source: element_job
+priority: 4
+title: Hub bake-off — K2 prompt conciso
+mission_id: hub-bakeoff
+step_command: .venv/bin/python scripts/hub_bakeoff.py --run-element --concise --models k2_horizon_7b
+elements_command: .venv/bin/python scripts/hub_bakeoff.py --list --concise --models k2_horizon_7b
+defer_exit_code: 77
+skip_exit_code: 79
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 60
