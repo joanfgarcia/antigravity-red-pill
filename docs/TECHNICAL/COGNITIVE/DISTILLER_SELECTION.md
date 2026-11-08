@@ -128,11 +128,21 @@ El bake-off **no sustituyó Granite globalmente**: dividió los carriles. La fue
 
 **La "voz"**: el carril nuevo `annotate` (K2) usa `annotate_prompt_set: v3`; `voice_v2_enabled()` devuelve True para v2/v3 y `.env` activa `MEMENTO_ANNOTATE_FROM_RAW` + `MEMENTO_ANNOTATE_VOICE_REWRITE`. Los `_meta.json` de nov-2026 confirman `voice_rewrite: True`. El `refine` legacy sigue en Granite y no produce ficheros nuevos. El `hub` del sueño y `conversation` **no forman parte** de este bake-off.
 
-**Pendiente**: medir Bonsai/K2 en el carril `hub` (síntesis de hubs del sueño). El hub sigue en Granite hasta que la medición diga lo contrario.
+**Medición**: el hub sigue en Granite; la comparación Bonsai/K2 está abajo y en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
 
 **Hallazgo de cableado (2026-11-08)**: `synthesize_hub_v2` llamaba a `provider.generate` **sin `task`**; `SipInferenceProvider.generate` defaultea a `conversation`. El hub se resolvía con el perfil `conversation` (Granite), no con `hub`. Corregido: `task="hub"`. Los carriles Memento no estaban afectados (`http_transport` pasa `task` explícito). `distill_engram`, `classify_category` y `audit_engram_quality` conservan el mismo defecto latente (no vivos hoy); se corregirán cuando se toquen.
 
-**Medición pendiente**: harness `scripts/hub_bakeoff.py` + job `configs/jobs/hub_bakeoff.yaml` (Granite vs Bonsai 2 27B vs K2-Horizon 7B sobre 3 sesiones reales de 8k/42k/166k; `task=hub`; sin escribir hubs). Candidatos Bonsai/K2 declarados **NO-default** en `hub`; el default sigue siendo Granite hasta que el Operador lea el bake-off (`docs/BENCHMARKS/HUB_BAKEOFF.md`).
+**Medición realizada (2026-11-08)**: harness `scripts/hub_bakeoff.py` + job `configs/jobs/hub_bakeoff.yaml` (Granite vs Bonsai 2 27B vs K2-Horizon 7B sobre 3 sesiones reales de 8k/42k/166k; `task=hub`; sin escribir hubs). Candidatos Bonsai/K2 declarados **NO-default** en `hub`; el default sigue siendo Granite hasta que el Operador lea el bake-off (`docs/BENCHMARKS/HUB_BAKEOFF.md`).
+
+**Resultado del bake-off de hubs (2026-11-08)**: 9/9 combinaciones OK, sin truncado.
+
+| Modelo | ok | coverage media | summary chars | latencia media |
+| :--- | ---: | ---: | ---: | ---: |
+| **k2_horizon_7b** | 3/3 | **0.322** | 1.549 | 178.4 s |
+| **bonsai_2_27b** | 3/3 | 0.267 | 832 | 259.7 s |
+| **granite_8b** | 3/3 | 0.233 | 770 | **75.2 s** |
+
+Lectura: **K2** gana cobertura y detalle (y es consistente con el carril annotate, que ya usa K2); **Granite** gana latencia y concisión; **Bonsai** es el más lento y su cobertura es mixta (0.1 en la sesión de 42k). En la sesión grande —la que sufría el truncado— K2 (0.367) y Bonsai (0.333) superan claramente a Granite (0.1). Recomendación: **K2 para `hub`** si priorizamos calidad/consistencia; **Granite** si priorizamos latencia/concisión. El default no se cambia hasta que el Operador lo decida. Muestras completas en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
 
 ---
 
