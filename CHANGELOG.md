@@ -10,6 +10,22 @@
   desde el desk, frente a 9 con la unión. El repo del cwd entra siempre (si es
   git) y los `--repo` se añaden, con dedupe por ruta resuelta.
 
+### 🧭 Despertar — «pendiente de aterrizar» se mide, no se recuerda
+
+- **[NEW] `scripts/branch_landing_audit.py`**: auditoría determinista (sin LLM, sin
+  red) de las ramas pendientes. El handoff del despertar afirmaba «rama X pendiente
+  de aterrizar» sin comprobarlo, y se equivocó en las dos direcciones: ramas cuyo
+  contenido ya estaba en `main` (el release squash-mergea, cambian los SHA y no el
+  contenido) y ramas realmente pendientes que nadie miraba. `git branch --merged`
+  no ve un squash y `git cherry` tampoco (su patch-id es por commit), así que el
+  script compara lo único que no engaña: el **contenido** de los ficheros que tocó
+  cada rama contra el destino. Estados: `merged`, `no_changes`, `same_content`,
+  `clean`, `conflict`, `unrelated`; `--strict` sale 1 si queda algo pendiente,
+  para que el próximo despertar no pueda heredar la frase sin evidencia.
+- **[TEST] 8 casos con repos de verdad**: merge real, squash (SHA distinto,
+  contenido igual), rama divergente, conflicto con nombre de fichero, rama vacía,
+  filtros de patrón y destino inexistente.
+
 ### 🔧 Instalación — el pin de BitNet compila en cualquier máquina
 
 - **[FIX] Cadena de pins reproducible**: `3rdparty/BitNet-1.58b` apuntaba a un
