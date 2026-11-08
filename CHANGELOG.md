@@ -1,5 +1,28 @@
 ## Unreleased
 
+### 🔍 Planner — la mención en el cuerpo de un commit no es prueba de trabajo
+
+- **[FIX] Asunto vs cuerpo en la evidencia de git**: `scripts/planner_state_audit.py`
+  leía `git log --grep`, que casa también con el **cuerpo** del commit — y el
+  cuerpo de un squash es el CHANGELOG del release, que enumera ids de medio repo.
+  Así, un par de commits de release se convertían en «evidencia» de cualquier
+  documento: `RFC-DESPERTAR-001`, `RFC-LOCALTOOLS-001` y `MEM-006` (los tres
+  `draft`, sin una línea de trabajo detrás) salían con `stale-status` y una
+  propuesta falsa de `in-progress`. Ahora el commit cuenta como prueba solo si el
+  id aparece en su **asunto**; el cuerpo se reporta aparte como **mención**
+  (`mention-only`, medium, `suggest` = estado actual): ni promociona ni degrada,
+  pide confirmación a mano. La regla es simétrica con la del 17:00 — el error
+  contrario (degradar 18 documentos vivos a `draft` por no verlos en un asunto)
+  era igual de caro, así que la mención frena las dos direcciones.
+- **[FIX] El render no sepulta lo accionable**: lo que cambia estado va primero y
+  en detalle; las menciones se agrupan en una lista compacta al final
+  (16 fichas en el desk medido) en vez de 16 bloques que nadie lee. Efecto medido
+  en el desk: 10 propuestas → 4 accionables (3 `no-evidence` high ya medidos y el
+  `stale-status` real de `MEM-010`) + 16 menciones a revisar a mano.
+- **[TEST] 4 casos nuevos**: mención en el cuerpo no promociona un `draft` ni
+  degrada un `in-progress` a high, el asunto sigue siendo prueba, y el render
+  agrupa las menciones fuera de los bloques accionables. 23 passed, ruff limpio.
+
 ### 🔍 Planner — el pre-pase deja de ser ciego a medias
 
 - **[FIX] `--repo` suma, no reemplaza**: `scripts/planner_state_audit.py` construía

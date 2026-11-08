@@ -275,3 +275,64 @@ def test_closed_con_commit_fuera_de_la_rama_viva_sigue_bandera(tmp_path):
 	desk = _desk_with_rfc(tmp_path, "WSP-666", "closed", extra=f'evidence: ["{repo.name}:{sha}"]\n')
 	kinds = {p["kind"] for p in m.audit(desk, [repo], max_commits=10)[0]["proposals"]}
 	assert "unverified-closed" in kinds
+
+
+def _commit_body_only(repo: Path, token: str, branch: str = "main") -> str:
+	"""Commit cuyo CUERPO enumera el id (como el CHANGELOG de un release)."""
+
+	def g(*a):
+		subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+
+	g("checkout", "-q", branch)
+	(repo / "CHANGELOG.md").write_text(f"z {token}", encoding="utf-8")
+	g("add", ".")
+	g("commit", "-q", "-m", "Release 9.9.9 — muchas cosas", "-m", f"* feat: algo que cita {token} de pasada")
+	return _head(repo)
+
+
+def test_mencion_en_el_cuerpo_no_promociona_un_draft(tmp_path):
+	"""Un release que enumera el id en su cuerpo NO es prueba de trabajo: no
+	convierte un `draft` en `in-progress` (falso positivo medido en el desk)."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-001")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-001", "draft")
+	results = m.audit(desk, [repo], max_commits=10)
+	kinds = {p["kind"] for p in results[0]["proposals"]}
+	assert "stale-status" not in kinds
+	assert "mention-only" in kinds
+	assert {p["suggest"] for p in results[0]["proposals"]} == {"draft"}
+
+
+def test_mencion_en_el_cuerpo_no_degrada_a_high(tmp_path):
+	"""Y tampoco al revés: la mención impide vender `no-evidence` (la ausencia
+	no está probada cuando el id aparece en algún sitio)."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-002")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-002", "in-progress")
+	props = m.audit(desk, [repo], max_commits=10)[0]["proposals"]
+	assert not any(p["kind"] == "no-evidence" for p in props)
+	assert {p["kind"] for p in props} == {"mention-only"}
+	assert props[0]["severity"] == "medium"
+
+
+def test_asunto_sigue_siendo_prueba(tmp_path):
+	"""El asunto sí anuncia el trabajo: `draft` → `in-progress` se mantiene."""
+	m = _load()
+	repo = _git_repo(tmp_path, "RFC-SUBJECT-001")
+	desk = _desk_with_rfc(tmp_path, "RFC-SUBJECT-001", "draft")
+	results = m.audit(desk, [repo], max_commits=10)
+	assert {p["kind"] for p in results[0]["proposals"]} == {"stale-status"}
+
+
+def test_mention_only_aparece_en_el_render(tmp_path):
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-003")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-003", "in-progress")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert "Revisar a mano — solo mención en cuerpo de commit" in out
+	assert "`RFC-MENTION-003` (`in-progress`) — 1 mención(es)" in out
+	# Y no se vende como bloque accionable: no hay nada que decidir.
+	assert "## RFC-MENTION-003" not in out

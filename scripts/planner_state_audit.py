@@ -3,8 +3,11 @@
 
 Sin LLM. Lee el frontmatter (`id`, `status`, `evidence`) de los documentos del
 planner del desk y lo compara con la evidencia real en los repos git (ramas,
-commits y ficheros que mencionan el id, más los commits que el propio documento
-declara). Emite una lista de DISCREPANCIAS propuestas — nunca aplica cambios.
+commits que **anuncian** el id en su asunto y ficheros que lo llevan, más los
+commits que el propio documento declara). Lo que solo aparece en el **cuerpo**
+de un commit (CHANGELOG de release, descripción de PR) se reporta como *mención*:
+ni prueba trabajo ni prueba su ausencia. Emite una lista de DISCREPANCIAS
+propuestas — nunca aplica cambios.
 
 El despertar (o el operador) revisa solo lo marcado: un draft con rama/commit es
 candidato a `in-progress`; un `implemented` sin merge, un `closed` sin evidencia o
@@ -253,6 +256,27 @@ def _scanner_docs(planner_root: Path) -> list[Path]:
 	return sorted(set(docs))
 
 
+def _commit_matches(repo: Path, token: str, max_commits: int, *, merges: bool = False) -> tuple[list[str], list[str]]:
+	"""Commits que citan `token`: (anunciados en el asunto, solo mencionados).
+
+	El **asunto** es el anuncio del commit: si el id está ahí, ese commit habla de
+	ese trabajo. El **cuerpo** es, en la práctica, el CHANGELOG del release o la
+	descripción del PR — enumera los ids de medio repo, así que un release se
+	convertía en «evidencia» de cualquier documento (`draft` → `in-progress`
+	falsos, tres a la vez por el mismo par de commits). El cuerpo se devuelve
+	aparte como *mención*: un indicio que se enseña, no una prueba que decida.
+	"""
+	args = ["log", "--all", "-i", "--format=%h %s", f"--grep={token}", f"-n{max_commits}"]
+	if merges:
+		args.insert(2, "--merges")
+	announced: list[str] = []
+	mentioned: list[str] = []
+	for line in _git(repo, *args):
+		_, _, subject = line.partition(" ")
+		(announced if token.casefold() in subject.casefold() else mentioned).append(line)
+	return announced, mentioned
+
+
 def _evidence(repos: list[Path], token: str, max_commits: int) -> dict:
 	"""Evidencia de `token` en los repos, probando primero el id exacto.
 
@@ -262,10 +286,10 @@ def _evidence(repos: list[Path], token: str, max_commits: int) -> dict:
 	"""
 	for candidate in _token_candidates(token):
 		ev = _evidence_exact(repos, candidate, max_commits)
-		if ev["commits"] or ev["files"] or ev["branches"]:
+		if ev["commits"] or ev["files"] or ev["branches"] or ev["mentions"]:
 			ev["token_used"] = candidate
 			return ev
-	return {"branches": [], "commits": [], "merges": [], "files": [], "token_used": token}
+	return {"branches": [], "commits": [], "merges": [], "files": [], "mentions": [], "token_used": token}
 
 
 def _evidence_exact(repos: list[Path], token: str, max_commits: int) -> dict:
@@ -273,12 +297,17 @@ def _evidence_exact(repos: list[Path], token: str, max_commits: int) -> dict:
 	commits: list[str] = []
 	merges: list[str] = []
 	files: list[str] = []
+	mentions: list[str] = []
 	for repo in repos:
 		branches += [f"{repo.name}:{b}" for b in _git(repo, "branch", "-a", "--list", f"*{token}*")]
-		commits += [f"{repo.name}:{c}" for c in _git(repo, "log", "--all", "-i", "--oneline", f"--grep={token}", f"-n{max_commits}")]
-		merges += [f"{repo.name}:{c}" for c in _git(repo, "log", "--all", "-i", "--merges", "--oneline", f"--grep={token}", f"-n{max_commits}")]
+		announced, mentioned = _commit_matches(repo, token, max_commits)
+		commits += [f"{repo.name}:{c}" for c in announced]
+		mentions += [f"{repo.name}:{c}" for c in mentioned]
+		announced, mentioned = _commit_matches(repo, token, max_commits, merges=True)
+		merges += [f"{repo.name}:{c}" for c in announced]
+		mentions += [f"{repo.name}:{c}" for c in mentioned]
 		files += [f"{repo.name}:{p}" for p in _git(repo, "ls-files", f"*{token}*")]
-	return {"branches": branches, "commits": commits, "merges": merges, "files": files}
+	return {"branches": branches, "commits": commits, "merges": merges, "files": files, "mentions": list(dict.fromkeys(mentions))}
 
 
 def _propose(
@@ -293,6 +322,7 @@ def _propose(
 	status = (status or "").strip().lower()
 	out: list[dict] = []
 	has_impl_evidence = bool(ev["commits"] or ev["files"])
+	has_mention = bool(ev.get("mentions"))
 	if status in NEEDS_REASON and not has_reason:
 		out.append({"kind": "missing-reason", "severity": "high", "suggest": status, "reason": f"`{status}` exige `reason` en el frontmatter"})
 	if not has_token:
@@ -311,10 +341,28 @@ def _propose(
 		)
 	if status == "ready" and has_impl_evidence:
 		out.append({"kind": "stale-status", "severity": "medium", "suggest": "in-progress", "reason": "ready con trabajo ya iniciado"})
+	if status == "draft" and not has_impl_evidence and has_mention:
+		out.append(
+			{
+				"kind": "mention-only",
+				"severity": "medium",
+				"suggest": status,
+				"reason": f"draft sin prueba de trabajo; el id solo aparece en el CUERPO de {len(ev['mentions'])} commit(s) (CHANGELOG de release / descripción de PR) — mención, no avance",
+			}
+		)
 	if status == "in-progress" and ev["merges"]:
 		out.append({"kind": "advance", "severity": "medium", "suggest": "implemented", "reason": "merge(s) que mencionan el id"})
 	if status in NO_EVIDENCE_STATUSES and not has_impl_evidence and not ev["branches"]:
-		if project_covered:
+		if has_mention:
+			out.append(
+				{
+					"kind": "mention-only",
+					"severity": "medium",
+					"suggest": status,
+					"reason": f"{status} sin prueba: el id solo aparece en el CUERPO de {len(ev['mentions'])} commit(s) (CHANGELOG de release / descripción de PR) — mención, no trabajo; confirma a mano",
+				}
+			)
+		elif project_covered:
 			out.append({"kind": "no-evidence", "severity": "high", "suggest": "draft", "reason": f"{status} sin rama/commit/fichero verificable"})
 		else:
 			out.append(
@@ -335,7 +383,17 @@ def _propose(
 			}
 		)
 	if status == "closed" and not ev["merges"] and not ev.get("landed"):
-		if project_covered:
+		if has_mention:
+			if not any(p["kind"] == "mention-only" for p in out):
+				out.append(
+					{
+						"kind": "mention-only",
+						"severity": "medium",
+						"suggest": status,
+						"reason": "closed sin merge ni commit de asunto verificado; solo menciones en cuerpos de commit — confirma a mano",
+					}
+				)
+		elif project_covered:
 			out.append({"kind": "unverified-closed", "severity": "high", "suggest": status, "reason": "closed sin merge verificable"})
 		elif not any(p["kind"] == "unscanned-project" for p in out):
 			out.append(
@@ -409,7 +467,12 @@ def render_markdown(results: list[dict], desk: Path, repos: list[Path]) -> str:
 	if not results:
 		lines.append("Sin discrepancias. Nada que proponer.")
 		return "\n".join(lines)
-	for r in results:
+	# Lo que cambia estado va primero y en detalle. Lo que solo pide confirmar una
+	# mención (CHANGELOG de release) se agrupa al final: son 20 fichas de ruido si
+	# se renderizan como bloques, y nadie lee 20 bloques.
+	actionable = [r for r in results if any(p["kind"] != "mention-only" for p in r["proposals"])]
+	mention_only = [r for r in results if all(p["kind"] == "mention-only" for p in r["proposals"])]
+	for r in actionable:
 		# Solo se anuncia lo que CAMBIA el estado; una propuesta que lo mantiene
 		# (`weak-evidence`, `unverified-closed`) es una petición de revisión, no un destino.
 		changes = [p["suggest"] for p in r["proposals"] if p["suggest"] != r["status"]]
@@ -424,9 +487,22 @@ def render_markdown(results: list[dict], desk: Path, repos: list[Path]) -> str:
 			lines.append("  - evidencia declarada en el frontmatter (verificada en git): " + ", ".join(f"`{x}`" for x in ev["declared"][:5]))
 		if ev.get("landed"):
 			lines.append("  - ya en una rama viva (sin commit de merge: el release squash-mergea): " + ", ".join(f"`{x}`" for x in ev["landed"][:5]))
-		for key, label in (("branches", "rama(s)"), ("commits", "commit(s)"), ("merges", "merge(s)"), ("files", "fichero(s)")):
-			if ev[key]:
+		for key, label in (
+			("branches", "rama(s)"),
+			("commits", "commit(s)"),
+			("merges", "merge(s)"),
+			("files", "fichero(s)"),
+			("mentions", "mención(es) en cuerpo de commit (no prueba)"),
+		):
+			if ev.get(key):
 				lines.append(f"  - {label}: " + ", ".join(f"`{x}`" for x in ev[key][:5]))
+		lines.append("")
+	if mention_only:
+		lines.append("## Revisar a mano — solo mención en cuerpo de commit (no prueba de trabajo)")
+		lines.append("")
+		for r in mention_only:
+			n = len(r["evidence"].get("mentions") or [])
+			lines.append(f"- `{r['id']}` (`{r['status']}`) — {n} mención(es) en CHANGELOG/PR; ni avanza ni se degrada sin confirmación")
 		lines.append("")
 	lines.append("> Propuestas, no órdenes: el despertar/el operador decide. Nada se ha aplicado.")
 	return "\n".join(lines)
