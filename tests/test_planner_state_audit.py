@@ -84,3 +84,23 @@ def test_render_no_aplica_nada(tmp_path):
 	md = m.render_markdown(results, desk, [])
 	assert "Propuestas, no órdenes" in md
 	assert (desk / "planner" / "design" / "X" / "RFC_X.md").read_text(encoding="utf-8").startswith("---\nid: AWAKEN-333\nstatus: blocked")
+
+
+def test_repo_suma_al_del_cwd_y_no_duplica(tmp_path, monkeypatch):
+	"""`--repo` AÑADE al repo del cwd: reemplazarlo perdía media evidencia."""
+	m = _load()
+	here = _git_repo(tmp_path, "AWAKEN-999")
+	other = tmp_path / "other"
+	other.mkdir()
+	subprocess.run(["git", "-C", str(other), "init", "-q", "-b", "main"], check=True, capture_output=True, text=True)
+	monkeypatch.chdir(here)
+
+	repos = m._resolve_repos([str(other)])
+	assert repos == [here.resolve(), other.resolve()]
+
+	# Repetir el repo del cwd no lo duplica.
+	assert m._resolve_repos([str(here), str(here)]) == [here.resolve()]
+
+	# Fuera de un repo git, quedan solo los declarados.
+	monkeypatch.chdir(tmp_path / "nowhere" if (tmp_path / "nowhere").mkdir() is None else tmp_path)
+	assert m._resolve_repos([str(other)]) == [other.resolve()]

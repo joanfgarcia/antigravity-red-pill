@@ -183,7 +183,7 @@ def render_markdown(results: list[dict], desk: Path, repos: list[Path]) -> str:
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Pre-pase determinista de estados del planner (AWAKEN-002 A-4).")
 	ap.add_argument("--desk", default=None, help="Raíz del desk (default: AGENT_CORE_DIR).")
-	ap.add_argument("--repo", action="append", default=[], help="Repo git a inspeccionar (repetible).")
+	ap.add_argument("--repo", action="append", default=[], help="Repo git ADICIONAL a inspeccionar (repetible); el del cwd va siempre.")
 	ap.add_argument("--only", default=None, help="Solo un id concreto.")
 	ap.add_argument("--max-commits", type=int, default=40)
 	ap.add_argument("--json", action="store_true", help="Salida JSON.")
@@ -191,11 +191,7 @@ def main() -> int:
 	args = ap.parse_args()
 
 	desk = Path(args.desk) if args.desk else _default_desk()
-	repos: list[Path] = [Path(r).expanduser().resolve() for r in args.repo if Path(r).expanduser().is_dir()]
-	if not args.repo:
-		root = _git_root(Path.cwd())
-		if root:
-			repos.append(root)
+	repos = _resolve_repos(args.repo)
 
 	results = audit(desk, repos, only=args.only, max_commits=args.max_commits)
 	if args.json:
@@ -203,6 +199,27 @@ def main() -> int:
 	else:
 		print(render_markdown(results, desk, repos))
 	return 1 if (args.strict and results) else 0
+
+
+def _resolve_repos(requested: list[str]) -> list[Path]:
+	"""Repos a inspeccionar: el del cwd (si es git) MÁS los declarados con `--repo`.
+
+	`--repo` AÑADE, no reemplaza: antes, auditar desde el desk perdía la evidencia
+	de los repos de proyecto (y auditar desde el kernel perdía la del desk), y los
+	`implemented`/`in-progress` reales salían como `no-evidence` falsos.
+	"""
+	repos: list[Path] = []
+	root = _git_root(Path.cwd())
+	if root and root.resolve() not in repos:
+		repos.append(root.resolve())
+	for raw in requested:
+		path = Path(raw).expanduser()
+		if not path.is_dir():
+			continue
+		resolved = path.resolve()
+		if resolved not in repos:
+			repos.append(resolved)
+	return repos
 
 
 def _default_desk() -> Path:

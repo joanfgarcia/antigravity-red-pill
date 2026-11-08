@@ -1,5 +1,15 @@
 ## Unreleased
 
+### 🔍 Planner — el pre-pase deja de ser ciego a medias
+
+- **[FIX] `--repo` suma, no reemplaza**: `scripts/planner_state_audit.py` construía
+  la lista de repos como «o el del cwd, o los `--repo`», aunque su propio uso
+  prometía «añade». Auditar desde el desk perdía la evidencia de los repos de
+  proyecto (y desde el kernel, la del desk), así que RFCs implementados de verdad
+  salían como `implemented` sin evidencia: 14 banderas altas desde el kernel y 12
+  desde el desk, frente a 9 con la unión. El repo del cwd entra siempre (si es
+  git) y los `--repo` se añaden, con dedupe por ruta resuelta.
+
 ### 🔧 Instalación — el pin de BitNet compila en cualquier máquina
 
 - **[FIX] Cadena de pins reproducible**: `3rdparty/BitNet-1.58b` apuntaba a un
