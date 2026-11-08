@@ -1,5 +1,20 @@
 ## Unreleased
 
+### 🧠 Memoria — hubs sin truncamiento, compaction y modelo híbrido (AD-115)
+
+- **[FIX] Cero truncamiento en hubs**: `synthesize_hub_v2` ya no recorta el prompt, la textura ni el fallback mecánico. Si el prompt no cabe, map-reduce; si la textura supera el target, se conserva y se marca `texture_over_target`; si el summary sigue largo tras la compaction, se conserva **intacto** y se marca `summary_over_budget`.
+- **[NEW] Compaction por reescritura**: target de 900 chars y 2 intentos (`SLEEP_HUB_SUMMARY_TARGET_CHARS`, `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS`); si el modelo no reduce, no se pierde contenido. K2 no es fiable como editor (ignoró el target en 42k), así que la compaction es un lever blando, nunca un recorte.
+- **[NEW] Híbrido Granite + K2 concise**: hubs con prompt ≤100k siguen en Granite; >100k usan K2-Horizon 7B + prompt concise (donde Granite cae a coverage 0.1 y K2 llega a 0.467). Coste estimado ~2-4 min/ciclo (~8-9 min en backfill con 4 hubs grandes). Config: `SLEEP_HUB_LARGE_INPUT_CHARS`, `SLEEP_HUB_LARGE_MODEL`, `SLEEP_HUB_LARGE_PROMPT`; metadata `hub_large_path`/`hub_model`/`hub_prompt_file`.
+- **[DOC] Bake-off 15/15 sin truncado**: Granite 75 s / 0.233; K2 178 s / 0.322; K2 concise 149 s / **0.389**; K2 concise+compaction 204 s / 0.300; Bonsai 260 s / 0.267. Informe en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
+- **[TEST] 73 passed** en hub/provider/sueño; smoke real con K2 concise (`large_path=True`, `truncated=False`).
+
+### 🛰️ Coro/Jobs — identidad del llamante y auditoría (AD-114)
+
+- **[FIX] `job_submit` no hereda el alma de otra pestaña**: el proxy prefiere `OPENCODE_SESSION_ID`/`OPENCODE_SESSION`, no cae al bridge global con ambigüedad y envía `ambiguous`; el backend propaga `proxy_ambiguous` y `job_submit` falla cerrado salvo `REDPILL_OPERATOR=1`.
+- **[NEW] Auditoría de procedencia**: `origin_session_id`/`submitted_by` en payload, `cognitive_tasks` (migración aditiva) y `job_identity`.
+- **[NEW] Escape del Operador**: `red-pill job submit --continuity <alma>` para atribuir un job cuando hay dos pestañas en el mismo workspace.
+- **[TEST] 129 passed, 2 skipped**; `conftest` deja de heredar `OPENCODE_SESSION_ID`.
+
 ### 🔍 Planner — la mención en el cuerpo de un commit no es prueba de trabajo
 
 - **[FIX] Asunto vs cuerpo en la evidencia de git**: `scripts/planner_state_audit.py`
