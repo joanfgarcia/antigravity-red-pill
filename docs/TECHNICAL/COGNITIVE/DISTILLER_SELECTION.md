@@ -102,10 +102,37 @@ win. See [DISTILLER_FIDELITY.md](../../BENCHMARKS/DISTILLER_FIDELITY.md).
 fit, efficiency — while Hermes stays as the arch-risk safety net (promote it if a future
 llama.cpp cannot load Granite's hybrid architecture).
 
-**Outcome:** the bake-off overturned the a-priori favorite. Qwen3.5-9B is a strong generalist
-but ignores the "no reasoning" instruction and rarely closes valid JSON; **hermes_8b** is the
-production distiller (sole `distillation` capability), with **piaget_8b** as the affective-depth
-alternative. `samantha` is retired from the role. See `DISTILLER_BAKEOFF.md` for raw outputs.
+**Outcome (final, 2026-07-13):** the bake-off overturned the a-priori favorite. Qwen3.5-9B is a strong generalist but ignores the "no reasoning" instruction and rarely closes valid JSON. Granite-4.1-8B and Hermes-3-8B tie on format and (tuned) fidelity; AD-022 breaks the tie in favor of **Granite-4.1-8B as primary** (Apache-2.0, small-expert fit) with **Hermes-3-8B as fallback**. Samantha is retired. (The old paragraph that called Hermes the production distiller was the pre-tiebreak draft; AD-021 §2 carries the same stale wording — the config and all current lanes use Granite.) See `DISTILLER_BAKEOFF.md` for raw outputs.
+
+---
+
+## Estado actual de los carriles (2026-11-08)
+
+El bake-off **no sustituyó Granite globalmente**: dividió los carriles. La fuente de verdad operativa es `~/.config/red-pill/task_profiles.yaml` + el `engine` del frontmatter de Memento. Este documento describe el **porqué**; la configuración es el **qué**.
+
+| Carril (`task`) | Modelo vigente | Desde | Evidencia |
+| :--- | :--- | :--- | :--- |
+| `distill` (Memento) | **Bonsai 2 27B** | 2026-10-30 | 270/270 `engine: bonsai_2_27b` en nov-2026 |
+| `annotate` (Memento) | **K2-Horizon 7B** | 2026-10-30 | 704/704 `engine: k2_horizon_7b` en nov-2026; `voice_rewrite: True` |
+| `refine` (legacy) | **Granite 8B** | — | todos los `refine/*.md`; 0 nuevos en oct/nov |
+| `hub` (sueño) | **Granite 8B** | — | logs del nightly `task 'hub'` |
+| `conversation` | **Granite 8B** | — | logs del nightly |
+| `validate` | **Granite 8B** (+4.2-3B) | — | `task_profiles.yaml` |
+| `minion_tool` | **Granite 8B** | — | `task_profiles.yaml` |
+
+**Timeline**:
+- **2026-07-13** — bake-off del distiller del sueño → Granite primario (AD-022), Hermes fallback. (AD-021 §2 y el `Outcome` antiguo decían Hermes: corregido arriba.)
+- **2026-09-14** — bake-off del pase Memento → `tiny_aya_water` (32K).
+- **2026-09-15** — bake-off de prompts → **reversión a Granite** para todas las etapas Memento; tiny_aya descartado.
+- **2026-10-29/30** — **split Bonsai/K2** en Memento (distill/annotate); `refine` se queda en Granite. La decisión vivía solo en `task_profiles.yaml`; este documento la recoge por primera vez.
+
+**La "voz"**: el carril nuevo `annotate` (K2) usa `annotate_prompt_set: v3`; `voice_v2_enabled()` devuelve True para v2/v3 y `.env` activa `MEMENTO_ANNOTATE_FROM_RAW` + `MEMENTO_ANNOTATE_VOICE_REWRITE`. Los `_meta.json` de nov-2026 confirman `voice_rewrite: True`. El `refine` legacy sigue en Granite y no produce ficheros nuevos. El `hub` del sueño y `conversation` **no forman parte** de este bake-off.
+
+**Pendiente**: medir Bonsai/K2 en el carril `hub` (síntesis de hubs del sueño). El hub sigue en Granite hasta que la medición diga lo contrario.
+
+**Hallazgo de cableado (2026-11-08)**: `synthesize_hub_v2` llamaba a `provider.generate` **sin `task`**; `SipInferenceProvider.generate` defaultea a `conversation`. El hub se resolvía con el perfil `conversation` (Granite), no con `hub`. Corregido: `task="hub"`. Los carriles Memento no estaban afectados (`http_transport` pasa `task` explícito). `distill_engram`, `classify_category` y `audit_engram_quality` conservan el mismo defecto latente (no vivos hoy); se corregirán cuando se toquen.
+
+**Medición pendiente**: harness `scripts/hub_bakeoff.py` + job `configs/jobs/hub_bakeoff.yaml` (Granite vs Bonsai 2 27B vs K2-Horizon 7B sobre 3 sesiones reales de 8k/42k/166k; `task=hub`; sin escribir hubs). Candidatos Bonsai/K2 declarados **NO-default** en `hub`; el default sigue siendo Granite hasta que el Operador lea el bake-off (`docs/BENCHMARKS/HUB_BAKEOFF.md`).
 
 ---
 
@@ -182,7 +209,7 @@ typos). Profiles registered in `model_profiles.yaml` (`tiny_aya_water`,
 
 ---
 
-## Pase agéntico Memento (distill + refine file-based) — GRANITE (2026-09-15)
+## Pase agéntico Memento (distill + refine file-based) — de Granite a Bonsai/K2 (2026-09-15 → 2026-10-30)
 
 Distinto del distiller del sueño, el **pase Memento** (RFC-002 §4.5) produce los
 `distill/*.md` y `refine/*.md` sobre el árbol. Tras el bake-off de prompts
@@ -210,3 +237,25 @@ Distinto del distiller del sueño, el **pase Memento** (RFC-002 §4.5) produce l
   `prompt_version` (hash de los prompts de la etapa) en el frontmatter; el
   registry `agentic` guarda `engine`, `distill_prompt_version`,
   `refine_prompt_version`.
+
+### Actualización 2026-10-30 — split Bonsai/K2
+
+La decisión de 2026-09-15 ("Granite para todas las etapas") quedó superada por la
+ronda de medidas del 29-30/10:
+
+- **`distill` → Bonsai 2 27B** (default). Deixis 3/3 a precio pagable
+  (~6,2 s/fragmento) y mejor textura ("el jersey rojo": no inventa lo que no
+  está). Prompt de voz MODE B (`distiller_v3_voice.txt`). Granite queda como
+  fallback explícito si el fork Prism no carga.
+- **`annotate` → K2-Horizon 7B** (default; `annotate_prompt_set: v3`). 15/15 en el
+  benchset vs Granite 12/15 (síntesis ES 0/3). El set v3 reutiliza la maquinaria
+  de voz v2; con `MEMENTO_ANNOTATE_VOICE_REWRITE` activo, `voice_rewrite: True`
+  en `_meta`.
+- **`refine` → Granite 8B** (sin cambio). Es el carril legacy; el pase nuevo
+  (annotate) lo sustituye y no se escriben refine nuevos desde octubre.
+- **`hub` (sueño) → Granite 8B** (sin cambio). No estaba en el alcance del
+  bake-off de Memento; queda pendiente medir Bonsai/K2 para la síntesis de hubs.
+
+Evidencia: conteos de `engine` por mes (sept/oct transición; nov 270/270 Bonsai
+en distill y 704/704 K2 en annotate) y `_meta.json` de nov-2026. La decisión del
+30-oct no tenía ADR; queda registrada aquí.

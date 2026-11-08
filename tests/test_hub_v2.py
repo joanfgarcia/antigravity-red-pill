@@ -73,6 +73,13 @@ def test_synthesize_hub_v2_happy_path(monkeypatch):
 	assert "_is_fallback" not in hub
 
 
+def test_synthesize_hub_v2_uses_hub_task(monkeypatch):
+	"""El hub debe resolverse por `task="hub"`, no por el default `conversation`."""
+	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "S", "texture": "", "lang": "es"})
+	synthesize_hub_v2(CHUNKS)
+	assert provider.generate.call_args.kwargs.get("task") == "hub"
+
+
 def test_synthesize_hub_v2_truncates_concatenated_texture(monkeypatch):
 	_mock_provider(monkeypatch, {"title": "T", "summary": "S", "texture": "x" * 2000, "lang": "es"})
 	hub = synthesize_hub_v2(CHUNKS)

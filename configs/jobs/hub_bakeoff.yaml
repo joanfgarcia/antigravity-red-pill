@@ -1,0 +1,26 @@
+# Hub bake-off — Granite vs Bonsai vs K2 sobre sesiones reales.
+#
+# Mide la síntesis de hubs del sueño (map-reduce AD-113) con el MISMO input y
+# prompt, cambiando solo el modelo. NO escribe hubs: solo sintetiza y registra
+# `docs/BENCHMARKS/HUB_BAKEOFF.{jsonl,md}` para que el Operador decida.
+#
+# Un step = una combinación (sesión × modelo) → 9 elementos, checkpoint por
+# elemento y fail-soft (`skip_exit_code 79`). El reporte se regenera tras cada
+# elemento. Se lanza BLOCKED tras la re-síntesis de hubs para no competir por
+# la GPU: `job submit --recipe hub_bakeoff --parent <job_de_hubs>`.
+#
+# Candidatos: `bonsai_2_27b` y `k2_horizon_7b` están declarados como NO-default
+# de la task `hub` en task_profiles.yaml (hot_reload); Granite sigue siendo el
+# default hasta que la medición diga lo contrario.
+source: element_job
+priority: 4
+title: Hub bake-off (Granite vs Bonsai vs K2)
+mission_id: hub-bakeoff
+step_command: .venv/bin/python scripts/hub_bakeoff.py --run-element
+elements_command: .venv/bin/python scripts/hub_bakeoff.py --list
+defer_exit_code: 77
+skip_exit_code: 79
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 60   # el combo más largo (166k chars × Bonsai 27B) entra de sobra

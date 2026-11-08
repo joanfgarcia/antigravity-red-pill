@@ -816,6 +816,9 @@ def synthesize_hub_v2(
 					prompt=user,
 					messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
 					temperature=temperature,
+					# AD-030: el proveedor SIP defaultea a `conversation`. El hub
+					# debe resolverse por SU task (modelo/thinking/max_tokens).
+					task="hub",
 				)
 			)
 		except Exception as e:
