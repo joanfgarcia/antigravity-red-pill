@@ -25,6 +25,19 @@
 - **[TEST] 8 casos con repos de verdad**: merge real, squash (SHA distinto,
   contenido igual), rama divergente, conflicto con nombre de fichero, rama vacía,
   filtros de patrón y destino inexistente.
+- **[FIX] No dar por pendiente lo que ya está**: comparar fichero completo dejaba
+  marcada para siempre una rama squash-mergeada cuyo fichero siguió creciendo
+  después (CHANGELOG, índices): `awaken/20261107-0900` salía `conflict` solo por su
+  CHANGELOG cuando su código era byte-idéntico al de `next`. `same_content` se
+  decide ahora por tres vías y el JSON dice cuál (`evidence`): `merge_noop`,
+  `whole_file` y `additions_present` (las líneas que la rama añade ya están,
+  literales, en el destino). La tercera solo se pronuncia con diffs de solo
+  adiciones, sin binarios ni cambios de modo: si la rama borra o reescribe, se
+  queda pendiente. Mejor de más que dar por aterrizado lo que no está.
+- **[FIX] `parked/*` fuera del gate**: se audita (visibilidad) pero no cuenta para
+  `--strict` salvo `--include-parked`. Una rama aparcada con `reason` es pendiente
+  por diseño, y con el patrón anterior `--strict` estaba en rojo permanente — el
+  siguiente despertar habría aprendido a ignorarlo.
 
 ### 🔧 Instalación — el pin de BitNet compila en cualquier máquina
 

@@ -137,3 +137,50 @@ def test_render_marks_same_content_as_not_landable(tmp_path: Path) -> None:
 	text = mod.render(mod.audit(repo, "main", ("awaken/*",)), repo, "main")
 	assert "same_content" in text
 	assert "Ninguna rama con contenido pendiente" in text
+
+
+def test_additions_present_aunque_el_fichero_crezca(tmp_path: Path) -> None:
+	"""El caso real: squash-merge y el fichero (CHANGELOG) sigue creciendo.
+
+	La comparación por fichero completo lo daba por pendiente para siempre; sus
+	adiciones, en cambio, ya están en el destino.
+	"""
+	mod = _load()
+	repo = _repo(tmp_path)
+	(repo / "doc.md").write_text("## Unreleased\n\nviejo\n", encoding="utf-8")
+	_g(repo, "add", "doc.md")
+	_g(repo, "commit", "-q", "-m", "docs: base")
+	_branch_with(repo, "awaken/doc", {"doc.md": "## Unreleased\n\n### Nuevo\n\n- bloque\n\nviejo\n"})
+	# El destino ya tiene el bloque y ENCIMA una sección posterior.
+	(repo / "doc.md").write_text("## Unreleased\n\n### Nuevo\n\n- bloque\n\n### Otro\n\n- extra\n\nviejo\n", encoding="utf-8")
+	_g(repo, "add", "doc.md")
+	_g(repo, "commit", "-q", "-m", "docs: otra sección después")
+	verdict = next(v for v in mod.audit(repo, "main", ("awaken/*",)) if v.branch == "awaken/doc")
+	assert verdict.status == "same_content"
+	assert verdict.evidence == "additions_present"
+
+
+def test_rama_con_borrados_no_se_da_por_aterrizada(tmp_path: Path) -> None:
+	"""Si la rama borra o reescribe, no se adivina: pendiente."""
+	mod = _load()
+	repo = _repo(tmp_path)
+	_branch_with(repo, "awaken/rewrite", {"base.txt": "rama\n"})
+	(repo / "base.txt").write_text("rama\nmain-extra\n", encoding="utf-8")
+	_g(repo, "add", "base.txt")
+	_g(repo, "commit", "-q", "-m", "fix: main reescribe y añade")
+	verdict = next(v for v in mod.audit(repo, "main", ("awaken/*",)) if v.branch == "awaken/rewrite")
+	assert verdict.status != "same_content"
+
+
+def test_parked_no_cuenta_para_strict_salvo_include_parked(tmp_path: Path, monkeypatch, capsys) -> None:
+	mod = _load()
+	repo = _repo(tmp_path)
+	_branch_with(repo, "parked/aparcada", {"p.txt": "p\n"})
+	monkeypatch.chdir(repo)
+
+	monkeypatch.setattr(sys, "argv", ["branch_landing_audit.py", "--strict"])
+	assert mod.main() == 0
+	assert "por diseño" in capsys.readouterr().out
+
+	monkeypatch.setattr(sys, "argv", ["branch_landing_audit.py", "--strict", "--include-parked"])
+	assert mod.main() == 1
