@@ -1062,6 +1062,16 @@ class RedPillConfig(BaseSettings):
 	# SLEEP CYCLE
 	# -----------------------------------------------------------------------
 	SLEEP_CHUNK_SIZE: int = 500
+	# Hub synthesis: presupuesto por llamada (NO es el n_ctx del modelo). Si el
+	# input lo supera, `synthesize_hub_v2` lo trocea y reduce jerárquicamente en
+	# vez de truncar. 8000 chars ≈ 2-3k tokens: deja sitio al system prompt y a
+	# la salida (max_tokens del perfil). Subirlo acelera el map-reduce; el
+	# presupuesto real de cada lote se mide sobre el prompt renderizado.
+	SLEEP_MAX_HUB_INPUT_CHARS: int = 8000
+	SLEEP_HUB_MAP_REDUCE_ENABLED: bool = True
+	# Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de
+	# chars). Evita lotes de cientos de fragmentos diminutos poco coherentes.
+	SLEEP_HUB_MAX_CHUNKS_PER_BATCH: int = 48
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 

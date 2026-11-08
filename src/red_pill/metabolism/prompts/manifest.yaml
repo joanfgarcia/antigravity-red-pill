@@ -30,6 +30,9 @@ prompts:
   hub_synthesis_v2:
     template: hub_synthesis_v2.txt
 
+  hub_synthesis_v2_partial:
+    template: hub_synthesis_v2_partial.txt
+
   classify_category:
     template: classify_category.txt
 

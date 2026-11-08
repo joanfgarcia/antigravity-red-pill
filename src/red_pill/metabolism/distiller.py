@@ -598,6 +598,157 @@ def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, 
 	return {"fragments": fragment_affects}
 
 
+# ── Hub synthesis: presupuesto por llamada + map-reduce jerárquico ───────────
+# El límite de chars NO es el contexto del modelo: es el presupuesto de UNA
+# llamada. Si el input no cabe, se trocea en lotes (map), se sintetizan hubs
+# parciales y se reducen en árbol hasta un hub maestro. Los parciales quedan en
+# `hub_partitions` para navegar el detalle. Fin del truncado silencioso.
+HUB_PARTIAL_PROMPT = "hub_synthesis_v2_partial.txt"
+HUB_PARTIAL_MAX_CHARS = 1500
+HUB_MAP_REDUCE_MAX_LEVELS = 8
+
+
+def hub_budget() -> int:
+	"""Presupuesto de chars por llamada de síntesis de hub (configurable)."""
+	return max(1000, int(getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000) or 8000))
+
+
+def hub_map_reduce_enabled() -> bool:
+	return bool(getattr(cfg, "SLEEP_HUB_MAP_REDUCE_ENABLED", True))
+
+
+def _chunk_summary(c: Dict[str, Any]) -> str:
+	return str(c.get("summary", "") or "").strip()
+
+
+def hub_texture_text(c: Dict[str, Any]) -> str:
+	"""Textura legible: string si ya lo es; dict {theme, relics} si viene del engrama."""
+	texture = c.get("texture")
+	if isinstance(texture, dict):
+		bits: List[str] = []
+		theme = texture.get("theme")
+		relics = texture.get("relics")
+		if theme:
+			bits.append(f"theme: {theme}")
+		if relics:
+			bits.append("relics: " + "; ".join(str(r) for r in relics))
+		return " | ".join(bits).strip()
+	return str(texture or "").strip()
+
+
+def render_hub_items(items: List[Dict[str, Any]]) -> str:
+	"""Prompt de un lote/sección: summaries + textures (formato HUB_V2)."""
+	summaries = [_chunk_summary(c) for c in items if _chunk_summary(c)]
+	textures = [hub_texture_text(c) for c in items if hub_texture_text(c)]
+	user = "SUMMARIES:\n" + "\n".join(f"- {s}" for s in summaries)
+	if textures:
+		user += "\n\nTEXTURES:\n" + "\n".join(f"- {t}" for t in textures)
+	return user
+
+
+def _split_oversized_text(text: str, budget: int) -> List[str]:
+	"""Parte un texto gigante en segmentos <= budget (segmentación, no truncado)."""
+	limit = max(200, int(budget) - 32)
+	if len(text) <= limit:
+		return [text]
+	segments: List[str] = []
+	rest = text
+	while len(rest) > limit:
+		cut = rest.rfind("\n", 0, limit)
+		if cut < limit // 2:
+			cut = rest.rfind(". ", 0, limit)
+			if cut >= limit // 2:
+				cut += 1
+		if cut < limit // 2:
+			cut = limit
+		segments.append(rest[:cut].strip())
+		rest = rest[cut:].lstrip()
+	if rest.strip():
+		segments.append(rest.strip())
+	return segments or [text[:limit]]
+
+
+def partition_hub_items(items: List[Dict[str, Any]], budget: int, max_chunks: int = 0) -> List[List[Dict[str, Any]]]:
+	"""Empaqueta fragmentos completos en lotes cuyo prompt renderizado quepa.
+
+	Un fragmento individual que excede el presupuesto se parte por líneas/frases
+	antes de empaquetar: se segmenta, nunca se descarta contenido.
+	"""
+	expanded: List[Dict[str, Any]] = []
+	for item in items:
+		single_len = len(render_hub_items([item]))
+		if single_len <= budget:
+			expanded.append(item)
+			continue
+		segments = _split_oversized_text(_chunk_summary(item), budget)
+		for idx, seg in enumerate(segments):
+			clone = dict(item)
+			clone["summary"] = seg
+			# La textura pertenece al fragmento, no a cada segmento: va en el primero.
+			clone["texture"] = item.get("texture") if idx == 0 else ""
+			expanded.append(clone)
+
+	batches: List[List[Dict[str, Any]]] = []
+	current: List[Dict[str, Any]] = []
+	for item in expanded:
+		candidate = current + [item]
+		too_big = len(render_hub_items(candidate)) > budget
+		too_many = bool(max_chunks) and len(candidate) > max_chunks
+		if current and (too_big or too_many):
+			batches.append(current)
+			current = [item]
+		else:
+			current = candidate
+	if current:
+		batches.append(current)
+	return batches
+
+
+def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[str, Any]]:
+	"""Parsea el JSON del LLM; None si no hay JSON o el summary es eco/plantilla."""
+	import re
+
+	if not content:
+		return None
+	match = re.search(r"\{[\s\S]*\}", str(content))
+	if not match:
+		return None
+	try:
+		parsed = json.loads(_sanitize_llm_json(match.group(0)))
+	except Exception:
+		return None
+	summary = str(parsed.get("summary") or "").strip()
+	if not summary or _is_template_echo(summary):
+		return None
+	texture = str(parsed.get("texture") or "").strip()
+	if _is_template_echo(texture):
+		texture = ""
+	if len(texture) > HUB_TEXTURE_MAX_CHARS:
+		logger.warning(
+			f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture)}) — truncating (compression instruction ignored)."
+		)
+		texture = texture[:HUB_TEXTURE_MAX_CHARS]
+	lang = str(parsed.get("lang") or fallback_lang).lower().strip()[:2]
+	return {
+		"title": str(parsed.get("title") or "").strip(),
+		"summary": summary,
+		"texture": texture,
+		"lang": lang,
+	}
+
+
+def _mechanical_partial(items: List[Dict[str, Any]], lang: str = "") -> Dict[str, Any]:
+	"""Resumen mecánico de una parte si el LLM falla (nunca pierde el contenido)."""
+	joined = "\n".join(_chunk_summary(c) for c in items if _chunk_summary(c))
+	return {
+		"title": "",
+		"summary": joined[:HUB_PARTIAL_MAX_CHARS],
+		"texture": "",
+		"lang": lang,
+		"_is_fallback": True,
+	}
+
+
 def synthesize_hub_v2(
 	chunks: List[Dict[str, Any]],
 	override_prompt: Optional[str] = None,
@@ -606,11 +757,12 @@ def synthesize_hub_v2(
 ) -> Dict[str, Any]:
 	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
 
-	Falls back to the legacy synthesize_hub() text with empty texture if the
-	structured call fails — the hub must always exist.
+	Si el prompt completo no cabe en `SLEEP_MAX_HUB_INPUT_CHARS`, aplica
+	map-reduce: lotes -> hubs parciales -> reducción en árbol. El resultado
+	maestro incluye `partitions` (nivel intermedio) para navegar el detalle.
+	Sin map-reduce (flag OFF), mantiene el recorte como última red — y lo marca
+	en `truncated`.
 	"""
-	import re
-
 	from red_pill.core.providers import ProviderRegistry
 
 	cfg_params = load_distiller_config(config_yaml_path).synthesize_hub_v2
@@ -620,75 +772,126 @@ def synthesize_hub_v2(
 
 	prompt_file = params.get("prompt_file", "hub_synthesis_v2.txt")
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
+	partial_system_prompt = load_prompt_text(HUB_PARTIAL_PROMPT) if hub_map_reduce_enabled() else system_prompt
 
-	summaries = [str(c.get("summary", "")) for c in chunks if c.get("summary")]
-	textures = [str(c.get("texture", "")) for c in chunks if c.get("texture")]
 	langs = []
 	for c in chunks:
 		c_lang = str(c.get("lang", ""))
 		if c_lang:
-			langs.append(_correct_lang_label(c_lang, str(c.get("summary", "")) or str(c.get("texture", ""))))
+			langs.append(_correct_lang_label(c_lang, _chunk_summary(c) or hub_texture_text(c)))
 	dominant_lang = max(set(langs), key=langs.count) if langs else ""
 
 	if dominant_lang and "DOMINANT language" not in system_prompt:
 		system_prompt += (
 			f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
 		)
-
-	user_prompt = "SUMMARIES:\n" + "\n".join(f"- {s}" for s in summaries)
-	if textures:
-		user_prompt += "\n\nTEXTURES:\n" + "\n".join(f"- {t}" for t in textures)
-
-	max_hub_input_chars = getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000)
-	if len(user_prompt) > max_hub_input_chars:
-		logger.warning(
-			f"[DISTILLER] Hub synthesis input ({len(user_prompt)} chars) exceeds context safety limit ({max_hub_input_chars} chars). Truncating user prompt."
+	if dominant_lang and "DOMINANT language" not in partial_system_prompt:
+		partial_system_prompt += (
+			f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
 		)
-		user_prompt = user_prompt[:max_hub_input_chars]
+
+	full_prompt = render_hub_items(chunks)
+	budget = hub_budget()
+	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
 
 	def _make_fallback() -> Dict[str, Any]:
-		fallback_text = synthesize_hub(summaries)
-		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+		fallback_text = synthesize_hub([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
+		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True, "truncated": False}
 
 	provider_alias = params.get("provider_alias", "sip")
 	temperature = float(params.get("temperature", 0.1))
-
 	try:
 		try:
 			provider = ProviderRegistry.get_inference_provider(provider_alias)
 		except RuntimeError:
 			provider = ProviderRegistry.get_inference_provider()
-		content = provider.generate(
-			prompt=user_prompt,
-			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-			temperature=temperature,
-		)
-		match = re.search(r"\{[\s\S]*\}", content)
-		if not match:
-			return _make_fallback()  # type: ignore
-		parsed = json.loads(_sanitize_llm_json(match.group(0)))
-		summary_val = str(parsed.get("summary") or "").strip()
-		if not summary_val or _is_template_echo(summary_val):
-			return _make_fallback()  # type: ignore
-		texture_val = str(parsed.get("texture") or "").strip()
-		if _is_template_echo(texture_val):
-			texture_val = ""
-		if len(texture_val) > HUB_TEXTURE_MAX_CHARS:
-			logger.warning(
-				f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture_val)}) — truncating (compression instruction ignored)."
-			)
-			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
-		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
-		lang_val = _correct_lang_label(lang_val, user_prompt)
-		return {
-			"title": str(parsed.get("title") or "").strip(),
-			"summary": summary_val,
-			"texture": texture_val,
-			"lang": lang_val,
-		}
 	except Exception as e:
-		logger.warning(f"[HUB-V2] LLM synthesis failed ({e}). Falling back to legacy concatenation.")
+		logger.warning(f"[HUB-V2] No inference provider ({e}). Falling back to legacy concatenation.")
 		return _make_fallback()
+
+	def _call(system: str, user: str) -> str:
+		try:
+			return str(
+				provider.generate(
+					prompt=user,
+					messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+					temperature=temperature,
+				)
+			)
+		except Exception as e:
+			logger.warning(f"[HUB-V2] LLM call failed ({e}).")
+			return ""
+
+	# Caso normal: cabe en una llamada (comportamiento histórico).
+	if not hub_map_reduce_enabled() or len(full_prompt) <= budget:
+		user_prompt = full_prompt
+		truncated = False
+		if len(user_prompt) > budget:
+			logger.warning(
+				f"[DISTILLER] Hub synthesis input ({len(user_prompt)} chars) exceeds context safety limit ({budget} chars). Truncating user prompt."
+			)
+			user_prompt = user_prompt[:budget]
+			truncated = True
+		parsed = _parse_hub_payload(_call(system_prompt, user_prompt), dominant_lang)
+		if parsed is None:
+			return _make_fallback()
+		parsed["truncated"] = truncated
+		parsed["input_chars"] = len(full_prompt)
+		return parsed
+
+	# Map: lotes que quepan, cada uno con su propio resumen denso.
+	pack_budget = max(500, budget - 96)  # margen para la cabecera PART i/N
+	batches = partition_hub_items(chunks, pack_budget, max_chunks)
+	partials: List[Dict[str, Any]] = []
+	for idx, batch in enumerate(batches):
+		header = f"PART {idx + 1}/{len(batches)} of the chronological fragments of ONE interaction.\n\n"
+		parsed = _parse_hub_payload(_call(partial_system_prompt, header + render_hub_items(batch)), dominant_lang)
+		if parsed is None:
+			parsed = _mechanical_partial(batch, dominant_lang)
+		parsed["summary"] = str(parsed.get("summary") or "")[:HUB_PARTIAL_MAX_CHARS]
+		parsed["texture"] = str(parsed.get("texture") or "")[:HUB_TEXTURE_MAX_CHARS]
+		partials.append(parsed)
+
+	# Reduce: árbol hasta que el prompt de los parciales quepa.
+	current = partials
+	levels = 0
+	while True:
+		prompt = render_hub_items(current)
+		if len(prompt) <= budget or len(current) == 1:
+			final = _parse_hub_payload(_call(system_prompt, prompt), dominant_lang)
+			if final is None:
+				return _make_fallback()
+			break
+		groups = partition_hub_items(current, pack_budget, max_chunks)
+		next_level: List[Dict[str, Any]] = []
+		for group in groups:
+			parsed = _parse_hub_payload(_call(system_prompt, render_hub_items(group)), dominant_lang)
+			if parsed is None:
+				parsed = _mechanical_partial(group, dominant_lang)
+			parsed["summary"] = str(parsed.get("summary") or "")[:HUB_PARTIAL_MAX_CHARS]
+			parsed["texture"] = str(parsed.get("texture") or "")[:HUB_TEXTURE_MAX_CHARS]
+			next_level.append(parsed)
+		current = next_level
+		levels += 1
+		if levels > HUB_MAP_REDUCE_MAX_LEVELS:
+			return _make_fallback()
+
+	final["hierarchical"] = True
+	final["partition_count"] = len(partials)
+	final["partitions"] = [
+		{
+			"index": i + 1,
+			"total": len(partials),
+			"summary": p["summary"],
+			"texture": p.get("texture", ""),
+			"lang": p.get("lang", ""),
+		}
+		for i, p in enumerate(partials)
+	]
+	final["map_reduce_levels"] = levels
+	final["input_chars"] = len(full_prompt)
+	final["truncated"] = False
+	return final
 
 
 def classify_category(
