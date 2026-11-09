@@ -823,13 +823,26 @@ def partition_hub_items(items: List[Dict[str, Any]], budget: int, max_chunks: in
 		if single_len <= budget:
 			expanded.append(item)
 			continue
-		segments = _split_oversized_text(_chunk_summary(item), budget)
-		for idx, seg in enumerate(segments):
-			clone = dict(item)
-			clone["summary"] = seg
-			# La textura pertenece al fragmento, no a cada segmento: va en el primero.
-			clone["texture"] = item.get("texture") if idx == 0 else ""
-			expanded.append(clone)
+		# Un item oversize se parte en items SEPARADOS por campo (summary y
+		# texture), sin perder contenido. Así ningún prompt de reduce queda por
+		# encima del presupuesto y no hace falta recortar (el giant de 736k
+		# reventaba el maestro con un único parcial textura+summary > budget).
+		summary_text = _chunk_summary(item)
+		if summary_text:
+			for seg in _split_oversized_text(summary_text, budget):
+				clone = dict(item)
+				clone["summary"] = seg
+				clone["texture"] = ""
+				expanded.append(clone)
+		texture_text = hub_texture_text(item)
+		if texture_text:
+			for seg in _split_oversized_text(texture_text, budget):
+				clone = dict(item)
+				clone["summary"] = ""
+				clone["texture"] = seg
+				expanded.append(clone)
+		if not summary_text and not texture_text:
+			expanded.append(item)
 
 	batches: List[List[Dict[str, Any]]] = []
 	current: List[Dict[str, Any]] = []
