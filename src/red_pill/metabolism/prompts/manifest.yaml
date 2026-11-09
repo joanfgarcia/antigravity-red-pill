@@ -36,6 +36,9 @@ prompts:
   hub_summary_compact:
     template: hub_summary_compact.txt
 
+  hub_summary_language:
+    template: hub_summary_language.txt
+
   hub_texture_compact:
     template: hub_texture_compact.txt
 

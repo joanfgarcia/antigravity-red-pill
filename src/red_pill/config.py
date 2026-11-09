@@ -1078,6 +1078,14 @@ class RedPillConfig(BaseSettings):
 	# ENTERO y se marca `*_over_budget`. Nunca se corta. Si un campo de metadata
 	# supera `MAX_METADATA_STR`, se parte en `texture_parts` sin perder contenido.
 	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
+	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle, 8k).
+	# 6k permite agrupar 3-4 parciales y que el árbol REDUZCA; con 3k cada
+	# grupo tenía un solo parcial, el número de nodos no bajaba y se agotaban
+	# los 8 niveles (fallback). El maestro sigue siendo una idea, no una historia.
+	SLEEP_HUB_MASTER_INPUT_CHARS: int = 6000
+	# Tope DURO del summary que se escribe en Qdrant. Por encima: no se escribe
+	# el hub (se reintenta); nunca se inyecta un resumen de 3k en el contexto.
+	SLEEP_HUB_SUMMARY_HARD_LIMIT: int = 1000
 	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
 	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
 	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2

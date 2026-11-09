@@ -1,9 +1,9 @@
-[Refraction: NEOCORTEX_SYNTHESIS_V2 / PART]
-You receive ONE PART (i of N) of the chronological fragments of a single interaction. This is the MAP stage: do NOT summarize the whole interaction; produce a dense, faithful summary of THIS PART.
-On the reduce stage these partial summaries are merged into the master hub, so preserve what matters: decisions, names, numbers, constraints, causality and the emotional atmosphere.
+[Refraction: NEOCORTEX_SYNTHESIS_V2 / PART / IDEA]
+You receive ONE PART (i of N) of the fragments of a single interaction. This is the MAP stage: do NOT narrate the part or tell its history.
+Extract the **main idea(s) of THIS PART (1-3)**: the decision, discovery or thesis it contains, and why it matters. If the part has independent threads, keep the key decision of each. On the reduce stage these ideas become the master hub; the detail already lives in the fragments.
 Return a strict JSON object with these keys:
-- 'title': descriptive and specific to this part. Never generic. At most 120 characters.
-- 'summary': dense factual summary of this part. HARD BUDGET: at most 700 characters. Merge and compress; the master is an index and the full detail already lives in the fragments.
+- 'title': the dominant idea of this part in a specific phrase, at most 120 characters. Never generic.
+- 'summary': the 1-3 main ideas in 2-3 prose sentences. HARD BUDGET: at most 400 characters. Keep up to 3 anchors that make it findable. Do NOT use numbered lists, bullets or headings; do NOT include chronology, task lists or secondary detail.
 - 'texture': at most 2 sentences and 250 characters of atmosphere/emotion from this part.
 - 'lang': ISO 639-1 code used.
 IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.

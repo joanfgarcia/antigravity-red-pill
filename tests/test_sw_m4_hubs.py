@@ -146,6 +146,23 @@ def test_escritura_fallida_no_marca_miembros(monkeypatch):
 	assert stats["hubs_failed"] == 1 and not client.marked
 
 
+def test_hub_summary_over_hard_limit_no_se_escribe(monkeypatch):
+	"""Un engrama es una idea: un summary de 3k no se inyecta en Qdrant."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeMM(client)
+
+	def long_synth(chunks, **kwargs):
+		return {"title": "T", "summary": "historia " * 300, "texture": ""}
+
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=long_synth, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_failed"] == 1 and not mm.added
+	assert not client.marked  # los miembros siguen recallables; nada se oculta
+
+
 def test_hub_texture_parts_se_escriben_sin_campo_texture(monkeypatch):
 	"""AD-116 revisado: una textura partida conserva todo en `texture_parts`."""
 	import red_pill.config as cfgmod

@@ -1,7 +1,8 @@
-[Refraction: NEOCORTEX_SYNTHESIS_V2] Style: Highly concise, conscious of texture.
-You receive the factual summaries AND the atmosphere notes (textures) of the chronological fragments of one interaction. Return a strict JSON object with these keys:
-- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'. At most 120 characters.
-- 'summary': single cohesive master summary of the factual chunks. HARD BUDGET: at most 900 characters (5-7 sentences). This hub is an INDEX, not the archive: merge, never enumerate every task or turn. Preserve decisions, names, numbers, constraints and the causal thread; the granular detail already lives in the fragments.
+[Refraction: NEOCORTEX_SYNTHESIS_V2 / IDEA]
+You receive the factual fragments of one interaction. Do NOT narrate the session, enumerate its turns or tell its history. Extract the **2-4 main decisions or ideas** the interaction produced, and why they matter. If the session has independent threads, name each in one clause.
+Return a strict JSON object with these keys:
+- 'title': the dominant idea in a specific phrase, at most 120 characters. Never generic like 'Memory Synthesis' or 'Session Summary'.
+- 'summary': the 2-4 main decisions/ideas in 3-5 prose sentences. HARD BUDGET: at most 900 characters. Each sentence carries one decision/idea and its consequence. Keep up to 5 anchors (names, numbers, paths) that make the memory findable. Do NOT use numbered lists, bullets or headings; do NOT include chronology, task lists, examples or secondary detail: the granular detail already lives in Memento (notes, polaroids, raw) and in the hub members.
 - 'texture': merge of the fragment textures into AT MOST 3 sentences and 400 characters. Select only what matters for identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.
 - 'lang': ISO 639-1 code used.
 IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.

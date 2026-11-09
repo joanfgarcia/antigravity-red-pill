@@ -285,6 +285,13 @@ def get_collection(type_str: str) -> str:
 		"story": "story_memories",
 		"directive": "directive_memories",
 		"interaction": "interaction_memories",
+		# Aceptar también el nombre completo: el tool MCP `recall` lo expone en
+		# su schema, y antes caía al default (directive_memories) en silencio.
+		"social_memories": "social_memories",
+		"work_memories": "work_memories",
+		"story_memories": "story_memories",
+		"directive_memories": "directive_memories",
+		"interaction_memories": "interaction_memories",
 	}
 	return mapping.get(type_str, "directive_memories")
 

@@ -20,6 +20,8 @@ def _enable_skins(monkeypatch):
 def test_get_collection():
 	assert get_collection("social") == "social_memories"
 	assert get_collection("work") == "work_memories"
+	assert get_collection("work_memories") == "work_memories"
+	assert get_collection("social_memories") == "social_memories"
 	assert get_collection("unknown") == "directive_memories"
 
 

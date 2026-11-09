@@ -12,6 +12,19 @@ Mismo input real, mismo prompt (map-reduce AD-113) y `task=hub`; solo cambia el 
 | granite_8b | 3 | 3/3 | 0/3 | 0.233 | 770 | 360 | 0.0 | 75.2s | 0.0 | 0.0s |
 | granite_8b_concise_synth400 | 3 | 3/3 | 3/3 | 0.3 | 1278 | 324 | 0.0 | 222.2s | 12.0 | 85.1s |
 | granite_8b_concise_synth400v2 | 3 | 3/3 | 3/3 | 0.344 | 1074 | 315 | 0.0 | 90.9s | 1.0 | 6.4s |
+| granite_8b_idea1 | 1 | 1/1 | 1/1 | 0.067 | 621 | 263 | 0.0 | 168.3s | 1.0 | 1.3s |
+| granite_8b_idea10 | 1 | 0/1 | 0/1 | 0.0 | 0 | 0 | 0.0 | 0.0s | 0.0 | 0.0s |
+| granite_8b_idea11 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 261.7s | 0.0 | 0.0s |
+| granite_8b_idea12 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 325.2s | 0.0 | 0.0s |
+| granite_8b_idea13 | 1 | 1/1 | 1/1 | 0.067 | 712 | 471 | 0.0 | 152.6s | 4.0 | 13.4s |
+| granite_8b_idea2 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 318.9s | 0.0 | 0.0s |
+| granite_8b_idea3 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 305.4s | 0.0 | 0.0s |
+| granite_8b_idea4 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 350.1s | 0.0 | 0.0s |
+| granite_8b_idea5 | 1 | 1/1 | 1/1 | 0.0 | 603 | 272 | 0.0 | 227.6s | 2.0 | 3.5s |
+| granite_8b_idea6 | 1 | 0/1 | 1/1 | 0.067 | 171 | 0 | 0.0 | 351.3s | 0.0 | 0.0s |
+| granite_8b_idea7 | 1 | 1/1 | 1/1 | 0.167 | 975 | 641 | 0.0 | 171.5s | 4.0 | 11.8s |
+| granite_8b_idea8 | 1 | 1/1 | 1/1 | 0.133 | 732 | 312 | 0.0 | 146.8s | 0.0 | 0.0s |
+| granite_8b_idea9 | 1 | 1/1 | 1/1 | 0.3 | 820 | 391 | 0.0 | 167.7s | 2.0 | 4.5s |
 | k2_horizon_7b | 3 | 3/3 | 0/3 | 0.322 | 1549 | 584 | 0.0 | 178.4s | 0.0 | 0.0s |
 | k2_horizon_7b_concise | 3 | 3/3 | 0/3 | 0.389 | 1204 | 669 | 0.0 | 148.6s | 0.0 | 0.0s |
 | k2_horizon_7b_concise_compacted | 3 | 3/3 | 0/3 | 0.3 | 1216 | 639 | 0.0 | 203.9s | 1.0 | 8.6s |
@@ -34,6 +47,19 @@ Mismo input real, mismo prompt (map-reduce AD-113) y `task=hub`; solo cambia el 
 | large-166k | granite_8b | ✅ | ❌ | 0.1 | 562 | 453 | 0 | 154.87s | 0 / 0.0s |
 | large-166k | granite_8b_concise_synth400 | ✅ | ✅ | 0.3 | 1445 | 358 | 0 | 434.57s | 26 / 153.0s |
 | large-166k | granite_8b_concise_synth400v2 | ✅ | ✅ | 0.433 | 1591 | 340 | 0 | 199.37s | 2 / 15.23s |
+| large-166k | granite_8b_idea1 | ✅ | ✅ | 0.067 | 621 | 263 | 0 | 168.26s | 1 / 1.28s |
+| large-166k | granite_8b_idea10 | ❌ | ❌ | 0.0 | 0 | 0 | 0 | 0.01s | 0 / 0.0s |
+| large-166k | granite_8b_idea11 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 261.69s | 0 / 0.0s |
+| large-166k | granite_8b_idea12 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 325.23s | 0 / 0.0s |
+| large-166k | granite_8b_idea13 | ✅ | ✅ | 0.067 | 712 | 471 | 0 | 152.55s | 4 / 13.37s |
+| large-166k | granite_8b_idea2 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 318.87s | 0 / 0.0s |
+| large-166k | granite_8b_idea3 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 305.44s | 0 / 0.0s |
+| large-166k | granite_8b_idea4 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 350.11s | 0 / 0.0s |
+| large-166k | granite_8b_idea5 | ✅ | ✅ | 0.0 | 603 | 272 | 0 | 227.62s | 2 / 3.49s |
+| large-166k | granite_8b_idea6 | ❌ | ✅ | 0.067 | 171 | 0 | 0 | 351.28s | 0 / 0.0s |
+| large-166k | granite_8b_idea7 | ✅ | ✅ | 0.167 | 975 | 641 | 0 | 171.53s | 4 / 11.81s |
+| large-166k | granite_8b_idea8 | ✅ | ✅ | 0.133 | 732 | 312 | 0 | 146.76s | 0 / 0.0s |
+| large-166k | granite_8b_idea9 | ✅ | ✅ | 0.3 | 820 | 391 | 0 | 167.67s | 2 / 4.5s |
 | large-166k | k2_horizon_7b | ✅ | ❌ | 0.367 | 1497 | 800 | 0 | 386.82s | 0 / 0.0s |
 | large-166k | k2_horizon_7b_concise | ✅ | ❌ | 0.467 | 1250 | 800 | 0 | 271.69s | 0 / 0.0s |
 | large-166k | k2_horizon_7b_concise_compacted | ✅ | ❌ | 0.3 | 1374 | 609 | 0 | 506.01s | 2 / 17.57s |
@@ -97,6 +123,73 @@ _partición 1_: Joan reportó 982 sesiones activas frente a 1119 registradas, co
 > Joan analizó ALMA_Y_CORO, aumentó el límite nocturno de Memento de 20 a 30 sesiones para manejar 80 pendientes, corrigió un error crítico en metabolism/doctor.py que causaba errores 'outbox soul', redujo los puntos de recuperación de búfer de 551 a 508, implementó una paleta de colores para el análisis emocional y validó ciclos de sueño y estadísticas de destilación antes de fusionar feat/c3-superficies. Propuso un quinto commit para monitorear la cobertura de fuentes y ajustó el límite nocturno para acomodar las sesiones pendientes, abordando la deuda de diseño. Corrigió el registro session memory_queue:mcp:Aleth (Gemini 1.5 Flash) por objetivos sin comillas, movió 43 turnos sin renderizar
 
 _partición 1_: Joan analyzed the job state of ALMA_Y_CORO, finding it reserved (REVIEW) due to incomplete evidence, not discarded. Raw data coverage shows 796/796 opencode, 281/281 memory_queue, 206/206 antigravity, but 0/37 claude_code, 0/20 telegram, 0/26 pi, and 0/47 antigravity_export, indicating missing raw sources for these. The Memento agentic night limit processes 20 sessions per night, causing a backlog
+
+**granite_8b_idea1** — Externalización de configuraciones y gestión centralizada de señales
+
+> Se externalizaron las configuraciones D-08 y D-09 a archivos YAML para facilitar ajustes futuros sin modificar código, mejorando la flexibilidad. Se introdujo una ley de intensidad para ajustar la intensidad de señales según el tiempo desde el primer avistado, optimizando la respuesta dinámica. Además, se ratificó el RFC de reconciliación de señales, haciendo SIGNAL_NAMES inmutable y creando scripts para sincronizar nombres con el inventario central, centralizando la gestión y asegurando una auditoría segmentada. Estas decisiones mejoran la eficiencia operativa, la respuesta dinámica y la consistencia del sistema.
+
+_partición 1_: Joan y el autor decidieron que las configuraciones D-08 y D-09 deberían manejarse mediante archivos YAML para facilitar ajustes posteriores sin modificar código. Esto asegura flexibilidad y simplicidad en la gestión de parámetros del agente, aunque se discute si centralizar en un único YAML o separar en módulos/plugins para mantener claridad modular. D-10 y D-04 se consideran correctos sin cambios
+
+**granite_8b_idea10** — (sin título)
+
+> UnboundLocalError: cannot access local variable 'memory_lang' where it is not associated with a value
+
+**granite_8b_idea11** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea12** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea13** — Optimización de la versión 0.8.0 y gestión de mensajes diferidos
+
+> Se implementan ajustes en D-07, D-08 y D-09 para mejorar la claridad en la gestión de tareas mediante la diferenciación de jobs de recordatorios. Se introduce una paleta de colores para el análisis de afecto y se establece un límite de sesiones nocturnas de 30 para optimizar la eficiencia emocional y operativa. Joan corrige un broadcast sin destinatario, ajusta el DECISION_LOG para reflejar el estado real de S1, S2 y S3, y elimina el límite de tiempo en pases agénticos para optimizar costos. Se prepara la liberación de neon-link v0.8.0 después de resolver problemas de formato y limpieza, y se introduce una columna específica para el backoff de reintentos para medir el envejecimiento desde de
+
+_partición 1_: Se define el camino de publicación para la versión 0.8.0, que incluye un push de feat/deliver-after, creación de PR, merge y publicación. Además, se establecen decisiones sobre la configuración centralizada para D-08 y D-09, y se menciona la necesidad de ajustes en D-07 para separación de módulos. Se detalla la cobertura de raw y las fuentes sin raw, así como el límite de procesamiento nocturno y
+
+**granite_8b_idea2** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea3** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea4** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea5** — Version 0.8.0 Release Process and RFC Ratification
+
+> 1. Implement emotional feedback mechanisms, recoverable debt system with cooling, and fix broadcast hole to enhance system responsiveness and reliability.
+2. Correct extractor to exclude .pb files, ensuring data integrity and accurate data processing.
+3. Introduce `reveal_at` as an `expires_at` mirror in `theatre.py` to hide sealed notes while preserving `_is_active`, improving data security.
+4. Ratify RFC_OBS-005, confirming ledger closure and initiating P0 launch, preparing for P1 post-data analysis, and establishing auditor-only access with severity threshold ≥5.0 for controlled data handling.
+
+_partición 1_: Se decide hacer ajustes mediante YAML para facilitar cambios futuros, se corrige un error de nombre de variable en el código y se establece un plan de publicación para la versión 0.8.0, incluyendo el proceso de merge y release. También se implementa un aviso de purga del buffer de Memento y se revisa el despertar del sistema para evitar deudas no pagables.
+
+**granite_8b_idea6** — (sin título)
+
+> [Aggregated Memory Sequence (441 nodes)] Siguiente paso: dos semanas mirando ~/.local/share/red-pill/... -> Distinguí el dolor (AD-108) del recordatorio: el dolor sube ...
+
+**granite_8b_idea7** — System Integrity Enhancements and Policy Adjustments for P0 Launch
+
+> The system decoupled physical and attention clocks to ensure accurate job review transitions and prevent misleading logs, corrected a .pb file counting bug for precise data coverage, and established a severity-based pain escalation policy for persistent alerts. Joan expanded test coverage, delayed P1 activation, reordered neon-link features, removed dead branches, introduced ingestion checks, identified VRAM leakage, proposed new job states (REVIEW, CANCELLED), mandated creation of 88 legacy turnos without session_id as synthetic sessions in Memento, proposed export_raw/load_raw for Claude Code, Telegram, and Pi with a recovery test in AD-108, ratified RFC_OBS-005 for inventory auto-generati
+
+_partición 1_: Se decide que D-08 y D-09 deben operar mediante configuración para facilitar ajustes futuros, mientras que D-07 se incluye en un YAML central. El plan de publicación para la versión 0.8.0 se detalla: push de feat/deliver-after, creación de PR, merge y publicación, seguido de la actualización del pin en red-pill. Esto asegura que la entrega diferida permanezca activa sin cambios adicionales. Además
+
+**granite_8b_idea8** — Centralized Configuration and Release Planning for Stability
+
+> The team centralized configuration using YAML for easier future adjustments and fixed a variable naming error to ensure code accuracy. A detailed plan for the 0.8.0 release was established, covering pull requests, merges, and red-pill updates to maintain an orderly release flow. Jobs and calendar reminders were clearly distinguished to prevent unwanted alerts, preserving user autonomy. A color palette system for emotion analysis and a 30-session nightly limit based on historical data were implemented to improve observability and operational efficiency. Joan finalized emotion feedback mechanisms, limited debt signals, and completed the v8.2.0 release with clean CI and service restarts, ensuri
+
+_partición 1_: Se decide hacer ajustes mediante YAML central para facilitar cambios futuros, se corrige un error de nombre de variable en el código de entrega, y se establece un plan detallado para la publicación de la versión 0.8.0, incluyendo el proceso de PR, merge y actualización en red-pill. Esto asegura flexibilidad en la configuración y un flujo de lanzamiento ordenado.
+
+**granite_8b_idea9** — Release Plan and Data Integrity Enhancements for v0.8.0
+
+> Joan and the speaker enhance system reliability by making D-08 and D-09 configurable without code changes, implementing a buffer purge warning for data integrity, and introducing a color palette for emotion analysis. They increase the nightly session limit from 20 to 30, based on historical Memento data, to improve observability and scalability. Joan proposes a non-auto-scaling scaling policy to address an unusual consolidation drop, adjusts session origin rules, and documents git_workflow.md. The release v8.3.0 is finalized without memory leaks, with queue triage optimized and dead letter aging inconsistency resolved by adding a 'deliver_after' column. Deferred delivery is implemented, and
+
+_partición 1_: Joan y el hablante deciden que D-08 y D-09 deben ser configurables para facilitar ajustes futuros sin modificar código. Se establece un plan de publicación detallado para la versión 0.8.0, incluyendo push, PR, merge y actualización en red-pill. Además, se corrige un error de nombre de variable en el código y se implementa un aviso previo para la purga del buffer de Memento, mejorando la integridad
 
 **k2_horizon_7b** — Ciclo v8.2.0 completado, sistema de afecto implementado y P0 de reconciliación de señales arranca en next
 

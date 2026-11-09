@@ -450,9 +450,32 @@ def distill_engram(
 	return fallback
 
 
+def _aggregate_summaries(summaries: List[str]) -> str:
+	"""Agregado mecánico y acotado: no llama al LLM ni envía la entrada entera."""
+	if summaries:
+		first_sum = summaries[0][:60]
+		if len(summaries[0]) > 60:
+			first_sum += "..."
+		if len(summaries) > 1:
+			last_sum = summaries[-1][:60]
+			if len(summaries[-1]) > 60:
+				last_sum += "..."
+			return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
+		return f"[Aggregated Memory (1 node)] {first_sum}"
+	return "[Aggregated Memory Sequence]"
+
+
 def synthesize_hub(summaries: List[str]) -> str:
 	"""Creates the final Neocortex Hub Node from a chain of chunks."""
 	combined = "\n".join([f"- {s}" for s in summaries])
+	# Un fallback NUNCA debe mandar toda la sesión al modelo: el giant de 166k
+	# acababa en HTTP 500 (45k tokens) desde aquí. Si no cabe, agregado mecánico.
+	_budget = max(1000, int(getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000) or 8000))
+	if len(combined) > _budget:
+		logger.warning(
+			f"[SLEEP ENGINE] legacy hub prompt {len(combined)} chars > {_budget}; mechanical aggregate (no LLM)."
+		)
+		return _aggregate_summaries(summaries)
 	system_prompt = load_prompt_text("hub_synthesis_legacy_system.txt")
 	user_prompt = _render_metabolism("hub_synthesis_legacy_user", chunks=combined)
 
@@ -471,17 +494,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 	).encode("utf-8")
 
 	def _aggregate_fallback() -> str:
-		if summaries:
-			first_sum = summaries[0][:60]
-			if len(summaries[0]) > 60:
-				first_sum += "..."
-			if len(summaries) > 1:
-				last_sum = summaries[-1][:60]
-				if len(summaries[-1]) > 60:
-					last_sum += "..."
-				return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
-			return f"[Aggregated Memory (1 node)] {first_sum}"
-		return "[Aggregated Memory Sequence]"
+		return _aggregate_summaries(summaries)
 
 	# Reuse existing transport detection
 	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
@@ -600,6 +613,18 @@ def _metadata_str_limit() -> int:
 	return max(256, int(getattr(cfg, "MAX_METADATA_STR", 1024) or 1024) - 64)
 
 
+_EN_STOP = {"the", "and", "with", "for", "from", "this", "that", "was", "were", "has", "have", "by", "to", "of", "in", "on", "as", "is", "are", "it", "its", "not", "but", "or", "an", "at", "be"}
+_ES_STOP = {"el", "la", "los", "las", "de", "que", "y", "en", "con", "para", "por", "una", "un", "del", "se", "su", "al", "es", "como", "más", "pero", "o", "sin", "lo", "le", "les", "ser", "ha", "han", "esta", "este"}
+
+
+def _looks_english(text: str) -> bool:
+	"""Heurística de idioma para el summary (Granite cambiaba a inglés)."""
+	words = re.findall(r"[a-záéíóúüñ]+", str(text or "").lower())
+	en = sum(1 for w in words if w in _EN_STOP)
+	es = sum(1 for w in words if w in _ES_STOP)
+	return en >= 3 and en > es
+
+
 def split_text_lossless(text: str, limit: int) -> List[str]:
 	"""Parte un texto en trozos <= limit SIN perder caracteres.
 
@@ -678,6 +703,7 @@ HUB_PARTIAL_PROMPT = "hub_synthesis_v2_partial.txt"
 HUB_SUMMARY_COMPACT_PROMPT = "hub_summary_compact.txt"
 HUB_TEXTURE_COMPACT_PROMPT = "hub_texture_compact.txt"
 HUB_TEXTURE_SPLIT_PROMPT = "hub_texture_split.txt"
+HUB_LANGUAGE_REWRITE_PROMPT = "hub_summary_language.txt"
 HUB_PARTIAL_MAX_CHARS = 1500  # target orientativo del parcial; el árbol reduce lo que se pase (sin truncar)
 HUB_MAP_REDUCE_MAX_LEVELS = 8
 
@@ -865,16 +891,23 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 	import re
 
 	if not content:
+		logger.warning("[HUB-V2] empty response from model")
 		return None
 	match = re.search(r"\{[\s\S]*\}", str(content))
 	if not match:
+		logger.warning(f"[HUB-V2] response without JSON ({len(str(content))} chars): {str(content)[:240]!r}")
 		return None
 	try:
 		parsed = json.loads(_sanitize_llm_json(match.group(0)))
-	except Exception:
+	except Exception as e:
+		logger.warning(f"[HUB-V2] invalid JSON ({e}): {match.group(0)[:240]!r}")
 		return None
 	summary = str(parsed.get("summary") or "").strip()
-	if not summary or _is_template_echo(summary):
+	if not summary:
+		logger.warning(f"[HUB-V2] JSON without summary: {match.group(0)[:240]!r}")
+		return None
+	if _is_template_echo(summary):
+		logger.warning(f"[HUB-V2] summary echoes prompt: {summary[:240]!r}")
 		return None
 	texture = str(parsed.get("texture") or "").strip()
 	if _is_template_echo(texture):
@@ -931,6 +964,7 @@ def synthesize_hub_v2(
 	compact_system_prompt = load_prompt_text(HUB_SUMMARY_COMPACT_PROMPT, fallback_prompt="")
 	texture_compact_prompt = load_prompt_text(HUB_TEXTURE_COMPACT_PROMPT, fallback_prompt="")
 	texture_split_prompt = load_prompt_text(HUB_TEXTURE_SPLIT_PROMPT, fallback_prompt="")
+	language_rewrite_prompt = load_prompt_text(HUB_LANGUAGE_REWRITE_PROMPT, fallback_prompt="")
 
 	langs = []
 	for c in chunks:
@@ -938,18 +972,43 @@ def synthesize_hub_v2(
 		if c_lang:
 			langs.append(_correct_lang_label(c_lang, _chunk_summary(c) or hub_texture_text(c)))
 	dominant_lang = max(set(langs), key=langs.count) if langs else ""
+	# Idioma de la MEMORIA (no el mayoritario de los fragmentos): el operador
+	# es español y MEMENTO_PROMPT_LANGUAGE=es manda. Sin esto, una sesión mixta
+	# producía un hub en inglés que luego no casaba con el recall en español.
+	_memory_lang_raw = str(getattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "") or "").strip().lower()
+	memory_lang = "" if _memory_lang_raw in ("", "auto") else _memory_lang_raw[:2]
+	output_lang = memory_lang or dominant_lang
 
-	if dominant_lang and "DOMINANT language" not in system_prompt:
-		system_prompt += (
-			f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
-		)
-	if dominant_lang and "DOMINANT language" not in partial_system_prompt:
-		partial_system_prompt += (
-			f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
-		)
+	# Instrucción de idioma MANDATORIA: se usa el idioma de la MEMORIA (es),
+	# no el mayoritario de los fragmentos. Granite cambiaba a inglés cuando el
+	# prompt era solo inglés; la línea va al final y el JSON se reafirma después.
+	_lang_names = {"es": "español", "en": "English", "ca": "català", "fr": "français", "de": "Deutsch", "it": "italiano", "pt": "português"}
+	_lang_name = _lang_names.get(output_lang, output_lang)
+	if _lang_name:
+		if output_lang == "es":
+			_lang_line = (
+				"\nIDIOMA OBLIGATORIO: escribe 'title', 'summary' y 'texture' en español. "
+				"No uses inglés ni otro idioma. No uses listas numeradas ni viñetas: prosa de 3-5 frases."
+				"\nConstraint: Output ONLY valid raw JSON, without markdown blocks."
+			)
+		else:
+			_lang_line = (
+				f"\nMANDATORY LANGUAGE: write 'title', 'summary' and 'texture' in {_lang_name}. "
+				"Do not switch language. Do not use numbered lists or bullets: 3-5 prose sentences."
+				"\nConstraint: Output ONLY valid raw JSON, without markdown blocks."
+			)
+		if _lang_line not in system_prompt:
+			system_prompt += _lang_line
+		if _lang_line not in partial_system_prompt:
+			partial_system_prompt += _lang_line
 
 	full_prompt = render_hub_items(chunks)
 	budget = hub_budget()
+	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle). El
+	# master de un giant no debe recibir 8k de parciales: con ~3k sintetiza
+	# una idea; con 8k escribe una historia de 3.000 chars.
+	reduce_budget = min(budget, max(500, int(getattr(cfg, "SLEEP_HUB_MASTER_INPUT_CHARS", 3000) or 3000)))
+	reduce_pack = max(500, reduce_budget - 96)
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
 	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
@@ -974,7 +1033,9 @@ def synthesize_hub_v2(
 	large_used = {"flag": False, "model": "", "prompt": ""}
 
 	def _make_fallback() -> Dict[str, Any]:
-		fallback_text = synthesize_hub([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
+		# Fallback mecánico y acotado: no manda la sesión al modelo (el giant
+		# acababa en HTTP 500 por el prompt legacy de 45k tokens).
+		fallback_text = _aggregate_summaries([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
 		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True, "truncated": False}
 
 	provider_alias = params.get("provider_alias", "sip")
@@ -1010,6 +1071,14 @@ def synthesize_hub_v2(
 			large_used.update({"flag": bool(call_model), "model": call_model, "prompt": call_prompt_file})
 		call_temperature = temperature
 		extra = dict(call_extra)
+		# Guardia de diagnóstico: un prompt de hub nunca debe acercarse al
+		# contexto del modelo. Si aparece uno gigante, el stack dice qué etapa
+		# lo construyó (map/reduce/master) en vez de esperar un HTTP 500.
+		if len(user) > 20000:
+			import traceback
+
+			logger.error(f"[HUB-V2] prompt {len(user)} chars > 20000; stack:\n{''.join(traceback.format_stack())}")
+			raise RuntimeError(f"oversized hub prompt {len(user)} chars")
 		if call_model and bool(params.get("use_model_sampling")):
 			# La receta del perfil manda cuando el modelo se fija por llamada:
 			# es la diferencia entre Spark hub a temp 1.0/top_k 0 (993 chars)
@@ -1152,6 +1221,27 @@ def synthesize_hub_v2(
 		)
 		return result
 
+	def _rewrite_language(text: str) -> str:
+		"""Fuerza una reescritura de idioma aunque el texto ya quepa en target.
+
+		`_compact_with` no llama al modelo si len(text) <= target; para corregir
+		un summary corto pero en inglés hace falta llamar siempre.
+		"""
+		if not language_rewrite_prompt:
+			return text
+		system = language_rewrite_prompt.replace("{target}", str(summary_target))
+		t0 = time.time()
+		content = _call(system, text).strip()
+		compaction_stats["calls"] += 1
+		compaction_stats["latency_s"] += time.time() - t0
+		if not content:
+			return text
+		if content.startswith("{"):
+			parsed_json = _parse_hub_payload(content, dominant_lang)
+			if parsed_json and parsed_json.get("summary"):
+				content = str(parsed_json["summary"])
+		return content.strip().strip('"').strip() or text
+
 	def _finalize(hub: Dict[str, Any]) -> Dict[str, Any]:
 		"""Impone el contrato de salida del hub SIN CORTAR.
 
@@ -1176,6 +1266,20 @@ def synthesize_hub_v2(
 				break
 			current = compacted
 			summary_compacted = True
+		# Idioma: Granite a veces escribe el summary en inglés aunque la sesión
+		# sea española. Reescribir en español es síntesis/transcripción, no corte.
+		lang_rewritten = False
+		lang_mismatch = False
+		if output_lang == "es" and _looks_english(current) and language_rewrite_prompt:
+			rewritten = _rewrite_language(current)
+			if rewritten and not _looks_english(rewritten):
+				current = rewritten
+				lang_rewritten = True
+			else:
+				lang_mismatch = True
+		hub["summary_language_rewritten"] = lang_rewritten
+		hub["summary_lang_mismatch"] = lang_mismatch
+
 		hub["summary"] = current
 		hub["summary_compacted"] = summary_compacted
 		hub["summary_over_budget"] = len(current) > summary_target
@@ -1199,6 +1303,8 @@ def synthesize_hub_v2(
 		hub["large_path"] = bool(large_used["flag"])
 		hub["model"] = large_used["model"] if large_used["flag"] else ""
 		hub["prompt_file"] = large_used["prompt"] or prompt_file
+		if output_lang:
+			hub["lang"] = output_lang
 		return hub
 
 	# Caso normal: cabe en una llamada (sin truncar; si no cupiera, map-reduce).
@@ -1244,12 +1350,28 @@ def synthesize_hub_v2(
 	levels = 0
 	while True:
 		prompt = render_hub_items(current)
-		if len(prompt) <= budget or len(current) == 1:
+		if len(prompt) <= reduce_budget:
 			final = _parse_hub_payload(_call(system_prompt, prompt, master=True), dominant_lang)
 			if final is None:
 				return _make_fallback()
 			break
-		groups = partition_hub_items(current, pack_budget, max_chunks)
+		if len(current) == 1:
+			# Un único parcial que aún no cabe: partirlo lossless y seguir
+			# reduciendo. Sin esto, el master recibía el prompt completo
+			# (45k tokens en el giant) y el servidor devolvía HTTP 500.
+			split = partition_hub_items(current, reduce_pack, max_chunks)
+			if len(split) > 1:
+				current = split
+				levels += 1
+				if levels > HUB_MAP_REDUCE_MAX_LEVELS:
+					return _make_fallback()
+				continue
+			# No se puede partir más: última llamada (prompt ya mínimo).
+			final = _parse_hub_payload(_call(system_prompt, prompt, master=True), dominant_lang)
+			if final is None:
+				return _make_fallback()
+			break
+		groups = partition_hub_items(current, reduce_pack, max_chunks)
 		next_level: List[Dict[str, Any]] = []
 		for group in groups:
 			parsed = _parse_hub_payload(_call(system_prompt, render_hub_items(group)), dominant_lang)

@@ -171,6 +171,23 @@ def _synthesize_one(
 		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
 		return "failed"
 	body = str(hub.get("summary") or "")
+	# Un engrama es una IDEA, no una historia: el summary que va a Qdrant (y
+	# por tanto al contexto de una búsqueda) tiene un tope duro. El detalle vive
+	# en Memento (notas/polaroids/raw) y en los miembros; si el maestro no baja
+	# por síntesis, NO se escribe el hub: se reintenta, no se inyectan 3k chars.
+	hard_limit = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000))
+	if len(body) > hard_limit:
+		logger.warning(
+			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id}; "
+			"no se escribe (se reintenta; el detalle sigue en Memento)"
+		)
+		return "failed"
+	if hub.get("summary_lang_mismatch"):
+		logger.warning(
+			f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; "
+			"no se escribe (se reintenta con reescritura)"
+		)
+		return "failed"
 	if hub.get("title"):
 		body = f"{hub['title']}\n{body}"
 	emotion, intensity = affect_fn(chunks)
@@ -214,6 +231,8 @@ def _synthesize_one(
 	metadata["hub_input_chars"] = int(hub.get("input_chars") or 0)
 	metadata["hub_summary_compacted"] = bool(hub.get("summary_compacted", False))
 	metadata["hub_summary_over_budget"] = bool(hub.get("summary_over_budget", False))
+	metadata["hub_summary_language_rewritten"] = bool(hub.get("summary_language_rewritten", False))
+	metadata["hub_summary_lang_mismatch"] = bool(hub.get("summary_lang_mismatch", False))
 	metadata["hub_title_over_target"] = bool(hub.get("title_over_target", False))
 	metadata["hub_texture_over_target"] = bool(hub.get("texture_over_target", False))
 	metadata["hub_texture_compacted"] = bool(hub.get("texture_compacted", False))

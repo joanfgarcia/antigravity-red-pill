@@ -268,6 +268,29 @@ def test_synthesize_hub_v2_texture_split_by_synthesis(monkeypatch):
 	assert hub["truncated"] is False
 
 
+def test_hub_summary_english_is_rewritten_to_spanish(monkeypatch):
+	"""Granite cambiaba a inglés; la reescritura de idioma es síntesis, no corte."""
+	import red_pill.config as cfg
+	from red_pill.metabolism.distiller import _looks_english
+
+	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "es", raising=False)
+	english = "The team centralized configuration using YAML and fixed a variable naming error to ensure code accuracy. A detailed plan for the 0.8.0 release was established with pull requests and merges."
+
+	class _Lang:
+		def generate(self, prompt, messages=None, temperature=0.1, **kwargs):  # noqa: ANN001
+			system = str((messages or [{}])[0].get("content") or "")
+			if "HUB_LANGUAGE_REWRITE" in system:
+				return "El equipo centralizó la configuración mediante YAML y corrigió un error de nomenclatura para asegurar la precisión del código. Se estableció un plan para la versión 0.8.0 con solicitudes de fusión e integraciones."
+			return json.dumps({"title": "T", "summary": english, "texture": "atmósfera", "lang": "es"})
+
+	_patch_custom(monkeypatch, _Lang())
+	hub = synthesize_hub_v2(CHUNKS)
+	assert _looks_english(hub["summary"]) is False
+	assert hub["summary_language_rewritten"] is True
+	assert hub["summary_lang_mismatch"] is False
+
+
+
 def test_synthesize_hub_v2_texture_split_strict_synthesis_only(monkeypatch):
 	"""Con el fallback lossless OFF, si la síntesis no parte, el hub no se escribe."""
 	import pytest
