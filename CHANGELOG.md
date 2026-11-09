@@ -1,5 +1,11 @@
 ## Unreleased
 
+### 📨 Avisos inyectados — plegados con título (AD-117)
+
+- **[NEW] Presentación plegada en OpenCode**: los avisos de `soul_notify` (fin de job, tablón, sesiones hermanas) se entregan por `POST /api/session/<id>/prompt` con `metadata.displayText`; el IDE pinta una sola línea (`Mensaje recibido · job '…' → success`, `… · CORO E-…`, `… · tablón`) y el cuerpo completo sigue en el prompt para el modelo. Fallback automático a `opencode run --session` si la API falla o tarda más de 8 s.
+- **[FIX] Se conservan captura, handshake y acuse**: se descartó el mensaje `synthetic` porque **no dispara el hook `prompt`** (0 filas en `memory_queue` medido); el user message con `displayText` mantiene scribe → Búnker, reset del handshake y acuse `msg=<event_id>`.
+- **[TEST] 7 casos nuevos** (`TestPresentacionPlegada`): títulos (CORO/job/tablón/genérico), payload con `displayText`, fallback al `run` clásico y sesión inexistente. 146 passed en los módulos tocados; 4.336 en la suite (1 fallo preexistente de Sound of Silence).
+
 ### 🎨 Media — MOSS-Image-SFT evaluado y descartado (ficha en `docs/BENCHMARKS/`)
 
 - **[DOC] Bench A/B completo (30 imágenes, 6 géneros)**: MOSS-Image-SFT (5,1 B DiT, apache-2.0) tarda **228 s/imagen** frente a 6,6 s de `flux2_klein`, 15,2 s de `flux3_klein`, 19,6 s de `zimage_turbo` y 32,5 s de `qwen_image_2_1_turbo`, **sin ganar en ningún género** y fallando tipografía (*"siven hills"*, cartel ilegible en ilustración); retrato con sobre-saturación de rojo y producto desobediente. **No entra en el elenco**; pesos purgados. Ficha + snippet de re-evaluación en `docs/BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md`.

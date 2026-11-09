@@ -3671,3 +3671,25 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0.95` y **≥32.768 tokens de salida**; con 10.240 de contexto y 8 GB no cabe, y el high sin budget hace timeout. La de Spark documenta `enable_thinking`/`reasoning_effort` high/low, pero en este build de llama.cpp high y low son un no-op; el que manda es `--reasoning-budget`. **Decisión**: Granite sigue siendo el titular de `hub` (rápido, limpio y con caché: 13m25 en frío / 19,3 s en caliente sobre el gigante); K2 off queda como candidato no-default para fidelidad; Spark no se promueve a titular por calidad de lengua (queda como candidato no-default/experimento). El guardia sin corte protege el esquema con cualquier modelo.
 
 **Consequences**: el hub no puede volver a reventar por tamaño ni llenar el contexto; la navegación hub→miembro→Memento sigue disponible y cuesta ~1 KB; el coste nocturno del hub pasa de 40 min a (frontera + maestro) en régimen. El ciclo total sigue dominado por el chronicle (K2 annotate, 2h31), fuera del alcance de este AD.
+
+## [AD-117] Avisos inyectados: presentación plegada con título (`metadata.displayText`)
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/notice-display`).
+
+**Context**: los avisos de `soul_notify` (fin de job, nudge de evento del tablón, mensaje de sesión hermana) se inyectaban con `opencode run --session` y el IDE los pintaba como un mensaje de usuario con el cuerpo crudo. El Operador pidió que se vieran **plegados y con un título de procedencia**, sin cambiar lo que ve el modelo. OpenCode V2 ofrece dos caminos: el mensaje `synthetic` (aviso de sistema, una línea tenue) y el user message normal con `metadata.displayText`.
+
+**Decision**:
+- El transporte `cli` de `soul_notify` entrega por **`POST /api/session/<id>/prompt`** usando `opencode api post` (resuelve servicio y auth) con `metadata.displayText = notice_title(text)`. Si la llamada falla (rc≠0, timeout de 8 s, servicio caído), cae al `opencode run --session` clásico: perder un aviso es peor que pintarlo sin plegar.
+- `notice_title()` deriva un título de **una línea**: `Mensaje recibido · CORO <hilo>`, `Mensaje recibido · job '<título>' → <estado>`, `Mensaje recibido · tablón`, o `Mensaje recibido`. Máximo 120 caracteres; **nunca usa el cuerpo** como título (D-09: el aviso es dato, no orden).
+- **No se usa `synthetic`**: no dispara el hook `prompt` del arnés, así que se perderían la captura del turno (scribe → Búnker), el reset del handshake y el acuse `msg=<event_id>`.
+- `delivery.INJECTION_POINTS` no cambia (`opencode` sigue en `cli`); solo se actualiza la tabla de honestidad para describir la ruta real.
+- La entrega conserva `steer` por defecto y `resume=true` (despierta una sesión idle), igual que antes.
+
+**Evidence**:
+- E2E 2026-11-09: aviso de job entregado → mensaje `type: user` con `metadata.displayText` correcto, turno ejecutado (el modelo respondió al cuerpo) y prompt+respuesta completos en `memory_queue`.
+- Contraprueba `synthetic`: dos sesiones con mensaje sintético → **0 filas** en `memory_queue`; la misma sesión con `/prompt` → 1 fila. Confirma la pérdida de captura.
+- Renderer del desktop 2.2.6: `im` pasa `displayText ?? message.text` a `Pl`; la acción **Copy message** copia `message.text` completo.
+- `opencode api` devuelve rc=0 en éxito y rc≠0 en error (400 → rc=1); el HTTP directo exige Basic auth (`service.json`), por eso se usa el CLI.
+- Tests: `TestPresentacionPlegada` (7 casos: títulos, payload con `displayText`, fallback, sesión inexistente); 146 passed en los módulos tocados y 4.336 en la suite completa (1 fallo preexistente de Sound of Silence, ajeno).
+
+**Consequences**: el IDE muestra una tarjeta de una línea con la procedencia y el cuerpo queda oculto; el modelo recibe el cuerpo íntegro y el operador puede recuperarlo con **Copy message**. El runner de jobs recoge el cambio en el siguiente ciclo (proceso nuevo); el `mcp_proxy` de una sesión viva es un proceso largo y necesita reinicio o sesión nueva para el push de `coro_api.send`. Si una versión futura de OpenCode deja de honrar `metadata.displayText`, la degradación es pintar el mensaje completo, no perderlo. Claude Code ya tiene el marco nativo de mensaje peer (`isMeta` + `origin.kind=peer`, «Message from …»); Pi queda pendiente porque hoy no tiene punto de inyección en red-pill.
