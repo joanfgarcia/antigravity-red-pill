@@ -513,6 +513,40 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
+def _hub_pointer(payload: Dict[str, Any]) -> str:
+	"""Línea compacta de punteros hub (D-07): id, sesión, rangos y nº de miembros.
+
+	Se imprime para TODO hit con `hub_id` (hub o miembro rescatado): el agente
+	necesita el puntero para abrir el detalle con `hub_members`, no el texto.
+	"""
+	hub_id = str(payload.get("hub_id") or "")
+	is_hub = payload.get("node_type") == "synthesis_hub" or payload.get("lazarus_phase") == "synthesis_hub"
+	if not hub_id and is_hub:
+		hub_id = str(payload.get("_point_id") or "")
+	if not hub_id and not is_hub:
+		return ""
+	bits = [f"hub_id={hub_id[:36]}"]
+	sid = payload.get("session_id")
+	if sid:
+		bits.append(f"session={str(sid)[:24]}")
+	if is_hub:
+		members = payload.get("hub_members_count")
+		if members is not None:
+			bits.append(f"members={int(members)}")
+		ranges = payload.get("hub_partition_ranges") or []
+		if isinstance(ranges, (list, tuple)) and ranges:
+			pairs = [f"{ranges[i]}-{ranges[i + 1]}" for i in range(0, min(len(ranges) - 1, 15), 2)]
+			bits.append("ranges=" + ",".join(pairs))
+		terms = payload.get("hub_terms")
+		if isinstance(terms, (list, tuple)):
+			bits.append(f"terms={len(terms)}")
+		if payload.get("hub_synth_version"):
+			bits.append(f"v={payload.get('hub_synth_version')}")
+	else:
+		bits.append("member")
+	return "  ↳ " + " ".join(bits)
+
+
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="recall",
@@ -572,6 +606,9 @@ async def handle_recall(arguments: Dict[str, Any]):
 		intensity = payload.get("intensity", 1.0)
 		status = " [IMMUNE]" if payload.get("immune") else f" (Score: {float(score):.2f})"
 		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
+		pointer = _hub_pointer({**payload, "_point_id": str(getattr(hit, "id", ""))})
+		if pointer:
+			lines.append(pointer)
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
@@ -602,6 +639,19 @@ async def handle_recall(arguments: Dict[str, Any]):
 				"enum": ["session", "member"],
 				"description": "session = cadena de hubs (macro); member = cadena intra-sesión de miembros (micro). Default: session.",
 			},
+			"limit": {
+				"type": "integer",
+				"description": "level=member: max miembros a devolver (default 20 con SW_TRAVERSE_MEMBER_LIMIT_ENABLED; si no, 500 legado).",
+			},
+			"offset": {
+				"type": "integer",
+				"description": "level=member: miembros a saltar (paginación). Default 0.",
+			},
+			"mode": {
+				"type": "string",
+				"enum": ["titles", "content"],
+				"description": "level=member: titles (≤60 chars) o content (≤200 chars). Default: content.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -620,7 +670,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		client = manager.client
 
 		# 1. Find the best matching synthesis_hub via semantic search (search wider, filter to hubs)
-		hits = manager.search_and_reinforce(collection, query, limit=50, caller="traverse")
+		hits = manager.search_and_reinforce(collection, query, limit=50, caller="traverse", hybrid=True)
 		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
 		if not hub_hits:
 			return [
@@ -635,33 +685,62 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 
 		start = hub_hits[0]
 
-		# ── MICRO (D8): cadena intra-sesión de miembros (orden de refine) ──────
+		# ── MICRO (D8): cadena intra-sesión de miembros (orden created_at) ────
 		if level == "member":
 			sid = start.payload.get("session_id")
 			if not sid:
 				return [types.TextContent(type="text", text="El nodo inicial no tiene session_id; no hay micro-hilo.")]
 			from qdrant_client.http import models as _qm
 
-			from red_pill.metabolism.thread_synthesis import order_members
+			from red_pill.config import get_config
+			from red_pill.metabolism.hub_synthesis import is_content_node, sort_members_chronologically
 
+			cfg_now = get_config()
+			bounded = bool(getattr(cfg_now, "SW_TRAVERSE_MEMBER_LIMIT_ENABLED", False))
+			offset = max(0, int(arguments.get("offset", 0) or 0))
+			raw_limit = arguments.get("limit")
+			if raw_limit is None:
+				limit = int(getattr(cfg_now, "MEMORY_TRAVERSE_MEMBER_DEFAULT", 20)) if bounded else 500
+			else:
+				limit = int(raw_limit)
+			limit = max(1, min(limit, 500))
+			mode = str(arguments.get("mode", "content"))
+			content_chars = 60 if mode == "titles" else 200
+			# Con el flag OFF se conserva el comportamiento legado (500×200);
+			# con el flag ON se aplica el presupuesto de salida (D-13).
+			max_total_chars = int(getattr(cfg_now, "MEMORY_HUB_MEMBERS_MAX_CHARS", 8000) or 8000) if bounded else 10**9
+
+			# Qdrant no ordena por payload: se trae una ventana acotada y se
+			# ordena/ paginación en memoria. Nunca 500×200 chars por defecto
+			# cuando el flag está ON.
+			scan_limit = min(500, max(limit + offset, 100 if bounded else 500))
 			pts, _ = client.scroll(
 				collection,
 				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=sid))]),
-				limit=500,
+				limit=scan_limit,
 				with_payload=True,
 			)
 			members = [
 				(str(p.id), p.payload or {})
 				for p in pts
-				if (p.payload or {}).get("lazarus_phase") != "synthesis_hub" and (p.payload or {}).get("node_type") != "synthesis_hub"
+				if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")
 			]
-			ordered = order_members(members)
+			ordered = sort_members_chronologically(members)
+			window = ordered[offset : offset + limit]
 			start_id = str(start.id)
-			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} miembros", ""]
-			for mid, mp in ordered:
+			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} escaneados", ""]
+			used = 0
+			for mid, mp in window:
+				text = str(mp.get("content", "")).replace("\n", " ").strip()
+				text = text[:content_chars]
 				mark = "  ← START" if mid == start_id else ""
-				lines.append(f"· [{mid[:8]}] {str(mp.get('content', ''))[:200]}{mark}")
-			lines.append(f"\nTotal: {len(ordered)} miembros (orden por member_index/refine)")
+				line = f"· [{mid[:8]}] {text}{mark}"
+				if used + len(line) > max_total_chars:
+					lines.append(f"… (ventana {offset}-{offset + len(window)}; salida acotada a {max_total_chars} chars)")
+					break
+				used += len(line)
+				lines.append(line)
+			lines.append(f"\nTotal: {len(ordered)} miembros | ventana {offset}-{offset + len(window)} (orden created_at)")
 			return [types.TextContent(type="text", text="\n".join(lines))]
 
 		def _fetch(point_id: str) -> dict | None:
@@ -711,6 +790,104 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 	except Exception as e:
 		logger.error(f"traverse_thread failed: {e}")
 		return [types.TextContent(type="text", text=f"Thread traversal error: {e}")]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="hub_members",
+	description=(
+		"[OFFICIAL] Abre un hub como ÍNDICE: lista sus miembros (títulos o contenido acotado) "
+		"con paginación. No inyecta el detalle completo. Requiere SW_HUB_MEMBERS_ENABLED."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"hub_id": {"type": "string", "description": "Point id del hub devuelto por recall/traverse."},
+			"collection": {
+				"type": "string",
+				"enum": ["work_memories", "social_memories"],
+				"description": "Collection del hub. Default: work_memories.",
+			},
+			"limit": {"type": "integer", "description": "Máximo de miembros (default 10, tope 50)."},
+			"offset": {"type": "integer", "description": "Miembros a saltar. Default 0."},
+			"mode": {
+				"type": "string",
+				"enum": ["titles", "content"],
+				"description": "titles = primera línea ≤60 chars; content = ≤200 chars por miembro. Default: titles.",
+			},
+			"max_chars_total": {"type": "integer", "description": "Presupuesto total de salida. Default 8000."},
+		},
+		"required": ["hub_id"],
+	},
+)
+async def handle_hub_members(arguments: Dict[str, Any]):
+	from qdrant_client.http import models as _qm
+
+	from red_pill.cli import get_collection
+	from red_pill.config import get_config
+	from red_pill.memory import MemoryManager
+	from red_pill.metabolism.hub_synthesis import is_content_node, sort_members_chronologically
+
+	cfg_now = get_config()
+	if not bool(getattr(cfg_now, "SW_HUB_MEMBERS_ENABLED", False)):
+		return [types.TextContent(type="text", text="[HUB MEMBERS] disabled (SW_HUB_MEMBERS_ENABLED=false).")]
+
+	hub_id = str(arguments.get("hub_id") or "").strip()
+	if not hub_id:
+		return [types.TextContent(type="text", text="[HUB MEMBERS] falta hub_id.")]
+	collection = get_collection(str(arguments.get("collection") or "work_memories"))
+	limit = max(1, min(int(arguments.get("limit", 10) or 10), 50))
+	offset = max(0, int(arguments.get("offset", 0) or 0))
+	mode = str(arguments.get("mode", "titles"))
+	max_total = max(500, int(arguments.get("max_chars_total", getattr(cfg_now, "MEMORY_HUB_MEMBERS_MAX_CHARS", 8000)) or 8000))
+
+	try:
+		manager = MemoryManager()
+		client = manager.client
+		hub_points = client.retrieve(collection_name=collection, ids=[hub_id], with_payload=True)
+		if not hub_points:
+			return [types.TextContent(type="text", text=f"[HUB MEMBERS] hub no encontrado: {hub_id} en {collection}.")]
+		hub_payload = hub_points[0].payload or {}
+		session_id = hub_payload.get("session_id")
+		if not session_id:
+			return [types.TextContent(type="text", text="[HUB MEMBERS] el hub no tiene session_id; no hay miembros que abrir.")]
+
+		scan_limit = min(500, max(limit + offset, 100))
+		points, _ = client.scroll(
+			collection,
+			scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))]),
+			limit=scan_limit,
+			with_payload=True,
+		)
+		members = [
+			(str(point.id), point.payload or {})
+			for point in points
+			if is_content_node(point.payload or {}) and not (point.payload or {}).get("_is_fragment")
+		]
+		ordered = sort_members_chronologically(members)
+		window = ordered[offset : offset + limit]
+		total_hint = int(hub_payload.get("hub_members_count") or len(ordered))
+		header = (
+			f"[HUB MEMBERS] collection={collection} | session={session_id} | "
+			f"{total_hint} miembros (escaneados {len(ordered)}) | ventana {offset}-{offset + len(window)} | mode={mode}"
+		)
+		lines = [header, ""]
+		used = 0
+		for mid, payload in window:
+			text = str(payload.get("content", "")).replace("\n", " ").strip()
+			text = text[:60] if mode == "titles" else text[:200]
+			line = f"· [{mid[:8]}] {text}"
+			if used + len(line) > max_total:
+				lines.append(f"… (salida acotada a {max_total} chars; usa offset para seguir)")
+				break
+			used += len(line)
+			lines.append(line)
+		if not window:
+			lines.append("(sin miembros en esta ventana)")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		logger.error(f"hub_members failed: {e}", exc_info=True)
+		return [types.TextContent(type="text", text=f"[HUB MEMBERS] error: {e}")]
 
 
 @registry.register_action(

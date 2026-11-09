@@ -866,6 +866,15 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 					stats["released"] = stats.get("released", 0) + len(release)
 				except Exception as e:
 					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
+			# La erosión puede dejar islas (miembros demotados, hub vivo): se
+			# reconcilia el estado blocked/count para no reintentar a ciegas.
+			if to_delete:
+				try:
+					from red_pill.metabolism.hub_synthesis import reconcile_hub_blocks
+
+					reconcile_hub_blocks(memory_manager, collections=(collection,), apply=True)
+				except Exception as e:
+					logger.warning(f"[SLEEP ENGINE] No se pudo reconciliar hubs bloqueados en {collection}: {e}")
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
 	return stats

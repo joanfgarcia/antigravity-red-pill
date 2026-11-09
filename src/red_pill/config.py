@@ -751,6 +751,22 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_WARN_BEFORE_DAYS: int = 7
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
+	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
+	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;
+	# la migración del corpus se decide aparte (D-11: listar, no migrar).
+	SW_HUB_KEYWORD_ENABLED: bool = False  # pata keyword de hubs (hub_title/hub_terms)
+	SW_HUB_BOOST_ENABLED: bool = False  # reordena hubs ya presentes en el top semántico
+	SW_HUB_MEMBERS_ENABLED: bool = False  # action MCP hub_members
+	SW_TRAVERSE_MEMBER_LIMIT_ENABLED: bool = False  # traverse level=member con default acotado (20)
+	SW_HUB_VERSION_INVALIDATION_ENABLED: bool = False  # re-sintetiza si cambia HUB_SYNTH_VERSION
+	SW_HUB_SCRUB_ENABLED: bool = True  # D-12: redacta secretos del body antes del upsert
+	MEMORY_HUB_KEYWORD_MAX_HUBS: int = 500  # hubs escaneados por la pata keyword
+	MEMORY_HUB_KEYWORD_MAX_CHARS: int = 500  # presupuesto BLANDO de la lista de keywords (keywords enteras)
+	MEMORY_HUB_KEYWORD_MIN_SCORE: float = 0.0  # corta la cola de términos poco relevantes
+	MEMORY_HUB_MEMBERS_MAX_TITLES: int = 20  # títulos devueltos por hub_members
+	MEMORY_HUB_MEMBERS_MAX_CHARS: int = 8000  # presupuesto total de hub_members mode=content
+	MEMORY_TRAVERSE_MEMBER_DEFAULT: int = 20  # default de traverse level=member con el flag ON
 	# Tope de sesiones sintetizadas por ciclo de sueño (0 = sin tope). Necesario
 	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
 	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0

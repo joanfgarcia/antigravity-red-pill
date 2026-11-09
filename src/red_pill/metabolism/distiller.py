@@ -1361,7 +1361,10 @@ def synthesize_hub_v2(
 			# (45k tokens en el giant) y el servidor devolvía HTTP 500.
 			split = partition_hub_items(current, reduce_pack, max_chunks)
 			if len(split) > 1:
-				current = split
+				# `partition_hub_items` devuelve LOTES; el bucle de reduce
+				# consume una lista plana de parciales. Aplanar conserva todos
+				# los segmentos (no se descarta contenido).
+				current = [item for batch in split for item in batch]
 				levels += 1
 				if levels > HUB_MAP_REDUCE_MAX_LEVELS:
 					return _make_fallback()

@@ -208,7 +208,7 @@ def test_hierarchical_metadata_is_persisted_in_the_hub(monkeypatch):
 	assert metadata["hub_members_count"] == 1
 	assert metadata["hub_map_reduce_levels"] == 1
 	assert metadata["hub_truncated"] is False
-	assert metadata["hub_synth_version"] == 2
+	assert metadata["hub_synth_version"] == 3
 
 
 def test_find_oversized_sessions_skips_already_remediated():
@@ -219,7 +219,7 @@ def test_find_oversized_sessions_skips_already_remediated():
 	memory = MagicMock()
 	memory.client.collection_exists.return_value = True
 	memory.client.scroll.return_value = ([point_a, point_b], None)
-	memory.client.retrieve.return_value = [MagicMock(payload={"hub_synth_version": 2, "hub_truncated": False})]
+	memory.client.retrieve.return_value = [MagicMock(payload={"hub_synth_version": 3, "hub_truncated": False})]
 
 	assert find_oversized_sessions(memory, collections=("work_memories",), budget=100) == []
 	all_rows = find_oversized_sessions(memory, collections=("work_memories",), budget=100, only_pending=False)

@@ -5,7 +5,9 @@
 # existía en el drain pre-single-writer (SLEEP_MAX_CHUNKS_PER_HUB) y se perdió
 # al reescribir consolidation en 8.0.0; el marcador `hub_rebuild_pending`
 # (AD-023 §4) quedó como deuda. Este job cierra esa deuda sobre el corpus vivo:
-#   - `--list` = inventario de sesiones cuyo prompt actual supera el presupuesto;
+#   - `--list-stale` = inventario POR HUB fuera del contrato vigente (v<3 o
+#     summary>hard); es el que alimenta la migración (D-11: listar ahora,
+#     programar el job, NO ejecutar hasta que las pruebas estén verdes);
 #   - un step por sesión = re-síntesis con hubs parciales + reducción en árbol.
 #
 # Un step = una sesión (checkpoint por elemento, pausable/reanudable). Si una
@@ -16,7 +18,7 @@ priority: 6
 title: Re-síntesis jerárquica de hubs truncados
 mission_id: hubs-resynthesize
 step_command: .venv/bin/python scripts/resynthesize_hubs.py --run
-elements_command: .venv/bin/python scripts/resynthesize_hubs.py --list
+elements_command: .venv/bin/python scripts/resynthesize_hubs.py --list-stale --eligible
 defer_exit_code: 77
 skip_exit_code: 79
 llm:
