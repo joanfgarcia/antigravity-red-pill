@@ -71,20 +71,37 @@ def is_groupable(payload: Dict[str, Any]) -> bool:
 	return is_content_node(payload) and bool(payload.get("session_id"))
 
 
+def _chrono_key(member: Tuple[Any, Dict[str, Any]]) -> Tuple[float, str]:
+	"""Orden cronológico de los miembros (created_at; desempate estable por id)."""
+	pid, payload = member
+	try:
+		ts = float((payload or {}).get("created_at") or 0.0)
+	except (TypeError, ValueError):
+		ts = 0.0
+	return (ts, str(pid))
+
+
 def group_by_session(points: List[Tuple[Any, Dict[str, Any]]]) -> Dict[str, List[Tuple[Any, Dict[str, Any]]]]:
-	"""Agrupa engramas de contenido por `session_id` (excluye hubs y sin sesión)."""
+	"""Agrupa engramas de contenido por `session_id` (excluye hubs y sin sesión).
+
+	Los miembros se devuelven ORDENADOS por `created_at`: el map-reduce trocea
+	"fragmentos cronológicos" y los rangos de navegación se calculan sobre ese
+	orden, así que el orden de scroll de Qdrant (por id) no sirve.
+	"""
 	groups: Dict[str, List[Tuple[Any, Dict[str, Any]]]] = {}
 	for pid, payload in points:
 		payload = payload or {}
 		if not is_groupable(payload):
 			continue
 		groups.setdefault(str(payload["session_id"]), []).append((pid, payload))
+	for members in groups.values():
+		members.sort(key=_chrono_key)
 	return groups
 
 
 def _members_to_chunks(members: List[Tuple[Any, Dict[str, Any]]]) -> List[Dict[str, Any]]:
 	chunks: List[Dict[str, Any]] = []
-	for _pid, pl in members:
+	for member_index, (_pid, pl) in enumerate(members):
 		texture = ""
 		if pl.get("texture"):
 			texture = str(pl["texture"]).strip()
@@ -103,6 +120,7 @@ def _members_to_chunks(members: List[Tuple[Any, Dict[str, Any]]]) -> List[Dict[s
 				"texture": texture or None,
 				"relics": pl.get("relics") or [],
 				"lang": pl.get("lang"),
+				"_member_index": member_index,
 			}
 		)
 	return chunks
@@ -127,6 +145,7 @@ def _synthesize_one(
 	`force=True` salta el atajo de idempotencia: lo usa la re-síntesis de hubs
 	truncados (el conjunto de miembros no cambia, pero el algoritmo sí).
 	"""
+	members = sorted(members, key=_chrono_key)
 	member_ids = [pid for pid, _ in members]
 	hid = hub_point_id(collection, session_id)
 	ihash = hub_input_hash(member_ids)
@@ -144,7 +163,7 @@ def _synthesize_one(
 			pass
 
 	chunks = _members_to_chunks(members)
-	hub = synthesizer(chunks) or {}
+	hub = synthesizer(chunks, cache_namespace=f"{collection}:{session_id}") or {}
 	if hub.get("_is_fallback"):
 		# El sintetizador cayó al fallback mecánico (LLM caído): NO se escribe un
 		# hub-basura ni se marcan miembros (quedarían ocultos sin hub real). Se
@@ -164,25 +183,47 @@ def _synthesize_one(
 		"hub_depth": 2,
 		"session_id": session_id,
 		"origin": "memento_hub",
-		"members": member_ids,
+		"hub_members_count": len(member_ids),
+		"hub_snapshot_ts": time.time(),
 		"last_reinforced_at": time.time(),
 	}
-	if hub.get("texture"):
-		metadata["texture"] = hub["texture"]
+	# Textura: si cabe, campo canónico; si se partió (síntesis o lossless), la
+	# lista `texture_parts` conserva TODO el contenido y `texture` queda vacío.
+	texture = str(hub.get("texture") or "").strip()
+	if texture:
+		metadata["texture"] = texture
+	texture_parts = [str(p).strip() for p in (hub.get("texture_parts") or []) if str(p).strip()]
+	if texture_parts:
+		metadata["texture_parts"] = texture_parts
+		metadata["hub_texture_split"] = True
 	if hub.get("lang"):
 		metadata["lang"] = hub["lang"]
 	if hub.get("hierarchical"):
 		metadata["hub_hierarchical"] = True
 		metadata["hub_partition_count"] = int(hub.get("partition_count") or 0)
-		metadata["hub_partitions"] = hub.get("partitions") or []
+		# Navegación barata (AD-116): lista plana [from0,to0,from1,to1,...]
+		# sobre los miembros ordenados por created_at. Sin texto duplicado.
+		flat_ranges: List[int] = []
+		for rng in hub.get("partition_ranges") or []:
+			if isinstance(rng, (list, tuple)) and len(rng) == 2:
+				flat_ranges.extend([int(rng[0]), int(rng[1])])
+		if flat_ranges:
+			metadata["hub_partition_ranges"] = flat_ranges
 		metadata["hub_map_reduce_levels"] = int(hub.get("map_reduce_levels") or 0)
 	metadata["hub_truncated"] = bool(hub.get("truncated", False))
 	metadata["hub_input_chars"] = int(hub.get("input_chars") or 0)
 	metadata["hub_summary_compacted"] = bool(hub.get("summary_compacted", False))
 	metadata["hub_summary_over_budget"] = bool(hub.get("summary_over_budget", False))
+	metadata["hub_title_over_target"] = bool(hub.get("title_over_target", False))
 	metadata["hub_texture_over_target"] = bool(hub.get("texture_over_target", False))
+	metadata["hub_texture_compacted"] = bool(hub.get("texture_compacted", False))
+	metadata["hub_texture_split"] = bool(hub.get("texture_split", False) or texture_parts)
+	metadata["hub_texture_split_fallback"] = bool(hub.get("texture_split_fallback", False))
+	metadata["hub_output_chars"] = int(hub.get("output_chars") or 0)
 	metadata["hub_compaction_calls"] = int(hub.get("compaction_calls") or 0)
 	metadata["hub_compaction_latency_s"] = float(hub.get("compaction_latency_s") or 0.0)
+	metadata["hub_partial_cache_hits"] = int(hub.get("partial_cache_hits") or 0)
+	metadata["hub_partial_cache_total"] = int(hub.get("partial_cache_total") or 0)
 	# Híbrido (AD-115): modelo/prompt efectivos del maestro en hubs grandes.
 	metadata["hub_large_path"] = bool(hub.get("large_path", False))
 	metadata["hub_model"] = str(hub.get("model") or "")
@@ -277,6 +318,7 @@ def synthesize_session_hubs(
 		affect_fn = affect_fn or derive_hub_affect
 
 	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "sessions": 0, "enabled": True}
+	failed_sessions: List[str] = []
 	for collection in collections:
 		try:
 			if not memory_manager.client.collection_exists(collection):
@@ -289,25 +331,63 @@ def synthesize_session_hubs(
 				if offset is None:
 					break
 			groups = group_by_session(points)
-			for i, (session_id, members) in enumerate(groups.items()):
-				if limit_sessions is not None and i >= limit_sessions:
-					break
-				if len(members) < 2:
-					# Hub de una sola idea: el engrama ya es buscable; no se
-					# parafrasea ni se oculta (evita perder precisión).
-					continue
-				stats["sessions"] += 1
-				force = bool(force_sessions and session_id in force_sessions)
-				result = _synthesize_one(memory_manager, collection, session_id, members, synthesizer, affect_fn, force=force)
-				if result == "written":
-					stats["hubs_written"] += 1
-				elif result == "failed":
-					stats["hubs_failed"] += 1
-				else:
-					stats["hubs_skipped"] += 1
 		except Exception as e:
-			logger.error(f"[HUBS] fallo sintetizando hubs en {collection}: {e}")
+			logger.error(f"[HUBS] no se pudo inventariar {collection}: {e}")
+			continue
+		for i, (session_id, members) in enumerate(groups.items()):
+			if limit_sessions is not None and i >= limit_sessions:
+				break
+			if len(members) < 2:
+				# Hub de una sola idea: el engrama ya es buscable; no se
+				# parafrasea ni se oculta (evita perder precisión).
+				continue
+			stats["sessions"] += 1
+			force = bool(force_sessions and session_id in force_sessions)
+			# Fail-soft POR SESIÓN: un hub malo no puede abortar la colección
+			# (incidente 2026-11-09: una textura fuera de esquema se llevó por
+			# delante 7 grupos pendientes).
+			try:
+				result = _synthesize_one(memory_manager, collection, session_id, members, synthesizer, affect_fn, force=force)
+			except Exception as e:
+				logger.error(f"[HUBS] fallo sintetizando hub {collection}:{session_id}: {e}")
+				stats["hubs_failed"] += 1
+				failed_sessions.append(f"{collection}:{session_id}")
+				continue
+			if result == "written":
+				stats["hubs_written"] += 1
+			elif result == "failed":
+				stats["hubs_failed"] += 1
+				failed_sessions.append(f"{collection}:{session_id}")
+			else:
+				stats["hubs_skipped"] += 1
+	if stats["hubs_failed"]:
+		_emit_hub_failure_signal(memory_manager, stats, failed_sessions)
 	return stats
+
+
+def _emit_hub_failure_signal(memory_manager: Any, stats: Dict[str, Any], failed_sessions: List[str]) -> None:
+	"""Señal de dolor si algún hub no se pudo escribir (antes era invisible).
+
+	Nunca lanza: la fase de sueño debe terminar aunque el aviso falle.
+	"""
+	try:
+		name = "hub_synthesis_failed"
+		if memory_manager.has_signal(name):
+			return
+		muestra = ", ".join(failed_sessions[:5])
+		memory_manager.inject_signal(
+			name=name,
+			intensity=5.0,
+			signal_type="pain",
+			source="sleep/consolidation",
+			criticality="WARNING",
+			message=(
+				f"{stats['hubs_failed']} hub(s) no se escribieron; sus miembros siguen recallables "
+				f"(sin pérdida). Sesiones: {muestra}"
+			),
+		)
+	except Exception as e:
+		logger.debug(f"[HUBS] no se pudo emitir la señal de fallo: {e}")
 
 
 # ── Remediation: re-síntesis de hubs truncados ───────────────────────────────

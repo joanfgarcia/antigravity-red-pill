@@ -185,14 +185,13 @@ def test_hierarchical_metadata_is_persisted_in_the_hub(monkeypatch):
 	memory.add_memory.return_value = "hub1"
 	memory.client.scroll.return_value = ([], None)
 	members = [("m1", {"content": "x", "session_id": "s", "created_at": 1.0})]
-	partitions = [{"index": 1, "total": 2, "summary": "p1", "texture": "", "lang": "es"}]
 	synth = MagicMock(
 		return_value={
 			"title": "t",
 			"summary": "s",
 			"hierarchical": True,
 			"partition_count": 2,
-			"partitions": partitions,
+			"partition_ranges": [[0, 1], [1, 2]],
 			"map_reduce_levels": 1,
 			"truncated": False,
 			"input_chars": 123,
@@ -203,7 +202,10 @@ def test_hierarchical_metadata_is_persisted_in_the_hub(monkeypatch):
 	metadata = memory.add_memory.call_args.kwargs["metadata"]
 	assert metadata["hub_hierarchical"] is True
 	assert metadata["hub_partition_count"] == 2
-	assert metadata["hub_partitions"] == partitions
+	assert metadata["hub_partition_ranges"] == [0, 1, 1, 2]
+	assert "hub_partitions" not in metadata
+	assert "members" not in metadata
+	assert metadata["hub_members_count"] == 1
 	assert metadata["hub_map_reduce_levels"] == 1
 	assert metadata["hub_truncated"] is False
 	assert metadata["hub_synth_version"] == 2
@@ -228,18 +230,107 @@ def test_find_oversized_sessions_skips_already_remediated():
 	assert len(find_oversized_sessions(memory, collections=("work_memories",), budget=100)) == 1
 
 
-def test_hub_partitions_pass_schema_validation():
-	"""El esquema de metadata acepta hub_partitions (dicts planos) y rechaza anidados."""
+def test_hub_partition_ranges_pass_schema_validation():
+	"""AD-116: `hub_partition_ranges` es una lista PLANA de ints (pares from/to)."""
 	from red_pill.schemas import CreateEngramRequest
 
-	req = CreateEngramRequest(
-		content="x",
-		metadata={"hub_partitions": [{"index": 1, "total": 2, "summary": "s", "texture": "", "lang": "es"}]},
-	)
-	assert req.metadata["hub_partitions"][0]["index"] == 1
+	req = CreateEngramRequest(content="x", metadata={"hub_partition_ranges": [0, 20, 20, 41, 41, 76]})
+	assert req.metadata["hub_partition_ranges"] == [0, 20, 20, 41, 41, 76]
 	try:
-		CreateEngramRequest(content="x", metadata={"hub_partitions": [{"nested": {"x": 1}}]})
+		CreateEngramRequest(content="x", metadata={"hub_partition_ranges": [[0, 20]]})
 	except ValueError:
 		pass
 	else:
-		raise AssertionError("hub_partitions debe rechazar valores anidados")
+		raise AssertionError("hub_partition_ranges debe rechazar listas anidadas")
+
+	# El payload de texto duplicado (AD-113) ya no se acepta al escribir.
+	try:
+		CreateEngramRequest(content="x", metadata={"hub_partitions": [{"index": 1}]})
+	except ValueError:
+		pass
+	else:
+		raise AssertionError("hub_partitions ya no debe aceptarse (AD-116)")
+
+	# AD-116 revisado: la textura partida se conserva en `texture_parts` (lista
+	# de strings), sin perder contenido y sin superar el tope por parte.
+	req = CreateEngramRequest(content="x", metadata={"texture_parts": ["parte 1", "parte 2"]})
+	assert req.metadata["texture_parts"] == ["parte 1", "parte 2"]
+	try:
+		CreateEngramRequest(content="x", metadata={"texture_parts": ["x" * 2000]})
+	except ValueError:
+		pass
+	else:
+		raise AssertionError("texture_parts debe rechazar partes por encima del tope")
+
+
+def test_synthesize_one_orders_members_chronologically():
+	"""El map-reduce trocea 'fragmentos cronológicos': el orden de scroll no vale."""
+	from red_pill.metabolism.hub_synthesis import _synthesize_one
+
+	memory = MagicMock()
+	memory.add_memory.return_value = "hub1"
+	memory.client.scroll.return_value = ([], None)
+	members = [
+		("c", {"content": "tercero", "created_at": 30.0, "session_id": "s"}),
+		("a", {"content": "primero", "created_at": 10.0, "session_id": "s"}),
+		("b", {"content": "segundo", "created_at": 20.0, "session_id": "s"}),
+	]
+	seen: dict = {}
+
+	def synth(chunks, **kwargs):
+		seen["order"] = [c["summary"] for c in chunks]
+		return {"title": "t", "summary": "s"}
+
+	assert _synthesize_one(memory, "work_memories", "s", members, synth, lambda c: ("neutral", 0.5), force=True) == "written"
+	assert seen["order"] == ["primero", "segundo", "tercero"]
+
+
+def test_session_failure_is_fail_soft(monkeypatch):
+	"""Un hub que revienta no aborta la colección: se cuenta y se sigue (AD-116)."""
+	from red_pill.metabolism import hub_synthesis as hs
+
+	memory = MagicMock()
+	memory.client.collection_exists.return_value = True
+	points = [
+		MagicMock(id=f"a{i}", payload={"content": "x", "session_id": "s1", "node_type": "memento_engram", "created_at": i})
+		for i in range(2)
+	]
+	points += [
+		MagicMock(id=f"b{i}", payload={"content": "y", "session_id": "s2", "node_type": "memento_engram", "created_at": i})
+		for i in range(2)
+	]
+	memory.client.scroll.return_value = (points, None)
+	memory.has_signal.return_value = True  # no emitir señal en el test
+	monkeypatch.setattr(hs.cfg, "SW_HUBS_ENABLED", True, raising=False)
+
+	def synth(chunks, **kwargs):
+		if chunks and chunks[0]["summary"] == "y":
+			raise RuntimeError("boom")
+		return {"title": "t", "summary": "ok"}
+
+	stats = hs.synthesize_session_hubs(memory, collections=("work_memories",), synthesizer=synth, affect_fn=lambda c: ("neutral", 0.5))
+	assert stats["sessions"] == 2
+	assert stats["hubs_failed"] == 1
+	assert stats["hubs_written"] == 1
+
+
+def test_partial_cache_reuses_unchanged_batches(monkeypatch, tmp_path):
+	"""La 2ª pasada de una sesión viva solo paga el maestro (+ lote frontera)."""
+	from red_pill.core import paths
+	from red_pill.metabolism import distiller as d
+
+	monkeypatch.setattr(paths, "get_state_dir", lambda: tmp_path)
+	_configure(monkeypatch, budget=1200, max_chunks=4)
+	provider = _FakeProvider()
+	_patch_provider(monkeypatch, provider)
+	chunks = _chunks(14)
+
+	first = d.synthesize_hub_v2(chunks, cache_namespace="work_memories:s1")
+	calls_first = len(provider.prompts)
+	assert first["partition_count"] >= 2
+	assert first["partial_cache_hits"] == 0
+
+	second = d.synthesize_hub_v2(chunks, cache_namespace="work_memories:s1")
+	assert second["partial_cache_hits"] == second["partition_count"]
+	# Solo se paga el maestro (sin compaction: el fake devuelve textos cortos).
+	assert len(provider.prompts) == calls_first + 1

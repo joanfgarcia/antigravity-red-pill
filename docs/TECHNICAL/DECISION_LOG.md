@@ -3632,3 +3632,42 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 **Evidence** (bake-off 2026-11-08, 15/15 OK, `truncated=false` en todas): Granite 75,2 s / 770 chars / coverage 0,233; K2 178,4 s / 1.549 / 0,322; K2 concise 148,6 s / 1.204 / **0,389**; K2 concise+compaction 203,9 s / 1.216 / 0,300 (8,6 s extra); Bonsai 259,7 s / 832 / 0,267. La compaction de K2 falló en 42k (1.427 chars, `summary_compacted=false`) y fue parcial en 166k (1.374 chars): es un lever blando. Ciclo nocturno `6ecdfe81`: 1 h 57 min; fase `consolidation` ~10,5 min para 84 hubs; K2 concise+compaction añadiría ~12-19 min. Híbrido: `tests/test_hub_v2.py` (modelo/prompt en el path grande, default intacto en el pequeño) y `tests/test_sip_provider_payload.py` (override por llamada). Detalle en `DISTILLER_SELECTION.md` y `docs/BENCHMARKS/HUB_BAKEOFF.md`.
 
 **Consequences**: ningún hub se trunca, ni en el prompt, ni en la textura, ni en el summary; lo que no se puede compactar queda largo y auditado. El default efectivo es **híbrido**: Granite para ≤100k y K2 concise para >100k, con un coste estimado de ~2-4 min por ciclo (≈8-9 min en una noche de backfill con ~4 hubs grandes). Bonsai queda descartado. La decisión es revisable con las métricas `hub_model`/`hub_large_path` de los hubs reales.
+
+## [AD-116] Contrato de salida del hub: índice acotado, navegación por rangos y síntesis incremental
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (revisado 2026-11-09: contrato **sin corte**; rama `fix/hub-output-contract`).
+
+**Context**: AD-115 eliminó los topes de salida ("no truncar nunca") y el ciclo del 2026-11-09 lo expuso: el hub de la sesión de 736.959 chars / 1.670 miembros quedó con summary 3.641 + textura 2.662 + `hub_partitions` (87,5 KB) + `members` (52,3 KB) = **145.377 bytes de payload**. La escritura falló porque `texture` (2.662) superaba `MAX_METADATA_STR` (1.024), y el `try/except` de la colección abortó 7 grupos pendientes. Además, el híbrido AD-115 decidía `large_path` por el total de la sesión y aplicaba K2 a las 97 llamadas del map: 40 min solo para ese hub.
+
+**Decision**:
+- Un hub es un **índice**, no un archivo: `title ≤120`, `summary ≤900`, `texture ≤400` (total ~1,4k chars ≈ 400 tokens) como **targets de síntesis**. La ENTRADA no se trunca; la SALIDA tampoco se corta.
+- Enforcement: compactación **por síntesis** (reescritura) de summary y textura. Si el modelo no obedece, el texto se conserva **entero** y se marca `hub_summary_over_budget`/`hub_texture_over_target`; nunca se recorta. Si la textura supera el tope duro de metadata (`MAX_METADATA_STR`), se parte en `texture_parts` por síntesis (y, como último recurso configurable, por segmentación lossless); el contenido se conserva. `hub_truncated` sigue significando "entrada truncada" y es siempre False en este camino. `SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK=false` obliga a reintentar en vez de segmentar.
+- `hub_partitions` (texto) y `members` (lista) **fuera del payload**. Navegación barata: `hub_partition_ranges` (lista plana de enteros) + `hub_members_count`; los miembros se resuelven por `hub_id`. El demote de hubs libera por `hub_id` (no por lista duplicada).
+- Orden **cronológico real** de los miembros por `created_at` (el scroll de Qdrant va por id) antes de trocear.
+- Fail-soft **por sesión** + señal de dolor `hub_synthesis_failed` si algún hub no se escribe.
+- `large_path` se decide **por llamada**; con map-reduce ninguna llamada supera 8k, así que queda OFF por defecto.
+- **Caché de parciales y reducciones** en el state dir (no en Qdrant), clave por contenido exacto: una sesión viva solo paga el lote frontera + el maestro en la siguiente pasada.
+
+**Evidence** (real, 2026-11-09 08:44, sesión `ses_e9f357…`):
+- 736.959 chars de entrada, 1.670 miembros, 97 lotes, 2 niveles de reducción: **13m25s en frío** (vs 40 min con K2), `truncated=false`, `summary=746`, `texture=350`, `output_chars=1.097`, payload **3.710 bytes** (−97,4 % vs 145.377), rangos contiguos `0..1670`, 3 compactions, Granite.
+- Caché: **97/97 parciales y 13/13 reducciones** reutilizables. Medido con Granite real y los datos del gigante:
+  - 1ª pasada con map caliente y reduce frío: **2m16s** (12 llamadas).
+  - 2ª pasada con todo caliente: **19,3 s** (maestro + 2 compactaciones).
+  - Escritura real del hub en caliente: **13,6 s** de pared (incluye arranque y carga del embedder).
+- Calidad del maestro en caliente: summary 889/900, textura 360/400, `output_chars` 1.284-1.326, `truncated=false`; cubre K-65P, `parent-of`, GBNF, gate-1, 2,47 bits/palabra, 99,4 % de retención, autoridad lexicográfica (delta 67) y migración v65→v67.
+- Tests: hub/sleep 42+55 verdes; suite completa 4.300 passed (2 fallos preexistentes de Sound of Silence en `branch_landing_audit.py`/`HUB_BAKEOFF.md`).
+
+**Revisión 2026-11-09 (sin corte + barrido de thinking)**. La primera versión de AD-116 resolvía el exceso con **recorte determinista** de la salida. El Operador lo rechazó: la compactación debe ser **de síntesis, no por corte**. Sustituido por: compactación por síntesis; si no baja, se conserva entero y se marca; si no cabe en metadata, `texture_parts` (síntesis de partes; segmentación lossless solo como fallback configurable). Además se midieron los parámetros oficiales de thinking en la sesión `large-166k` (441 miembros):
+
+| Config | Tiempo | Summary | Textura | Calidad |
+| :--- | ---: | ---: | ---: | :--- |
+| Granite (titular) | **199 s** | 1.591 | 340 | Limpio y conciso; pierde anclas |
+| K2 off (actual) | 466 s | 2.492 | 344 | Coherente y detallado; mejor fidelidad/tiempo |
+| K2 `reasoning_effort=high` + budget 256 | 577 s | 1.654 | 593 | **Degradado**: texto garbled/poético |
+| K2 high sin budget | timeout 429 s (small-8k) | fallback | — | Inviable en 8 GB / 10k ctx |
+| Spark thinking off | **225 s** | 1.037 | 339 | Rápido/conciso, pero **castellano degradado** |
+| Spark budget 256 | 707 s | 2.246 | 446 | Detallado; errores de lengua |
+
+La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0.95` y **≥32.768 tokens de salida**; con 10.240 de contexto y 8 GB no cabe, y el high sin budget hace timeout. La de Spark documenta `enable_thinking`/`reasoning_effort` high/low, pero en este build de llama.cpp high y low son un no-op; el que manda es `--reasoning-budget`. **Decisión**: Granite sigue siendo el titular de `hub` (rápido, limpio y con caché: 13m25 en frío / 19,3 s en caliente sobre el gigante); K2 off queda como candidato no-default para fidelidad; Spark no se promueve a titular por calidad de lengua (queda como candidato no-default/experimento). El guardia sin corte protege el esquema con cualquier modelo.
+
+**Consequences**: el hub no puede volver a reventar por tamaño ni llenar el contexto; la navegación hub→miembro→Memento sigue disponible y cuesta ~1 KB; el coste nocturno del hub pasa de 40 min a (frontera + maestro) en régimen. El ciclo total sigue dominado por el chronicle (K2 annotate, 2h31), fuera del alcance de este AD.

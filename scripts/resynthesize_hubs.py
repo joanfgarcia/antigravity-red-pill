@@ -82,11 +82,16 @@ def main() -> None:
 		raise SystemExit(2)
 
 	if args.dry_run:
+		import time as _time
+
 		from red_pill.metabolism.distiller import render_hub_items, synthesize_hub_v2
 
 		members = load_session_members(memory, collection, session_id)
+		members.sort(key=lambda m: (float((m[1] or {}).get("created_at") or 0), str(m[0])))
 		chunks = members_to_chunks(members)
-		hub = synthesize_hub_v2(chunks)
+		t0 = _time.time()
+		hub = synthesize_hub_v2(chunks, cache_namespace=f"{collection}:{session_id}")
+		elapsed = round(_time.time() - t0, 1)
 		print(
 			json.dumps(
 				{
@@ -94,13 +99,31 @@ def main() -> None:
 					"session_id": session_id,
 					"members": len(members),
 					"input_chars": len(render_hub_items(chunks)),
+					"elapsed_s": elapsed,
 					"hierarchical": bool(hub.get("hierarchical")),
 					"partition_count": int(hub.get("partition_count") or 0),
 					"map_reduce_levels": int(hub.get("map_reduce_levels") or 0),
 					"truncated": bool(hub.get("truncated")),
 					"is_fallback": bool(hub.get("_is_fallback")),
+					"title_chars": len(str(hub.get("title") or "")),
 					"summary_chars": len(str(hub.get("summary") or "")),
-					"title": str(hub.get("title") or "")[:160],
+					"texture_chars": len(str(hub.get("texture") or "")),
+					"texture_parts": len(hub.get("texture_parts") or []),
+					"output_chars": int(hub.get("output_chars") or 0),
+					"summary_compacted": bool(hub.get("summary_compacted")),
+					"summary_over_budget": bool(hub.get("summary_over_budget")),
+					"texture_compacted": bool(hub.get("texture_compacted")),
+					"texture_over_target": bool(hub.get("texture_over_target")),
+					"texture_split": bool(hub.get("texture_split")),
+					"texture_split_fallback": bool(hub.get("texture_split_fallback")),
+					"compaction_calls": int(hub.get("compaction_calls") or 0),
+					"partial_cache_hits": int(hub.get("partial_cache_hits") or 0),
+					"partial_cache_total": int(hub.get("partial_cache_total") or 0),
+					"model": str(hub.get("model") or ""),
+					"large_path": bool(hub.get("large_path")),
+					"title": str(hub.get("title") or ""),
+					"summary": str(hub.get("summary") or ""),
+					"texture": str(hub.get("texture") or ""),
 				},
 				ensure_ascii=False,
 			)

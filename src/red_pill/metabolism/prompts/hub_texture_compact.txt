@@ -1,0 +1,2 @@
+[Refraction: HUB_TEXTURE_COMPACT]
+Rewrite the following atmosphere note so it fits in at most {target} characters and 2-3 sentences. Keep the emotional tone, the relationship and the identity flavour; drop enumerations, repetition and secondary detail. Do not cut mid-sentence. Return ONLY the rewritten note, no JSON, no markdown, in the same language as the input.

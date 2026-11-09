@@ -2,9 +2,9 @@
 You receive ONE PART (i of N) of the chronological fragments of a single interaction. This is the MAP stage: do NOT summarize the whole interaction; produce a dense, faithful summary of THIS PART.
 On the reduce stage these partial summaries are merged into the master hub, so preserve what matters: decisions, names, numbers, constraints, causality and the emotional atmosphere.
 Return a strict JSON object with these keys:
-- 'title': descriptive and specific to this part. Never generic.
-- 'summary': dense factual summary of this part (key facts and narrative trajectory).
-- 'texture': at most 2 sentences of atmosphere/emotion from this part.
+- 'title': descriptive and specific to this part. Never generic. At most 120 characters.
+- 'summary': dense factual summary of this part. HARD BUDGET: at most 700 characters. Merge and compress; the master is an index and the full detail already lives in the fragments.
+- 'texture': at most 2 sentences and 250 characters of atmosphere/emotion from this part.
 - 'lang': ISO 639-1 code used.
 IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.
 Constraint: Output ONLY valid raw JSON, without markdown blocks.

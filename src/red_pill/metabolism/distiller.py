@@ -4,9 +4,11 @@ Extracted from sleep.py per ADR-SLEEP-001. GPU/LLM-facing (uses the inference
 provider); the sleep orchestrator gates these on free VRAM.
 """
 
+import hashlib
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -557,7 +559,76 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 
 # ─────────────────────── HUB v2 (ADR-AXON-001 / Eje 1) ───────────────────────
 
-HUB_TEXTURE_MAX_CHARS = 800  # target de textura; si se pasa, se avisa y se deja intacta (sin truncar)
+# Contrato de salida (AD-116, revisado 2026-11-09). Un hub es un índice
+# acotado, pero **NUNCA se recorta por corte**: la compactación es SIEMPRE por
+# síntesis (reescritura). Si el modelo no obedece, el texto se conserva entero y
+# se marca `*_over_budget`; si un campo de metadata supera su límite duro
+# (`MAX_METADATA_STR`), se PARTE en `texture_parts` conservando todo el
+# contenido: primero por síntesis (partes coherentes), y solo como último
+# recurso por segmentación lossless (sin perder un carácter). La ENTRADA nunca
+# se trunca (map-reduce); `truncated` sigue significando "la ENTRADA se truncó".
+HUB_TEXTURE_MAX_CHARS = 400
+HUB_TITLE_MAX_CHARS = 120
+HUB_PARTIAL_TEXTURE_MAX_CHARS = 250
+HUB_PARTIAL_SUMMARY_MAX_CHARS = 700
+HUB_CONTENT_MAX_CHARS = 4096  # espejo de CreateEngramRequest.content
+HUB_TEXTURE_PARTS_MAX = 32
+
+
+class HubBudgetError(RuntimeError):
+	"""Un campo no cabe en el contrato y no se puede reducir sin cortar."""
+
+
+def _hub_summary_target() -> int:
+	return max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+
+
+def _hub_texture_max() -> int:
+	return max(100, int(getattr(cfg, "SLEEP_HUB_TEXTURE_MAX_CHARS", HUB_TEXTURE_MAX_CHARS) or HUB_TEXTURE_MAX_CHARS))
+
+
+def _hub_texture_parts_max() -> int:
+	return max(1, int(getattr(cfg, "SLEEP_HUB_TEXTURE_PARTS_MAX", HUB_TEXTURE_PARTS_MAX) or HUB_TEXTURE_PARTS_MAX))
+
+
+def _hub_title_max() -> int:
+	return max(40, int(getattr(cfg, "SLEEP_HUB_TITLE_MAX_CHARS", HUB_TITLE_MAX_CHARS) or HUB_TITLE_MAX_CHARS))
+
+
+def _metadata_str_limit() -> int:
+	"""Tope duro de un string de metadata, con margen para no rozar el esquema."""
+	return max(256, int(getattr(cfg, "MAX_METADATA_STR", 1024) or 1024) - 64)
+
+
+def split_text_lossless(text: str, limit: int) -> List[str]:
+	"""Parte un texto en trozos <= limit SIN perder caracteres.
+
+	No es compactación: es partición de un campo que no cabe en el esquema. La
+	compactación real es la reescritura por síntesis. Corta en frontera de
+	frase/palabra y, si no hay, en el límite exacto; los trozos concatenados
+	reconstruyen el texto salvo espacios normalizados en las juntas.
+	"""
+	text = str(text or "").strip()
+	limit = max(64, int(limit))
+	if len(text) <= limit:
+		return [text] if text else []
+	parts: List[str] = []
+	rest = text
+	while len(rest) > limit:
+		window = rest[:limit]
+		best = -1
+		for sep in (". ", "! ", "? ", ".\n", "!\n", "?\n", "… ", "; "):
+			idx = window.rfind(sep)
+			if idx > best:
+				best = idx + 1  # incluye solo el signo; el espacio se consume con lstrip
+		if best < int(limit * 0.5):
+			idx = window.rfind(" ")
+			best = idx if idx >= int(limit * 0.5) else limit
+		parts.append(rest[:best].strip())
+		rest = rest[best:].lstrip()
+	if rest.strip():
+		parts.append(rest.strip())
+	return parts
 
 
 def derive_hub_affect(chunks: List[Dict[str, Any]]) -> tuple:
@@ -605,6 +676,8 @@ def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, 
 # `hub_partitions` para navegar el detalle. Fin del truncado silencioso.
 HUB_PARTIAL_PROMPT = "hub_synthesis_v2_partial.txt"
 HUB_SUMMARY_COMPACT_PROMPT = "hub_summary_compact.txt"
+HUB_TEXTURE_COMPACT_PROMPT = "hub_texture_compact.txt"
+HUB_TEXTURE_SPLIT_PROMPT = "hub_texture_split.txt"
 HUB_PARTIAL_MAX_CHARS = 1500  # target orientativo del parcial; el árbol reduce lo que se pase (sin truncar)
 HUB_MAP_REDUCE_MAX_LEVELS = 8
 
@@ -612,6 +685,75 @@ HUB_MAP_REDUCE_MAX_LEVELS = 8
 def hub_budget() -> int:
 	"""Presupuesto de chars por llamada de síntesis de hub (configurable)."""
 	return max(1000, int(getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000) or 8000))
+
+
+# ── Caché de parciales (map) ──────────────────────────────────────────────────
+# El hub de una sesión viva se re-sintetiza cada noche porque llegan miembros
+# nuevos. Sin caché, se vuelven a pagar TODOS los lotes (76 llamadas para la
+# sesión de 578k). La caché guarda el resultado de cada lote clave por su
+# contenido exacto: los lotes viejos no cambian (append-only) y solo se paga el
+# lote frontera + los nuevos. Vive en el state dir (no en Qdrant: no infla el
+# payload del hub). Se poda a los lotes de la pasada actual.
+HUB_PARTIAL_CACHE_VERSION = "1"
+
+
+def _partial_cache_meta() -> str:
+	"""Huella del contrato del map: prompt, presupuesto y topes de parcial."""
+	meta = "|".join(
+		[
+			HUB_PARTIAL_CACHE_VERSION,
+			str(hub_budget()),
+			str(int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)),
+			str(HUB_PARTIAL_SUMMARY_MAX_CHARS),
+			str(HUB_PARTIAL_TEXTURE_MAX_CHARS),
+			load_prompt_text(HUB_PARTIAL_PROMPT),
+		]
+	)
+	return hashlib.sha256(meta.encode("utf-8")).hexdigest()[:16]
+
+
+def _partial_key(batch: List[Dict[str, Any]], meta: str) -> str:
+	parts = []
+	for c in batch:
+		digest = hashlib.sha1(str(c.get("summary", "")).encode("utf-8")).hexdigest()[:8]
+		parts.append(f"{c.get('_member_index')}:{digest}")
+	return hashlib.sha1(("|".join(parts) + meta).encode("utf-8")).hexdigest()
+
+
+def _partial_cache_file(namespace: str):
+	from pathlib import Path
+
+	from red_pill.core.paths import get_state_dir
+
+	root = Path(get_state_dir()) / "hub_partials"
+	root.mkdir(parents=True, exist_ok=True)
+	return root / (hashlib.sha1(namespace.encode("utf-8")).hexdigest()[:16] + ".json")
+
+
+def _load_partial_cache(namespace: str) -> Dict[str, Any]:
+	if not namespace:
+		return {}
+	try:
+		data = json.loads(_partial_cache_file(namespace).read_text(encoding="utf-8"))
+		if data.get("version") == HUB_PARTIAL_CACHE_VERSION:
+			return data.get("entries") or {}
+	except Exception:
+		pass
+	return {}
+
+
+def _save_partial_cache(namespace: str, entries: Dict[str, Any], meta: str) -> None:
+	import os
+
+	if not namespace:
+		return
+	try:
+		path = _partial_cache_file(namespace)
+		tmp = path.with_suffix(".tmp")
+		tmp.write_text(json.dumps({"version": HUB_PARTIAL_CACHE_VERSION, "meta": meta, "entries": entries}, ensure_ascii=False), encoding="utf-8")
+		os.replace(tmp, path)
+	except Exception as e:
+		logger.debug(f"[HUB-V2] no se pudo guardar la caché de parciales: {e}")
 
 
 def hub_map_reduce_enabled() -> bool:
@@ -724,19 +866,12 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 	texture = str(parsed.get("texture") or "").strip()
 	if _is_template_echo(texture):
 		texture = ""
-	if len(texture) > HUB_TEXTURE_MAX_CHARS:
-		# Nunca se recorta: se avisa y se deja intacta. El maestro es un índice;
-		# la textura larga no pierde contenido, solo ocupa payload.
-		logger.warning(
-			f"[HUB-V2] texture over target {HUB_TEXTURE_MAX_CHARS} chars ({len(texture)}) — kept intact (no truncation)."
-		)
 	lang = str(parsed.get("lang") or fallback_lang).lower().strip()[:2]
 	return {
 		"title": str(parsed.get("title") or "").strip(),
 		"summary": summary,
 		"texture": texture,
 		"lang": lang,
-		"texture_over_target": len(texture) > HUB_TEXTURE_MAX_CHARS,
 	}
 
 
@@ -760,14 +895,15 @@ def synthesize_hub_v2(
 	override_prompt: Optional[str] = None,
 	override_params: Optional[Dict[str, Any]] = None,
 	config_yaml_path: Optional[str] = None,
+	cache_namespace: str = "",
 ) -> Dict[str, Any]:
 	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
 
 	Si el prompt completo no cabe en `SLEEP_MAX_HUB_INPUT_CHARS`, SIEMPRE aplica
 	map-reduce: lotes -> hubs parciales -> reducción en árbol. Nunca trunca la
 	entrada. El maestro se compacta por reescritura si supera
-	`SLEEP_HUB_SUMMARY_TARGET_CHARS`; si aun así sigue largo, se deja intacto y
-	se marca `summary_over_budget` (el detalle vive en `partitions`).
+	`SLEEP_HUB_SUMMARY_TARGET_CHARS`; si aun así sigue largo, se recorta en
+	frontera de frase (contrato de salida, AD-116).
 	"""
 	from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
 
@@ -780,6 +916,8 @@ def synthesize_hub_v2(
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
 	partial_system_prompt = load_prompt_text(HUB_PARTIAL_PROMPT)
 	compact_system_prompt = load_prompt_text(HUB_SUMMARY_COMPACT_PROMPT, fallback_prompt="")
+	texture_compact_prompt = load_prompt_text(HUB_TEXTURE_COMPACT_PROMPT, fallback_prompt="")
+	texture_split_prompt = load_prompt_text(HUB_TEXTURE_SPLIT_PROMPT, fallback_prompt="")
 
 	langs = []
 	for c in chunks:
@@ -802,26 +940,25 @@ def synthesize_hub_v2(
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
 	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
-	# Híbrido (AD-115): los hubs muy grandes usan otro modelo + prompt concise;
-	# el resto sigue el default del perfil `hub`. Solo con el provider de
-	# producción (`provider_alias=sip`): un alias explícito (bake-off) manda.
+	texture_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS", compact_attempts) or compact_attempts))
+	# Híbrido de modelos (AD-115): la decisión es POR LLAMADA y depende del
+	# prompt que se envía, no del total de la sesión. Con map-reduce ninguna
+	# llamada supera `SLEEP_MAX_HUB_INPUT_CHARS`, así que por defecto está OFF.
 	large_threshold = max(0, int(getattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 0) or 0))
 	large_model = str(getattr(cfg, "SLEEP_HUB_LARGE_MODEL", "") or "").strip()
 	large_prompt_file = str(getattr(cfg, "SLEEP_HUB_LARGE_PROMPT", "") or "").strip()
-	large_path = bool(
-		large_threshold
-		and large_model
-		and str(params.get("provider_alias") or "") == "sip"
-		and len(full_prompt) >= large_threshold
+	large_enabled = bool(
+		large_threshold and large_model and str(params.get("provider_alias") or "") == "sip"
 	)
-	large_prompt_used = ""
-	if large_path and large_prompt_file and not override_prompt and prompt_file == "hub_synthesis_v2.txt":
-		system_prompt = load_prompt_text(large_prompt_file)
-		large_prompt_used = large_prompt_file
-		if dominant_lang and "DOMINANT language" not in system_prompt:
-			system_prompt += (
+	large_system_prompt = ""
+	if large_enabled and large_prompt_file and not override_prompt and prompt_file == "hub_synthesis_v2.txt":
+		large_system_prompt = load_prompt_text(large_prompt_file)
+		if dominant_lang and "DOMINANT language" not in large_system_prompt:
+			large_system_prompt += (
 				f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
 			)
+	# Auditoría del path grande efectivo (se rellena en la llamada maestra).
+	large_used = {"flag": False, "model": "", "prompt": ""}
 
 	def _make_fallback() -> Dict[str, Any]:
 		fallback_text = synthesize_hub([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
@@ -829,6 +966,12 @@ def synthesize_hub_v2(
 
 	provider_alias = params.get("provider_alias", "sip")
 	temperature = float(params.get("temperature", 0.1))
+	forced_model = str(params.get("model") or "").strip()
+	call_extra = {
+		key: params[key]
+		for key in ("max_tokens", "top_p", "top_k", "min_p", "thinking", "reasoning_effort", "chat_template_kwargs")
+		if params.get(key) is not None
+	}
 	try:
 		try:
 			provider = ProviderRegistry.get_inference_provider(provider_alias)
@@ -838,30 +981,62 @@ def synthesize_hub_v2(
 		logger.warning(f"[HUB-V2] No inference provider ({e}). Falling back to legacy concatenation.")
 		return _make_fallback()
 
-	def _call(system: str, user: str) -> str:
-		call_model = large_model if large_path and isinstance(provider, SipInferenceProvider) else ""
+	def _call(system: str, user: str, *, master: bool = False) -> str:
+		use_large = bool(large_enabled and len(user) >= large_threshold)
+		call_system = system
+		call_prompt_file = prompt_file
+		if use_large and master and large_system_prompt:
+			call_system = large_system_prompt
+			call_prompt_file = large_prompt_file
+		call_model = (
+			forced_model
+			or str(getattr(provider, "model", "") or "")
+			or (large_model if use_large and isinstance(provider, SipInferenceProvider) else "")
+		)
+		if master:
+			large_used.update({"flag": bool(call_model), "model": call_model, "prompt": call_prompt_file})
+		call_temperature = temperature
+		extra = dict(call_extra)
+		if call_model and bool(params.get("use_model_sampling")):
+			# La receta del perfil manda cuando el modelo se fija por llamada:
+			# es la diferencia entre Spark hub a temp 1.0/top_k 0 (993 chars)
+			# y el default 0.1 (4.418 chars, rechazado por el contrato).
+			from red_pill.core.model_registry import ModelRegistry
+
+			profile = ModelRegistry.get_profile(call_model) or {}
+			if profile.get("temperature") is not None:
+				call_temperature = float(profile["temperature"])
+			for key in ("top_p", "top_k", "min_p"):
+				value = (profile.get("sampling") or {}).get(key)
+				if value is not None:
+					extra[key] = value
 		try:
 			return str(
 				provider.generate(
 					prompt=user,
-					messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-					temperature=temperature,
+					messages=[{"role": "system", "content": call_system}, {"role": "user", "content": user}],
+					temperature=call_temperature,
 					# AD-030: el proveedor SIP defaultea a `conversation`. El hub
 					# debe resolverse por SU task (modelo/thinking/max_tokens).
 					task="hub",
 					# AD-115: el híbrido fija el modelo por llamada; vacío = task.
 					**({"model": call_model} if call_model else {}),
+					# Tope de generación + conducta oficial (thinking/effort/
+					# samplers) por llamada, sin recorte de texto.
+					**extra,
 				)
 			)
 		except Exception as e:
 			logger.warning(f"[HUB-V2] LLM call failed ({e}).")
 			return ""
 
-	def _compact(text: str) -> str:
-		"""Reescribe (no recorta) un summary largo para acercarlo al target."""
-		if not compact_system_prompt or len(text) <= summary_target:
+	compaction_stats = {"calls": 0, "latency_s": 0.0}
+
+	def _compact_with(text: str, system_prompt: str, target: int, field: str) -> str:
+		"""Reescribe por SÍNTESIS (nunca recorta) para acercar el texto al target."""
+		if not system_prompt or len(text) <= target:
 			return text
-		system = compact_system_prompt.replace("{target}", str(summary_target))
+		system = system_prompt.replace("{target}", str(target))
 		t0 = time.time()
 		content = _call(system, text).strip()
 		compaction_stats["calls"] += 1
@@ -870,59 +1045,186 @@ def synthesize_hub_v2(
 			return text
 		if content.startswith("{"):
 			parsed_json = _parse_hub_payload(content, dominant_lang)
-			if parsed_json and parsed_json.get("summary"):
-				content = str(parsed_json["summary"])
+			if parsed_json and parsed_json.get(field):
+				content = str(parsed_json[field])
 		content = content.strip().strip('"').strip()
 		return content or text
 
-	compaction_stats = {"calls": 0, "latency_s": 0.0}
+	def _split_texture_with_synthesis(text: str, target: int) -> Optional[List[str]]:
+		"""Parte una textura que no cabe en partes coherentes por SÍNTESIS.
+
+		No es un corte: el modelo reescribe la nota como N partes completas,
+		conservando todas las ideas. Si la respuesta no conserva al menos el 85%
+		del texto (señal de que resumió en vez de partir), se descarta.
+		"""
+		if not texture_split_prompt:
+			return None
+		system = texture_split_prompt.replace("{target}", str(target))
+		t0 = time.time()
+		content = _call(system, text).strip()
+		compaction_stats["calls"] += 1
+		compaction_stats["latency_s"] += time.time() - t0
+		if not content:
+			return None
+		match = re.search(r"\{[\s\S]*\}", content)
+		if not match:
+			return None
+		try:
+			parsed = json.loads(_sanitize_llm_json(match.group(0)))
+		except Exception:
+			return None
+		raw_parts = parsed.get("parts")
+		if not isinstance(raw_parts, list):
+			return None
+		parts = [str(p).strip() for p in raw_parts if str(p).strip()]
+		hard = _metadata_str_limit()
+		if not parts or any(len(p) > hard for p in parts):
+			return None
+		if len(parts) > _hub_texture_parts_max():
+			return None
+		if sum(len(p) for p in parts) < int(len(text) * 0.85):
+			return None
+		return parts
+
+	def _fit_texture(texture: str) -> Dict[str, Any]:
+		"""Ajusta la textura: síntesis → partes por síntesis → partes lossless.
+
+		Regla del Operador: nunca se corta. Si la síntesis no la reduce, se
+		conserva entera (marcada); si supera el tope duro de metadata, se parte
+		sin perder contenido.
+		"""
+		target = _hub_texture_max()
+		hard = _metadata_str_limit()
+		compacted = False
+		for _ in range(texture_attempts):
+			if len(texture) <= target:
+				break
+			candidate = _compact_with(texture, texture_compact_prompt, target, "texture")
+			if not candidate or len(candidate) >= len(texture):
+				break
+			texture = candidate
+			compacted = True
+		result: Dict[str, Any] = {
+			"texture": texture,
+			"texture_compacted": compacted,
+			"texture_over_target": len(texture) > target,
+			"texture_split": False,
+			"texture_split_fallback": False,
+		}
+		if len(texture) <= hard:
+			return result
+		parts = _split_texture_with_synthesis(texture, target)
+		fallback = False
+		if not parts:
+			if not bool(getattr(cfg, "SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK", True)):
+				raise HubBudgetError(
+					f"texture {len(texture)} chars no cabe y la partición por síntesis falló; "
+					"no se recorta: la sesión se reintenta en otro ciclo"
+				)
+			# Último recurso: segmentación lossless (no se pierde un carácter).
+			parts = split_text_lossless(texture, hard)
+			fallback = True
+		if not parts or len(parts) > _hub_texture_parts_max():
+			raise HubBudgetError(
+				f"texture {len(texture)} chars no cabe en {_hub_texture_parts_max()} partes de {hard}"
+			)
+		result.update(
+			{
+				"texture": "",
+				"texture_parts": parts,
+				"texture_over_target": True,
+				"texture_split": True,
+				"texture_split_fallback": fallback,
+			}
+		)
+		return result
 
 	def _finalize(hub: Dict[str, Any]) -> Dict[str, Any]:
-		"""Compacta el maestro si se pasa; si no cabe, lo deja intacto y lo marca."""
+		"""Impone el contrato de salida del hub SIN CORTAR.
+
+		Toda reducción es por síntesis (reescritura). Si el modelo no obedece,
+		el texto se conserva entero y se marca `*_over_budget`; si un campo de
+		metadata no cabe, se parte en `texture_parts`. `truncated` sigue
+		significando "la ENTRADA se truncó" y por tanto es siempre False aquí.
+		"""
+		title_max = _hub_title_max()
+		title = str(hub.get("title") or "").strip()
+		hub["title"] = title
+		hub["title_over_target"] = len(title) > title_max
+
 		original = str(hub.get("summary") or "")
 		current = original
+		summary_compacted = False
 		for _ in range(compact_attempts):
 			if len(current) <= summary_target:
 				break
-			compacted = _compact(current)
+			compacted = _compact_with(current, compact_system_prompt, summary_target, "summary")
 			if not compacted or len(compacted) >= len(current):
 				break
 			current = compacted
+			summary_compacted = True
 		hub["summary"] = current
-		hub["summary_compacted"] = current != original
+		hub["summary_compacted"] = summary_compacted
 		hub["summary_over_budget"] = len(current) > summary_target
-		if hub["summary_over_budget"]:
-			logger.warning(
-				f"[HUB-V2] summary over target after compaction ({len(current)}>{summary_target}); kept intact (no truncation)."
+
+		body_len = len(title) + (1 if title else 0) + len(current)
+		if body_len > HUB_CONTENT_MAX_CHARS:
+			raise HubBudgetError(
+				f"hub body {body_len} chars > {HUB_CONTENT_MAX_CHARS} (summary {len(current)}); "
+				"no se recorta: la sesión se reintenta en otro ciclo"
 			)
+
+		texture = str(hub.get("texture") or "").strip()
+		hub.update(_fit_texture(texture))
+		texture_len = len(hub.get("texture") or "") + sum(len(p) for p in hub.get("texture_parts") or [])
+
 		hub["truncated"] = False
-		hub["texture_over_target"] = bool(hub.get("texture_over_target"))
+		hub["output_chars"] = body_len + texture_len + 1
 		hub["compaction_calls"] = compaction_stats["calls"]
 		hub["compaction_latency_s"] = round(compaction_stats["latency_s"], 2)
-		# Auditoría del híbrido: modelo/prompt efectivos del maestro.
-		hub["large_path"] = bool(large_path)
-		hub["model"] = large_model if large_path else ""
-		hub["prompt_file"] = large_prompt_used or prompt_file
+		# Auditoría del híbrido: modelo/prompt efectivos de la llamada maestra.
+		hub["large_path"] = bool(large_used["flag"])
+		hub["model"] = large_used["model"] if large_used["flag"] else ""
+		hub["prompt_file"] = large_used["prompt"] or prompt_file
 		return hub
 
 	# Caso normal: cabe en una llamada (sin truncar; si no cupiera, map-reduce).
 	if len(full_prompt) <= budget:
-		parsed = _parse_hub_payload(_call(system_prompt, full_prompt), dominant_lang)
+		parsed = _parse_hub_payload(_call(system_prompt, full_prompt, master=True), dominant_lang)
 		if parsed is None:
 			return _make_fallback()
 		parsed["input_chars"] = len(full_prompt)
 		return _finalize(parsed)
 
-	# Map: lotes que quepan, cada uno con su propio resumen denso.
+	# Map: lotes que quepan, cada uno con su propio resumen denso. Los parciales
+	# son TRANSITORIOS (alimentan la reducción); no se persisten en el hub. Su
+	# tamaño se acota para que el árbol no crezca con el número de lotes.
 	pack_budget = max(500, budget - 96)  # margen para la cabecera PART i/N
 	batches = partition_hub_items(chunks, pack_budget, max_chunks)
+	cache_meta = _partial_cache_meta()
+	cache = _load_partial_cache(cache_namespace)
+	used_cache: Dict[str, Any] = {}
+	cache_hits = 0
 	partials: List[Dict[str, Any]] = []
+	partition_ranges: List[List[int]] = []
 	for idx, batch in enumerate(batches):
-		header = f"PART {idx + 1}/{len(batches)} of the chronological fragments of ONE interaction.\n\n"
-		parsed = _parse_hub_payload(_call(partial_system_prompt, header + render_hub_items(batch)), dominant_lang)
-		if parsed is None:
-			parsed = _mechanical_partial(batch, dominant_lang)
+		key = _partial_key(batch, cache_meta)
+		cached = cache.get(key)
+		if isinstance(cached, dict) and cached.get("summary"):
+			parsed = dict(cached)
+			cache_hits += 1
+		else:
+			header = f"PART {idx + 1}/{len(batches)} of the chronological fragments of ONE interaction.\n\n"
+			parsed = _parse_hub_payload(_call(partial_system_prompt, header + render_hub_items(batch)), dominant_lang)
+			if parsed is None:
+				parsed = _mechanical_partial(batch, dominant_lang)
+		used_cache[key] = parsed
 		partials.append(parsed)
+		positions = [int(it["_member_index"]) for it in batch if "_member_index" in it]
+		partition_ranges.append([min(positions), max(positions) + 1] if positions else [0, 0])
+	_save_partial_cache(cache_namespace, used_cache, cache_meta)
+	if cache_hits:
+		logger.info(f"[HUB-V2] parciales reutilizados: {cache_hits}/{len(batches)} (caché {cache_namespace or 'local'})")
 
 	# Reduce: árbol hasta que el prompt de los parciales quepa.
 	current = partials
@@ -930,7 +1232,7 @@ def synthesize_hub_v2(
 	while True:
 		prompt = render_hub_items(current)
 		if len(prompt) <= budget or len(current) == 1:
-			final = _parse_hub_payload(_call(system_prompt, prompt), dominant_lang)
+			final = _parse_hub_payload(_call(system_prompt, prompt, master=True), dominant_lang)
 			if final is None:
 				return _make_fallback()
 			break
@@ -948,6 +1250,11 @@ def synthesize_hub_v2(
 
 	final["hierarchical"] = True
 	final["partition_count"] = len(partials)
+	final["partial_cache_hits"] = cache_hits
+	final["partial_cache_total"] = len(batches)
+	# Navegación barata: rangos de índices sobre los miembros ORDENADOS por
+	# created_at. El texto de los parciales no se persiste (AD-116).
+	final["partition_ranges"] = partition_ranges
 	final["partitions"] = [
 		{
 			"index": i + 1,

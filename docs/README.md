@@ -111,6 +111,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [2026-09-11-TOOL_BAKEOFF.md](BENCHMARKS/2026-09-11-TOOL_BAKEOFF.md) | Tool-calling bake-off 2026-09-11: 6 modelos, template nativo, peculiaridades por modelo (granite/qwen3/gemma4/smollm3/qwen35) |
 | [2026-09-17-GRANITE_42_BAKEOFF.md](BENCHMARKS/2026-09-17-GRANITE_42_BAKEOFF.md) | Granite 4.2 vs 4.1: destilador (thinking on, 12K KV cuantizada) + detector 3B. Receta completa en AD-033 |
 | [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (AD-049): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
+| [HUB_BAKEOFF.md](BENCHMARKS/HUB_BAKEOFF.md) | Bake-off de hubs (AD-115/AD-116): Granite/K2/Bonsai, cobertura, latencia y cumplimiento del contrato de salida |
+| [2026-11-09-MOSS_IMAGE_SFT.md](BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md) | Evaluación de MOSS-Image-SFT (media local) |
 
 ### Bünker
 

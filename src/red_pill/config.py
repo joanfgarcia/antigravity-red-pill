@@ -1072,16 +1072,27 @@ class RedPillConfig(BaseSettings):
 	# Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de
 	# chars). Evita lotes de cientos de fragmentos diminutos poco coherentes.
 	SLEEP_HUB_MAX_CHUNKS_PER_BATCH: int = 48
-	# Concision del maestro: si supera el target, se REESCRIBE (compaction), no
-	# se recorta. Si tras N intentos sigue largo, se deja intacto y se marca
-	# `summary_over_budget` (nunca se pierde contenido).
+	# CONTRATO DE SALIDA del hub (AD-116, revisado 2026-11-09): un hub es un
+	# ÍNDICE de tamaño acotado, no un archivo. La reducción es SIEMPRE por
+	# síntesis (reescritura); si el modelo no obedece, el texto se conserva
+	# ENTERO y se marca `*_over_budget`. Nunca se corta. Si un campo de metadata
+	# supera `MAX_METADATA_STR`, se parte en `texture_parts` sin perder contenido.
 	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
 	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
-	# Híbrido de modelos (AD-115): los hubs cuyo prompt renderizado supera este
-	# umbral se sintetizan con otro modelo + prompt concise; el resto sigue el
-	# default del perfil `hub` (Granite). Solo aplica al provider de producción
-	# (`provider_alias=sip`); un alias explícito (bake-off) manda. 0 = off.
-	SLEEP_HUB_LARGE_INPUT_CHARS: int = 100000
+	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
+	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2
+	SLEEP_HUB_TEXTURE_PARTS_MAX: int = 32  # tope de partes si la textura no cabe en metadata
+	# Último recurso si la partición por síntesis falla: partir el texto en
+	# trozos SIN perder caracteres (no es truncamiento). False = no escribir el
+	# hub y reintentarlo en otro ciclo (estrictamente solo síntesis).
+	SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK: bool = True
+	SLEEP_HUB_TITLE_MAX_CHARS: int = 120
+	# Híbrido de modelos (AD-115): se decide POR LLAMADA según el tamaño del
+	# prompt que se envía (no el total de la sesión). Con map-reduce ninguna
+	# llamada supera `SLEEP_MAX_HUB_INPUT_CHARS`, así que el path grande está
+	# apagado por defecto (0). Solo aplica al provider de producción
+	# (`provider_alias=sip`); un alias explícito (bake-off) manda.
+	SLEEP_HUB_LARGE_INPUT_CHARS: int = 0
 	SLEEP_HUB_LARGE_MODEL: str = "k2_horizon_7b"
 	SLEEP_HUB_LARGE_PROMPT: str = "hub_synthesis_v2_concise.txt"
 	SLEEP_CULL_THRESHOLD: float = 0.1

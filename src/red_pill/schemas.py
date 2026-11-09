@@ -63,16 +63,23 @@ class CreateEngramRequest(BaseModel):
 			if key in cls.RESERVED_KEYS:
 				raise ValueError(f"Reserved key '{key}' found")
 
+			if key == "texture_parts":
+				# AD-116 revisado: una textura que no cabe se parte sin perder
+				# contenido. Cada parte es un string dentro del tope de metadata.
+				if not isinstance(val, list) or not all(isinstance(item, str) for item in val):
+					raise ValueError("texture_parts must be a list of strings")
+				if len(val) > 64:
+					raise ValueError("texture_parts exceeds 64 parts")
+				for item in val:
+					_check_null_bytes(item, "texture_parts item")
+					if len(item) > cfg.MAX_METADATA_STR:
+						raise ValueError("texture_parts item exceeds limit")
+				continue
+
 			if isinstance(val, (dict, list)) and key != "associations":
 				if isinstance(val, list):
 					for item in val:
 						if key == "emotional_profile" and isinstance(item, dict):
-							continue
-						if key == "hub_partitions" and isinstance(item, dict):
-							# AD-113: nivel intermedio del hub (index/total/summary/texture/lang),
-							# mismo contrato plano que emotional_profile.
-							if any(not isinstance(fv, (str, int, float, bool)) for fv in item.values()):
-								raise ValueError("Complex type in hub_partitions")
 							continue
 						if isinstance(item, dict) or not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")

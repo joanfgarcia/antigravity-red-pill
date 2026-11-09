@@ -5,6 +5,20 @@
 > recuperación correcta) en 3,5 GB. No es destilador: sin razonamiento falla un desliz
 > de deixis. No es de herramientas: llama bien a una, no encadena.
 
+> **Corrección 2026-11-09 (veredicto pendiente de revisión).** Las frases anteriores
+> sobre "no es destilador" y la tabla "Por qué NO es el destilador de esta noche" son
+> **anteriores** al hallazgo de `--reasoning-budget 256`. Con ese tope, Spark hace
+> **15/15** en el BENCHSET a ~7 s y arregla la deixis (3/3), empatado con K2-7B y con
+> la mitad de memoria. **No se descartó por calidad**: quedó sin carril de producción
+> (no hay perfil en `model_profiles.yaml` ni candidato en `task_profiles.yaml`) y sin
+> la prueba que decide la voz (`TEXTURE`/`VOICE`). La comparación de calidad para
+> `distill`/`hub` sigue pendiente; ver la sección "El presupuesto de razonamiento".
+
+> **Hub (2026-11-09, medido en large-166k).** Para el índice del hub, **thinking off
+> gana**: 224,7 s / 1.037 chars / schema OK, frente a 707,5 s / 2.246 chars con
+> budget 256. El 15/15 del BENCHSET era otra tarea; no se transfiere al hub. Perfil
+> `spark_x2_6_4b_hub` (thinking off, temp 1.0, top_p 0.95, top_k 0).
+
 Perfil propuesto: `spark_x2_6_4b` · Fichero: `Spark-X2.6-4B-Q4_K_M.gguf` (3,54 GB)
 Runtime: **llama.cpp stock** (arch `spark2_5`) · Medido: 2026-10-30
 

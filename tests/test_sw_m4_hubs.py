@@ -86,7 +86,7 @@ def test_hubs_escribe_marca_e_idempotente(monkeypatch):
 	client = FakeClient([_member("opencode:ses_a", "idea 1", "m1"), _member("opencode:ses_a", "idea 2", "m2")])
 	mm = FakeMM(client)
 
-	def synthesizer(chunks):
+	def synthesizer(chunks, **kwargs):
 		return {"title": "T", "summary": "S", "texture": {"theme": "t"}, "lang": "es"}
 
 	def affect(chunks):
@@ -114,7 +114,7 @@ def test_hub_fallback_no_escribe_ni_marca(monkeypatch):
 	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
 	mm = FakeMM(client)
 
-	def fallback(chunks):
+	def fallback(chunks, **kwargs):
 		return {"title": "", "summary": "concat", "_is_fallback": True}
 
 	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=fallback, affect_fn=lambda c: ("gray", 0.5))
@@ -129,7 +129,7 @@ def test_hub_de_uno_se_omite(monkeypatch):
 	client = FakeClient([_member("s", "única idea", "m1")])
 	mm = FakeMM(client)
 	stats = synthesize_session_hubs(
-		mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
 	)
 	assert stats["sessions"] == 0 and not mm.added
 
@@ -141,6 +141,38 @@ def test_escritura_fallida_no_marca_miembros(monkeypatch):
 	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
 	mm = FakeMM(client, fail=True)
 	stats = synthesize_session_hubs(
-		mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
 	)
 	assert stats["hubs_failed"] == 1 and not client.marked
+
+
+def test_hub_texture_parts_se_escriben_sin_campo_texture(monkeypatch):
+	"""AD-116 revisado: una textura partida conserva todo en `texture_parts`."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeMM(client)
+
+	def synthesis(chunks, **kwargs):
+		return {
+			"title": "T",
+			"summary": "S",
+			"texture": "",
+			"texture_parts": ["atmósfera uno", "atmósfera dos"],
+			"texture_split": True,
+			"texture_split_fallback": False,
+			"texture_over_target": True,
+		}
+
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=synthesis, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_written"] == 1
+	md = mm.added[0]["metadata"]
+	assert md["texture_parts"] == ["atmósfera uno", "atmósfera dos"]
+	assert "texture" not in md
+	assert md["hub_texture_split"] is True
+	assert md["hub_texture_split_fallback"] is False
+	# El payload completo pasa el contrato real de escritura.
+	from red_pill.schemas import CreateEngramRequest
+
+	CreateEngramRequest(content=mm.added[0]["text"], metadata=md)

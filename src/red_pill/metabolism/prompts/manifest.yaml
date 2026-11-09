@@ -36,6 +36,12 @@ prompts:
   hub_summary_compact:
     template: hub_summary_compact.txt
 
+  hub_texture_compact:
+    template: hub_texture_compact.txt
+
+  hub_texture_split:
+    template: hub_texture_split.txt
+
   hub_synthesis_v2_partial:
     template: hub_synthesis_v2_partial.txt
 

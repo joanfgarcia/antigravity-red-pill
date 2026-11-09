@@ -289,11 +289,16 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_MAX_HUB_INPUT_CHARS` | `8000` | Presupuesto de chars por llamada de hub. Si el prompt no cabe, `synthesize_hub_v2` aplica map-reduce (no trunca). No es el `n_ctx` del modelo. |
 | `SLEEP_HUB_MAP_REDUCE_ENABLED` | `True` | **Deprecated.** El over-budget SIEMPRE se resuelve con map-reduce (lotes → parciales → reducción en árbol); ya no existe el recorte legacy. |
 | `SLEEP_HUB_MAX_CHUNKS_PER_BATCH` | `48` | Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de chars). |
-| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `900` | Target del summary maestro. Si se supera, se reescribe (compaction); si no baja, se conserva intacto y se marca `summary_over_budget`. |
-| `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura del summary antes de rendirse (nunca se recorta). |
-| `SLEEP_HUB_LARGE_INPUT_CHARS` | `100000` | Umbral del híbrido: prompts renderizados ≥ este tamaño usan `SLEEP_HUB_LARGE_MODEL` + prompt concise. `0` = off. |
-| `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para hubs grandes (candidato del perfil `hub`; `thinking: off`). |
-| `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para hubs grandes (presupuesto 700-900 chars). |
+| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `900` | **Target de síntesis** del summary maestro. Si se supera, se reescribe (compaction); si el modelo no baja, se conserva **entero** y se marca `hub_summary_over_budget=true`. Nunca se corta. |
+| `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura del summary (síntesis, nunca corte). |
+| `SLEEP_HUB_TEXTURE_MAX_CHARS` | `400` | **Target de síntesis** de la textura (2-3 frases). Si no baja, se conserva entera y se marca `hub_texture_over_target=true`; si supera el tope de metadata, se parte en `texture_parts` sin perder contenido. |
+| `SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura de la textura (síntesis). |
+| `SLEEP_HUB_TEXTURE_PARTS_MAX` | `32` | Tope de partes si la textura no cabe en un campo de metadata. Superarlo → el hub no se escribe y se reintenta (nunca se corta). |
+| `SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK` | `True` | Si la partición por síntesis falla: `True` parte el texto SIN perder caracteres (no es truncamiento); `False` no escribe el hub y lo reintenta (estrictamente solo síntesis). |
+| `SLEEP_HUB_TITLE_MAX_CHARS` | `120` | Target del título; si no baja, se conserva y se marca `hub_title_over_target=true`. |
+| `SLEEP_HUB_LARGE_INPUT_CHARS` | `0` | Umbral del híbrido **por llamada** (no por sesión): prompts ≥ este tamaño usan `SLEEP_HUB_LARGE_MODEL` + prompt concise. `0` = off (con map-reduce ninguna llamada supera el presupuesto de 8k). |
+| `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para llamadas grandes (candidato del perfil `hub`; `thinking: off`). |
+| `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para llamadas grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |

@@ -167,7 +167,20 @@ class SipInferenceProvider(BaseInferenceProvider):
 		model = str(extra.get("model") or self.model or "").strip()
 		if model:
 			payload["model"] = model
-		for key in ("max_tokens", "stop", "seed", "response_format", "tools", "tool_choice"):
+		for key in (
+			"max_tokens",
+			"stop",
+			"seed",
+			"response_format",
+			"tools",
+			"tool_choice",
+			"top_p",
+			"top_k",
+			"min_p",
+			"thinking",
+			"reasoning_effort",
+			"chat_template_kwargs",
+		):
 			if extra.get(key) is not None:
 				payload[key] = extra[key]
 		return payload
@@ -205,6 +218,12 @@ class SipInferenceProvider(BaseInferenceProvider):
 			seed=kwargs.get("seed"),
 			response_format=kwargs.get("response_format"),
 			model=kwargs.get("model"),
+			top_p=kwargs.get("top_p"),
+			top_k=kwargs.get("top_k"),
+			min_p=kwargs.get("min_p"),
+			thinking=kwargs.get("thinking"),
+			reasoning_effort=kwargs.get("reasoning_effort"),
+			chat_template_kwargs=kwargs.get("chat_template_kwargs"),
 		)
 
 		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)

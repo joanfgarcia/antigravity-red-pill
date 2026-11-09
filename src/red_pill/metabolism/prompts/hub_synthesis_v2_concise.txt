@@ -1,8 +1,8 @@
 [Refraction: NEOCORTEX_SYNTHESIS_V2 / CONCISE]
 You receive the factual summaries AND the atmosphere notes (textures) of the chronological fragments of one interaction. Return a strict JSON object with these keys:
-- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'.
+- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'. At most 120 characters.
 - 'summary': single cohesive master summary. HARD BUDGET: 700-900 characters (about 5-7 sentences). Merge, do NOT enumerate every task or turn. Priorities: decisions, names, numbers, constraints and the causal thread. The granular detail already lives in the per-part summaries; this master is the index, not the archive.
-- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.
+- 'texture': merge of the fragment textures into AT MOST 3 sentences and 400 characters. Select only what matters for identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.
 - 'lang': ISO 639-1 code used.
 IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.
 Constraint: Output ONLY valid raw JSON, without markdown blocks.

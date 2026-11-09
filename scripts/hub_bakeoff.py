@@ -46,6 +46,7 @@ from red_pill.core.providers import ProviderRegistry, SipInferenceProvider  # no
 from red_pill.memory import MemoryManager  # noqa: E402
 from red_pill.metabolism.distiller import load_prompt_text, render_hub_items, synthesize_hub_v2  # noqa: E402
 from red_pill.metabolism.hub_synthesis import load_session_members, members_to_chunks  # noqa: E402
+from red_pill.schemas import CreateEngramRequest  # noqa: E402
 
 MODELS = ("granite_8b", "bonsai_2_27b", "k2_horizon_7b")
 CONCISE_PROMPT = "hub_synthesis_v2_concise.txt"
@@ -134,7 +135,24 @@ def _measure(session: Dict[str, Any], model: str, memory: MemoryManager, concise
 		error = f"{type(e).__name__}: {e}"
 	latency = round(time.time() - t0, 2)
 	summary = str(hub.get("summary") or "")
+	title = str(hub.get("title") or "")
+	texture = str(hub.get("texture") or "")
+	texture_parts = [str(p) for p in (hub.get("texture_parts") or []) if str(p).strip()]
 	partitions = hub.get("partitions") or []
+	# Validación REAL del contrato de escritura: lo que `add_memory` aceptaría.
+	body = f"{title}\n{summary}" if title else summary
+	md: Dict[str, Any] = {}
+	if texture:
+		md["texture"] = texture
+	if texture_parts:
+		md["texture_parts"] = texture_parts
+	schema_valid = True
+	schema_error = ""
+	try:
+		CreateEngramRequest(content=body, metadata=md)
+	except Exception as e:
+		schema_valid = False
+		schema_error = f"{type(e).__name__}: {e}"
 	source_terms = _terms([str(c.get("summary") or "") for c in chunks])
 	return {
 		"model": label_model,
@@ -144,26 +162,38 @@ def _measure(session: Dict[str, Any], model: str, memory: MemoryManager, concise
 		"session_id": session["session_id"],
 		"members": len(members),
 		"input_chars": input_chars,
-		"ok": bool(summary) and not hub.get("_is_fallback") and not error,
+		"ok": bool(summary) and not hub.get("_is_fallback") and not error and schema_valid,
 		"error": error,
 		"hierarchical": bool(hub.get("hierarchical")),
 		"partition_count": int(hub.get("partition_count") or 0),
 		"map_reduce_levels": int(hub.get("map_reduce_levels") or 0),
 		"truncated": bool(hub.get("truncated")),
 		"summary_chars": len(summary),
-		"texture_chars": len(str(hub.get("texture") or "")),
-		"title": str(hub.get("title") or ""),
+		"title_chars": len(title),
+		"texture_chars": len(texture) + sum(len(p) for p in texture_parts),
+		"texture_parts": len(texture_parts),
+		"texture_split": bool(hub.get("texture_split")),
+		"texture_split_fallback": bool(hub.get("texture_split_fallback")),
+		"summary_over_budget": bool(hub.get("summary_over_budget")),
+		"texture_over_target": bool(hub.get("texture_over_target")),
+		"summary_compacted": bool(hub.get("summary_compacted")),
+		"texture_compacted": bool(hub.get("texture_compacted")),
+		"output_chars": int(hub.get("output_chars") or 0),
+		"schema_valid": schema_valid,
+		"schema_error": schema_error,
+		"title": title,
 		"lang": str(hub.get("lang") or ""),
 		"coverage": _coverage(summary, source_terms),
 		"source_terms": source_terms[:12],
 		"summary_head": summary[:700],
+		"summary_full": summary,
+		"texture_head": texture[:700],
+		"texture_full": texture,
+		"texture_parts_full": texture_parts,
 		"partition_head": str((partitions[0] or {}).get("summary") or "")[:400] if partitions else "",
 		"latency_s": latency,
 		"compaction_calls": int(hub.get("compaction_calls") or 0),
 		"compaction_latency_s": float(hub.get("compaction_latency_s") or 0.0),
-		"summary_compacted": bool(hub.get("summary_compacted", False)),
-		"summary_over_budget": bool(hub.get("summary_over_budget", False)),
-		"texture_over_target": bool(hub.get("texture_over_target", False)),
 	}
 
 
@@ -197,32 +227,34 @@ def _report() -> None:
 		"",
 		"Mismo input real, mismo prompt (map-reduce AD-113) y `task=hub`; solo cambia el modelo. Sin escritura de hubs.",
 		"",
-		"**Ninguna fila trunca** (`truncated=false`). Las variantes `_concise` usan el prompt de 700-900 chars; `_concise_compacted` añade la compaction por reescritura (si no reduce, el summary se conserva y se marca `summary_over_budget`).",
+		"**Ninguna fila trunca** (`truncated=false`). La compactación es por **síntesis** (nunca por corte): si el modelo no obedece, el texto se conserva entero y se marca; si no cabe en metadata, se parte en `texture_parts` sin perder contenido. `schema_valid` valida el contrato real de `CreateEngramRequest`.",
 		"",
 		"## Agregado por modelo",
 		"",
-		"| Modelo | n | ok | coverage media | summary chars | particiones | latencia media | compact calls | extra compact |",
-		"| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+		"| Modelo | n | ok | schema | coverage media | summary chars | textura chars | partes | latencia media | compact calls | extra compact |",
+		"| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
 	]
 	for model in models:
 		mrows = [r for r in rows if r["model"] == model]
 		n = len(mrows)
 		ok = sum(1 for r in mrows if r.get("ok"))
+		schema = sum(1 for r in mrows if r.get("schema_valid"))
 		cov = round(sum(float(r.get("coverage") or 0) for r in mrows) / n, 3)
 		chars = round(sum(int(r.get("summary_chars") or 0) for r in mrows) / n)
-		parts = round(sum(int(r.get("partition_count") or 0) for r in mrows) / n, 1)
+		tex = round(sum(int(r.get("texture_chars") or 0) for r in mrows) / n)
+		parts = round(sum(int(r.get("texture_parts") or 0) for r in mrows) / n, 1)
 		lat = round(sum(float(r.get("latency_s") or 0) for r in mrows) / n, 1)
 		ccalls = round(sum(int(r.get("compaction_calls") or 0) for r in mrows) / n, 1)
 		cextra = round(sum(float(r.get("compaction_latency_s") or 0) for r in mrows) / n, 1)
-		lines.append(f"| {model} | {n} | {ok}/{n} | {cov} | {chars} | {parts} | {lat}s | {ccalls} | {cextra}s |")
-	lines += ["", "## Por sesión", "", "| Sesión | Modelo | ok | coverage | summary | particiones | latencia | compact |", "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |"]
+		lines.append(f"| {model} | {n} | {ok}/{n} | {schema}/{n} | {cov} | {chars} | {tex} | {parts} | {lat}s | {ccalls} | {cextra}s |")
+	lines += ["", "## Por sesión", "", "| Sesión | Modelo | ok | schema | coverage | summary | textura | partes | latencia | compact |", "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
 	for label in labels:
 		for model in models:
 			r = next((x for x in rows if x["label"] == label and x["model"] == model), None)
 			if not r:
 				continue
 			lines.append(
-				f"| {label} | {model} | {'✅' if r.get('ok') else '❌'} | {r.get('coverage')} | {r.get('summary_chars')} | {r.get('partition_count')} | {r.get('latency_s')}s | {r.get('compaction_calls', 0)} / {r.get('compaction_latency_s', 0.0)}s |"
+				f"| {label} | {model} | {'✅' if r.get('ok') else '❌'} | {'✅' if r.get('schema_valid') else '❌'} | {r.get('coverage')} | {r.get('summary_chars')} | {r.get('texture_chars')} | {r.get('texture_parts', 0)} | {r.get('latency_s')}s | {r.get('compaction_calls', 0)} / {r.get('compaction_latency_s', 0.0)}s |"
 			)
 	lines += ["", "## Muestras (lectura del Operador)", ""]
 	for label in labels:
@@ -249,7 +281,14 @@ def main() -> None:
 	parser.add_argument("--suffix", default="", help="Sufijo de la variante en el label (p. ej. compacted).")
 	parser.add_argument("--models", default=",".join(MODELS), help="Modelos separados por coma.")
 	parser.add_argument("--sessions", default=",".join(s["label"] for s in SESSIONS), help="Labels separados por coma.")
+	parser.add_argument("--texture-max-chars", type=int, default=0, help="Override de SLEEP_HUB_TEXTURE_MAX_CHARS (target de síntesis).")
+	parser.add_argument("--summary-max-chars", type=int, default=0, help="Override de SLEEP_HUB_SUMMARY_TARGET_CHARS.")
 	args = parser.parse_args()
+
+	if args.texture_max_chars:
+		cfg.SLEEP_HUB_TEXTURE_MAX_CHARS = int(args.texture_max_chars)
+	if args.summary_max_chars:
+		cfg.SLEEP_HUB_SUMMARY_TARGET_CHARS = int(args.summary_max_chars)
 
 	models = [m.strip() for m in args.models.split(",") if m.strip()]
 	sessions = [s for s in SESSIONS if s["label"] in {x.strip() for x in args.sessions.split(",")}]

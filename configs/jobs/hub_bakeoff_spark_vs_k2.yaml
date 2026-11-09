@@ -1,0 +1,27 @@
+# Hub bake-off — Spark vs K2 vs Granite sobre las sesiones del fallo nocturno.
+#
+# Mide el MISMO input real que falló anoche (textura por encima del límite de
+# metadata) con la guarda de síntesis sin corte (AD-116 revisado): compactación
+# por reescritura, conservación íntegra si el modelo no baja, y `texture_parts`
+# si no cabe. NO escribe hubs: sintetiza y registra métricas + muestras completas.
+#
+# Modelos:
+#   - granite_8b       (baseline / titular)
+#   - k2_horizon_7b    (el que falló anoche; thinking off)
+#   - spark_x2_6_4b    (candidato: --reasoning on + budget 256, 3.5 GB, 262K)
+#
+# Un step = una combinación (sesión × modelo) = 9 elementos. Reanudable por
+# elemento y fail-soft (`skip_exit_code 79`). Lanzar como job, no en foreground:
+#   red-pill job submit --recipe hub_bakeoff_spark_vs_k2
+source: element_job
+priority: 4
+title: Hub bake-off — Spark vs K2 (fallo nocturno, sin corte)
+mission_id: hub-bakeoff
+step_command: .venv/bin/python scripts/hub_bakeoff.py --run-element --concise --suffix synth400v2 --texture-max-chars 400 --models granite_8b,k2_horizon_7b,spark_x2_6_4b
+elements_command: .venv/bin/python scripts/hub_bakeoff.py --list --concise --suffix synth400v2 --texture-max-chars 400 --models granite_8b,k2_horizon_7b,spark_x2_6_4b
+defer_exit_code: 77
+skip_exit_code: 79
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 90   # la sesión de 166k con Spark/K2 puede ser larga
