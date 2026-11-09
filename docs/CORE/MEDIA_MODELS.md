@@ -226,6 +226,15 @@ automáticamente. Sirve para que un modelo con DiT residente (FLUX.3) llegue a
 ~2 MPix en 8 GB sin penalizar el t2i pequeño (p. ej. `1500000` = offload por
 encima de ~1.5 MPix).
 
+**`tokenizer: <tokenizer.json>`** — para arquitecturas que lo exigen aparte del
+`--llm` (MOSS-Image: `sd-cli` aborta con *"requires the official Qwen3.5
+tokenizer.json"* si falta). Es **opcional y dirigido por el dato**: si el bloque
+no lo declara no se pasa ninguna flag; si lo declara y el fichero no existe, la
+carga falla limpio (`falta tokenizer`) en vez de degradar en silencio.
+
+**`--list-models --models a,b,c`** permite lanzar un A/B sobre un subconjunto del
+elenco sin editar código (el `element_job` recibe solo esos elementos).
+
 ---
 
 ## 6. License

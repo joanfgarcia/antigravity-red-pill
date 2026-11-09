@@ -82,6 +82,16 @@ def test_mask_inpainting(monkeypatch):
 	assert cmd[cmd.index("--mask") + 1] == "/m.png"
 
 
+def test_tokenizer_solo_si_el_elenco_lo_declara(monkeypatch):
+	"""MOSS-Image exige `--tokenizer` (tokenizer.json oficial de Qwen3.5); el resto no lo usa."""
+	m = _load(monkeypatch)
+	assert "--tokenizer" not in m._sd_cpp_command(_ctx(vision=False), "p", 1, 512, 512, "/o.png")
+	ctx = _ctx(vision=False)
+	ctx["paths"]["tokenizer"] = "/tok/tokenizer.json"
+	cmd = m._sd_cpp_command(ctx, "p", 1, 512, 512, "/o.png")
+	assert cmd[cmd.index("--tokenizer") + 1] == "/tok/tokenizer.json"
+
+
 def test_offload_condicional_por_pixeles(monkeypatch):
 	m = _load(monkeypatch)
 	ctx = _ctx(vision=False)

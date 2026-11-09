@@ -1,5 +1,13 @@
 ## Unreleased
 
+### 🎨 Media — MOSS-Image-SFT evaluado y descartado (ficha en `docs/BENCHMARKS/`)
+
+- **[DOC] Bench A/B completo (30 imágenes, 6 géneros)**: MOSS-Image-SFT (5,1 B DiT, apache-2.0) tarda **228 s/imagen** frente a 6,6 s de `flux2_klein`, 15,2 s de `flux3_klein`, 19,6 s de `zimage_turbo` y 32,5 s de `qwen_image_2_1_turbo`, **sin ganar en ningún género** y fallando tipografía (*"siven hills"*, cartel ilegible en ilustración); retrato con sobre-saturación de rojo y producto desobediente. **No entra en el elenco**; pesos purgados. Ficha + snippet de re-evaluación en `docs/BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md`.
+- **[NEW] `sd_cpp.tokenizer` en el elenco**: el harness pasa `--tokenizer` cuando el perfil lo declara (MOSS-Image lo exige aparte del `--llm`), con validación en carga y disponibilidad (fallo limpio si falta, nunca silencio). Genérico para cualquier DiT que necesite tokenizer externo.
+- **[NEW] `bench_imagegen.py --list-models --models a,b,c`**: A/B sobre un subconjunto del elenco sin editar código.
+- **[DOC] Curva de coste medida** (barrido 12/20/30/50 pasos): **4,19 s/paso + 13,7 s fijos**; encoder de texto en CPU ≈ 6 % del total, el cuello es el denoising con CFG (2 ramas). 50 ≈ 30 pasos en calidad.
+- **[TEST] `test_tokenizer_solo_si_el_elenco_lo_declara`**; 29 passed en imagegen, ruff limpio.
+
 ### 🧠 Memoria — hubs sin truncamiento, compaction y modelo híbrido (AD-115)
 
 - **[FIX] Cero truncamiento en hubs**: `synthesize_hub_v2` ya no recorta el prompt, la textura ni el fallback mecánico. Si el prompt no cabe, map-reduce; si la textura supera el target, se conserva y se marca `texture_over_target`; si el summary sigue largo tras la compaction, se conserva **intacto** y se marca `summary_over_budget`.

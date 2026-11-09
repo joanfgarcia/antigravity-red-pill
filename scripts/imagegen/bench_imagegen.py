@@ -156,6 +156,13 @@ def _resolve_sd_cpp(cfg: dict) -> dict:
 		if not vp.is_file():
 			raise RuntimeError(f"sd.cpp: vision (mmproj) no encontrado {vp} (modelo {cfg.get('id')})")
 		paths["vision"] = vp
+	# Tokenizer (tokenizer.json): solo algunos DiT lo exigen (MOSS-Image). Dirigido por el dato.
+	tokenizer = sd.get("tokenizer")
+	if tokenizer:
+		tp = Path(os.path.expanduser(str(tokenizer)))
+		if not tp.is_file():
+			raise RuntimeError(f"sd.cpp: tokenizer no encontrado {tp} (modelo {cfg.get('id')})")
+		paths["tokenizer"] = tp
 	env = dict(os.environ)
 	for k, v in (rt.get("env") or {}).items():
 		env[str(k)] = os.path.expanduser(str(v))
@@ -198,6 +205,10 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 		"-o",
 		str(out),
 	]
+	# `--tokenizer` solo si el elenco lo declara (MOSS-Image exige el Qwen3.5 oficial).
+	tok = (ctx.get("paths") or {}).get("tokenizer")
+	if tok:
+		cmd += ["--tokenizer", str(tok)]
 	sig = sd.get("sigmas")
 	if sig:
 		# `sigmas` fija el Nº de pasos (len-1 intervalos). Solo se pasa si el modelo va a
@@ -588,6 +599,12 @@ def _avail_sd_cpp(prof: dict):
 		p = os.path.expanduser(str(sd.get(key) or ""))
 		if not p or not os.path.isfile(p):
 			return False, f"falta {key}"
+	# Tokenizer declarado = obligatorio para ese modelo (MOSS-Image); no se ignora en silencio.
+	tok = sd.get("tokenizer")
+	if tok:
+		p = os.path.expanduser(str(tok))
+		if not os.path.isfile(p):
+			return False, "falta tokenizer"
 	return True, None
 
 
@@ -692,7 +709,12 @@ def main() -> int:
 	args = ap.parse_args()
 
 	if args.list_models:
-		print(json.dumps([{"model": m} for m in MODELS], ensure_ascii=False))
+		want = [m.strip() for m in (args.models or "").split(",") if m.strip()]
+		unknown = [m for m in want if m not in MODELS]
+		if unknown:
+			print(f"modelo desconocido: {', '.join(unknown)} (válidos: {', '.join(MODELS)})")
+			return 1
+		print(json.dumps([{"model": m} for m in (want or list(MODELS))], ensure_ascii=False))
 		return 0
 
 	_setup_caches()
