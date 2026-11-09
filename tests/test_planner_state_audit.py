@@ -391,6 +391,29 @@ def test_evidencia_declarada_de_otro_repo_cuenta_para_un_doc_ajeno(tmp_path):
 	assert m.audit(desk, [sharing], max_commits=10) == []
 
 
+def test_mencion_cita_el_commit_y_no_solo_el_recuento(tmp_path):
+	"""«1 mención» sin sha no se puede comprobar: el acta cita el commit que la
+	provoca (sha corto + asunto), o el operador no tiene nada que decidir."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	sha = _commit_body_only(repo, "RFC-MENTION-005")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-005", "closed")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert f"`{repo.name}:{sha[:7]}`" in out
+	assert "Release 9.9.9 — muchas cosas" in out
+
+
+def test_mencion_bajo_familia_lo_declara(tmp_path):
+	"""`AUDIT-FUSION-901` casa por la familia `FUSION-901`: la mención es real
+	pero de la familia. El acta lo dice en vez de confundir los dos ids."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-10")
+	_commit_body_only(repo, "FUSION-901")
+	desk = _desk_with_rfc(tmp_path, "AUDIT-FUSION-901", "closed")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert "bajo la familia `FUSION-901`" in out
+
+
 def test_fichero_con_otro_separador_cuenta_como_evidencia(tmp_path):
 	"""`BITACORA-BIT-V2` vive en `docs/BITACORA_BIT_V2.md`: el pathspec tolera
 	guion y guion bajo, o el doc salía `no-evidence` con su fichero delante."""

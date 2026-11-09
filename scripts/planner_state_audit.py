@@ -517,8 +517,18 @@ def render_markdown(results: list[dict], desk: Path, repos: list[Path]) -> str:
 		lines.append("## Revisar a mano — solo mención en cuerpo de commit (no prueba de trabajo)")
 		lines.append("")
 		for r in mention_only:
-			n = len(r["evidence"].get("mentions") or [])
-			lines.append(f"- `{r['id']}` (`{r['status']}`) — {n} mención(es) en CHANGELOG/PR; ni avanza ni se degrada sin confirmación")
+			mentions = r["evidence"].get("mentions") or []
+			lines.append(f"- `{r['id']}` (`{r['status']}`) — {len(mentions)} mención(es) en CHANGELOG/PR; ni avanza ni se degrada sin confirmación")
+			# Un recuento sin sha no se puede comprobar ni decidir: se citan los
+			# commits que provocan la mención (y bajo qué token, si es la familia).
+			family = r["evidence"].get("token_used")
+			if family and family != r["id"]:
+				lines.append(f"  - bajo la familia `{family}`: el id exacto no aparece en git")
+			for entry in mentions[:3]:
+				sha, _, subject = entry.partition(" ")
+				lines.append(f"  - `{sha}` {subject}".rstrip())
+			if len(mentions) > 3:
+				lines.append(f"  - … y {len(mentions) - 3} más")
 		lines.append("")
 	lines.append("> Propuestas, no órdenes: el despertar/el operador decide. Nada se ha aplicado.")
 	return "\n".join(lines)
