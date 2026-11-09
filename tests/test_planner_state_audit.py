@@ -336,3 +336,69 @@ def test_mention_only_aparece_en_el_render(tmp_path):
 	assert "`RFC-MENTION-003` (`in-progress`) — 1 mención(es)" in out
 	# Y no se vende como bloque accionable: no hay nada que decidir.
 	assert "## RFC-MENTION-003" not in out
+
+
+def test_repo_ajeno_no_mete_menciones_en_un_doc_de_otro_proyecto(tmp_path):
+	"""El CHANGELOG de `sharing` citaba `POP-001` y `BITACORA-BIT-V2`, que son de
+	`frankenswarm`: salían «a revisar» por un release que no es suyo. La mención
+	solo cuenta en el repo del documento."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(ajeno, "WSP-901")
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-2")
+	desk = _desk_with_rfc(tmp_path, "WSP-901", "in-progress", extra="project: frankenswarm\n")
+	results = m.audit(desk, [ajeno], max_commits=10)
+	# Sin evidencia en su repo: `no-evidence` (medido), pero la mención del repo
+	# ajeno NO entra — ni como mención ni como prueba.
+	assert results[0]["evidence"]["mentions"] == []
+	assert not any(p["kind"] == "mention-only" for p in results[0]["proposals"])
+
+
+def test_repo_ajeno_no_promociona_un_doc_de_otro_proyecto(tmp_path):
+	"""Ni siquiera el ASUNTO de un repo ajeno es prueba: el commit no es suyo."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "WSP-902")
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-3")
+	desk = _desk_with_rfc(tmp_path, "WSP-902", "draft", extra="project: frankenswarm\n")
+	assert m.audit(desk, [ajeno], max_commits=10) == []
+
+
+def test_mencion_en_su_propio_repo_sigue_contando(tmp_path):
+	"""Lo que se retira es el barrido ajeno, no la señal: en su repo la mención
+	sigue apareciendo como «revisar a mano»."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "OTRA-COSA-4")
+	propio = _git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-5")
+	_commit_body_only(propio, "WSP-903")
+	desk = _desk_with_rfc(tmp_path, "WSP-903", "in-progress", extra="project: frankenswarm\n")
+	props = m.audit(desk, [ajeno], max_commits=10)[0]["proposals"]
+	assert {p["kind"] for p in props} == {"mention-only"}
+
+
+def test_evidencia_declarada_de_otro_repo_cuenta_para_un_doc_ajeno(tmp_path):
+	"""`evidence:` es una declaración explícita: se acepta aunque el sha viva en
+	otro repo (el frontmatter dice `sharing:<sha>`, no un barrido por id)."""
+	m = _load()
+	sharing = _git_repo_named(tmp_path, "sharing", "OTRA-COSA-6")
+	sha = _head(sharing)
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-7")
+	desk = _desk_with_rfc(
+		tmp_path,
+		"WSP-904",
+		"implemented",
+		extra=f'project: frankenswarm\nevidence: ["sharing:{sha}"]\n',
+	)
+	assert m.audit(desk, [sharing], max_commits=10) == []
+
+
+def test_fichero_con_otro_separador_cuenta_como_evidencia(tmp_path):
+	"""`BITACORA-BIT-V2` vive en `docs/BITACORA_BIT_V2.md`: el pathspec tolera
+	guion y guion bajo, o el doc salía `no-evidence` con su fichero delante."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-8")
+	(repo / "docs").mkdir()
+	(repo / "docs" / "BITACORA_BIT_V2.md").write_text("bitácora", encoding="utf-8")
+	subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True, text=True)
+	subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "docs: bitácora"], check=True, capture_output=True, text=True)
+	desk = _desk_with_rfc(tmp_path, "BITACORA-BIT-V2", "in-progress")
+	assert m.audit(desk, [repo], max_commits=10) == []

@@ -292,6 +292,16 @@ def _evidence(repos: list[Path], token: str, max_commits: int) -> dict:
 	return {"branches": [], "commits": [], "merges": [], "files": [], "mentions": [], "token_used": token}
 
 
+def _file_pattern(token: str) -> str:
+	"""Pathspec que tolera los dos separadores del id.
+
+	`BITACORA-BIT-V2` vive en `docs/BITACORA_BIT_V2.md`: el id usa guiones y el
+	fichero guiones bajos, así que `*BITACORA-BIT-V2*` no casaba y un documento
+	con su fichero delante salía `no-evidence` (falso positivo medido).
+	"""
+	return "*" + re.sub(r"[-_]", "[-_]", token) + "*"
+
+
 def _evidence_exact(repos: list[Path], token: str, max_commits: int) -> dict:
 	branches: list[str] = []
 	commits: list[str] = []
@@ -306,7 +316,7 @@ def _evidence_exact(repos: list[Path], token: str, max_commits: int) -> dict:
 		announced, mentioned = _commit_matches(repo, token, max_commits, merges=True)
 		merges += [f"{repo.name}:{c}" for c in announced]
 		mentions += [f"{repo.name}:{c}" for c in mentioned]
-		files += [f"{repo.name}:{p}" for p in _git(repo, "ls-files", f"*{token}*")]
+		files += [f"{repo.name}:{p}" for p in _git(repo, "ls-files", _file_pattern(token))]
 	return {"branches": branches, "commits": commits, "merges": merges, "files": files, "mentions": list(dict.fromkeys(mentions))}
 
 
@@ -427,19 +437,25 @@ def audit(desk: Path, repos: list[Path], only: str | None = None, max_commits: i
 			continue
 		has_reason = any(fm.get(k) for k in ("reason", "blocked_reason", "paused_reason"))
 		slug = _project_slug(fm)
-		doc_repos = list(repos)
-		if slug and not _covers_project(doc_repos, slug):
-			own = _project_repo(desk, slug)
-			if own and own not in doc_repos:
-				doc_repos.append(own)
+		# El repo del doc MANDA: los demás no hablan de su trabajo. Antes se sumaba
+		# el del proyecto sin retirar el del cwd, así que un release de otro repo
+		# metía sus menciones —y, si el asunto citaba el id, hasta commits— en un
+		# documento ajeno (`POP-001` y `BITACORA-BIT-V2`, de `frankenswarm`, salían
+		# «a revisar» por el CHANGELOG de `sharing`). Sin repo propio resoluble se
+		# mantiene el barrido del cwd y la propuesta `unscanned-project` lo delata.
+		own = _project_repo(desk, slug) if slug else None
+		doc_repos = [own] if own else list(repos)
 		covered = _covers_project(doc_repos, slug)
 		ev = _evidence(doc_repos, token, max_commits) if token else {"branches": [], "commits": [], "merges": [], "files": [], "token_used": ""}
-		declared = _declared_evidence(doc_repos, fm.get("evidence")) if token else []
+		# La evidencia DECLARADA se busca en todos los repos: el prefijo del sha es
+		# una declaración humana explícita, no un barrido por id.
+		all_repos = list(dict.fromkeys([*doc_repos, *repos]))
+		declared = _declared_evidence(all_repos, fm.get("evidence")) if token else []
 		if declared:
 			ev["declared"] = declared
 			ev["commits"] = [*ev["commits"], *(c for c in declared if c not in ev["commits"])]
 		if ev["commits"]:
-			ev["landed"] = _landed(doc_repos, ev["commits"])
+			ev["landed"] = _landed(all_repos, ev["commits"])
 		weak = bool(token) and ev.get("token_used") != token and not declared
 		props = _propose(status, ev, has_reason, has_token=bool(token), weak=weak, project_covered=covered, project=slug)
 		if props:
