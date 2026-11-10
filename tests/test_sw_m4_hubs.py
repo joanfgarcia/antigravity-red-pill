@@ -193,3 +193,72 @@ def test_hub_texture_parts_se_escriben_sin_campo_texture(monkeypatch):
 	from red_pill.schemas import CreateEngramRequest
 
 	CreateEngramRequest(content=mm.added[0]["text"], metadata=md)
+
+
+class FakeSignals(FakeMM):
+	"""MemoryManager mínimo con señales: emisión, evaporación y diagnóstico."""
+
+	def __init__(self, client, fail=False, existing=False):
+		super().__init__(client, fail=fail)
+		self.existing = existing
+		self.injected: list = []
+		self.evaporated: list = []
+
+	def has_signal(self, name):
+		return bool(self.existing or self.injected)
+
+	def inject_signal(self, **kw):
+		self.injected.append(kw)
+
+	def evaporate_signals(self, name=None):
+		self.evaporated.append(name)
+		return 1
+
+
+def test_fallo_de_hub_emite_el_motivo_no_solo_el_recuento(monkeypatch):
+	"""El aviso debe decir POR QUÉ cayó el hub (2026-11-10: era indiagnosticable)."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeSignals(client)
+
+	def fallback(chunks, **kwargs):
+		return {"title": "", "summary": "concat", "_is_fallback": True}
+
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=fallback, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_failed"] == 1
+	assert len(mm.injected) == 1
+	sig = mm.injected[0]
+	assert sig["name"] == "hub_synthesis_failed"
+	assert "sintesis_fallback" in sig["message"]
+	assert sig["diagnosis"] == "hub_synthesis_failed:sintesis_fallback"
+	assert not mm.evaporated
+
+
+def test_ciclo_limpio_entierra_el_aviso(monkeypatch):
+	"""Si la causa muere, el WARNING no sobrevive: dolor reconciliado por condición."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeSignals(client, existing=True)
+
+	stats = synthesize_session_hubs(
+		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+	)
+	assert stats["hubs_failed"] == 0
+	assert mm.evaporated == ["hub_synthesis_failed"]
+
+
+def test_ciclo_limpio_sin_aviso_previo_no_evapora_nada(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeSignals(client)
+
+	synthesize_session_hubs(
+		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+	)
+	assert not mm.evaporated and not mm.injected

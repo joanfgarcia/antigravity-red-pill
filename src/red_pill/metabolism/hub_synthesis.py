@@ -158,12 +158,24 @@ def _synthesize_one(
 	synthesizer: Callable,
 	affect_fn: Callable,
 	force: bool = False,
+	failure_reasons: Optional[List[Tuple[str, str]]] = None,
 ) -> str:
 	"""Escribe (upsert) el hub de un grupo de sesión y marca sus miembros.
 
 	`force=True` salta el atajo de idempotencia: lo usa la re-síntesis de hubs
 	truncados (el conjunto de miembros no cambia, pero el algoritmo sí).
+
+	`failure_reasons` (opcional, se muta) recibe `(sesión, motivo)` por cada
+	rechazo: el aviso de dolor debe decir POR QUÉ, no solo cuántos — un WARNING
+	sin causa no se puede diagnosticar (2026-11-10: 2 hubs caídos, causa
+	imposible de reconstruir desde el tablero).
 	"""
+
+	def _fail(reason: str) -> str:
+		if failure_reasons is not None:
+			failure_reasons.append((f"{collection}:{session_id}", reason))
+		return "failed"
+
 	members = sort_members_chronologically(members)
 	member_ids = [pid for pid, _ in members]
 	hid = hub_point_id(collection, session_id)
@@ -217,7 +229,7 @@ def _synthesize_one(
 		# hub-basura ni se marcan miembros (quedarían ocultos sin hub real). Se
 		# reintenta cuando el LLM esté disponible.
 		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
-		return "failed"
+		return _fail("sintesis_fallback")
 	body = str(hub.get("summary") or "")
 	# Un engrama es una IDEA, no una historia: el summary que va a Qdrant (y
 	# por tanto al contexto de una búsqueda) tiene un tope duro. El detalle vive
@@ -229,13 +241,13 @@ def _synthesize_one(
 			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id}; "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
-		return "failed"
+		return _fail("summary_over_hard_limit")
 	if hub.get("summary_lang_mismatch"):
 		logger.warning(
 			f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; "
 			"no se escribe (se reintenta con reescritura)"
 		)
-		return "failed"
+		return _fail("summary_lang_mismatch")
 	title = str(hub.get("title") or "").strip()
 	# D-12: el hub puede contener credenciales tecleadas en la sesión; se
 	# redactan ANTES del upsert (idempotente, no toca el resto del texto).
@@ -376,7 +388,7 @@ def _synthesize_one(
 	if not new_id:
 		# Escritura rechazada (quality gate / fallo): NO marcar miembros (F3).
 		logger.warning(f"[HUBS] hub rechazado al escribir en {collection}:{session_id}; miembros intactos.")
-		return "failed"
+		return _fail("escritura_rechazada")
 	# F3: marcar los miembros SOLO tras escribir el hub CON ÉXITO.
 	_mark_members(memory_manager, collection, members, hid)
 	_clear_rebuild_pending(memory_manager, collection, session_id, hid)
@@ -452,6 +464,8 @@ def synthesize_session_hubs(
 
 	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "sessions": 0, "enabled": True}
 	failed_sessions: List[str] = []
+	# Motivo por sesión caída: viaja al aviso (diagnóstico sin abrir logs).
+	failure_reasons: List[Tuple[str, str]] = []
 	for collection in collections:
 		try:
 			if not memory_manager.client.collection_exists(collection):
@@ -480,11 +494,21 @@ def synthesize_session_hubs(
 			# (incidente 2026-11-09: una textura fuera de esquema se llevó por
 			# delante 7 grupos pendientes).
 			try:
-				result = _synthesize_one(memory_manager, collection, session_id, members, synthesizer, affect_fn, force=force)
+				result = _synthesize_one(
+					memory_manager,
+					collection,
+					session_id,
+					members,
+					synthesizer,
+					affect_fn,
+					force=force,
+					failure_reasons=failure_reasons,
+				)
 			except Exception as e:
 				logger.error(f"[HUBS] fallo sintetizando hub {collection}:{session_id}: {e}")
 				stats["hubs_failed"] += 1
 				failed_sessions.append(f"{collection}:{session_id}")
+				failure_reasons.append((f"{collection}:{session_id}", f"exception:{type(e).__name__}"))
 				continue
 			if result == "written":
 				stats["hubs_written"] += 1
@@ -494,33 +518,90 @@ def synthesize_session_hubs(
 			else:
 				stats["hubs_skipped"] += 1
 	if stats["hubs_failed"]:
-		_emit_hub_failure_signal(memory_manager, stats, failed_sessions)
+		_emit_hub_failure_signal(memory_manager, stats, failed_sessions, failure_reasons)
+	else:
+		# La causa murió: el dolor se entierra. Sin este camino, un WARNING de
+		# una noche mala sobrevive semanas (dolor huérfano, SIG-001/OBS-005
+		# D-01: los emisores no-auditor evaporan POR CONDICIÓN).
+		_evaporate_hub_failure_signal(memory_manager)
 	return stats
 
 
-def _emit_hub_failure_signal(memory_manager: Any, stats: Dict[str, Any], failed_sessions: List[str]) -> None:
+def _hub_failure_diagnosis(stats: Dict[str, Any], failure_reasons: List[Tuple[str, str]]) -> str:
+	"""Huella ESTABLE del fallo (AD-108): los motivos ordenados, sin recuentos.
+
+	El `message` lleva números y sesiones que cambian solas; el `diagnosis` no,
+	así que un fallo igual no re-arma el acuse y uno distinto sí.
+	"""
+	codes = sorted({reason for _, reason in failure_reasons})
+	return "hub_synthesis_failed:" + ",".join(codes)
+
+
+def _describe_failure_reasons(failure_reasons: List[Tuple[str, str]], limit_files: int = 3) -> str:
+	"""`motivos: fallback×2, summary_over_hard_limit×1 · sesiones: a, b`."""
+	counts: Dict[str, int] = {}
+	seen: List[str] = []
+	for session, reason in failure_reasons:
+		counts[reason] = counts.get(reason, 0) + 1
+		if session not in seen:
+			seen.append(session)
+	motivos = ", ".join(f"{k}×{v}" for k, v in sorted(counts.items()))
+	return f"motivos: {motivos or 'desconocido'} · sesiones: {', '.join(seen[:limit_files])}"
+
+
+def _emit_hub_failure_signal(
+	memory_manager: Any,
+	stats: Dict[str, Any],
+	failed_sessions: List[str],
+	failure_reasons: Optional[List[Tuple[str, str]]] = None,
+) -> None:
 	"""Señal de dolor si algún hub no se pudo escribir (antes era invisible).
 
 	Nunca lanza: la fase de sueño debe terminar aunque el aviso falle.
+
+	El aviso lleva el MOTIVO (2026-11-10): antes solo decía cuántos hubs
+	habían caído, y la causa solo existía en un `logger.warning` que no se
+	persiste en ningún fichero medible — el WARNING era indiagnosticable.
+	La señal se re-inyecta si cambia el motivo (`diagnosis`, AD-108), en vez
+	de quedarse con el mensaje del primer fallo (`has_signal` → return).
 	"""
 	try:
 		name = "hub_synthesis_failed"
-		if memory_manager.has_signal(name):
-			return
+		reasons = list(failure_reasons or [])
+		# `inject_signal` es idempotente por nombre y conserva `first_seen_at`;
+		# se re-inyecta con `diagnosis` (AD-108) para que el mensaje no se quede
+		# congelado en el primer fallo y un motivo nuevo re-arme el acuse.
+		diagnosis = _hub_failure_diagnosis(stats, reasons)
 		muestra = ", ".join(failed_sessions[:5])
+		message = (
+			f"{stats['hubs_failed']} hub(s) no se escribieron; sus miembros siguen recallables "
+			f"(sin pérdida). {_describe_failure_reasons(reasons)} · sesiones: {muestra}"
+		)
 		memory_manager.inject_signal(
 			name=name,
 			intensity=5.0,
 			signal_type="pain",
 			source="sleep/consolidation",
 			criticality="WARNING",
-			message=(
-				f"{stats['hubs_failed']} hub(s) no se escribieron; sus miembros siguen recallables "
-				f"(sin pérdida). Sesiones: {muestra}"
-			),
+			message=message,
+			diagnosis=diagnosis,
 		)
 	except Exception as e:
 		logger.debug(f"[HUBS] no se pudo emitir la señal de fallo: {e}")
+
+
+def _evaporate_hub_failure_signal(memory_manager: Any) -> None:
+	"""Entierra el aviso cuando el ciclo sintetizó sin un solo fallo.
+
+	Nunca lanza (best-effort): el sueño no se cae por un borrado que no pudo ser.
+	"""
+	try:
+		if not memory_manager.has_signal("hub_synthesis_failed"):
+			return
+		memory_manager.evaporate_signals("hub_synthesis_failed")
+		logger.info("[HUBS] aviso hub_synthesis_failed evaporado: el ciclo no tuvo fallos.")
+	except Exception as e:
+		logger.debug(f"[HUBS] no se pudo evaporar la señal de fallo: {e}")
 
 
 # ── Remediation: re-síntesis de hubs truncados ───────────────────────────────
