@@ -7,6 +7,20 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Un FRUSTRATED por decisión del Operador NO es un fallo: es un cierre. El
+# disyuntor (3 intentos) escribe el error real del step; estos dos textos solo
+# los escribe una cancelación deliberada (`kill_task_ex(discard=True)` y su
+# cascada a los hijos BLOCKED). El dolor `jobs_frustrated` nace para pedir
+# atención sobre lo que falló, no para gritar por lo que el Operador enterró:
+# sin este filtro, descartar un job dejaba un WARNING de intensidad 5 vivo
+# durante los 14 días de la dead-letter (medido 2026-11-10: la misión NB-001,
+# descartada a propósito, sostenía el dolor con `error_log: cancelled by operator`).
+OPERATOR_DISCARD_ERRORS = ("cancelled by operator", "parent cancelled")
+
+# Fragmento SQL compartido: el filtro del descarte deliberado se escribe UNA vez
+# para que recuento (`job_health`) y atribución (`frustrated_jobs`) no discrepen.
+_DISCARD_SQL = "COALESCE(error_log, '') NOT IN (%s)" % ",".join(["?"] * len(OPERATOR_DISCARD_ERRORS))
+
 
 class CognitiveQueueManager:
 	"""
@@ -558,6 +572,10 @@ class CognitiveQueueManager:
 		"""Salud del carril mecánico (solo lectura, para el DaemonPlugin job_monitor):
 		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado).
 
+		`frustrated` cuenta SOLO el fallo que pide atención: un job que el Operador
+		descartó a propósito (FRUSTRATED por `kill_task_ex(discard=True)`) es una
+		decisión cerrada, no un dolor — ver `OPERATOR_DISCARD_ERRORS`.
+
 		El latido no es solo `updated_at`: esa columna se escribe en frontera de step
 		y se congela durante horas en una etapa larga. Si el hijo publica progreso
 		fino en su fichero de control y ese fichero está fresco, el job está vivo
@@ -579,8 +597,8 @@ class CognitiveQueueManager:
 				(*sources, f"-{int(stuck_after_seconds)} seconds"),
 			).fetchall()
 			frustrated = conn.execute(
-				f"SELECT COUNT(*) FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND source IN ({placeholders})",
-				(*sources,),
+				f"SELECT COUNT(*) FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND source IN ({placeholders}) AND {_DISCARD_SQL}",
+				(*sources, *OPERATOR_DISCARD_ERRORS),
 			).fetchone()[0]
 		from red_pill.core.progress import job_progress_age_s
 
@@ -599,6 +617,9 @@ class CognitiveQueueManager:
 		de cada job que sostiene el dolor, con su edad en horas. Sin esto, el dolor
 		`jobs_frustrated` es un número anónimo (y, por escalado, un 10 fijo) que no dice
 		al operador qué encolar de nuevo ni qué es basura de cola.
+
+		Mismo filtro que `job_health`: el descarte deliberado del Operador no sostiene
+		el dolor (si discrepasen, el mensaje citaría jobs que el recuento no cuenta).
 		"""
 		if not sources:
 			return []
@@ -611,10 +632,11 @@ class CognitiveQueueManager:
 					CAST((julianday('now') - julianday(updated_at)) * 24 AS INTEGER) AS age_hours
 				FROM cognitive_tasks
 				WHERE status = 'FRUSTRATED' AND source IN ({placeholders})
+					AND {_DISCARD_SQL}
 				ORDER BY updated_at DESC
 				LIMIT ?
 				""",
-				(*sources, int(limit)),
+				(*sources, *OPERATOR_DISCARD_ERRORS, int(limit)),
 			).fetchall()
 		return [dict(row) for row in rows]
 

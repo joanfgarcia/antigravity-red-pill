@@ -83,3 +83,45 @@ def test_frustrated_message_without_attribution_is_explicit():
 	"""Si la cola no devuelve filas, el mensaje lo dice en vez de mentir con un 0."""
 	assert "sin atribución" in frustrated_message([])
 	assert json.dumps(frustrated_message([]))  # sigue siendo serializable para Qdrant
+
+
+def test_operator_discard_does_not_sustain_pain(queue):
+	"""Un job descartado A PROPÓSITO no es dolor: el Operador ya cerró el asunto.
+
+	Medido el 2026-11-10: la misión NB-001 se descartó a mano, la cola la selló
+	FRUSTRATED con `error_log: cancelled by operator` y el JobMonitor mantuvo un
+	WARNING de intensidad 5 (escalado a 7) durante 14 días de dead-letter.
+	"""
+	task_id = queue.enqueue_task(source="script_job", payload={"title": "misión descartada"})
+	queue.pop_next_task(allowed_sources=["script_job"])
+	assert queue.kill_task(task_id, discard=True) is True
+	assert queue.get_task(task_id)["status"] == "FRUSTRATED"  # la cola conserva el rastro
+
+	assert queue.job_health(["script_job"])["frustrated"] == 0
+	assert queue.frustrated_jobs(["script_job"]) == []
+
+
+def test_real_frustration_still_sustains_pain(queue):
+	"""El disyuntor de verdad sigue doliendo: el filtro no silencia los fallos."""
+	task_id = _enqueue(queue, title="falló 3 veces")
+	with queue._get_connection() as conn:
+		conn.execute(
+			"UPDATE cognitive_tasks SET error_log = 'JobStepTimeout: step excedió la cota' WHERE id = ?",
+			(task_id,),
+		)
+
+	assert queue.job_health(["script_job"])["frustrated"] == 1
+	assert [job["id"] for job in queue.frustrated_jobs(["script_job"])] == [task_id]
+
+
+def test_discarded_parent_cascade_does_not_sustain_pain(queue):
+	"""La cascada de un padre descartado (`parent cancelled`) tampoco es dolor."""
+	parent = queue.enqueue_task(source="script_job", payload={"title": "padre"})
+	child = queue.enqueue_task(source="script_job", payload={"title": "hijo"}, parent_task_id=parent)
+	assert queue.get_task(child)["status"] == "BLOCKED"
+
+	assert queue.kill_task(parent, discard=True) is True
+	assert queue.get_task(child)["status"] == "FRUSTRATED"
+
+	assert queue.job_health(["script_job"])["frustrated"] == 0
+	assert queue.frustrated_jobs(["script_job"]) == []
