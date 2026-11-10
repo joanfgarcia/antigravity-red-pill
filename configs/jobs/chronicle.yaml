@@ -20,6 +20,8 @@ priority: 7
 title: Chronicle diario (ingesta de trayectorias)
 mission_id: chronicle-daily
 nightly_exempt: true
+control:
+  deadline_minutes: 85   # NB-001 F3: techo de pared del compuesto (distill 45 + annotate 40)
 manifest:
   workdir: .
   stages:

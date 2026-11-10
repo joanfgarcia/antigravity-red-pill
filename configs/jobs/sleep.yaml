@@ -25,6 +25,7 @@ nightly_exempt: true   # anti-deadlock: el sueño no se auto-difiere entre unida
 mode: lazy
 control:
   max_step_minutes: 300
+  deadline_minutes: 60   # NB-001 F3: techo de pared del compuesto (incluye deep_sleep futuro)
 manifest:
   workdir: .
   stages:
