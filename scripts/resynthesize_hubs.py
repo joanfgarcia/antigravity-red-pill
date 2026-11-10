@@ -8,13 +8,13 @@ QUÉ ES
 	+ reducción jerárquica, y consume el marcador legado `hub_rebuild_pending`.
 
 USO
-    .venv/bin/python scripts/resynthesize_hubs.py --list
-    .venv/bin/python scripts/resynthesize_hubs.py --dry-run --collection work_memories --session <sid>
-    RP_ELEMENT='{"collection":"work_memories","session_id":"..."}' \
-      .venv/bin/python scripts/resynthesize_hubs.py --run
+	.venv/bin/python scripts/resynthesize_hubs.py --list
+	.venv/bin/python scripts/resynthesize_hubs.py --dry-run --collection work_memories --session <sid>
+	RP_ELEMENT='{"collection":"work_memories","session_id":"..."}' \
+	.venv/bin/python scripts/resynthesize_hubs.py --run
 
-    Job: `configs/jobs/hubs_resynthesize.yaml` (element_job, un step por sesión,
-    pausable/reanudable, fail-soft con skip_exit_code).
+	Job: `configs/jobs/hubs_resynthesize.yaml` (element_job, un step por sesión,
+	pausable/reanudable, fail-soft con skip_exit_code).
 """
 
 from __future__ import annotations

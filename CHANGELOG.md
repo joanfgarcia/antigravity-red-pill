@@ -1,5 +1,18 @@
 ## Unreleased
 
+### 🌙 Noche acotada — cota y coste del ciclo nocturno (NB-001)
+
+Presupuesto y reuso del ciclo nocturno `chronicle → sleep`. Todas las piezas con flag propio default OFF (RULE 4); apagadas, comportamiento idéntico al actual. Diseño y decisiones: `docs/TECHNICAL/DECISION_LOG.md` (AD-118).
+
+- **[NEW] F0 — medición con artefacto**: `stage_seconds` por etapa e `item_seconds` por instancia de fan-out fundidos en el checkpoint del `dag_job`, y `durations` por fase en `sleep_phase_status.json`. Telemetría aditiva, sin cambiar comportamiento ni decisiones.
+- **[FIX] F1 — hubs sin descarte silencioso**: la textura oversize sin `texture_parts` se parte **antes** de `add_memory`; el scrub de secretos corre antes de partir y en cada parte; `jobs/drivers/distill.py` propaga `texture_parts` al payload (antes se descartaba en esa ruta de promoción).
+- **[NEW] F2a — reuso incremental en distill** (`MEMENTO_DISTILL_REUSE_ENABLED`, OFF): `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el `content_hash` + `prompt_version`/`engine`/fragmentación y reusa las secciones intactas entre noches. Una sección `degraded` (prompt truncado en fallback HTTP 500) jamás se reusa. Siembra en la primera noche (D-NB-11).
+- **[NEW] F2b — reuso incremental en annotate** (`MEMENTO_ANNOTATE_REUSE_ENABLED`, OFF): `annotate/_meta.json` persiste por `unit_key` el hash + `annotate_prompt_version`/`engine` + notas por unidad y reusa las unidades intactas sin llamar al modelo; `_partial.json` sigue como checkpoint intra-run.
+- **[NEW] F3 — techo de pared por compuesto** (`JOB_COMPOUND_DEADLINE_ENABLED`, OFF): `control.deadline_minutes` (por compuesto, clamp `[0,720]`) ancla el techo al primer step de cada compuesto y acota su fan-out; agotado → `JobDeferred("budget_exhausted")` + `deferred_by_budget` en el checkpoint. Solo corta fan-out: la cola del sueño nunca se difiere.
+- **[NEW] F4 — fusión work+social en una llamada, GO** (`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`, OFF): con el banco reproducible previo (`docs/BENCHMARKS/ANNOTATE_BENCH.md`), la extracción combinada con `scope` por idea **pasa la paridad y decide GO** — notas/fragmento 1.25 vs 0.90 (≥ 0.855), `json_invalido` 0 vs 4.4, rutas dentro de ±5 pp, −50 % de llamadas de extracción. Detalle: `docs/TECHNICAL/COGNITIVE/ANNOTATE_FUSION_DECISION.md`.
+- **[NEW] F5 — presupuesto por coste real por etapa** (`MEMENTO_NIGHT_COST_MODEL_ENABLED`, OFF): la selección presupuesta en la divisa de cada fase (chars de work-unit en distill; unidades + notas esperadas en annotate) en vez de mensajes, conservando `NIGHT_LIMIT` y el anti-hambruna.
+- **[DOC] Guía del presupuesto nocturno**: `docs/TECHNICAL/NIGHTLY_BUDGET.md`.
+
 ### 📨 Avisos inyectados — plegados con título (AD-117)
 
 - **[NEW] Presentación plegada en OpenCode**: los avisos de `soul_notify` (fin de job, tablón, sesiones hermanas) se entregan por `POST /api/session/<id>/prompt` con `metadata.displayText`; el IDE pinta una sola línea (`Mensaje recibido · job '…' → success`, `… · CORO E-…`, `… · tablón`) y el cuerpo completo sigue en el prompt para el modelo. Fallback automático a `opencode run --session` si la API falla o tarda más de 8 s.

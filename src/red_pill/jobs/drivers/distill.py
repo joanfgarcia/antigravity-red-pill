@@ -161,6 +161,11 @@ class DistillJobDriver(ResumableJobDriver):
 				),
 				"category_reviewed_at": time.time(),
 			}
+			# F1 (NB-001): la textura partida se propaga al payload; antes se
+			# descartaba `texture_parts` (pérdida silenciosa en esta ruta).
+			texture_parts = [str(p).strip() for p in (hub.get("texture_parts") or []) if str(p).strip()]
+			if texture_parts:
+				upgrade_payload["texture_parts"] = texture_parts
 			client.set_payload(collection_name=col, payload=upgrade_payload, points=[pid])
 			upgraded_in_step += 1
 

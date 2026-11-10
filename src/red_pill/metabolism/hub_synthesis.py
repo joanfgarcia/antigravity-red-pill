@@ -272,9 +272,21 @@ def _synthesize_one(
 		from red_pill.memento.scrub import scrub_secrets
 
 		texture = scrub_secrets(texture)
+	texture_parts = [str(p).strip() for p in (hub.get("texture_parts") or []) if str(p).strip()]
+	# F1 (NB-001): guard ANTES de add_memory. Un synthesizer custom puede
+	# devolver una textura sin `texture_parts` que excede `MAX_METADATA_STR`; se
+	# parte lossless aquí (función ya existente) para no pagar la escritura y que
+	# el schema la rechace (incidente 2026-11-09 06:16). Orden de scrub: primero
+	# la textura entera (arriba) y después cada parte resultante (abajo).
+	guard_split = False
+	if texture and not texture_parts and len(texture) > getattr(cfg, "MAX_METADATA_STR", 1024):
+		from red_pill.metabolism.distiller import split_text_lossless
+
+		texture_parts = split_text_lossless(texture, getattr(cfg, "MAX_METADATA_STR", 1024))
+		texture = ""
+		guard_split = True
 	if texture:
 		metadata["texture"] = texture
-	texture_parts = [str(p).strip() for p in (hub.get("texture_parts") or []) if str(p).strip()]
 	if texture_parts and bool(getattr(cfg, "SW_HUB_SCRUB_ENABLED", True)):
 		from red_pill.memento.scrub import scrub_secrets
 
@@ -314,7 +326,7 @@ def _synthesize_one(
 	metadata["hub_texture_over_target"] = bool(hub.get("texture_over_target", False))
 	metadata["hub_texture_compacted"] = bool(hub.get("texture_compacted", False))
 	metadata["hub_texture_split"] = bool(hub.get("texture_split", False) or texture_parts)
-	metadata["hub_texture_split_fallback"] = bool(hub.get("texture_split_fallback", False))
+	metadata["hub_texture_split_fallback"] = bool(hub.get("texture_split_fallback", False) or guard_split)
 	metadata["hub_output_chars"] = int(hub.get("output_chars") or 0)
 	metadata["hub_compaction_calls"] = int(hub.get("compaction_calls") or 0)
 	metadata["hub_compaction_latency_s"] = float(hub.get("compaction_latency_s") or 0.0)

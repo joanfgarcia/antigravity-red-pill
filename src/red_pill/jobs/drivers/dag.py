@@ -37,6 +37,13 @@ class DagJobDriver(DagScheduleMixin, DagExecMixin, DagFanoutMixin, ResumableJobD
 	_mission_beat_stop: Any = None
 	_mission_beat_thread: Any = None
 
+	# Telemetría F0 (NB-001): duración por etapa e instancia de fan-out, en
+	# segundos. Acumuladores del step en curso; `step()` los resetea al entrar y
+	# los funde en el checkpoint (`stage_seconds` / `item_seconds`). Aditivo:
+	# no cambia comportamiento ni decisiones.
+	_telemetry_stage: Dict[str, float] = {}
+	_telemetry_item: Dict[str, float] = {}
+
 	# ── Validación en el submit (recursiva sobre el árbol) ─────────────────────
 	@classmethod
 	def _load_recipe(cls, reference: str) -> Tuple[str, Dict[str, Any], int, Optional[str], bool]:

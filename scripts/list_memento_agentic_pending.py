@@ -23,23 +23,30 @@ import json
 import sys
 
 
-def select_targets(pending, limit: int, msg_limit: int = 0, registry=None) -> list:
+def select_targets(pending, limit: int, msg_limit: int = 0, registry=None, *, phase=None, root=None) -> list:
 	"""Selección stale-first con DOS topes de coste (fuente: `agentic.selection`).
 
 	Delegado a `red_pill.memento.agentic.selection`: la política vive en UN sitio
 	para que el pase clásico (`memento_agentic.py` sin `--target`) no pueda divergir
 	del discover — que es exactamente lo que pasaba con el tope por mensajes recién
-	añadido (el `discover` lo aplicaba, el pase clásico no).
+	añadido (el `discover` lo aplicaba, el pase clásico no). `phase`/`root` habilitan
+	el cost model por etapa (NB-001 F5); sin ellos el comportamiento es el de siempre.
 	"""
 	from red_pill.memento.agentic.selection import select_targets as _select
 
-	return [f"{src}:{sid}" for src, sid, _reason in _select(pending, limit, msg_limit=msg_limit, registry=registry)]
+	return [f"{src}:{sid}" for src, sid, _reason in _select(pending, limit, msg_limit=msg_limit, registry=registry, phase=phase, root=root)]
 
 
 def main() -> int:
 	"""Emit the fan-out source item list as JSON on stdout."""
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--limit", type=int, default=None, help="Máx. sesiones (def: MEMENTO_AGENTIC_NIGHT_LIMIT)")
+	parser.add_argument(
+		"--phase",
+		choices=("distill", "annotate"),
+		default=None,
+		help="Divisa del presupuesto por coste (NB-001 F5): chars en distill, unidades+notas en annotate. Sin este flag, presupuesto por mensajes.",
+	)
 	args = parser.parse_args()
 
 	import red_pill.config as cfg
@@ -52,7 +59,7 @@ def main() -> int:
 	pending = pending_agentic(registry, root=root, force=False, redistill_since=None)
 	limit = args.limit if args.limit is not None else int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_LIMIT", 20))
 	msg_limit = int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_MSG_LIMIT", 0))
-	items = select_targets(pending, limit, msg_limit=msg_limit, registry=registry)
+	items = select_targets(pending, limit, msg_limit=msg_limit, registry=registry, phase=args.phase, root=root)
 	print(
 		json.dumps(
 			{"items": items, "total": len(pending), "selected": len(items), "left": max(0, len(pending) - len(items))},

@@ -341,6 +341,31 @@ Plugins 05–10. Each is independently toggleable.
 
 ---
 
+### 🌙 Cota y coste del ciclo nocturno (NB-001)
+
+Flags de la misión NB-001 (RULE 4: un flag por pieza, default OFF). Los dos
+primeros viven en `.env.example`; los otros tres son tunables de `config.py`
+(sin entrada en `.env.example`).
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` | `False` | F4 — fusión work+social en UNA llamada. ON: la extracción emite una sola llamada combinada (prompt con `scope` por idea) en vez de dos; `scope` se persiste en idea, parcial y frontmatter. Paridad medida en el banco (`docs/BENCHMARKS/ANNOTATE_BENCH.md`). OFF: dos llamadas por split. |
+| `MEMENTO_NIGHT_COST_MODEL_ENABLED` | `False` | F5 — presupuesto por coste real por etapa. ON: la selección presupuesta en la divisa de cada fase (chars de work-unit en distill; unidades + notas esperadas en annotate) en vez de mensajes. Conserva `MEMENTO_AGENTIC_NIGHT_LIMIT` y el anti-hambruna. OFF: msg_limit (byte-idéntico). |
+| `MEMENTO_DISTILL_REUSE_ENABLED` | `False` | F2a — reuso incremental por unidad en distill. ON: `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el `content_hash` + `prompt_version`/`engine`/fragmentación y reusa las secciones intactas entre noches en vez de borrar y rehacer. Una sección `degraded` jamás se reusa. OFF: regeneración completa. |
+| `MEMENTO_ANNOTATE_REUSE_ENABLED` | `False` | F2b — reuso incremental por unidad en annotate. ON: `annotate/_meta.json` persiste por `unit_key` el `content_hash` + `annotate_prompt_version`/`engine` + notas por unidad y reusa las unidades intactas sin llamar al modelo. `_partial.json` sigue como checkpoint intra-run. OFF: extracción completa, sin `units` en el meta. |
+| `JOB_COMPOUND_DEADLINE_ENABLED` | `False` | F3 — techo de pared por compuesto en `dag_job`. ON: `control.deadline_minutes` (o `deadline_minutes` por compuesto, clamp `[0,720]`) acota el fan-out de cada compuesto; agotado → `JobDeferred("budget_exhausted")` + `deferred_by_budget` en el checkpoint. Solo corta fan-out; la cola del sueño nunca se difiere. OFF: comportamiento actual exacto. |
+
+Presupuestos de la fase F5 (`MEMENTO_NIGHT_COST_MODEL_ENABLED` ON):
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_NIGHT_DISTILL_CHAR_LIMIT` | `200000` | Presupuesto de chars para la fase distill (suma de chars de work-unit). |
+| `MEMENTO_NIGHT_ANNOTATE_UNIT_LIMIT` | `100` | Presupuesto de unidades (splits) para la fase annotate. |
+| `MEMENTO_NIGHT_ANNOTATE_NOTE_LIMIT` | `800` | Presupuesto de notas esperadas para annotate (acota la cola, no decide qué ideas entran). |
+| `MEMENTO_NIGHT_ANNOTATE_NOTES_PER_UNIT` | `8` | Heurística de predicción de notas por unidad (calibrada: 519 notas / 65 splits ≈ 8). |
+
+---
+
 ## ☁️ Persistence & Encryption (Cloud Vault)
 
 | Parameter | Default | Description |

@@ -5,9 +5,9 @@ El handoff del despertar dice cosas como «rama X pendiente de aterrizar». Esa
 frase se ha demostrado falsa varias veces en las dos direcciones:
 
 - ramas dadas por pendientes cuyo contenido **ya está** en `main` (el release
-  squash-mergea: los SHA cambian, el contenido no), y
+	squash-mergea: los SHA cambian, el contenido no), y
 - ramas realmente pendientes que nadie miraba porque el log anterior decía que
-  ya habían entrado.
+	ya habían entrado.
 
 `git branch --merged` no sirve con squash y `git cherry` tampoco (su patch-id es
 por commit: un squash de N commits no coincide con ninguno de los N). Este script
@@ -20,7 +20,7 @@ Estados por rama:
 - `merged`       — el tip es ancestro del destino (merge real).
 - `no_changes`   — la rama no cambia ningún fichero respecto a su base.
 - `same_content` — tocó ficheros, pero el destino ya tiene ese contenido
-                   (squash/cherry-pick/recreación): nada que aterrizar.
+	(squash/cherry-pick/recreación): nada que aterrizar.
 - `clean`        — hay contenido distinto y el merge es limpio: pendiente real.
 - `conflict`     — hay contenido distinto y el merge conflictúa.
 - `unrelated`    — sin base común con el destino.
@@ -31,10 +31,10 @@ campo `evidence` dice cuál se usó:
 - `merge_noop`        — mergear la rama en el destino no cambiaría el árbol.
 - `whole_file`        — los ficheros que tocó son idénticos en el destino.
 - `additions_present` — sus adiciones (sin borrados) ya están, literales, en el
-                        destino. Cubre el caso que rompía la comparación por
-                        fichero: una rama squash-mergeada cuyo fichero siguió
-                        creciendo después (CHANGELOG, índices), que si no se
-                        quedaba marcada como pendiente para siempre.
+	destino. Cubre el caso que rompía la comparación por
+	fichero: una rama squash-mergeada cuyo fichero siguió
+	creciendo después (CHANGELOG, índices), que si no se
+	quedaba marcada como pendiente para siempre.
 
 Las ramas `parked/*` se auditan (visibilidad) pero **no cuentan** para
 `--strict`: una rama aparcada con `reason` es pendiente por diseño y no debe

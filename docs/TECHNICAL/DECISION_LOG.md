@@ -3693,3 +3693,31 @@ La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0
 - Tests: `TestPresentacionPlegada` (7 casos: títulos, payload con `displayText`, fallback, sesión inexistente); 146 passed en los módulos tocados y 4.336 en la suite completa (1 fallo preexistente de Sound of Silence, ajeno).
 
 **Consequences**: el IDE muestra una tarjeta de una línea con la procedencia y el cuerpo queda oculto; el modelo recibe el cuerpo íntegro y el operador puede recuperarlo con **Copy message**. El runner de jobs recoge el cambio en el siguiente ciclo (proceso nuevo); el `mcp_proxy` de una sesión viva es un proceso largo y necesita reinicio o sesión nueva para el push de `coro_api.send`. Si una versión futura de OpenCode deja de honrar `metadata.displayText`, la degradación es pintar el mensaje completo, no perderlo. Claude Code ya tiene el marco nativo de mensaje peer (`isMeta` + `origin.kind=peer`, «Message from …»); Pi queda pendiente porque hoy no tiene punto de inyección en red-pill.
+
+---
+
+## [AD-118] NB-001 — cota y coste del ciclo nocturno: techo por compuesto, reuso por unidad y fusión work+social
+**Date**: 2026-11-10
+**Status**: ACCEPTED & IMPLEMENTED (rama `mission/nb-001`, commits P1–P8).
+
+**Context**: el ciclo nocturno (`chronicle → sleep`) medía 105–198 min y lo dominaban 1-2 sesiones gigantes (58,5 % de una noche). Tres causas: `distill` borra y rehace todo cada noche, `annotate` borra su parcial al terminar (tampoco reusa entre noches), y no había techo ni presupuesto por coste real — el presupuesto de step no acota la noche (A-01) y el árbol se aplana en el submit (D-NB-01). El plan NB-001 (desk: `planner/design/nightly_budget/`) propuso F0-F5 bajo RULE 4 (un flag por pieza, default OFF). Este AD consolida las decisiones estructurales de la misión.
+
+**Decision**:
+1. **Techo por COMPUESTO, no por job** (D-NB-01): `control.deadline_minutes` (o `deadline_minutes` por compuesto en el manifest) ancla el techo al **primer step de cada compuesto** (crónica y sueño, cada uno con su techo). Un techo de job quedaría anclado a las 03:00 y apagaría el sueño. Flag `JOB_COMPOUND_DEADLINE_ENABLED` (default OFF). Clamp `[0, 720]`; 0/ausente/negativo = sin techo (D-NB-12). Agotado → se deja de arrancar fan-out y se difiere con `JobDeferred("budget_exhausted")` + contador `deferred_by_budget` en el checkpoint (D-NB-13); el techo **solo corta fan-out** — la cola del sueño (`thread`, `finalize`, `memento-reinforce`) nunca se difiere (D-NB-02).
+2. **Reuso por UNIDAD en distill Y annotate** (D-NB-08, D-NB-10): la unidad es el **rango de mensajes** (`memento/NNN-mensajes-XXXX-YYYY.md`), no la sesión. Flags `MEMENTO_DISTILL_REUSE_ENABLED` (F2a) y `MEMENTO_ANNOTATE_REUSE_ENABLED` (F2b), ambos default OFF.
+3. **Clave de reuso** (D-NB-03): `content_hash` del cuerpo + `prompt_version` + `engine` + fragmentación (`MEMENTO_FRAGMENT_MAX_CHARS`, `MEMENTO_FRAGMENT_OVERLAP`). El hash no cubre la línea `> [!ref]`. Cambiar la firma del prompt o el tamaño de fragmento invalida la clave → se re-procesa todo (no se mezclan estratos).
+4. **`degraded`** (D-NB-03): una sección/unidad con el prompt truncado en el fallback HTTP 500 se sella `degraded` y **jamás se reusa**, aunque su hash coincida. Distill y annotate comparten la marca.
+5. **`unit_key`** (D-NB-09): el `nnn` deja de ser la clave del enlace nota→polaroid; el frontmatter lleva `unit_key` (rango) y una fase de renombrado actualiza el `nnn` al insertar un split en medio, sin romper el enlace.
+6. **Siembra** (D-NB-11): la primera noche tras desplegar F2 no hay hashes; se calcula el hash del cuerpo de cada unidad y se **adopta** la sección existente solo si sus fragmentos declaran `prompt_version`/`engine` vigentes. Lo demás se re-procesa (una sola vez; las noches siguientes ya reusan).
+7. **Fusión work+social — GO** (D-NB-04 + P7): fundir las dos llamadas de extracción en una (prompt con `scope` por idea) era **condicional al banco** de annotate (inexistente hasta P6). P6 entregó el banco reproducible; P7 midió la fusión y **decidió GO**. Flag `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` (default OFF); `scope` se persiste en idea, parcial y frontmatter.
+
+**Evidence**:
+- F0 (P1, `ebea12d`): `stage_seconds` por etapa e `item_seconds` por instancia de fan-out fundidos en el checkpoint; `durations` por fase en `sleep_phase_status.json`.
+- F1 (P2, `3510335`): textura oversize se parte antes de `add_memory`; scrub antes de partir y en cada parte; `jobs/drivers/distill.py` propaga `texture_parts`.
+- F2a (P3, `7d838e3`): kill a mitad → relanza y reusa; sesión que crece → 64/65 reusadas; `degraded` nunca reusa; siembra adopta con `prompt_version` vigente.
+- F2b (P4, `42a6bf1`): sesión que crece → solo las unidades nuevas; kill a mitad con `_partial.json` intacto; cambio de `annotate_prompt_version` → re-anota todo.
+- F3 (P5, `1ebc128`): manifiesto de 6 items × 30 s con techo 60 s → 3 hechos, 3 diferidos (`deferred_by_budget=3`); las etapas no-fanout posteriores (`finalize`) se ejecutan; el job no reentra.
+- F4 (P6 `53218f4` + P7 `264bed3`): banco reproducible (`docs/BENCHMARKS/ANNOTATE_BENCH.md`); fusión medida (5 corridas reales, Granite-4.1-8B): `notas/fragmento` 1.25 vs 0.90 (≥ 0.855), `truncados` 0, `json_invalido` 0 vs 4.4, rutas work/social/none 66/22/12 % vs 66.7/25/8.3 % (todas ±5 pp), `extract_por_fragmento` 2.0 → 1.0 (−50 % llamadas). Detalle: `docs/TECHNICAL/COGNITIVE/ANNOTATE_FUSION_DECISION.md`.
+- F5 (P8, `66f8f07`): flag OFF byte-idéntico (msg_limit); ON presupuesta chars (distill) y unidades+notas (annotate) conservando `NIGHT_LIMIT` y el anti-hambruna; gate sin tocar (D-NB-06).
+
+**Consequences**: la noche queda acotada por tres palancas reversibles e independientes (reuso, techo por compuesto, presupuesto por coste), todas OFF por defecto. Lo diferido vuelve la noche siguiente por stale-first (D-NB-07). Pendiente de integración: el `discover` del DAG aún no pasa `--phase`, así que con `MEMENTO_NIGHT_COST_MODEL_ENABLED` ON el fan-out nocturno seguiría en msg_limit hasta cablear una discover por fase (gap declarado en P8). Los umbrales del gate (significance/dead-zone/dedup) no se tocan en ninguna fase (D-NB-06).

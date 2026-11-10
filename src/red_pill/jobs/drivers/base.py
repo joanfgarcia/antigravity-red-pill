@@ -70,10 +70,16 @@ class JobDeferred(Exception):
 
 	El runner devuelve el job a PENDING SIN incrementar attempts (regla R1):
 	el disyuntor de frustración es para fallos reales del job, no del entorno.
+
+	`checkpoint` (opcional) es el estado que el driver quiere persistir ANTES de
+	deferir (p.ej. el techo de pared por compuesto: `deferred_by_budget` y las
+	hojas de fan-out diferidas). El runner lo guarda antes de devolver a PENDING,
+	de modo que el contador de diferidos jamás queda silenciado (D-NB-07/13).
 	"""
 
-	def __init__(self, reason: str):
+	def __init__(self, reason: str, checkpoint: Optional[Dict[str, Any]] = None):
 		self.reason = reason
+		self.checkpoint = checkpoint
 		super().__init__(reason)
 
 

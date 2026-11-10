@@ -99,6 +99,11 @@ ANNOTATE_SOCIAL_USER_V2 = _load_prompt_file("annotate_social_user_v2.txt")
 # (por defecto solo `k2_horizon_7b` lo trae) — nunca un `if` en el código.
 ANNOTATE_WORK_USER_V3 = _load_prompt_file("annotate_work_user_v3.txt")
 ANNOTATE_SOCIAL_USER_V3 = _load_prompt_file("annotate_social_user_v3.txt")
+# F4-fusión (NB-001 P7): work+social en UNA llamada, con `scope` por idea.
+# Seleccionadas por el flag MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED (default OFF).
+ANNOTATE_COMBINED_USER = _load_prompt_file("annotate_combined_user.txt")
+ANNOTATE_COMBINED_USER_V2 = _load_prompt_file("annotate_combined_user_v2.txt")
+ANNOTATE_COMBINED_USER_V3 = _load_prompt_file("annotate_combined_user_v3.txt")
 DUAL_SCORE_USER_V2 = _load_prompt_file("dual_score_user_v2.txt")
 
 
@@ -172,6 +177,9 @@ ANNOTATE_WORK_USER = _load_prompt_file("annotate_work_user.txt")
 
 ANNOTATE_SOCIAL_SYSTEM = _system_const("annotate_social_user", "annotate_social_system.txt")
 ANNOTATE_SOCIAL_USER = _load_prompt_file("annotate_social_user.txt")
+
+# F4-fusión (NB-001 P7): system del prompt combinado work+social.
+ANNOTATE_COMBINED_SYSTEM = _system_const("annotate_combined_user", "annotate_combined_system.txt")
 
 # ── CONTENT VALIDATE (MEM-006): revisa notas rechazadas por el filtro de ruido ──
 # Prompts en fichero propio (RFC-003): prompts/content_validate_{system,user}.txt

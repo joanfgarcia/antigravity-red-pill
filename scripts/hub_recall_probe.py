@@ -6,9 +6,9 @@ chars que se inyectarían. No escribe en Qdrant (solo búsqueda + refuerzo, que 
 un update normal de recall). El fixture vive fuera del repo público.
 
 Uso:
-    .venv/bin/python scripts/hub_recall_probe.py --queries state/hub_recall_queries.json
-    SW_HUB_KEYWORD_ENABLED=true SW_HUB_BOOST_ENABLED=true \
-      .venv/bin/python scripts/hub_recall_probe.py --queries ... --json /tmp/on.json
+	.venv/bin/python scripts/hub_recall_probe.py --queries state/hub_recall_queries.json
+	SW_HUB_KEYWORD_ENABLED=true SW_HUB_BOOST_ENABLED=true \
+	.venv/bin/python scripts/hub_recall_probe.py --queries ... --json /tmp/on.json
 """
 
 from __future__ import annotations

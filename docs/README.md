@@ -27,6 +27,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [WAR_ECONOMY.md](TECHNICAL/WAR_ECONOMY.md) | War Economy: Reuse and orchestration of system organs and components |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
 | [CORO_PROTOCOL.md](TECHNICAL/CORO_PROTOCOL.md) | Protocolo del coro (AD-095): tablón, correspondencia entre almas y `coro_api` |
+| [NIGHTLY_BUDGET.md](TECHNICAL/NIGHTLY_BUDGET.md) | Presupuesto de pared del ciclo nocturno (NB-001): qué se difiere, qué no, y cómo leer `item_seconds`/`stage_seconds` |
 | [BITNET_FLAVORS.md](TECHNICAL/BITNET_FLAVORS.md) | Mapa de fuentes y receta para recrear llama.cpp/BitNet: pins, sabores, verificación |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
@@ -97,6 +98,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [IMPLEMENTATION_PLAN_PHASE2.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN_PHASE2.md) | Phase 2 implementation plan |
 | [INFERENCE_PLUGINS.md](TECHNICAL/INFERENCE_PLUGINS.md) | Inference plugins architecture |
 | [SOVEREIGN_DRIVE.md](TECHNICAL/COGNITIVE/SOVEREIGN_DRIVE.md) | The underlying psychological drives and motivations of the Agent |
+| [ANNOTATE_FUSION_DECISION.md](TECHNICAL/COGNITIVE/ANNOTATE_FUSION_DECISION.md) | Decisión GO de NB-001: fusión work+social en una llamada, con la tabla de paridad del banco |
 
 ### Distiller Bake-off Reports
 
@@ -113,6 +115,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (AD-049): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
 | [HUB_BAKEOFF.md](BENCHMARKS/HUB_BAKEOFF.md) | Bake-off de hubs (AD-115/AD-116): Granite/K2/Bonsai, cobertura, latencia y cumplimiento del contrato de salida |
 | [2026-11-09-MOSS_IMAGE_SFT.md](BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md) | Evaluación de MOSS-Image-SFT (media local) |
+| [ANNOTATE_BENCH.md](BENCHMARKS/ANNOTATE_BENCH.md) | Banco reproducible de annotate (NB-001): baseline 2 llamadas/split vs fusión, con fixture fijo y `--dry-run` |
 
 ### Bünker
 

@@ -26,6 +26,22 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	# v3 = mismo contrato de voz que v2, pero pide el ACTO y no la escena.
 	setc = runtime.annotate_prompt_set()
 	work_scope, social_scope = runtime.annotate_scopes()
+	# F4-fusión (NB-001 P7): con el flag ON, UNA llamada combinada (work+social) con
+	# `scope` por idea. OFF → dos llamadas (work + social), comportamiento exacto.
+	combined = runtime.annotate_combined_prompt_id()
+	if combined is not None:
+		static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
+		prompt = prompts.render(combined, static=static, fragment=content)
+		raw = transport(prompts.system(combined) or "", prompt, runtime.annotate_max_tokens())
+		for idea in runtime._extract_json_array(raw) or []:
+			materialized = _idea_from_row(idea)
+			if materialized is None:
+				continue
+			scope = _normalize_scope(idea.get("scope"))
+			if scope:
+				materialized["scope"] = scope
+			ideas.append(materialized)
+		return ideas
 	prompt_ids = {
 		"v3": ("annotate_work_user_v3", "annotate_social_user_v3"),
 		"v2": ("annotate_work_user_v2", "annotate_social_user_v2"),
@@ -35,23 +51,40 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 		prompt = prompts.render(prompt_id, static=static, fragment=content)
 		raw = transport(prompts.system(prompt_id) or "", prompt, runtime.annotate_max_tokens())
 		for idea in runtime._extract_json_array(raw) or []:
-			if not isinstance(idea, dict):
+			materialized = _idea_from_row(idea)
+			if materialized is None:
 				continue
-			text = str(idea.get("text") or "").strip()
-			if not text:
-				continue
-			ideas.append(
-				{
-					"title": str(idea.get("title") or "Anotación")[:80],
-					"text": text,
-					"significance": idea.get("significance"),
-					"emotion": str(idea.get("emotion") or "gray"),
-					"intensity": idea.get("intensity"),
-					"theme": str(idea.get("theme") or ""),
-					"relics": [str(r) for r in _as_list(idea.get("relics"))][:4],
-				}
-			)
+			ideas.append(materialized)
 	return ideas
+
+
+def _normalize_scope(raw: Any) -> Optional[str]:
+	"""Normaliza el `scope` declarado por el modelo combinado a "work" | "social" | None.
+
+	El prompt combinado pide "scope" ("work" | "social"); cualquier otro valor (o
+	ausente) se trata como None — el routing final no depende de él (sigue siendo
+	`_route` sobre los scores duales).
+	"""
+	value = str(raw or "").strip().lower()
+	return value if value in ("work", "social") else None
+
+
+def _idea_from_row(idea: Any) -> Optional[Dict[str, Any]]:
+	"""Materializa una idea desde una fila del array JSON devuelto por el modelo."""
+	if not isinstance(idea, dict):
+		return None
+	text = str(idea.get("text") or "").strip()
+	if not text:
+		return None
+	return {
+		"title": str(idea.get("title") or "Anotación")[:80],
+		"text": text,
+		"significance": idea.get("significance"),
+		"emotion": str(idea.get("emotion") or "gray"),
+		"intensity": idea.get("intensity"),
+		"theme": str(idea.get("theme") or ""),
+		"relics": [str(r) for r in _as_list(idea.get("relics"))][:4],
+	}
 
 
 def _needs_voice_rewrite(text: str) -> bool:

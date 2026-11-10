@@ -156,7 +156,9 @@ def main() -> None:
 		msg_limit = int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_MSG_LIMIT", 3000))
 		# Misma política que el `discover` del DAG (agentic/selection.py): stale primero,
 		# dos presupuestos (sesiones + mensajes) y `limit=0` = sin tope de verdad.
-		chosen = select_targets(pending, limit, msg_limit=msg_limit, registry=registry)
+		# NB-001 F5: con el cost model ON y `--phase`, el presupuesto variable pasa a
+		# la divisa de la fase (chars en distill; unidades+notas en annotate).
+		chosen = select_targets(pending, limit, msg_limit=msg_limit, registry=registry, phase=args.phase, root=root)
 		targets = [(source, session_id) for source, session_id, _reason in chosen]
 
 	if not targets:

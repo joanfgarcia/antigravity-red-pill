@@ -5,8 +5,8 @@ El set vive FUERA del repo público (state del Búnker): las consultas pueden
 contener memoria privada. Este script solo escribe el JSON, no ejecuta recall.
 
 Uso:
-    .venv/bin/python scripts/hub_recall_fixture.py
-    .venv/bin/python scripts/hub_recall_fixture.py --out /ruta/queries.json --per-collection 10
+	.venv/bin/python scripts/hub_recall_fixture.py
+	.venv/bin/python scripts/hub_recall_fixture.py --out /ruta/queries.json --per-collection 10
 """
 
 from __future__ import annotations

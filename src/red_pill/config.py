@@ -801,6 +801,59 @@ class RedPillConfig(BaseSettings):
 	# (≈ 2000-3200 tokens a ratio 2-2.5) cabe holgado con system + salida. El
 	# destilado por fases solapadas trocea lo que exceda (overlap = continuidad).
 	MEMENTO_FRAGMENT_MAX_CHARS: int = 8000
+	# Reuso incremental por unidad en distill (NB-001 F2a, RULE 4 default OFF):
+	# con ON, `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el
+	# `content_hash` del cuerpo + prompt_version/engine/fragmentación y reusa las
+	# secciones intactas entre noches en vez de borrar y rehacer (D-NB-03/08/09/11).
+	# OFF → comportamiento actual exacto (regeneración completa, jamás parcheo).
+	MEMENTO_DISTILL_REUSE_ENABLED: bool = False
+	# Reuso incremental por unidad en annotate (NB-001 F2b, RULE 4 default OFF):
+	# con ON, `annotate/_meta.json` persiste por `unit_key` (rango de mensajes) el
+	# `content_hash` del cuerpo + annotate_prompt_version/engine + la lista de notas
+	# por unidad, y reusa las unidades intactas entre noches sin llamar al modelo.
+	# El `_partial.json` sigue siendo el checkpoint INTRA-run (MEM-009), intacto.
+	# OFF → comportamiento actual exacto (se extrae todo, sin `units` en el meta).
+	MEMENTO_ANNOTATE_REUSE_ENABLED: bool = False
+	# Fusión work+social en UNA llamada en annotate (NB-001 F4/P7, RULE 4 default
+	# OFF): con ON, la extracción emite una sola llamada combinada (prompt con
+	# `scope` por idea) en vez de dos (work + social). Medido en el banco de
+	# annotate (docs/BENCHMARKS/ANNOTATE_BENCH.md): paridad de notas/fragmento y
+	# de rutas, 0 JSON inválido y la mitad de llamadas de extracción. El `scope`
+	# declarado se persiste en idea, parcial y frontmatter. OFF → dos llamadas por
+	# split (comportamiento actual exacto).
+	MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED: bool = False
+	# Techo de pared por compuesto en dag_job (NB-001 F3, RULE 4 default OFF):
+	# con ON, `control.deadline_minutes` (o `deadline_minutes` declarado por
+	# compuesto en el manifest) acota el FAN-OUT de cada compuesto: agotado, las
+	# instancias pendientes se difieren con JobDeferred("budget_exhausted") y el
+	# contador `deferred_by_budget` se publica en el checkpoint (D-NB-02/07/12/13).
+	# El techo SOLO corta fan-out: la cola del sueño (thread, finalize,
+	# memento-reinforce) nunca se difiere. OFF → comportamiento actual exacto.
+	JOB_COMPOUND_DEADLINE_ENABLED: bool = False
+	# Presupuesto por coste real por etapa en la selección nocturna (NB-001 F5/P8,
+	# RULE 4 default OFF): con ON, la selección presupuesta en la DIVISA de cada
+	# fase en vez de en mensajes (el tope por mensajes es un proxy, no el coste):
+	#   - distill es O(chars)        → presupuesto en chars de work-unit.
+	#   - annotate es O(unidades)×2 + O(notas) → presupuesto en unidades (splits) y
+	#     notas esperadas (predicción, para compararla con la duración real).
+	# Ambas conservan el tope de sesiones (NIGHT_LIMIT) y el anti-hambruna (la
+	# primera entra siempre). OFF → comportamiento actual exacto (msg_limit).
+	MEMENTO_NIGHT_COST_MODEL_ENABLED: bool = False
+	# Presupuesto de chars para la fase distill de una noche (suma de chars de los
+	# work units). Medido 2026-11-09: el monstruo de 140 secciones / 65 splits /
+	# 1.983 msgs costó 41,5 min de distill; el resto de las sesiones, 1,0-6,1 min.
+	# 200.000 chars ≈ el monstruo entero NO cabe (se difiere); las nominales sí.
+	MEMENTO_NIGHT_DISTILL_CHAR_LIMIT: int = 200_000
+	# Presupuesto de unidades (splits) para la fase annotate de una noche. El
+	# monstruo medido fueron 65 splits (74,1 min de annotate); una noche nominal
+	# anda por pocas unidades. No se tocan los umbrales del gate (D-NB-06).
+	MEMENTO_NIGHT_ANNOTATE_UNIT_LIMIT: int = 100
+	# Presupuesto de notas esperadas para la fase annotate de una noche (acota la
+	# cola de notas, no decide qué ideas entran). 800 ≈ 100 unidades × 8 notas/un.
+	MEMENTO_NIGHT_ANNOTATE_NOTE_LIMIT: int = 800
+	# Heurística de predicción de notas por unidad (calibrada con la evidencia:
+	# 519 notas / 65 splits ≈ 8). Alimenta la predicción expuesta (P8.4).
+	MEMENTO_NIGHT_ANNOTATE_NOTES_PER_UNIT: int = 8
 	# Los engramas ascendidos (origin=memento) erodan MUCHO más lento que el ruido:
 	# importance = significance × factor → el motor bayesiano (α=max(1,importance))
 	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días

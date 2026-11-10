@@ -407,6 +407,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					raise JobDeferred("cede el paso a un job PENDING de mayor prioridad")
 
 		except JobDeferred as deferral:
+			# El techo de pared por compuesto (NB-001 F3) difiere el fan-out con un
+			# checkpoint adjunto: persistirlo ANTES de devolver a PENDING para que
+			# `deferred_by_budget` y las hojas diferidas no se pierdan (D-NB-07/13).
+			attached = getattr(deferral, "checkpoint", None)
+			if isinstance(attached, dict):
+				cog_queue.save_checkpoint(job_id, attached, progress)
 			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
 			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")
 		except JobPauseRequested as pause:
