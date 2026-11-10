@@ -143,7 +143,10 @@ def test_escritura_fallida_no_marca_miembros(monkeypatch):
 	stats = synthesize_session_hubs(
 		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
 	)
-	assert stats["hubs_failed"] == 1 and not client.marked
+	assert stats["hubs_failed"] == 1
+	marked = client.marked["work_memories"]
+	assert not any(p.get("hubbed") for p in marked.values())  # nada se oculta
+	assert marked["m1"]["hub_synth_reject_reason"] == "escritura_rechazada"
 
 
 def test_hub_summary_over_hard_limit_no_se_escribe(monkeypatch):
@@ -160,7 +163,11 @@ def test_hub_summary_over_hard_limit_no_se_escribe(monkeypatch):
 
 	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=long_synth, affect_fn=lambda c: ("gray", 0.5))
 	assert stats["hubs_failed"] == 1 and not mm.added
-	assert not client.marked  # los miembros siguen recallables; nada se oculta
+	# Los miembros siguen recallables; lo único que se anota es el marcador de
+	# rechazo (compuerta de coste), nunca `hubbed`.
+	marked = client.marked["work_memories"]
+	assert not any(p.get("hubbed") for p in marked.values())
+	assert marked["m1"]["hub_synth_reject_count"] == 1
 
 
 def test_hub_texture_parts_se_escriben_sin_campo_texture(monkeypatch):

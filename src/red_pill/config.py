@@ -1156,6 +1156,11 @@ class RedPillConfig(BaseSettings):
 	# el hub (se reintenta); nunca se inyecta un resumen de 3k en el contexto.
 	SLEEP_HUB_SUMMARY_HARD_LIMIT: int = 1000
 	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
+	# Rechazos con el MISMO input antes de dejar la sesión en espera. Un rechazo
+	# ya pagó la síntesis LLM; repetirla cada ciclo de sueño con el mismo input
+	# (summary sobre el tope duro, idioma, compuerta de escritura) paga el mismo
+	# coste para el mismo veredicto. 0 = sin compuerta (reintento infinito).
+	SW_HUB_SYNTH_MAX_REJECTIONS: int = 2
 	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
 	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2
 	SLEEP_HUB_TEXTURE_PARTS_MAX: int = 32  # tope de partes si la textura no cabe en metadata

@@ -45,6 +45,14 @@ HUB_SYNTH_VERSION = 3
 HUB_MIGRATION_BLOCKED_NO_MEMBERS = "no_members"
 HUB_MIGRATION_BLOCKED_SINGLETON = "singleton"
 
+# Rechazos que YA pagaron una síntesis LLM y no dejaron hub (el input es el
+# mismo, la compuerta también): reintentarlos cada ciclo paga el mismo coste
+# para el mismo veredicto. Tras `SW_HUB_SYNTH_MAX_REJECTIONS` intentos con el
+# mismo `hub_input_hash` la sesión queda EN ESPERA hasta que cambie su entrada
+# (miembro nuevo, re-síntesis forzada o ajuste de la compuerta). Los fallos
+# transitorios (LLM caído) NO cuentan: son baratos y sí cambian solos.
+# Marcador por miembro: hash + intentos + motivo + cuándo.
+
 
 def hub_point_id(collection: str, session_id: str) -> str:
 	"""Id determinista del hub de sesión (idempotencia por upsert)."""
@@ -150,6 +158,55 @@ def _session_created_at(members: List[Tuple[Any, Dict[str, Any]]]) -> Optional[f
 	return min(vals) if vals else None
 
 
+def _rejection_marker(members: List[Tuple[Any, Dict[str, Any]]]) -> Tuple[str, int]:
+	"""Último rechazo registrado en los miembros: `(hub_input_hash, intentos)`.
+
+	Se lee del payload que ya se trajo el scroll: cero consultas extra.
+	"""
+	best_hash, best_count = "", 0
+	for _pid, payload in members:
+		count = int(payload.get("hub_synth_reject_count") or 0)
+		if count > best_count:
+			best_hash, best_count = str(payload.get("hub_synth_reject_hash") or ""), count
+	return best_hash, best_count
+
+
+def _record_rejection(
+	memory_manager: Any,
+	collection: str,
+	session_id: str,
+	members: List[Tuple[Any, Dict[str, Any]]],
+	ihash: str,
+	reason: str,
+) -> None:
+	"""Anota en los miembros que ESTA entrada ya fue rechazada.
+
+	Best-effort: si Qdrant no acepta el marcador, el siguiente ciclo vuelve a
+	pagar la síntesis — el lado seguro (no se pierde nada, solo se gasta).
+	El contador se reinicia cuando cambia el `hub_input_hash`: un miembro nuevo
+	es una entrada nueva y merece su intento.
+	"""
+	prev_hash, prev_count = _rejection_marker(members)
+	count = prev_count + 1 if prev_hash == ihash else 1
+	ids = [pid for pid, _ in members]
+	if not ids:
+		return
+	try:
+		memory_manager.client.set_payload(
+			collection_name=collection,
+			payload={
+				"hub_synth_reject_hash": ihash,
+				"hub_synth_reject_count": count,
+				"hub_synth_reject_reason": reason,
+				"hub_synth_reject_at": time.time(),
+			},
+			points=ids,
+		)
+		logger.info(f"[HUBS] rechazo #{count} anotado en {collection}:{session_id} ({reason}).")
+	except Exception as e:
+		logger.debug(f"[HUBS] no se pudo anotar el rechazo en {collection}:{session_id}: {e}")
+
+
 def _synthesize_one(
 	memory_manager: Any,
 	collection: str,
@@ -171,9 +228,16 @@ def _synthesize_one(
 	imposible de reconstruir desde el tablero).
 	"""
 
-	def _fail(reason: str) -> str:
+	def _fail(reason: str, billable: bool = False) -> str:
+		"""Registra el fallo y, si costó una síntesis real, lo cuenta en el miembro.
+
+		`billable=True` solo para rechazos del hub YA sintetizado: el LLM corrió
+		y su veredicto no cambia si la entrada no cambia.
+		"""
 		if failure_reasons is not None:
 			failure_reasons.append((f"{collection}:{session_id}", reason))
+		if billable:
+			_record_rejection(memory_manager, collection, session_id, members, ihash, reason)
 		return "failed"
 
 	members = sort_members_chronologically(members)
@@ -222,6 +286,22 @@ def _synthesize_one(
 				_mark_members(memory_manager, collection, members, hid)
 				return "skipped"
 
+	# Compuerta de coste (2026-11-10): un input ya rechazado N veces no se
+	# vuelve a pagar. Sin esto, un summary que el maestro nunca baja del tope
+	# duro re-sintetiza cada ciclo de sueño para siempre: mismo input, mismo
+	# veredicto, coste LLM repetido sin ganancia.
+	max_rejections = int(getattr(cfg, "SW_HUB_SYNTH_MAX_REJECTIONS", 2) or 0)
+	if not force and max_rejections > 0:
+		rej_hash, rej_count = _rejection_marker(members)
+		if rej_hash == ihash and rej_count >= max_rejections:
+			logger.info(
+				f"[HUBS] {collection}:{session_id} en espera: entrada rechazada {rej_count}× sin cambios; "
+				"no se paga otra síntesis (cambia el input o fuerza la re-síntesis)."
+			)
+			if failure_reasons is not None:
+				failure_reasons.append((f"{collection}:{session_id}", "entrada_rechazada_en_espera"))
+			return "deferred"
+
 	chunks = _members_to_chunks(members)
 	hub = synthesizer(chunks, cache_namespace=f"{collection}:{session_id}") or {}
 	if hub.get("_is_fallback"):
@@ -241,13 +321,13 @@ def _synthesize_one(
 			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id}; "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
-		return _fail("summary_over_hard_limit")
+		return _fail("summary_over_hard_limit", billable=True)
 	if hub.get("summary_lang_mismatch"):
 		logger.warning(
 			f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; "
 			"no se escribe (se reintenta con reescritura)"
 		)
-		return _fail("summary_lang_mismatch")
+		return _fail("summary_lang_mismatch", billable=True)
 	title = str(hub.get("title") or "").strip()
 	# D-12: el hub puede contener credenciales tecleadas en la sesión; se
 	# redactan ANTES del upsert (idempotente, no toca el resto del texto).
@@ -388,7 +468,7 @@ def _synthesize_one(
 	if not new_id:
 		# Escritura rechazada (quality gate / fallo): NO marcar miembros (F3).
 		logger.warning(f"[HUBS] hub rechazado al escribir en {collection}:{session_id}; miembros intactos.")
-		return _fail("escritura_rechazada")
+		return _fail("escritura_rechazada", billable=True)
 	# F3: marcar los miembros SOLO tras escribir el hub CON ÉXITO.
 	_mark_members(memory_manager, collection, members, hid)
 	_clear_rebuild_pending(memory_manager, collection, session_id, hid)
@@ -404,8 +484,18 @@ def _mark_members(memory_manager: Any, collection: str, members: List[Tuple[Any,
 	ids = [pid for pid, _ in members]
 	if not ids:
 		return True
+	payload: Dict[str, Any] = {
+		"hubbed": True,
+		"hub_id": hub_id,
+		# El hub real enterró la causa del rechazo: el marcador de espera se
+		# borra aquí (sin consulta extra) para no bloquear una entrada nueva.
+		"hub_synth_reject_hash": "",
+		"hub_synth_reject_count": 0,
+		"hub_synth_reject_reason": "",
+		"hub_synth_reject_at": 0.0,
+	}
 	try:
-		memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": True, "hub_id": hub_id}, points=ids)
+		memory_manager.client.set_payload(collection_name=collection, payload=payload, points=ids)
 		return True
 	except Exception as e:
 		logger.warning(f"[HUBS] no se pudieron marcar miembros en {collection}: {e}")
@@ -462,8 +552,9 @@ def synthesize_session_hubs(
 		synthesizer = synthesizer or synthesize_hub_v2
 		affect_fn = affect_fn or derive_hub_affect
 
-	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "sessions": 0, "enabled": True}
+	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "hubs_deferred": 0, "sessions": 0, "enabled": True}
 	failed_sessions: List[str] = []
+	deferred_sessions: List[str] = []
 	# Motivo por sesión caída: viaja al aviso (diagnóstico sin abrir logs).
 	failure_reasons: List[Tuple[str, str]] = []
 	for collection in collections:
@@ -512,13 +603,16 @@ def synthesize_session_hubs(
 				continue
 			if result == "written":
 				stats["hubs_written"] += 1
+			elif result == "deferred":
+				stats["hubs_deferred"] += 1
+				deferred_sessions.append(f"{collection}:{session_id}")
 			elif result == "failed":
 				stats["hubs_failed"] += 1
 				failed_sessions.append(f"{collection}:{session_id}")
 			else:
 				stats["hubs_skipped"] += 1
-	if stats["hubs_failed"]:
-		_emit_hub_failure_signal(memory_manager, stats, failed_sessions, failure_reasons)
+	if stats["hubs_failed"] or stats["hubs_deferred"]:
+		_emit_hub_failure_signal(memory_manager, stats, failed_sessions, failure_reasons, deferred_sessions)
 	else:
 		# La causa murió: el dolor se entierra. Sin este camino, un WARNING de
 		# una noche mala sobrevive semanas (dolor huérfano, SIG-001/OBS-005
@@ -554,6 +648,7 @@ def _emit_hub_failure_signal(
 	stats: Dict[str, Any],
 	failed_sessions: List[str],
 	failure_reasons: Optional[List[Tuple[str, str]]] = None,
+	deferred_sessions: Optional[List[str]] = None,
 ) -> None:
 	"""Señal de dolor si algún hub no se pudo escribir (antes era invisible).
 
@@ -568,14 +663,16 @@ def _emit_hub_failure_signal(
 	try:
 		name = "hub_synthesis_failed"
 		reasons = list(failure_reasons or [])
+		deferred = int(stats.get("hubs_deferred") or 0)
 		# `inject_signal` es idempotente por nombre y conserva `first_seen_at`;
 		# se re-inyecta con `diagnosis` (AD-108) para que el mensaje no se quede
 		# congelado en el primer fallo y un motivo nuevo re-arme el acuse.
 		diagnosis = _hub_failure_diagnosis(stats, reasons)
-		muestra = ", ".join(failed_sessions[:5])
+		muestra = ", ".join((failed_sessions + list(deferred_sessions or []))[:5])
+		espera = f" {deferred} en espera (entrada ya rechazada; no se paga otra síntesis)." if deferred else ""
 		message = (
 			f"{stats['hubs_failed']} hub(s) no se escribieron; sus miembros siguen recallables "
-			f"(sin pérdida). {_describe_failure_reasons(reasons)} · sesiones: {muestra}"
+			f"(sin pérdida).{espera} {_describe_failure_reasons(reasons)} · sesiones: {muestra}"
 		)
 		memory_manager.inject_signal(
 			name=name,
