@@ -306,7 +306,11 @@ def test_insert_split_renames_and_keeps_unit_key(tmp_path, reuse_on):
 # ── P4.5 flag OFF → comportamiento actual exacto (sin manifest, sin units) ──
 
 
-def test_flag_off_is_full_annotate_without_manifest(tmp_path):
+def test_flag_off_is_full_annotate_without_manifest(tmp_path, monkeypatch):
+	# La palanca se fija: es el test del comportamiento APAGADO, no del env.
+	# (Mismo falso rojo que F2a/F3 si el día que se encienda F2b alguien corre
+	# la suite con el `.env` real.)
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_REUSE_ENABLED", False, raising=False)
 	root, dir_rel, sid = _three(tmp_path)
 
 	t1 = _Transport()

@@ -240,8 +240,11 @@ def test_insert_split_renames_and_keeps_unit_key(tmp_path, reuse_on):
 # ── P3.7 flag OFF → comportamiento actual exacto (borrar y rehacer) ──
 
 
-def test_flag_off_is_full_redo_without_manifest(tmp_path):
-	# flag OFF (default): sin manifest, sin unit_key, borrar y rehacer.
+def test_flag_off_is_full_redo_without_manifest(tmp_path, monkeypatch):
+	# flag OFF (fijado): sin manifest, sin unit_key, borrar y rehacer.
+	# Se fija porque el `.env` real trae MEMENTO_DISTILL_REUSE_ENABLED=true
+	# desde el 2026-11-10: sin pin, un proceso con ese env da un falso rojo.
+	monkeypatch.setattr(cfg, "MEMENTO_DISTILL_REUSE_ENABLED", False, raising=False)
 	root, dir_rel, sid = _three(tmp_path)
 
 	calls1 = []

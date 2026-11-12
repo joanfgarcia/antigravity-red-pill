@@ -141,7 +141,16 @@ def test_deadline_minutes_clamp():
 
 
 def test_flag_off_is_exact_current_behavior(tmp_path, monkeypatch):
-	"""P5.6: flag en False (default) → el techo se ignora y corren los 6 items."""
+	"""P5.6: flag en False (default) → el techo se ignora y corren los 6 items.
+
+	El flag se FIJA aquí: el test afirma el comportamiento con la palanca
+	apagada, y en el `.env` real está `JOB_COMPOUND_DEADLINE_ENABLED=true` desde
+	el 2026-11-10. Sin el pin, cualquier proceso que cargue ese env tumba el
+	test (falso rojo medido en el despertar del 2026-11-12).
+	"""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "JOB_COMPOUND_DEADLINE_ENABLED", False, raising=False)
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
