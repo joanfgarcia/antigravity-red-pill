@@ -90,15 +90,44 @@ def test_operator_discard_does_not_sustain_pain(queue):
 
 	Medido el 2026-11-10: la misión NB-001 se descartó a mano, la cola la selló
 	FRUSTRATED con `error_log: cancelled by operator` y el JobMonitor mantuvo un
-	WARNING de intensidad 5 (escalado a 7) durante 14 días de dead-letter.
+	WARNING de intensidad 5 (escalado a 7) durante 14 días de dead-letter. Desde
+	2026-11-12 el descarte nace CANCELLED — el recuento ya no depende de leer el
+	texto del error, y el rastro no caduca con la dead-letter.
 	"""
 	task_id = queue.enqueue_task(source="script_job", payload={"title": "misión descartada"})
 	queue.pop_next_task(allowed_sources=["script_job"])
 	assert queue.kill_task(task_id, discard=True) is True
-	assert queue.get_task(task_id)["status"] == "FRUSTRATED"  # la cola conserva el rastro
+	assert queue.get_task(task_id)["status"] == "CANCELLED"  # la cola conserva el rastro
 
 	assert queue.job_health(["script_job"])["frustrated"] == 0
 	assert queue.frustrated_jobs(["script_job"]) == []
+
+
+def test_legacy_operator_discard_row_does_not_sustain_pain(queue):
+	"""Filas LEGACY (`FRUSTRATED` + `cancelled by operator`): siguen sin doler.
+
+	Una cola viva al desplegar este cambio arrastra descartes sellados con el
+	estado viejo hasta que caduque su dead-letter; el filtro por `error_log`
+	existe solo para ellas y no puede caer sin resucitar el dolor de 2026-11-10.
+	"""
+	task_id = _enqueue(queue, title="misión descartada (legacy)")
+	with queue._get_connection() as conn:
+		conn.execute("UPDATE cognitive_tasks SET error_log = 'cancelled by operator' WHERE id = ?", (task_id,))
+
+	assert queue.job_health(["script_job"])["frustrated"] == 0
+	assert queue.frustrated_jobs(["script_job"]) == []
+
+
+def test_cancelled_job_survives_hygiene_and_cannot_be_resurrected(queue):
+	"""CANCELLED es un acto del Operador: la purga automática no lo retira y
+	`resume` no lo resucita (se re-encola, no se des-cancela)."""
+	task_id = queue.enqueue_task(source="script_job", payload={"title": "cerrado a mano"})
+	assert queue.kill_task(task_id, discard=True) is True
+
+	queue.purge_hygiene(completed_days=0, frustrated_days=0, stale_processing_hours=24)
+	assert queue.get_task(task_id)["status"] == "CANCELLED"
+	assert queue.resume_task(task_id) is False
+	assert queue.get_task(task_id)["status"] == "CANCELLED"
 
 
 def test_real_frustration_still_sustains_pain(queue):
@@ -121,7 +150,7 @@ def test_discarded_parent_cascade_does_not_sustain_pain(queue):
 	assert queue.get_task(child)["status"] == "BLOCKED"
 
 	assert queue.kill_task(parent, discard=True) is True
-	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert queue.get_task(child)["status"] == "CANCELLED"
 
 	assert queue.job_health(["script_job"])["frustrated"] == 0
 	assert queue.frustrated_jobs(["script_job"]) == []

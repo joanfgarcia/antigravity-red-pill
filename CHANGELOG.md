@@ -1,5 +1,16 @@
 ## Unreleased
 
+### ⚖️ Cola honesta — el descarte del Operador nace CANCELLED, no FRUSTRATED
+
+`job kill --discard` sellaba **FRUSTRATED**, el mismo estado del disyuntor de 3 fallos, con un `error_log` de texto para distinguirlos. Un fallo y una decisión compartían estado: el tablón mentía, y el dolor `jobs_frustrated` solo se salvó el 2026-11-10 con un filtro por texto. Ahora el descarte es **CANCELLED** (el mismo cierre que `job discard` al revisar).
+
+- **[FIX] `kill_task_ex(discard=True)` → `CANCELLED`** (y su cascada de hijos BLOCKED también). `FRUSTRATED` queda exclusivamente para lo que pide atención: el disyuntor abierto.
+- **[FIX] El runner trata CANCELLED como parada del Operador**: guardas antes del primer step, antes de cerrar como COMPLETED, en la frontera de step y en la excepción del step (nunca quema intentos ni levanta alarma). La frontera **solo** materializa la pausa en PAUSING/PAUSED — antes `mark_paused` habría degradado un CANCELLED a reanudable.
+- **[FIX] Ya no se resucita**: `mark_completed`/`mark_failed` excluyen CANCELLED, `resume_task` no lo devuelve a PENDING, y `enqueue_task` rechaza hijos de un padre CANCELLED (antes solo miraba FRUSTRATED).
+- **[KEEP] Rastro permanente**: `purge_hygiene` nunca retira CANCELLED (la dead-letter de 14 días no se lo lleva); se retira a mano con `job purge <id>`.
+- **[KEEP] Filtro legacy por `error_log`**: las colas vivas arrastran descartes sellados con el estado viejo; `OPERATOR_DISCARD_ERRORS` sigue excluyéndolos del recuento y la atribución del dolor.
+- **[TEST] 6 ficheros actualizados + 3 casos nuevos**: descarte→CANCELLED, fila legacy que sigue sin doler, CANCELLED que sobrevive a `purge_hygiene` y no se reanuda, y descarte en vuelo que no se degrada a PAUSED (552 passed en el filtro `job/queue/kill/cancel/hygiene/purge/runner`; 151 en los ficheros tocados de cola).
+
 ### 🌙 Noche acotada — cota y coste del ciclo nocturno (NB-001)
 
 Presupuesto y reuso del ciclo nocturno `chronicle → sleep`. Todas las piezas con flag propio default OFF (RULE 4); apagadas, comportamiento idéntico al actual. Diseño y decisiones: `docs/TECHNICAL/DECISION_LOG.md` (AD-118).

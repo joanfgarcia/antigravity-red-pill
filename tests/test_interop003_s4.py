@@ -219,7 +219,7 @@ def test_kill_task_ex_reports_previous_processing_status(tmp_path):
 	assert qm.get_task(job_id)["status"] == "PAUSED"
 
 
-def test_completed_cannot_resurrect_frustrated_job(tmp_path):
+def test_completed_cannot_resurrect_cancelled_job(tmp_path):
 	from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 	qm = CognitiveQueueManager(str(tmp_path / "queue.db"))
@@ -227,7 +227,7 @@ def test_completed_cannot_resurrect_frustrated_job(tmp_path):
 	qm.pop_next_task(allowed_sources=["dag_job"])
 	qm.kill_task_ex(job_id, discard=True)
 	qm.mark_completed(job_id)
-	assert qm.get_task(job_id)["status"] == "FRUSTRATED"
+	assert qm.get_task(job_id)["status"] == "CANCELLED"
 
 
 def test_completed_cannot_overwrite_paused_dirty_kill(tmp_path):

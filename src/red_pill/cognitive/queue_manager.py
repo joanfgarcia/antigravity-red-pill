@@ -7,14 +7,13 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Un FRUSTRATED por decisión del Operador NO es un fallo: es un cierre. El
-# disyuntor (3 intentos) escribe el error real del step; estos dos textos solo
-# los escribe una cancelación deliberada (`kill_task_ex(discard=True)` y su
-# cascada a los hijos BLOCKED). El dolor `jobs_frustrated` nace para pedir
-# atención sobre lo que falló, no para gritar por lo que el Operador enterró:
-# sin este filtro, descartar un job dejaba un WARNING de intensidad 5 vivo
-# durante los 14 días de la dead-letter (medido 2026-11-10: la misión NB-001,
-# descartada a propósito, sostenía el dolor con `error_log: cancelled by operator`).
+# Un descarte deliberado NO es un fallo: es un cierre, y desde 2026-11-12 se
+# sella como CANCELLED (el mismo estado que `job discard` produce al revisar),
+# no como FRUSTRATED. Este filtro sobrevive por las filas LEGACY: hasta esa
+# fecha `kill_task_ex(discard=True)` escribía FRUSTRATED + estos textos, y una
+# dead-letter de 14 días seguía viva en la cola. Borrarlo habría resucitado el
+# dolor que se midió el 2026-11-10 (la misión NB-001, descartada a propósito,
+# sostenía `jobs_frustrated` con `error_log: cancelled by operator`).
 OPERATOR_DISCARD_ERRORS = ("cancelled by operator", "parent cancelled")
 
 # Fragmento SQL compartido: el filtro del descarte deliberado se escribe UNA vez
@@ -161,8 +160,10 @@ class CognitiveQueueManager:
 				parent_status = str(row["status"])
 				if parent_status == "COMPLETED":
 					initial_status = "PENDING"
-				elif parent_status == "FRUSTRATED":
-					raise ValueError(f"el padre {parent_task_id} está FRUSTRATED: el hijo nunca arrancaría (re-encola el padre primero)")
+				elif parent_status in ("FRUSTRATED", "CANCELLED"):
+					raise ValueError(
+						f"el padre {parent_task_id} está {parent_status}: el hijo nunca arrancaría (re-encola el padre primero)"
+					)
 			conn.execute(
 				"""
 				INSERT INTO cognitive_tasks (
@@ -418,7 +419,7 @@ class CognitiveQueueManager:
 				"""
 				UPDATE cognitive_tasks
 				SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP
-				WHERE id = ? AND status <> 'FRUSTRATED' AND cancel_requested_at IS NULL
+				WHERE id = ? AND status NOT IN ('FRUSTRATED', 'CANCELLED') AND cancel_requested_at IS NULL
 					AND NOT (status = 'PAUSED' AND checkpoint_data LIKE '%"dirty_kill"%')
 				""",
 				(task_id,),
@@ -462,7 +463,7 @@ class CognitiveQueueManager:
 			).fetchone()
 			if row and (
 				row["cancel_requested_at"] is not None
-				or str(row["status"]) in ("PAUSING", "PAUSED", "FRUSTRATED")
+				or str(row["status"]) in ("PAUSING", "PAUSED", "FRUSTRATED", "CANCELLED")
 			):
 				conn.execute(
 					"UPDATE cognitive_tasks SET error_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -572,9 +573,11 @@ class CognitiveQueueManager:
 		"""Salud del carril mecánico (solo lectura, para el DaemonPlugin job_monitor):
 		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado).
 
-		`frustrated` cuenta SOLO el fallo que pide atención: un job que el Operador
-		descartó a propósito (FRUSTRATED por `kill_task_ex(discard=True)`) es una
-		decisión cerrada, no un dolor — ver `OPERATOR_DISCARD_ERRORS`.
+		`frustrated` cuenta SOLO el fallo que pide atención: un job descartado a
+		propósito ya nace CANCELLED (2026-11-12) y no entra en el recuento; las
+		filas LEGACY selladas `FRUSTRATED` con `error_log: cancelled by operator`
+		siguen excluidas hasta que caduque su dead-letter — ver
+		`OPERATOR_DISCARD_ERRORS`.
 
 		El latido no es solo `updated_at`: esa columna se escribe en frontera de step
 		y se congela durante horas en una etapa larga. Si el hijo publica progreso
@@ -620,6 +623,7 @@ class CognitiveQueueManager:
 
 		Mismo filtro que `job_health`: el descarte deliberado del Operador no sostiene
 		el dolor (si discrepasen, el mensaje citaría jobs que el recuento no cuenta).
+		Hoy el descarte nace en CANCELLED; el filtro queda para las filas legacy.
 		"""
 		if not sources:
 			return []
@@ -838,6 +842,14 @@ class CognitiveQueueManager:
 		A4: toda cancelación sella además `cancel_requested_at` (marca monotónica)
 		en la MISMA transacción. Esa marca es la que impide que el step en vuelo
 		cierre el job como COMPLETED o lo devuelva a PENDING tras un fallo.
+
+		`discard=True` sella **CANCELLED** (2026-11-12: antes FRUSTRATED). El
+		FRUSTRATED del disyuntor significa «falló tres veces, míralo»; un descarte
+		del Operador es lo contrario — «decidido, no lo mires» — y compartía estado
+		con el fallo, así que el tablón mentía y hacía falta un filtro por TEXTO
+		de `error_log` para que no doliera. Mismo cierre que `job discard`
+		(`mark_cancelled`): un único estado terminal para toda decisión del
+		Operador, y el rastro deja de caducar con la dead-letter.
 		"""
 		with self._get_connection() as conn:
 			conn.execute("BEGIN IMMEDIATE")
@@ -866,7 +878,7 @@ class CognitiveQueueManager:
 					"UPDATE cognitive_tasks SET checkpoint_data=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
 					(json.dumps(checkpoint), task_id),
 				)
-			status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
+			status, error_log = ("CANCELLED", "cancelled by operator") if discard else ("PAUSED", None)
 			cursor = conn.execute(
 				"UPDATE cognitive_tasks SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP "
 				"WHERE id = ? AND status = ?",
@@ -876,7 +888,7 @@ class CognitiveQueueManager:
 				conn.rollback()
 				return False, current
 			if discard:
-				self._cancel_blocked_children(conn, task_id)
+				self._cancel_blocked_children(conn, task_id, status="CANCELLED")
 			conn.commit()
 			return True, current
 
@@ -885,8 +897,9 @@ class CognitiveQueueManager:
 		resucitará: el desbloqueo filtra status='BLOCKED').
 
 		`status` es el estado final de los hijos: FRUSTRATED por defecto (purga de
-		un padre terminal) y CANCELLED cuando el padre se descarta tras revisión —
-		un hijo de un job cancelado no es un fallo que revisar.
+		un padre terminal que falló) y CANCELLED cuando el padre fue descartado a
+		propósito (`kill_task_ex(discard=True)`, `mark_cancelled`) — un hijo de un
+		job cancelado no es un fallo que revisar.
 		"""
 		queue = [parent_id]
 		cancelled = 0
