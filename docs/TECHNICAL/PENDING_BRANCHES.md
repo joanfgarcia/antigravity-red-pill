@@ -28,6 +28,10 @@ branch_landing_audit.py --publish
                  └─ a cero se evapora (contrato de ciclo de vida)
 ```
 
+- **Quién lo ejecuta**: `redpill-auditor.service` (horario) llama a
+  `branch_landing_audit.py --target next --publish` como un paso más. Sin un
+  latido el dato se congelaría y el aviso mentiría por omisión — por eso no basta
+  con el comando manual.
 - **C — la línea del digest.** `open_loops_line` lee el JSON con un `stat`, sin
   correr git: el handshake no puede esperar un `merge-tree` por rama. Un dato de
   más de 24 h se ignora — mejor silencio que una cifra de ayer.

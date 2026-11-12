@@ -24,7 +24,9 @@ aterrizó ya nos ha mentido antes»).
   una línea si algún día hace falta push.
 
 Verificado en las dos direcciones con ramas reales: aparece al crear una rama con
-un commit pendiente y desaparece al purgarla.
+un commit pendiente y desaparece al purgarla. El latido lo da
+`redpill-auditor.service` (horario): sin él el dato se congelaría y el aviso
+mentiría por omisión.
 
 ### 🚨 Señales — el dolor nace con su entierro
 
