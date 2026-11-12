@@ -25,7 +25,13 @@ nightly_exempt: true   # anti-deadlock: el sueño no se auto-difiere entre unida
 mode: lazy
 control:
   max_step_minutes: 300
-  deadline_minutes: 60   # NB-001 F3: techo de pared del compuesto (incluye deep_sleep futuro)
+  # NB-001 F3: el techo solo acota FAN-OUT (D-NB-02) y este compuesto no tiene
+  # ninguno — sus 16 etapas son comandos atómicos. Hoy es INERTE por diseño: se
+  # conserva para el día que el sueño tenga fan-out (deep_sleep). Medido en el
+  # ciclo 4047324f (2026-11-12): el sueño entero cuesta 5.7 min, no 60, así que
+  # tampoco hace falta. El cuello de la noche es la crónica (70.9 min), y esa sí
+  # está acotada de verdad. Ver docs/TECHNICAL/NIGHTLY_BUDGET.md.
+  deadline_minutes: 60
 manifest:
   workdir: .
   stages:

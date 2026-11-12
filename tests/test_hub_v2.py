@@ -314,3 +314,31 @@ def test_split_text_lossless_never_drops_characters():
 	# Sin pérdida: uniendo con espacio se reconstruye el texto (salvo espacios de junta).
 	assert " ".join(parts).replace("  ", " ") == text
 	assert parts[0].endswith(".")
+
+
+def test_synthesize_hub_v2_pide_el_presupuesto_de_longitud_en_generacion(monkeypatch):
+	"""Medido 2026-11-12: 1039 y 1053 chars contra un tope duro de 1000.
+
+	El número existía (`SLEEP_HUB_SUMMARY_TARGET_CHARS`) pero solo se usaba para
+	compactar DESPUÉS. El modelo nunca supo cuánto se le pedía, así que se pasaba
+	un 4 % y el hub se rechazaba entero. Ahora el presupuesto viaja en el prompt.
+	"""
+	import red_pill.config as cfgmod
+
+	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "Idea.", "texture": "", "lang": "es"})
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900, raising=False)
+	monkeypatch.setattr(cfgmod, "MEMENTO_PROMPT_LANGUAGE", "es", raising=False)
+	synthesize_hub_v2(CHUNKS)
+	system = provider.generate.call_args.kwargs["messages"][0]["content"]
+	assert "900 caracteres" in system, "el maestro tiene que saber el presupuesto, no adivinarlo"
+
+
+def test_synthesize_hub_v2_pide_el_presupuesto_en_ingles_si_no_es_es(monkeypatch):
+	import red_pill.config as cfgmod
+
+	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "Idea.", "texture": "", "lang": "en"})
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900, raising=False)
+	monkeypatch.setattr(cfgmod, "MEMENTO_PROMPT_LANGUAGE", "en", raising=False)
+	synthesize_hub_v2(CHUNKS)
+	system = provider.generate.call_args.kwargs["messages"][0]["content"]
+	assert "must not exceed 900 characters" in system

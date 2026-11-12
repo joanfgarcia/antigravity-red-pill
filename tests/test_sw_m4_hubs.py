@@ -269,3 +269,24 @@ def test_ciclo_limpio_sin_aviso_previo_no_evapora_nada(monkeypatch):
 		mm, collections=("work_memories",), synthesizer=lambda c, **kw: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
 	)
 	assert not mm.evaporated and not mm.injected
+
+
+def test_aviso_de_hub_lista_las_sesiones_una_sola_vez(monkeypatch):
+	"""Medido 2026-11-12: el WARNING salía con `sesiones:` dos veces y recuentos
+	distintos (3 en la primera lista, 4 en la segunda). Un dolor que se
+	contradice consigo mismo no se diagnostica de un vistazo."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeSignals(client)
+
+	def fallback(chunks, **kwargs):
+		return {"title": "", "summary": "concat", "_is_fallback": True, "_fallback_reason": "invalid_output"}
+
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=fallback, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_failed"] == 1
+	message = mm.injected[0]["message"]
+	assert message.count("sesiones:") == 1, message
+	assert "motivos: sintesis_invalid_output×1" in message
+	assert "work_memories:s" in message

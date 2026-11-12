@@ -45,6 +45,14 @@ HUB_SYNTH_VERSION = 3
 HUB_MIGRATION_BLOCKED_NO_MEMBERS = "no_members"
 HUB_MIGRATION_BLOCKED_SINGLETON = "singleton"
 
+# Fallbacks del sintetizador que NO son transitorios: el maestro produjo una
+# salida inutilizable para ESTA entrada (JSON inválido, sin summary, eco de
+# plantilla). A diferencia de `llm_unavailable`, reintentarlos con el mismo
+# `hub_input_hash` paga la misma síntesis para el mismo veredicto, así que
+# cuentan intento y la sesión acaba en espera (el mismo agujero del bloque de
+# abajo, entrando por otra puerta: medido 2026-11-12, dos hubs con JSON roto).
+_BILLABLE_FALLBACK_REASONS = frozenset({"invalid_output", "map_reduce_exhausted"})
+
 # Rechazos que YA pagaron una síntesis LLM y no dejaron hub (el input es el
 # mismo, la compuerta también): reintentarlos cada ciclo paga el mismo coste
 # para el mismo veredicto. Tras `SW_HUB_SYNTH_MAX_REJECTIONS` intentos con el
@@ -308,6 +316,19 @@ def _synthesize_one(
 		# El sintetizador cayó al fallback mecánico (LLM caído): NO se escribe un
 		# hub-basura ni se marcan miembros (quedarían ocultos sin hub real). Se
 		# reintenta cuando el LLM esté disponible.
+		#
+		# Pero no todo fallback es transitorio (medido 2026-11-12): si el maestro
+		# devolvió basura para ESTA entrada (JSON inválido, sin summary, eco de
+		# plantilla), el veredicto no cambia solo y reintentarlo cada noche paga
+		# la misma síntesis para siempre — el mismo agujero que cerró `_deferred`,
+		# por otra puerta. Esos sí cuentan intento; el proveedor caído, no.
+		fallback_reason = str(hub.get("_fallback_reason") or "llm_unavailable")
+		if fallback_reason in _BILLABLE_FALLBACK_REASONS:
+			logger.warning(
+				f"[HUBS] síntesis descartada en {collection}:{session_id} ({fallback_reason}); "
+				"se cuenta el intento (misma entrada, mismo veredicto)."
+			)
+			return _fail(f"sintesis_{fallback_reason}", billable=True)
 		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
 		return _fail("sintesis_fallback")
 	body = str(hub.get("summary") or "")
@@ -318,7 +339,8 @@ def _synthesize_one(
 	hard_limit = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000))
 	if len(body) > hard_limit:
 		logger.warning(
-			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id}; "
+			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id} "
+			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope); "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
 		return _fail("summary_over_hard_limit", billable=True)
@@ -631,16 +653,20 @@ def _hub_failure_diagnosis(stats: Dict[str, Any], failure_reasons: List[Tuple[st
 	return "hub_synthesis_failed:" + ",".join(codes)
 
 
-def _describe_failure_reasons(failure_reasons: List[Tuple[str, str]], limit_files: int = 3) -> str:
-	"""`motivos: fallback×2, summary_over_hard_limit×1 · sesiones: a, b`."""
+def _describe_failure_reasons(failure_reasons: List[Tuple[str, str]]) -> str:
+	"""`motivos: sintesis_fallback×2, summary_over_hard_limit×1`.
+
+	NO incluye la lista de sesiones: el emisor ya concatena fallidas + en espera
+	en un único `· sesiones:`. Hasta el 2026-11-12 también la incluía aquí, así
+	que el aviso salía con DOS listas y dos recuentos distintos en la misma
+	línea (`sesiones: a,b,c · sesiones: a,b,c,d`): un dolor que se contradice a
+	sí mismo no se puede diagnosticar de un vistazo.
+	"""
 	counts: Dict[str, int] = {}
-	seen: List[str] = []
-	for session, reason in failure_reasons:
+	for _session, reason in failure_reasons:
 		counts[reason] = counts.get(reason, 0) + 1
-		if session not in seen:
-			seen.append(session)
 	motivos = ", ".join(f"{k}×{v}" for k, v in sorted(counts.items()))
-	return f"motivos: {motivos or 'desconocido'} · sesiones: {', '.join(seen[:limit_files])}"
+	return f"motivos: {motivos or 'desconocido'}"
 
 
 def _emit_hub_failure_signal(

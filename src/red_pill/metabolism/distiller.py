@@ -886,6 +886,97 @@ def partition_hub_items(items: List[Dict[str, Any]], budget: int, max_chunks: in
 	return batches
 
 
+def _repair_unescaped_quotes(raw: str) -> str:
+	"""Escapa las comillas de CONTENIDO que el modelo dejó sin escapar.
+
+	Medido el 2026-11-12 (ciclo nocturno 4047324f): dos hubs se perdieron porque
+	el summary citaba código con comillas dobles — ``print("session:", ...)`` —
+	y el JSON del maestro dejaba de ser válido (`Expecting ',' delimiter`).
+	`_sanitize_llm_json` solo repara BACKSLASHES ilegales; esta carencia costaba
+	la síntesis entera, y como el fallback no era facturable se re-pagaba cada
+	noche.
+
+	Heurística: una `"` dentro de una cadena es de CIERRE si va seguida (ignorando
+	espacios y saltos) de `:`, `,`, `}` o `]`; en cualquier otro caso es contenido
+	y se escapa. Solo se aplica cuando el `json.loads` normal ya falló, así que un
+	reparo equivocado deja el comportamiento anterior (fallback), nunca uno peor.
+	No toca comillas ya escapadas.
+	"""
+	out: List[str] = []
+	in_string = False
+	escaped = False
+	total = len(raw)
+	for i, ch in enumerate(raw):
+		if escaped:
+			out.append(ch)
+			escaped = False
+			continue
+		if ch == "\\":
+			out.append(ch)
+			escaped = True
+			continue
+		if ch != '"':
+			out.append(ch)
+			continue
+		if not in_string:
+			in_string = True
+			out.append(ch)
+			continue
+		j = i + 1
+		while j < total and raw[j] in " \t\r\n":
+			j += 1
+		if j >= total or raw[j] in ":,}]":
+			in_string = False
+			out.append(ch)
+		else:
+			out.append('\\"')
+	return "".join(out)
+
+
+def _salvage_hub_fields(raw: str) -> Optional[Dict[str, Any]]:
+	"""Extrae los campos del hub anclando en las CLAVES, no en la puntuación.
+
+	Segunda red tras `_repair_unescaped_quotes`. El heurístico de comillas se
+	equivoca con el caso real `print("session:", r.conversation_id)`: la comilla
+	de contenido va seguida de `,` y parece cierre. Aquí cada valor se delimita
+	por la SIGUIENTE clave del contrato (`"texture":`, `"lang":`…), que sí es un
+	ancla inequívoca: el texto entre dos claves es el valor, con sus comillas
+	internas incluidas.
+
+	Devuelve `None` si no hay al menos un campo reconocible.
+	"""
+	import re
+
+	keys = list(re.finditer(r'"(\w+)"\s*:', raw))
+	if not keys:
+		return None
+	salvaged: Dict[str, Any] = {}
+	for idx, match in enumerate(keys):
+		start = match.end()
+		end = keys[idx + 1].start() if idx + 1 < len(keys) else len(raw)
+		chunk = raw[start:end].strip()
+		if chunk.endswith(","):
+			chunk = chunk[:-1].rstrip()
+		if chunk.startswith('"'):
+			chunk = chunk[1:]
+		if chunk.endswith("}"):
+			chunk = chunk[:-1].rstrip()
+		if chunk.endswith('"'):
+			chunk = chunk[:-1]
+		salvaged[match.group(1)] = chunk.strip()
+	# Puerta de COMPLETITUD (AD-115: nunca escribir un summary cortado). Si el
+	# modelo se quedó sin tokens a mitad, el JSON no llegó a `texture`/`lang`:
+	# rescatar eso escribiría media idea como hub. Antes se caía al fallback y se
+	# reintentaba; eso se conserva. Solo se rescata lo que llegó al final del
+	# contrato.
+	if not salvaged.get("summary"):
+		return None
+	if salvaged.get("texture") is None and salvaged.get("lang") is None:
+		logger.warning("[HUB-V2] JSON incompleto (sin texture/lang): no se rescata, se reintenta")
+		return None
+	return salvaged
+
+
 def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[str, Any]]:
 	"""Parsea el JSON del LLM; None si no hay JSON o el summary es eco/plantilla."""
 	import re
@@ -897,11 +988,23 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 	if not match:
 		logger.warning(f"[HUB-V2] response without JSON ({len(str(content))} chars): {str(content)[:240]!r}")
 		return None
+	sanitized = _sanitize_llm_json(match.group(0))
 	try:
-		parsed = json.loads(_sanitize_llm_json(match.group(0)))
+		parsed = json.loads(sanitized)
 	except Exception as e:
-		logger.warning(f"[HUB-V2] invalid JSON ({e}): {match.group(0)[:240]!r}")
-		return None
+		parsed = None
+		try:
+			parsed = json.loads(_repair_unescaped_quotes(sanitized))
+			logger.info(f"[HUB-V2] JSON reparado (comillas sin escapar; el fallo original era: {e})")
+		except Exception:
+			parsed = _salvage_hub_fields(sanitized)
+			if parsed is None:
+				logger.warning(f"[HUB-V2] invalid JSON ({e}): {match.group(0)[:240]!r}")
+				return None
+			logger.warning(
+				f"[HUB-V2] JSON rescatado campo a campo ({e}); summary "
+				f"{len(str(parsed.get('summary') or ''))} chars"
+			)
 	summary = str(parsed.get("summary") or "").strip()
 	if not summary:
 		logger.warning(f"[HUB-V2] JSON without summary: {match.group(0)[:240]!r}")
@@ -1032,11 +1135,41 @@ def synthesize_hub_v2(
 	# Auditoría del path grande efectivo (se rellena en la llamada maestra).
 	large_used = {"flag": False, "model": "", "prompt": ""}
 
-	def _make_fallback() -> Dict[str, Any]:
+	# Presupuesto de longitud EN GENERACIÓN. Medido 2026-11-12: el maestro
+	# escribía 1039 y 1053 chars contra un tope duro de 1000 y los dos hubs se
+	# perdían por un 4 % — pagado, rechazado y a reintentar. El número existía
+	# (`summary_target`), pero solo se usaba DESPUÉS, para compactar: el modelo
+	# nunca supo cuánto se le pedía. Se le pide el target, y el margen hasta el
+	# tope duro absorbe el desvío normal sin recortar nada (AD-115: la
+	# compactación es por síntesis, jamás por corte).
+	_budget_line_es = f"\nLONGITUD OBLIGATORIA: el 'summary' no puede pasar de {summary_target} caracteres."
+	_budget_line_en = f"\nMANDATORY LENGTH: 'summary' must not exceed {summary_target} characters."
+	_budget_line = _budget_line_es if output_lang == "es" else _budget_line_en
+	if _budget_line not in system_prompt:
+		system_prompt += _budget_line
+	if _budget_line not in partial_system_prompt:
+		partial_system_prompt += _budget_line
+	if large_system_prompt and _budget_line_en not in large_system_prompt:
+		large_system_prompt += _budget_line_en
+
+	def _make_fallback(reason: str = "llm_unavailable") -> Dict[str, Any]:
 		# Fallback mecánico y acotado: no manda la sesión al modelo (el giant
 		# acababa en HTTP 500 por el prompt legacy de 45k tokens).
+		# `_fallback_reason` distingue lo TRANSITORIO (proveedor caído: reintentar
+		# mañana es gratis y razonable) de lo DETERMINISTA (el maestro devolvió
+		# basura para esta misma entrada: reintentarlo cada noche paga el mismo
+		# veredicto para siempre). `hub_synthesis` usa esa distinción para cobrar
+		# el intento solo en el segundo caso.
 		fallback_text = _aggregate_summaries([_chunk_summary(c) for c in chunks if _chunk_summary(c)])
-		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True, "truncated": False}
+		return {
+			"title": "",
+			"summary": fallback_text,
+			"texture": "",
+			"lang": dominant_lang,
+			"_is_fallback": True,
+			"_fallback_reason": reason,
+			"truncated": False,
+		}
 
 	provider_alias = params.get("provider_alias", "sip")
 	temperature = float(params.get("temperature", 0.1))
@@ -1053,7 +1186,7 @@ def synthesize_hub_v2(
 			provider = ProviderRegistry.get_inference_provider()
 	except Exception as e:
 		logger.warning(f"[HUB-V2] No inference provider ({e}). Falling back to legacy concatenation.")
-		return _make_fallback()
+		return _make_fallback("llm_unavailable")
 
 	def _call(system: str, user: str, *, master: bool = False) -> str:
 		use_large = bool(large_enabled and len(user) >= large_threshold)
@@ -1311,7 +1444,7 @@ def synthesize_hub_v2(
 	if len(full_prompt) <= budget:
 		parsed = _parse_hub_payload(_call(system_prompt, full_prompt, master=True), dominant_lang)
 		if parsed is None:
-			return _make_fallback()
+			return _make_fallback("invalid_output")
 		parsed["input_chars"] = len(full_prompt)
 		return _finalize(parsed)
 
@@ -1353,7 +1486,7 @@ def synthesize_hub_v2(
 		if len(prompt) <= reduce_budget:
 			final = _parse_hub_payload(_call(system_prompt, prompt, master=True), dominant_lang)
 			if final is None:
-				return _make_fallback()
+				return _make_fallback("invalid_output")
 			break
 		if len(current) == 1:
 			# Un único parcial que aún no cabe: partirlo lossless y seguir
@@ -1367,12 +1500,12 @@ def synthesize_hub_v2(
 				current = [item for batch in split for item in batch]
 				levels += 1
 				if levels > HUB_MAP_REDUCE_MAX_LEVELS:
-					return _make_fallback()
+					return _make_fallback("map_reduce_exhausted")
 				continue
 			# No se puede partir más: última llamada (prompt ya mínimo).
 			final = _parse_hub_payload(_call(system_prompt, prompt, master=True), dominant_lang)
 			if final is None:
-				return _make_fallback()
+				return _make_fallback("invalid_output")
 			break
 		groups = partition_hub_items(current, reduce_pack, max_chunks)
 		next_level: List[Dict[str, Any]] = []
@@ -1384,7 +1517,7 @@ def synthesize_hub_v2(
 		current = next_level
 		levels += 1
 		if levels > HUB_MAP_REDUCE_MAX_LEVELS:
-			return _make_fallback()
+			return _make_fallback("map_reduce_exhausted")
 
 	final["hierarchical"] = True
 	final["partition_count"] = len(partials)

@@ -181,3 +181,63 @@ def test_force_salta_la_compuerta(monkeypatch):
 	)
 	assert synth.calls == 2, "forzada = se paga aunque el marcador diga espera"
 	assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+
+
+def _fallback(reason):
+	"""Fallback del sintetizador con motivo explícito (`_fallback_reason`)."""
+
+	def synth(chunks, **kwargs):
+		return {
+			"title": "",
+			"summary": "agregado mecánico",
+			"texture": "",
+			"_is_fallback": True,
+			"_fallback_reason": reason,
+		}
+
+	return synth
+
+
+def test_fallback_determinista_cuenta_intento_y_termina_en_espera(monkeypatch):
+	"""Un maestro que devuelve basura para ESTA entrada no se re-paga eternamente.
+
+	Medido 2026-11-12: dos hubs con JSON roto quedaban en fallback cada noche, y
+	como el fallback no contaba intento, la síntesis se pagaba para siempre. El
+	motivo determinista (`invalid_output`) sí cuenta.
+	"""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000, raising=False)
+	monkeypatch.setattr(cfgmod, "SW_HUB_SYNTH_MAX_REJECTIONS", 2, raising=False)
+	client = MutableClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	synth = _counting(_fallback("invalid_output"))
+
+	for _ in range(2):
+		stats = _run(FakeMM(client), synth)
+		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+	assert synth.calls == 2
+	assert client.points["m1"]["hub_synth_reject_count"] == 2
+	assert client.points["m1"]["hub_synth_reject_reason"] == "sintesis_invalid_output"
+
+	for _ in range(2):
+		stats = _run(FakeMM(client), synth)
+		assert stats["hubs_deferred"] == 1 and stats["hubs_failed"] == 0
+	assert synth.calls == 2, "misma entrada, mismo veredicto: no se vuelve a pagar"
+
+
+def test_fallback_transitorio_no_gasta_intentos(monkeypatch):
+	"""El proveedor caído sí se resuelve solo: reintentar no cuesta y no se aparca."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000, raising=False)
+	monkeypatch.setattr(cfgmod, "SW_HUB_SYNTH_MAX_REJECTIONS", 1, raising=False)
+	client = MutableClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	synth = _counting(_fallback("llm_unavailable"))
+
+	for _ in range(4):
+		stats = _run(FakeMM(client), synth)
+		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+	assert synth.calls == 4, "siempre reintenta: el fallo transitorio no se aparca"
+	assert "hub_synth_reject_count" not in client.points["m1"]
