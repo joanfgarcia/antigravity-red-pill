@@ -30,6 +30,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [NIGHTLY_BUDGET.md](TECHNICAL/NIGHTLY_BUDGET.md) | Presupuesto de pared del ciclo nocturno (NB-001): qué se difiere, qué no, y cómo leer `item_seconds`/`stage_seconds` |
 | [DEFERRALS.md](TECHNICAL/DEFERRALS.md) | Aplazamientos: los cuatro mecanismos que difieren algo (espera de hubs, techo de presupuesto, entorno, entrega), cuándo vuelve cada uno y si caduca |
 | [SIGNAL_LIFECYCLE.md](TECHNICAL/SIGNAL_LIFECYCLE.md) | Contrato de señales: el dolor nace con su entierro (estado vs instantánea, tablero vs buzón) y el guard que lo impone |
+| [PENDING_BRANCHES.md](TECHNICAL/PENDING_BRANCHES.md) | Ramas pendientes de aterrizar (HANDOFF-001 A+C): la medición de contenido alimenta `OPEN LOOPS` y una señal con entierro |
 | [BITNET_FLAVORS.md](TECHNICAL/BITNET_FLAVORS.md) | Mapa de fuentes y receta para recrear llama.cpp/BitNet: pins, sabores, verificación |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |

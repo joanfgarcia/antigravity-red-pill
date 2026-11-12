@@ -1,5 +1,31 @@
 ## Unreleased
 
+### 🌿 Ramas pendientes — el aviso nace de medir (HANDOFF-001 A+C)
+
+El 2026-11-12 el Operador tuvo que preguntar **cuatro veces** qué había dejado un
+despertar en una rama. El log y el acta estaban bien: el acta habla a las otras
+almas y él tenía que ir a leerla. Decisión: **A + C** — y con un principio por
+delante, que el aviso nazca de **medir**, no de creer («un despertar que cree que
+aterrizó ya nos ha mentido antes»).
+
+- **[NEW] `branch_landing_audit.py --publish`**: publica el resultado como estado
+  medido en `state/pending_branches.json` (solo ramas con contenido pendiente, con
+  `rama@sha`) y ajusta la señal `branch_pending_landing` — emitida con el
+  recuento y **enterrada a cero** (contrato de ciclo de vida).
+- **[NEW] `OPEN LOOPS` anuncia las ramas pendientes**: `open_loops_line` lee ese
+  JSON **sin correr git** (el handshake no puede esperar un `merge-tree` por rama)
+  y añade `N rama(s) pendiente(s) de aterrizar` a la línea que el Operador ve al
+  abrir cualquier sesión. Un dato de más de 24 h se ignora: silencio antes que una
+  cifra de ayer.
+- **[DOC] `docs/TECHNICAL/PENDING_BRANCHES.md`**: el circuito, el principio y
+  **lo que no se implementó**: «`notify` al alma viva del Operador» no es
+  implementable hoy porque no existe mapeo `leg → alma`; inventarlo sería el
+  error contrario al que la decisión corrige. B (Telegram) queda documentado como
+  una línea si algún día hace falta push.
+
+Verificado en las dos direcciones con ramas reales: aparece al crear una rama con
+un commit pendiente y desaparece al purgarla.
+
 ### 🚨 Señales — el dolor nace con su entierro
 
 Medido el 2026-11-12: de las nueve señales que emiten los plugins del Janitor,

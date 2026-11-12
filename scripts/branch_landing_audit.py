@@ -332,6 +332,83 @@ def render(verdicts: list[Verdict], repo: Path, target: str, include_parked: boo
 	return "\n".join(lines)
 
 
+def publish_pending_state(payload: dict, pending: int) -> str:
+	"""Publica el resultado como ESTADO MEDIDO (2026-11-12, HANDOFF-001 A+C).
+
+	Dos salidas, las dos nacidas de la medición — nunca de la auto-declaración de
+	un despertar («un despertar que cree que aterrizó ya nos ha mentido antes»):
+
+	- `state/pending_branches.json`, que `core/open_loops.py` lee para la línea
+	`OPEN LOOPS: …` que el Operador ve al abrir cualquier sesión. No corre git:
+	leer un fichero es instantáneo, y el handshake no puede esperar a un
+	`merge-tree`.
+	- La señal `branch_pending_landing` en el tablero, con su entierro: a cero se
+	evapora (contrato de ciclo de vida, 2026-11-12).
+
+	Best-effort: si el kernel no está importable o Qdrant no responde, se escribe
+	el JSON igualmente y se avisa por stderr. Devuelve la ruta escrita.
+	"""
+	import json as _json
+	import os as _os
+	import sys as _sys
+	import time as _time
+
+	# Las rutas XDG las resuelve SOLO `core/paths.py` (test_path_sovereignty):
+	# sin kernel importable no se publica estado, en vez de inventar una ruta.
+	try:
+		_sys.path.insert(0, _os.path.join(_os.getcwd(), "src"))
+		from red_pill.core.paths import get_state_dir
+
+		state_dir = get_state_dir()
+	except Exception as exc:
+		print(f"aviso: sin get_state_dir, no se publica el estado de ramas: {exc}", file=_sys.stderr)
+		return ""
+
+	state_dir.mkdir(parents=True, exist_ok=True)
+	state_path = state_dir / "pending_branches.json"
+	branches = []
+	for repo in payload.get("repos", []):
+		for verdict in repo.get("verdicts", []):
+			if verdict.get("status") not in PENDING_STATUSES:
+				continue
+			branches.append(
+				{
+					"repo": repo.get("repo", ""),
+					"branch": verdict.get("branch", ""),
+					"tip": verdict.get("tip", ""),
+					"status": verdict.get("status", ""),
+					"evidence": verdict.get("evidence", ""),
+				}
+			)
+	state = {
+		"generated_at": _time.time(),
+		"target": payload.get("target", ""),
+		"pending": pending,
+		"branches": branches,
+	}
+	state_path.write_text(_json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+	try:
+		from red_pill.memory import MemoryManager
+
+		manager = MemoryManager()
+		if pending:
+			lista = ", ".join(f"{b['branch']}@{b['tip'][:7]}" for b in branches[:4])
+			manager.inject_signal(
+				name="branch_pending_landing",
+				intensity=3.0,
+				signal_type="pain",
+				source="branch_landing_audit",
+				message=f"{pending} rama(s) con contenido pendiente de aterrizar en `{state['target']}`: {lista}",
+			)
+		else:
+			# Sin pendientes: el aviso se entierra (contrato de ciclo de vida).
+			manager.evaporate_signals("branch_pending_landing")
+	except Exception as exc:
+		print(f"aviso: señal branch_pending_landing no publicada: {exc}", file=_sys.stderr)
+	return str(state_path)
+
+
 def main() -> int:
 	ap = argparse.ArgumentParser(description="Auditoría determinista de ramas pendientes de aterrizar (contenido, no SHA).")
 	ap.add_argument("--repo", action="append", default=[], help="Repo git a auditar (repetible; ADICIONAL — el del cwd va siempre).")
@@ -347,6 +424,11 @@ def main() -> int:
 		"--include-parked",
 		action="store_true",
 		help="Cuenta también las ramas `parked/*` como pendientes (para --strict). Se auditan siempre.",
+	)
+	ap.add_argument(
+		"--publish",
+		action="store_true",
+		help="Publica el resultado como estado medido: state/pending_branches.json (lo lee OPEN LOOPS) + señal branch_pending_landing. Ver docs/TECHNICAL/PENDING_BRANCHES.md.",
 	)
 	args = ap.parse_args()
 
@@ -380,6 +462,8 @@ def main() -> int:
 		if not args.json:
 			print(render(verdicts, repo, args.target, args.include_parked))
 			print()
+	if args.publish:
+		publish_pending_state(payload, pending)
 	if args.json:
 		print(json.dumps(payload, ensure_ascii=False, indent=2))
 	return 1 if (args.strict and pending) else 0
