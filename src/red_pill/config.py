@@ -1161,6 +1161,13 @@ class RedPillConfig(BaseSettings):
 	# (summary sobre el tope duro, idioma, compuerta de escritura) paga el mismo
 	# coste para el mismo veredicto. 0 = sin compuerta (reintento infinito).
 	SW_HUB_SYNTH_MAX_REJECTIONS: int = 2
+	# Una entrada en espera NO es para siempre: pasados estos días merece UN
+	# intento más (el fallo re-arma la ventana, así que el coste queda acotado a
+	# una síntesis por ventana y sesión). Sin caducidad, una sesión cuya entrada
+	# no vuelve a cambiar (hash congelado) no se escribe nunca y su dolor en el
+	# tablero tampoco muere: no hay ciclo limpio que lo entierre. 0 = espera
+	# indefinida (comportamiento previo).
+	SW_HUB_SYNTH_DEFER_RETRY_DAYS: float = 7.0
 	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
 	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2
 	SLEEP_HUB_TEXTURE_PARTS_MAX: int = 32  # tope de partes si la textura no cabe en metadata

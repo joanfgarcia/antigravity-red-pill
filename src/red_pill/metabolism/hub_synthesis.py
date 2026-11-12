@@ -57,7 +57,9 @@ _BILLABLE_FALLBACK_REASONS = frozenset({"invalid_output", "map_reduce_exhausted"
 # mismo, la compuerta también): reintentarlos cada ciclo paga el mismo coste
 # para el mismo veredicto. Tras `SW_HUB_SYNTH_MAX_REJECTIONS` intentos con el
 # mismo `hub_input_hash` la sesión queda EN ESPERA hasta que cambie su entrada
-# (miembro nuevo, re-síntesis forzada o ajuste de la compuerta). Los fallos
+# (miembro nuevo, re-síntesis forzada o ajuste de la compuerta) o CADUQUE la
+# espera (`SW_HUB_SYNTH_DEFER_RETRY_DAYS`): una sesión cerrada no cambia de
+# entrada nunca, así que sin caducidad no se escribiría jamás. Los fallos
 # transitorios (LLM caído) NO cuentan: son baratos y sí cambian solos.
 # Marcador por miembro: hash + intentos + motivo + cuándo.
 
@@ -177,6 +179,28 @@ def _rejection_marker(members: List[Tuple[Any, Dict[str, Any]]]) -> Tuple[str, i
 		if count > best_count:
 			best_hash, best_count = str(payload.get("hub_synth_reject_hash") or ""), count
 	return best_hash, best_count
+
+
+def _rejection_age_days(members: List[Tuple[Any, Dict[str, Any]]]) -> Optional[float]:
+	"""Edad del rechazo que sostiene la espera (días), o None si no la trae.
+
+	Se lee del mismo payload del scroll: cero consultas extra. Un marcador sin
+	`hub_synth_reject_at` (legacy, anterior al 2026-11-12) no permite saber la
+	edad, así que se trata como caducado — cuesta UN intento y a partir de ahí el
+	marcador ya lleva fecha.
+	"""
+	best_count, best_at = 0, 0.0
+	for _pid, payload in members:
+		count = int(payload.get("hub_synth_reject_count") or 0)
+		if count > best_count:
+			best_count = count
+			try:
+				best_at = float(payload.get("hub_synth_reject_at") or 0.0)
+			except (TypeError, ValueError):
+				best_at = 0.0
+	if not best_at:
+		return None
+	return max(0.0, (time.time() - best_at) / 86400.0)
 
 
 def _record_rejection(
@@ -302,13 +326,25 @@ def _synthesize_one(
 	if not force and max_rejections > 0:
 		rej_hash, rej_count = _rejection_marker(members)
 		if rej_hash == ihash and rej_count >= max_rejections:
+			# La espera CADUCA: sin esto, una entrada cuyo hash no vuelve a
+			# cambiar (sesión cerrada, miembro nuevo improbable) no se escribe
+			# NUNCA y su aviso de dolor no muere jamás — no hay ciclo limpio que
+			# lo entierre. Un intento por ventana mantiene el coste acotado.
+			window = float(getattr(cfg, "SW_HUB_SYNTH_DEFER_RETRY_DAYS", 7.0) or 0.0)
+			age = _rejection_age_days(members)
+			if not (window > 0 and (age is None or age >= window)):
+				logger.info(
+					f"[HUBS] {collection}:{session_id} en espera: entrada rechazada {rej_count}× sin cambios; "
+					"no se paga otra síntesis (cambia el input o fuerza la re-síntesis)."
+				)
+				if failure_reasons is not None:
+					failure_reasons.append((f"{collection}:{session_id}", "entrada_rechazada_en_espera"))
+				return "deferred"
 			logger.info(
-				f"[HUBS] {collection}:{session_id} en espera: entrada rechazada {rej_count}× sin cambios; "
-				"no se paga otra síntesis (cambia el input o fuerza la re-síntesis)."
+				f"[HUBS] {collection}:{session_id} en espera CADUCADA "
+				f"({rej_count}× · {'sin fecha' if age is None else f'{age:.1f} d'} ≥ {window:.0f} d): "
+				"un intento más (el fallo re-arma la ventana)."
 			)
-			if failure_reasons is not None:
-				failure_reasons.append((f"{collection}:{session_id}", "entrada_rechazada_en_espera"))
-			return "deferred"
 
 	chunks = _members_to_chunks(members)
 	hub = synthesizer(chunks, cache_namespace=f"{collection}:{session_id}") or {}
