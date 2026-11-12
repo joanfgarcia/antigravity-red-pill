@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,9 @@ def _emit_signals(memory_manager: Any, metrics: Dict[str, Any], after: Dict[str,
 				source="Janitor",
 				message="; ".join(problems),
 			)
+		else:
+			# El espejo volvió a su sitio: el aviso de crecimiento se entierra.
+			bury_signal("session_mirror_growth", memory_manager=memory_manager)
 		import red_pill.config as cfg
 
 		app_cfg = cfg.get_config()
@@ -132,5 +135,8 @@ def _emit_signals(memory_manager: Any, metrics: Dict[str, Any], after: Dict[str,
 					+ (" — EMERGENCIA aplicada" if after.get("over_budget") else "")
 				),
 			)
+		else:
+			# Presupuesto bajo control: el dolor se entierra (contrato de ciclo de vida).
+			bury_signal("session_mirror_budget", memory_manager=memory_manager)
 	except Exception as e:
 		logger.debug(f"[Janitor] session_mirror señal no inyectada: {e}")

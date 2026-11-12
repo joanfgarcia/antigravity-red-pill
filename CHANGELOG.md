@@ -1,5 +1,39 @@
 ## Unreleased
 
+### 🚨 Señales — el dolor nace con su entierro
+
+Medido el 2026-11-12: de las nueve señales que emiten los plugins del Janitor,
+**ocho no tenían camino de entierro**. Seguían en el tablero (o en el buzón)
+mucho después de que la causa cesara. Caso vivo: `memento_stale_distill` saltó a
+las 08:00 con 16 sesiones, la noche las destiló todas y la señal siguió ahí.
+
+Ese dolor huérfano es lo que hace que un despertar autónomo «encuentre» trabajo:
+el tablero le miente y él va a comprobarlo. No era un problema de los
+despertares; era un defecto de la capa que les habla.
+
+- **[FIX] Ocho emisores aprenden a enterrar**: `queue_stuck_tasks`,
+  `sw_hub_coverage_low`, `sw_solera_stale`, `session_mirror_growth`,
+  `session_mirror_budget`, `interaction_unrendered_purged` (tablero) y
+  `memento_stale_distill`, `cloud_sync_error_gmail` (silenciadas). Cada uno
+  entierra en el `else` del `if` que lo alza — **nunca** en un `else` del `try`,
+  que enterraría el dolor recién alzado.
+- **[NEW] `MinionInbox.resolve_report(event_id)`**: las señales silenciadas no
+  viven en Qdrant, así que `evaporate_signals` no las alcanzaba. Su entierro es
+  cerrar el reporte; hasta hoy **no existía ninguna API** para hacerlo.
+- **[NEW] `bury_signal(name, muted=…)`**: una sola puerta para ambos canales
+  (`evaporate_signals` / `resolve_report`), best-effort — un entierro que no pudo
+  ser no tumba al plugin.
+- **[NEW] Guard de contrato** (`tests/test_signal_lifecycle_contract.py`): recorre
+  el paquete con `ast` y **falla** si una señal `pain` no tiene su entierro. Es lo
+  que impide que el defecto nazca en el siguiente plugin; las instantáneas
+  (`status`/`info`) quedan exentas porque se sobrescriben en cada pase.
+- **[FIX] `gmail_watcher` deja de fabricar dolor**: simulaba un fallo de OAuth
+  1 de cada 5 segundos (una PAIN silenciada sin entierro). Ahora la simulación
+  está tras `simulate_errors` (default off, RULE 4) y el camino sano cierra el
+  reporte.
+- **[DOC] `docs/TECHNICAL/SIGNAL_LIFECYCLE.md`**: estado vs evento vs instantánea,
+  el entierro por canal, el `else` que muerde y el límite conocido del guard.
+
 ### 🧠 Hubs — el maestro no pierde ideas, no las re-paga y la espera no es dolor
 
 Endurecimiento de la síntesis de hubs tras la primera noche medida de punta a

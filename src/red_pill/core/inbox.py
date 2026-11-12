@@ -216,6 +216,34 @@ class MinionInbox:
 			reports.append(d)
 		return reports
 
+	def resolve_report(self, event_id: str) -> int:
+		"""Entierra un reporte por su `event_id` (contrapartida de `drop_report`).
+
+		Las señales silenciadas (`inject_signal(muted=True)`) no viven en Qdrant,
+		así que `evaporate_signals` no las alcanza: su entierro es cerrar el
+		reporte. Sin esto, un dolor silenciado se queda en el buzón para siempre
+		aunque la causa haya desaparecido (medido 2026-11-12: `memento_stale_
+		distill` seguía vivo después de que la noche destilara las 16 sesiones).
+
+		Idempotente y no destructivo: marca leídas las filas de ese `event_id`
+		(el histórico queda para auditoría; `purge_read` lo retira después).
+		Devuelve cuántas filas cerró.
+		"""
+		if not event_id:
+			return 0
+		try:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+				cursor = conn.cursor()
+				cursor.execute("UPDATE inbox SET is_read = 1 WHERE event_id = ? AND is_read = 0", (event_id,))
+				resolved = cursor.rowcount or 0
+				conn.commit()
+			if resolved:
+				logger.info(f"[Inbox] reporte '{event_id}' enterrado ({resolved} fila/s).")
+			return resolved
+		except Exception as e:
+			logger.warning(f"[Inbox] no se pudo enterrar el reporte '{event_id}': {e}")
+			return 0
+
 	def mark_as_read(self, report_ids: List[int]) -> None:
 		"""Mark specific reports as read by ID."""
 		try:
