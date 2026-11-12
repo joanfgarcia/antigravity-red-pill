@@ -65,6 +65,10 @@ Regla: **el nombre dice la conducta**. `waiting` espera una fecha; `deferred`
   'hubs_waiting': …}`.
 - Log de la fase: `[HUBS] … en espera: entrada rechazada 2× sin cambios…` y
   `[HUBS] … en espera CADUCADA (… ≥ 7 d): un intento más`.
+- Por sesión, sin abrir Qdrant a mano: `python scripts/hub_synth_state.py`
+  (read-only). Da el veredicto de la compuerta —`open` / `waiting` /
+  `expires_now` / `hub` / `stale`— con los días que faltan para el intento, así
+  que una espera se lee como una fecha y no como un dolor mudo.
 
 Implementación: `src/red_pill/metabolism/hub_synthesis.py`
 (`_synthesize_one`, `_emit_hub_failure_signal`, `_emit_hub_waiting_signal`).
