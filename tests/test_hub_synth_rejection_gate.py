@@ -93,12 +93,12 @@ def test_entrada_rechazada_deja_de_pagar_tras_el_tope(monkeypatch):
 
 	for _ in range(2):
 		stats = _run(FakeMM(client), synth)
-		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+		assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 	assert synth.calls == 2, "los dos primeros intentos SÍ pagan la síntesis"
 
 	for _ in range(3):
 		stats = _run(FakeMM(client), synth)
-		assert stats["hubs_deferred"] == 1 and stats["hubs_failed"] == 0
+		assert stats["hubs_waiting"] == 1 and stats["hubs_failed"] == 0
 	assert synth.calls == 2, "el input no cambió: la tercera no paga otra síntesis"
 
 
@@ -114,12 +114,12 @@ def test_entrada_nueva_reinicia_el_contador(monkeypatch):
 
 	for _ in range(2):
 		_run(FakeMM(client), synth)
-	assert _run(FakeMM(client), synth)["hubs_deferred"] == 1
+	assert _run(FakeMM(client), synth)["hubs_waiting"] == 1
 
 	# Llega un miembro nuevo: otra entrada, otro veredicto posible.
 	client.points["m3"] = dict(members[0][1])
 	stats = _run(FakeMM(client), synth)
-	assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+	assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 	assert synth.calls == 3
 
 
@@ -136,7 +136,7 @@ def test_fallo_transitorio_no_gasta_intentos(monkeypatch):
 
 	for _ in range(4):
 		stats = _run(FakeMM(client), fallback)
-		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+		assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 
 
 def test_hub_escrito_limpia_el_marcador(monkeypatch):
@@ -180,7 +180,7 @@ def test_force_salta_la_compuerta(monkeypatch):
 		force_sessions={"s"},
 	)
 	assert synth.calls == 2, "forzada = se paga aunque el marcador diga espera"
-	assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+	assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 
 
 def _fallback(reason):
@@ -215,14 +215,14 @@ def test_fallback_determinista_cuenta_intento_y_termina_en_espera(monkeypatch):
 
 	for _ in range(2):
 		stats = _run(FakeMM(client), synth)
-		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+		assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 	assert synth.calls == 2
 	assert client.points["m1"]["hub_synth_reject_count"] == 2
 	assert client.points["m1"]["hub_synth_reject_reason"] == "sintesis_invalid_output"
 
 	for _ in range(2):
 		stats = _run(FakeMM(client), synth)
-		assert stats["hubs_deferred"] == 1 and stats["hubs_failed"] == 0
+		assert stats["hubs_waiting"] == 1 and stats["hubs_failed"] == 0
 	assert synth.calls == 2, "misma entrada, mismo veredicto: no se vuelve a pagar"
 
 
@@ -238,6 +238,6 @@ def test_fallback_transitorio_no_gasta_intentos(monkeypatch):
 
 	for _ in range(4):
 		stats = _run(FakeMM(client), synth)
-		assert stats["hubs_failed"] == 1 and stats["hubs_deferred"] == 0
+		assert stats["hubs_failed"] == 1 and stats["hubs_waiting"] == 0
 	assert synth.calls == 4, "siempre reintenta: el fallo transitorio no se aparca"
 	assert "hub_synth_reject_count" not in client.points["m1"]

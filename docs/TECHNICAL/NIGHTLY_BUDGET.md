@@ -28,6 +28,11 @@ Tres palancas independientes y reversibles:
 
 ## Qué se difiere y qué no
 
+> Ojo con la palabra: el aplazamiento de esta página es el **techo de
+> presupuesto**. Un hub cuya entrada se rechazó está **en espera** (`waiting`,
+> con fecha de caducidad), y un aviso a un alma sin cuerpo es una **entrega
+> diferida**. Cuatro mecanismos, cuatro conductas: `docs/TECHNICAL/DEFERRALS.md`.
+
 - **Se difiere**: las instancias de **fan-out** pendientes de un compuesto cuyo techo
   se agotó. Se cierran con `JobDeferred("budget_exhausted")` y el contador
   `deferred_by_budget` se publica en el checkpoint (D-NB-13). Vuelven la noche

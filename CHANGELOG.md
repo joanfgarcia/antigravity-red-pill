@@ -1,5 +1,48 @@
 ## Unreleased
 
+### 🧠 Hubs — el maestro no pierde ideas, no las re-paga y la espera no es dolor
+
+Endurecimiento de la síntesis de hubs tras la primera noche medida de punta a
+punta (ciclo `4047324f`, 2026-11-12: 73/73 etapas, 76.8 min, 0 diferidos). Los
+cuatro hallazgos venían del mismo sitio: el hub se perdía, se re-pagaba o se
+anunciaba mal. Vocabulario y ciclo de vida completos:
+`docs/TECHNICAL/DEFERRALS.md`.
+
+- **[FIX] El JSON roto del maestro ya no tira el hub**: un summary que citaba
+  código con comillas dobles (`print("session:", …)`) invalidaba el JSON y la
+  síntesis entera se perdía. Ahora hay dos redes en el punto único de parseo
+  (heurística de puntuación y rescate **anclado en las claves** del contrato) y
+  una **puerta de completitud**: si la respuesta se cortó por `max_tokens` (sin
+  `texture`/`lang`), no se rescata — escribir media idea sería el truncamiento
+  que AD-115 prohíbe.
+- **[FIX] El fallback distingue determinista de transitorio**: `invalid_output` /
+  `map_reduce_exhausted` cuentan intento y acaban en espera; `llm_unavailable` se
+  reintenta gratis. Antes, un JSON roto se re-pagaba cada noche para siempre (el
+  agujero de la compuerta, por otra puerta).
+- **[FIX] El maestro sabe su presupuesto antes de escribir**: `TARGET_CHARS`
+  viaja en el prompt del maestro, del parcial y del path grande. Antes el número
+  solo se usaba **después** para compactar: el modelo escribía a ojo, se pasaba
+  un 4-17 % y el tope duro tumbaba el hub entero. El tope duro no se toca.
+- **[FIX] El aviso de hub deja de contar dos veces las sesiones**: el descriptor
+  de motivos ya cerraba con `· sesiones:` y el emisor añadía la suya (dos
+  recuentos distintos en una línea).
+- **[NEW] La espera CADUCA** (`SW_HUB_SYNTH_WAIT_RETRY_DAYS`, 7 d; `0` =
+  indefinida): sin caducidad, una sesión cerrada no cambia de entrada nunca y su
+  aviso no muere jamás. Coste acotado a **una síntesis por ventana y sesión**.
+- **[CHANGE] Una espera no es una herida**: dos canales separados.
+  `hub_synthesis_waiting` (INFO, con la fecha de la primera caducidad) para la
+  cita; `hub_synthesis_failed` (WARNING) solo para el fallo. Antes la espera
+  gritaba como WARNING cada noche con la intensidad escalando por edad sobre una
+  causa que ya no cambiaba.
+- **[CHANGE] `deferred` → `waiting`** en esta pieza. `deferred` ya nombraba la
+  cola de entrega (`session/delivery.py`) y el fan-out cortado por presupuesto
+  (`deferred_by_budget`): tres conductas incompatibles con una palabra. Rename
+  puro: estado `waiting`, contador `hubs_waiting`,
+  `SW_HUB_SYNTH_DEFER_RETRY_DAYS` → `SW_HUB_SYNTH_WAIT_RETRY_DAYS`.
+- **[DOC] `docs/TECHNICAL/DEFERRALS.md`**: tabla de verdad de los cuatro
+  aplazamientos del kernel (espera de síntesis, techo de presupuesto, entorno no
+  disponible, entrega de mensajes) con cuándo vuelve cada uno y si caduca.
+
 ### ⚖️ Cola honesta — el descarte del Operador nace CANCELLED, no FRUSTRATED
 
 `job kill --discard` sellaba **FRUSTRATED**, el mismo estado del disyuntor de 3 fallos, con un `error_log` de texto para distinguirlos. Un fallo y una decisión compartían estado: el tablón mentía, y el dolor `jobs_frustrated` solo se salvó el 2026-11-10 con un filtro por texto. Ahora el descarte es **CANCELLED** (el mismo cierre que `job discard` al revisar).

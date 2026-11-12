@@ -58,7 +58,7 @@ _BILLABLE_FALLBACK_REASONS = frozenset({"invalid_output", "map_reduce_exhausted"
 # para el mismo veredicto. Tras `SW_HUB_SYNTH_MAX_REJECTIONS` intentos con el
 # mismo `hub_input_hash` la sesión queda EN ESPERA hasta que cambie su entrada
 # (miembro nuevo, re-síntesis forzada o ajuste de la compuerta) o CADUQUE la
-# espera (`SW_HUB_SYNTH_DEFER_RETRY_DAYS`): una sesión cerrada no cambia de
+# espera (`SW_HUB_SYNTH_WAIT_RETRY_DAYS`): una sesión cerrada no cambia de
 # entrada nunca, así que sin caducidad no se escribiría jamás. Los fallos
 # transitorios (LLM caído) NO cuentan: son baratos y sí cambian solos.
 # Marcador por miembro: hash + intentos + motivo + cuándo.
@@ -248,6 +248,7 @@ def _synthesize_one(
 	affect_fn: Callable,
 	force: bool = False,
 	failure_reasons: Optional[List[Tuple[str, str]]] = None,
+	waiting_notes: Optional[List[Tuple[str, Optional[float]]]] = None,
 ) -> str:
 	"""Escribe (upsert) el hub de un grupo de sesión y marca sus miembros.
 
@@ -258,6 +259,10 @@ def _synthesize_one(
 	rechazo: el aviso de dolor debe decir POR QUÉ, no solo cuántos — un WARNING
 	sin causa no se puede diagnosticar (2026-11-10: 2 hubs caídos, causa
 	imposible de reconstruir desde el tablero).
+
+	`waiting_notes` (opcional, se muta) recibe `(sesión, días_hasta_caducidad)`
+	por cada sesión EN ESPERA. Va aparte de los fallos a propósito: una espera
+	acordada no es una herida, y su canal es INFO (con la fecha de la cita).
 	"""
 
 	def _fail(reason: str, billable: bool = False) -> str:
@@ -330,16 +335,21 @@ def _synthesize_one(
 			# cambiar (sesión cerrada, miembro nuevo improbable) no se escribe
 			# NUNCA y su aviso de dolor no muere jamás — no hay ciclo limpio que
 			# lo entierre. Un intento por ventana mantiene el coste acotado.
-			window = float(getattr(cfg, "SW_HUB_SYNTH_DEFER_RETRY_DAYS", 7.0) or 0.0)
+			window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
 			age = _rejection_age_days(members)
 			if not (window > 0 and (age is None or age >= window)):
 				logger.info(
 					f"[HUBS] {collection}:{session_id} en espera: entrada rechazada {rej_count}× sin cambios; "
 					"no se paga otra síntesis (cambia el input o fuerza la re-síntesis)."
 				)
-				if failure_reasons is not None:
-					failure_reasons.append((f"{collection}:{session_id}", "entrada_rechazada_en_espera"))
-				return "deferred"
+				# La espera NO entra en `failure_reasons`: no es un fallo, es una
+				# cita. Su aviso es INFO y vive en su propio canal (ver
+				# `_emit_hub_waiting_signal`). Mezclarla con los fallos hacía que
+				# una espera acordada gritara como WARNING cada noche.
+				if waiting_notes is not None:
+					remaining = None if window <= 0 else max(0.0, window - (age or 0.0))
+					waiting_notes.append((f"{collection}:{session_id}", remaining))
+				return "waiting"
 			logger.info(
 				f"[HUBS] {collection}:{session_id} en espera CADUCADA "
 				f"({rej_count}× · {'sin fecha' if age is None else f'{age:.1f} d'} ≥ {window:.0f} d): "
@@ -356,7 +366,7 @@ def _synthesize_one(
 		# Pero no todo fallback es transitorio (medido 2026-11-12): si el maestro
 		# devolvió basura para ESTA entrada (JSON inválido, sin summary, eco de
 		# plantilla), el veredicto no cambia solo y reintentarlo cada noche paga
-		# la misma síntesis para siempre — el mismo agujero que cerró `_deferred`,
+		# la misma síntesis para siempre — el mismo agujero que cerró `_waiting`,
 		# por otra puerta. Esos sí cuentan intento; el proveedor caído, no.
 		fallback_reason = str(hub.get("_fallback_reason") or "llm_unavailable")
 		if fallback_reason in _BILLABLE_FALLBACK_REASONS:
@@ -610,9 +620,12 @@ def synthesize_session_hubs(
 		synthesizer = synthesizer or synthesize_hub_v2
 		affect_fn = affect_fn or derive_hub_affect
 
-	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "hubs_deferred": 0, "sessions": 0, "enabled": True}
+	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "hubs_waiting": 0, "sessions": 0, "enabled": True}
 	failed_sessions: List[str] = []
-	deferred_sessions: List[str] = []
+	waiting_sessions: List[str] = []
+	# (sesión, días hasta la caducidad) para la cita: una espera sin fecha no se
+	# puede vigilar.
+	waiting_notes: List[Tuple[str, Optional[float]]] = []
 	# Motivo por sesión caída: viaja al aviso (diagnóstico sin abrir logs).
 	failure_reasons: List[Tuple[str, str]] = []
 	for collection in collections:
@@ -652,6 +665,7 @@ def synthesize_session_hubs(
 					affect_fn,
 					force=force,
 					failure_reasons=failure_reasons,
+					waiting_notes=waiting_notes,
 				)
 			except Exception as e:
 				logger.error(f"[HUBS] fallo sintetizando hub {collection}:{session_id}: {e}")
@@ -661,21 +675,30 @@ def synthesize_session_hubs(
 				continue
 			if result == "written":
 				stats["hubs_written"] += 1
-			elif result == "deferred":
-				stats["hubs_deferred"] += 1
-				deferred_sessions.append(f"{collection}:{session_id}")
+			elif result == "waiting":
+				stats["hubs_waiting"] += 1
+				waiting_sessions.append(f"{collection}:{session_id}")
 			elif result == "failed":
 				stats["hubs_failed"] += 1
 				failed_sessions.append(f"{collection}:{session_id}")
 			else:
 				stats["hubs_skipped"] += 1
-	if stats["hubs_failed"] or stats["hubs_deferred"]:
-		_emit_hub_failure_signal(memory_manager, stats, failed_sessions, failure_reasons, deferred_sessions)
+	# Dos canales, dos significados (2026-11-12). El DOLOR es solo del fallo: un
+	# hub que no se pudo escribir pide atención. La ESPERA es una cita: invisible
+	# como herida, visible como INFO con su fecha de caducidad. Antes compartían
+	# canal y una espera acordada gritaba como WARNING cada noche, con la
+	# intensidad escalando por edad sobre una causa que ya no cambiaba.
+	if stats["hubs_failed"]:
+		_emit_hub_failure_signal(memory_manager, stats, failed_sessions, failure_reasons)
 	else:
 		# La causa murió: el dolor se entierra. Sin este camino, un WARNING de
 		# una noche mala sobrevive semanas (dolor huérfano, SIG-001/OBS-005
 		# D-01: los emisores no-auditor evaporan POR CONDICIÓN).
 		_evaporate_hub_failure_signal(memory_manager)
+	if stats["hubs_waiting"]:
+		_emit_hub_waiting_signal(memory_manager, stats, waiting_notes)
+	else:
+		_evaporate_hub_waiting_signal(memory_manager)
 	return stats
 
 
@@ -710,7 +733,6 @@ def _emit_hub_failure_signal(
 	stats: Dict[str, Any],
 	failed_sessions: List[str],
 	failure_reasons: Optional[List[Tuple[str, str]]] = None,
-	deferred_sessions: Optional[List[str]] = None,
 ) -> None:
 	"""Señal de dolor si algún hub no se pudo escribir (antes era invisible).
 
@@ -721,20 +743,22 @@ def _emit_hub_failure_signal(
 	persiste en ningún fichero medible — el WARNING era indiagnosticable.
 	La señal se re-inyecta si cambia el motivo (`diagnosis`, AD-108), en vez
 	de quedarse con el mensaje del primer fallo (`has_signal` → return).
+
+	NO menciona las sesiones en espera: eso es `hub_synthesis_waiting` (INFO).
+	Un solo canal por significado — si el dolor hablara de esperas, volvería a
+	ser el WARNING que grita por una cita (2026-11-12).
 	"""
 	try:
 		name = "hub_synthesis_failed"
 		reasons = list(failure_reasons or [])
-		deferred = int(stats.get("hubs_deferred") or 0)
 		# `inject_signal` es idempotente por nombre y conserva `first_seen_at`;
 		# se re-inyecta con `diagnosis` (AD-108) para que el mensaje no se quede
 		# congelado en el primer fallo y un motivo nuevo re-arme el acuse.
 		diagnosis = _hub_failure_diagnosis(stats, reasons)
-		muestra = ", ".join((failed_sessions + list(deferred_sessions or []))[:5])
-		espera = f" {deferred} en espera (entrada ya rechazada; no se paga otra síntesis)." if deferred else ""
+		muestra = ", ".join(failed_sessions[:5])
 		message = (
 			f"{stats['hubs_failed']} hub(s) no se escribieron; sus miembros siguen recallables "
-			f"(sin pérdida).{espera} {_describe_failure_reasons(reasons)} · sesiones: {muestra}"
+			f"(sin pérdida). {_describe_failure_reasons(reasons)} · sesiones: {muestra}"
 		)
 		memory_manager.inject_signal(
 			name=name,
@@ -747,6 +771,63 @@ def _emit_hub_failure_signal(
 		)
 	except Exception as e:
 		logger.debug(f"[HUBS] no se pudo emitir la señal de fallo: {e}")
+
+
+HUB_WAIT_SIGNAL_NAME = "hub_synthesis_waiting"
+
+
+def _emit_hub_waiting_signal(
+	memory_manager: Any,
+	stats: Dict[str, Any],
+	waiting_notes: Optional[List[Tuple[str, Optional[float]]]] = None,
+) -> None:
+	"""INFO: una sesión EN ESPERA no es una herida, es una cita.
+
+	Existe para que nadie olvide que esa sesión no tiene hub, pero con
+	`criticality="INFO"` para que no cuente como dolor: el dolor vuelve cuando la
+	espera CADUCA y el intento vuelve a fallar (ese día sí es un fallo nuevo, con
+	evidencia nueva). Lleva la fecha de la primera caducidad — una cita sin fecha
+	no se puede vigilar.
+
+	Nunca lanza: el sueño no se cae por un aviso.
+	"""
+	try:
+		waiting = int(stats.get("hubs_waiting") or 0)
+		notes = list(waiting_notes or [])
+		sesiones = ", ".join(session for session, _ in notes[:5])
+		window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+		pending = [remaining for _, remaining in notes if remaining is not None]
+		if window <= 0:
+			cita = "espera indefinida (ventana 0: solo cambia la entrada)"
+		elif pending:
+			cita = f"la primera caduca en {min(pending):.1f} d y merece un intento"
+		else:
+			cita = f"ventana {window:.0f} d"
+		memory_manager.inject_signal(
+			name=HUB_WAIT_SIGNAL_NAME,
+			intensity=2.0,
+			signal_type="info",
+			source="sleep/consolidation",
+			criticality="INFO",
+			message=(
+				f"{waiting} sesión(es) EN ESPERA de re-síntesis: su entrada ya se rechazó y no se paga "
+				f"otra síntesis hasta que cambie o caduque. {cita}. Sesiones: {sesiones}"
+			),
+		)
+	except Exception as e:
+		logger.debug(f"[HUBS] no se pudo emitir el aviso de espera: {e}")
+
+
+def _evaporate_hub_waiting_signal(memory_manager: Any) -> None:
+	"""Entierra la cita cuando ya no queda nadie esperando (misma disciplina que
+	el dolor: un aviso que sobrevive a su causa es ruido). Nunca lanza."""
+	try:
+		if not memory_manager.has_signal(HUB_WAIT_SIGNAL_NAME):
+			return
+		memory_manager.evaporate_signals(HUB_WAIT_SIGNAL_NAME)
+		logger.info("[HUBS] aviso hub_synthesis_waiting evaporado: no queda ninguna sesión en espera.")
+	except Exception as e:
+		logger.debug(f"[HUBS] no se pudo evaporar el aviso de espera: {e}")
 
 
 def _evaporate_hub_failure_signal(memory_manager: Any) -> None:
