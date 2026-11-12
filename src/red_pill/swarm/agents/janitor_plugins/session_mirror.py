@@ -45,14 +45,26 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 		purged = mirror.purge(registry, retention_days=retention_days)
 		budget = mirror.enforce_budget()
 		after = mirror.stats(retention_days=retention_days)
+		# `orphan_rows` sin denominador miente por exageración: el registro solo
+		# conserva las almas VIVAS, así que «huérfana» es la forma normal de toda
+		# alma ya cerrada. Medido 2026-11-12: 20 795 filas huérfanas de 20 956
+		# (99,2 %) con 114 almas y 4 legs vivos — un número enorme que no
+		# significaba ningún problema. El recuento de almas y la lista de trabajo
+		# (`expired_candidates`) van en la MISMA señal para que se lea sin código.
+		# Nota: `dead_rows + orphan_rows` NO suma `rows` — las almas activas suman
+		# sus turnos pero no se reparten en esos dos cubos (por diseño).
 		metrics = {
 			"session_mirror_rows_before": before["rows"],
 			"session_mirror_rows_after": after["rows"],
 			"session_mirror_rows_purged": purged["rows_purged"],
 			"session_mirror_souls": after["souls"],
 			"session_mirror_souls_purged": purged["souls_purged"],
+			"session_mirror_active_souls": after["active_souls"],
+			"session_mirror_dead_souls": after["dead_souls"],
+			"session_mirror_orphan_souls": after["orphan_souls"],
 			"session_mirror_dead_rows": after["dead_rows"],
 			"session_mirror_orphan_rows": after["orphan_rows"],
+			"session_mirror_expired_candidates": after["expired_candidates"],
 			"session_mirror_undated_rows": after["undated_rows"],
 			"session_mirror_unknown_age_souls": after["unknown_age_souls"],
 			"session_mirror_bytes": after["db_bytes"] + after["wal_bytes"],
