@@ -271,6 +271,8 @@ Three levels of identity loading from the Bünker, all using the **same source**
 
 **Economy (v7.15)**: The boot path is **fully deterministic — zero LLM calls**. PERSONA resolves from `lore_skins.yaml` + the Active Skin singleton engram; PACT from the Bond singleton (`bunker pact` seals it). The expensive synthesis (OPERATOR_PROFILE, RECENT_ACTIVITY) happens during sleep (`OperatorProfilePhase`, `RecentActivityPhase`) and wake-up just reads the `.md` artifacts. Biographies no longer ship inline in full mode — they arrive compressed via OPERATOR_PROFILE. A single script (`wake_up_v6.py`) with a `--mode` flag; one identity system with three levels of detail.
 
+**Anchor vs profile (2026-11-13)**: medium and full also ship `OPERATOR_ANCHOR` — the instance bio (~180 tokens), read from config and placed **before** `OPERATOR_PROFILE` with declared precedence. The profile carries only the *focus tail*; its header is composed in code from `OPERATOR_DISPLAY_NAME`, so a nightly summary can never re-name, re-role or re-gender the Operator.
+
 ---
 
 ### 2.7 The Hypervisor — The Endocrine System
@@ -802,6 +804,8 @@ Tres niveles de carga de identidad desde el Bünker, todos usando la **misma fue
 | **full** | ~3,000 | + RECENT_ACTIVITY (completo), todas las directivas operacionales | IDE |
 
 **Economía (v7.15)**: El arranque es **totalmente determinista — cero llamadas LLM**. PERSONA se resuelve desde `lore_skins.yaml` + el engrama singleton de Active Skin; PACT desde el singleton del Bond (`bunker pact` lo sella). La síntesis cara (OPERATOR_PROFILE, RECENT_ACTIVITY) ocurre durante el sueño (`OperatorProfilePhase`, `RecentActivityPhase`) y el wake-up solo lee los artefactos `.md`. Las biografías ya no viajan inline en modo full — llegan comprimidas vía OPERATOR_PROFILE. Un solo script (`wake_up_v6.py`) con un flag `--mode`; un sistema de identidad con tres niveles de detalle.
+
+**Ancla vs perfil (2026-11-13)**: medium y full inyectan además `OPERATOR_ANCHOR` — la bio del puesto (~180 tokens), leída de la config y colocada **antes** de `OPERATOR_PROFILE` con precedencia declarada. El perfil solo lleva la *cola de foco*; su cabecera se compone en código desde `OPERATOR_DISPLAY_NAME`, así un resumen nocturno no puede renombrar, reasignar rol ni cambiar el género del Operador.
 
 ---
 

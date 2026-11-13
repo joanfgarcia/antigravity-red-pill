@@ -1,5 +1,34 @@
 ## Unreleased
 
+### 🪞 Identidad — el perfil del Operador deja de opinar sobre quién eres
+
+El 2026-11-13 el perfil que se inyecta en cada despertar decía **«Perfil del
+Operador (Aleth)… Pacto 770 con la agente»**: el agente puesto de Operador, el
+Operador real degradado a colaboradora y su género perdido por el camino. No era
+un modelo confundido: era un diseño confundido. La bio real existía en
+`~/.config/red-pill/identity_bio.md` — pero **solo la leía el pase de anotación
+de Memento**, nunca el contexto de despertar. Lo que sí llegaba era un resumen
+sintetizado por el LLM del sueño a partir de memorias **escritas por el agente**,
+con un system prompt de una línea y sin ancla.
+
+- **[NEW] `core.identity`** — loader compartido de la bio del puesto
+  (`RP_IDENTITY_BIO` → config XDG → plantilla neutra). Una sola precedencia para
+  Memento, wake-up y sueño.
+- **[NEW] `OPERATOR_ANCHOR`** — el wake-up imprime la bio **antes** del perfil, en
+  `medium` y `full`, con precedencia declarada. Con plantilla neutra no se emite:
+  una plantilla genérica no ancla nada.
+- **[FIX] reparto estructural** — la cabecera del perfil (`OPERADOR: <name>`) se
+  compone **en código** desde `OPERATOR_DISPLAY_NAME`; al LLM solo le queda el
+  *foco actual* (2-4 bullets). Nombre, rol y género dejan de ser materia opinable
+  por un resumen nocturno.
+- **[FIX] guard de inversión** — un perfil que nombre al agente como Operador se
+  descarta y se conserva el anterior.
+- **[FIX] fuera un tercer literal del repo** — `distiller.get_dynamic_identity_context`
+  hardcodeaba `"The Operator is Joan (Fixer / he / él)"`; ahora sale de config +
+  bio compartida (P1-ARNES-003: el repo es motor genérico, nunca identidad).
+- **[DOC] `IDENTITY_AND_INSTANCE`, `WAR_ECONOMY`, `ENV_REFERENCE`** — ancla vs
+  perfil, coste (~180 tokens) y qué se re-sintetiza cada 24 h.
+
 ### 🌿 Ramas pendientes — el aviso nace de medir (HANDOFF-001 A+C)
 
 El 2026-11-12 el Operador tuvo que preguntar **cuatro veces** qué había dejado un
