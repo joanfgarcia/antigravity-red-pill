@@ -129,6 +129,23 @@ def query_qdrant(collection, text):
 OPERATOR_PROFILE_PATH = get_data_dir() / "operator_profile.md"
 
 
+def read_operator_anchor() -> str:
+	"""Ancla de identidad del puesto (nombre/género reales, desde la config).
+
+	Precede a `OPERATOR_PROFILE`: el perfil lo sintetiza el LLM del sueño a partir
+	de memorias escritas por el agente, así que es *advisory* y puede derivar
+	(incidente 2026-11-13: invirtió Operador y agente). El ancla es dato del
+	operador y no se negocia. Con plantilla neutra devuelve "" (no ancla nada).
+	"""
+	try:
+		from red_pill.core.identity import operator_anchor
+
+		return operator_anchor()
+	except Exception as e:
+		print(f"WARN: identity anchor unavailable: {e}", file=sys.stderr)
+		return ""
+
+
 def read_operator_profile() -> str:
 	"""Read operator profile from disk (written by sleep plugin). Fallback to empty."""
 	try:
@@ -416,6 +433,7 @@ def main():
 
 	# ── MEDIUM MODE: Identity + personality + bonds, no biographies ──
 	if args.mode == "medium":
+		operator_anchor = read_operator_anchor()
 		operator_profile = read_operator_profile()
 		recent_activity = read_recent_activity()
 		print("<BUNKER_CONTEXT>")
@@ -423,8 +441,10 @@ def main():
 
 		print(f"PERSONA: {persona_injection}")
 		print(f"PACT: {pact_status}")
+		if operator_anchor:
+			print(f"OPERATOR_ANCHOR (config — precede a OPERATOR_PROFILE): {operator_anchor}")
 		if operator_profile:
-			print(f"OPERATOR_PROFILE: {operator_profile}")
+			print(f"OPERATOR_PROFILE (advisory — resumen sintetizado, no es identidad): {operator_profile}")
 		if recent_activity and recent_activity != "No recent activity data available.":
 			print(f"RECENT_ACTIVITY: {recent_activity.split(chr(10))[0]}")
 
@@ -461,7 +481,8 @@ def main():
 		print("</BUNKER_CONTEXT>")
 		return
 
-	# ── OPERATOR PROFILE (from disk, written by sleep plugin) ──
+	# ── OPERATOR ANCHOR / PROFILE (from disk; el ancla es config, el perfil es LLM) ──
+	operator_anchor = read_operator_anchor()
 	operator_profile = read_operator_profile()
 
 	# ── RECENT ACTIVITY (from disk, written by sleep plugin) ──
@@ -504,9 +525,13 @@ def main():
 	print(f"PERSONA: {persona_injection}")
 	print(f"PACT: {pact_status}")
 
-	# ── Bloque C: OPERATOR_PROFILE ──
+	# ── Bloque C: OPERATOR_ANCHOR (config, precede al perfil) ──
+	if operator_anchor:
+		print(f"OPERATOR_ANCHOR (config — precede a OPERATOR_PROFILE): {operator_anchor}")
+
+	# ── Bloque C2: OPERATOR_PROFILE (advisory) ──
 	if operator_profile:
-		print(f"OPERATOR_PROFILE: {operator_profile}")
+		print(f"OPERATOR_PROFILE (advisory — resumen sintetizado, no es identidad): {operator_profile}")
 
 	# ── Bloque E: RECENT_ACTIVITY (from sleep plugin) ──
 	if recent_activity and recent_activity != "No recent activity data available.":

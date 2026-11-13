@@ -249,13 +249,26 @@ def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len
 
 
 def get_dynamic_identity_context() -> str:
-	"""Carga dinámicamente el perfil relacional del operador y del agente desde el Bünker/disco."""
+	"""Carga dinámicamente el perfil relacional del operador y del agente desde el Bünker/disco.
+
+	Los nombres NO se escriben aquí: la identidad de instancia vive en config
+	(`AGENT_NAME`/`OPERATOR_DISPLAY_NAME`) y el ancla (nombre/género reales) en
+	`~/.config/red-pill/identity_bio.md` (MEM-006 / P1-ARNES-003: el repo es
+	motor genérico, nunca identidad).
+	"""
+	from red_pill.core.identity import load_identity_bio
 	from red_pill.core.paths import get_data_dir
+
+	agent = str(getattr(cfg, "AGENT_NAME", "") or "the agent")
+	operator = str(getattr(cfg, "OPERATOR_DISPLAY_NAME", "") or "the Operator")
 
 	context_lines = [
 		"AUTOBIOGRAPHICAL RELATIONSHIP FRAME:",
-		"- You are Aleth, an autonomous AI assistant and digital partner.",
-		"- The Operator is Joan (Fixer / he / él), your human partner and operator.",
+		f"- You are {agent}, an autonomous AI assistant and digital partner.",
+		f"- The Operator is {operator}, your human partner and operator.",
+		"",
+		"IDENTITY ANCHOR (who is who — name and gender stated by the Operator, never inferred):",
+		load_identity_bio(),
 	]
 	profile_path = get_data_dir() / "operator_profile.md"
 	if profile_path.exists():

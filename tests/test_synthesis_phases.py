@@ -157,3 +157,55 @@ def test_validate_activity_rejects_short_and_nominal():
 	assert rap._validate_activity("too short") is False
 	assert rap._validate_activity("System nominal. Persona engaged and running fine.") is False
 	assert rap._validate_activity("Joan refactorizó el wake-up y cerró la release v7.14.0.") is True
+
+
+def test_operator_profile_prompt_carries_identity_anchor(monkeypatch):
+	"""El ancla (config) va delante del system prompt: las memorias las escribe el
+	agente y sin ancla el resumen invierte Operador y agente (incidente 2026-11-13)."""
+	import red_pill.core.identity as ident
+
+	captured = {}
+
+	def fake_chat(system, user, max_tokens, tag="SYNTH"):
+		captured["system"] = system
+		return "Joan — Operador del Búnker."
+
+	monkeypatch.setattr(ident, "identity_bio_with_source", lambda: ("ANCLA: Joan es el Operador, masculino.", "config"))
+	monkeypatch.setattr(opp, "chat", fake_chat)
+
+	opp._synthesize_profile(["work hub"], ["social"], ["directive"])
+
+	assert captured["system"].startswith("ANCLA: Joan es el Operador, masculino.")
+	assert "context-summarizer" in captured["system"]
+
+
+def test_validate_profile_rejects_inverted_names():
+	"""Perfil que nombra al agente como Operador y omite al Operador real → fuera."""
+	assert opp._validate_profile("Perfil del Operador (Aleth): rol de ingeniera.", "Aleth", "Joan") is False
+	assert opp._validate_profile("Joan — ingeniero catalán; foco en la release.", "Aleth", "Joan") is True
+	# Sin nombres configurados no hay guard (nunca romper por datos incompletos).
+	assert opp._validate_profile("Perfil del Operador (Aleth).", "", "") is True
+
+
+def test_operator_profile_header_is_deterministic_not_llm(tmp_path, monkeypatch):
+	"""El reparto es estructural: la cabecera sale de la config, el LLM solo pone foco.
+
+	Si el modelo alucina un nombre o un rol en su respuesta, no puede escalar a
+	identidad: la cabecera se escribe en código desde `OPERATOR_DISPLAY_NAME`."""
+	import red_pill.config as cfg
+
+	artifact = tmp_path / "operator_profile.md"
+	monkeypatch.setattr(opp, "PROFILE_PATH", artifact)
+	monkeypatch.setattr(opp, "is_fresh", lambda path, hours: False)
+	monkeypatch.setattr(opp, "recall_recent", lambda coll, limit, tag=None: ["work hub"])
+	monkeypatch.setattr(opp, "_fetch_social_immune", lambda limit=5: [])
+	monkeypatch.setattr(opp, "_fetch_directive_immune", lambda limit=3: [])
+	monkeypatch.setattr(opp, "chat", lambda *a, **k: "- Cerrar el release\n- Revisar shards")
+	monkeypatch.setattr(cfg, "OPERATOR_DISPLAY_NAME", "Joan")
+
+	opp.OperatorProfilePhase().execute(SleepContext(memory_manager=None))
+
+	text = artifact.read_text()
+	assert text.startswith("OPERADOR: Joan")
+	assert "FOCO ACTUAL" in text
+	assert text.index("OPERADOR: Joan") < text.index("- Cerrar el release")

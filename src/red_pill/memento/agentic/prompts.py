@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -28,39 +27,15 @@ def _load_fragment(name: str) -> str:
 
 
 def _identity_bio_with_source() -> tuple[str, str]:
-	"""Bio de identidad (MEM-006 P0) y su origen:
+	"""Bio de identidad (MEM-006 P0) y su origen — loader compartido en `core.identity`.
 
-	1. `RP_IDENTITY_BIO` (ruta explícita; tests/avanzado) → "override:<path>"
-	2. `~/.config/red-pill/identity_bio.md` (config del operador — XDG) → "config"
-	3. `prompts/identity_bio.template.txt` (plantilla neutra del repo) → "template"
-
-	Los datos personales (nombre/género) NO viven en el repo público: la Bio real
-	se siembra en la instalación/onboarding (RFC-003 §4.7).
+	Precedencia: `RP_IDENTITY_BIO` → `~/.config/red-pill/identity_bio.md` →
+	plantilla neutra del repo. Los datos personales (nombre/género) NO viven en el
+	repo público: la Bio real se siembra en la instalación/onboarding (RFC-003 §4.7).
 	"""
-	from red_pill.core.paths import get_config_dir
+	from red_pill.core.identity import identity_bio_with_source
 
-	override = os.getenv("RP_IDENTITY_BIO", "").strip()
-	if override:
-		try:
-			text = Path(override).read_text(encoding="utf-8").strip()
-			if text:
-				return text, f"override:{override}"
-		except OSError:
-			pass
-	config_path = Path(get_config_dir()) / "identity_bio.md"
-	try:
-		text = config_path.read_text(encoding="utf-8").strip()
-		if text:
-			return text, "config"
-	except OSError:
-		pass
-	try:
-		text = (_PROMPTS_DIR / "identity_bio.template.txt").read_text(encoding="utf-8").strip()
-		if text:
-			return text, "template"
-	except OSError:
-		pass
-	return "IDENTIDAD: usa el nombre y el género reales del Operador y del agente.", "none"
+	return identity_bio_with_source()
 
 
 def _load_identity_bio() -> str:
