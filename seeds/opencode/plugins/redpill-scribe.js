@@ -604,6 +604,9 @@ export default {
       "only if the server is declared `codemode: false` is it listed directly as " +
       "`RedPill-Kernel_sovereign_handshake`. " +
       "That call loads identity, pain signals and OPEN LOOPS.\n" +
+      "If your context carries a `<redpill_identity leg=\"…\" />` block, also pass " +
+      "`caller_leg` = that `leg` (it keeps your soul distinct when several sessions " +
+      "share this workspace).\n" +
       "</redpill_handshake_reminder>";
     const turnHandshake = new Map(); // sessionID -> bool
     const turnRefusals = new Map(); // sessionID -> nº de rechazos
@@ -634,9 +637,20 @@ export default {
       turnRefusals.delete(sid);
     });
 
+    // Identidad POR PETICIÓN para el coro (2026-11-14): el proxy MCP es UNO para
+    // toda la app, así que con varias sesiones vivas en el mismo workspace no
+    // puede saber qué pestaña llama y el kernel se niega a adivinar. El hook SÍ
+    // conoce el `sessionID` de ESTA petición, así que el agente lo ve en cada
+    // turno y lo puede pasar como `caller_leg` (el kernel lo verifica contra el
+    // registro). No se persiste: `context` es por petición, inmune a la
+    // compactación.
+    const identityBlock = (sid) => `<redpill_identity leg="${ORIGINATOR}:${sid}" />`;
     await ctx.session.hook("context", (event) => {
-      if (!HANDSHAKE_GATE) return;
       const sid = turnSid(event);
+      if (Array.isArray(event?.system) && sid && sid !== "global" && !childSessions.has(sid)) {
+        event.system.push({ type: "text", text: identityBlock(sid) });
+      }
+      if (!HANDSHAKE_GATE) return;
       if (childSessions.has(sid) || turnHandshake.get(sid) === true) return;
       if (Array.isArray(event?.system)) event.system.push({ type: "text", text: HANDSHAKE_REMINDER });
     });

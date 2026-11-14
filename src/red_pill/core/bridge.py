@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -89,19 +90,114 @@ def _live_session_ids(provider: str, window_s: float = _CORRELATION_WINDOW_S) ->
 
 
 def _session_directory(session_id: str) -> Optional[str]:
-	"""`session.directory` de una sesión opencode (read-only), o None."""
+	"""`directory` de una sesión opencode (read-only), o None.
+
+	opencode v2 guarda las sesiones vivas en `session_v2`; la tabla `session` es
+	el histórico v1. Se consultan las dos (v2 primero) porque la correlación por
+	cwd solo sirve si la fila del turno en curso se puede leer.
+	"""
 	db = _opencode_db_path()
 	if not db.exists():
 		return None
 	try:
 		con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 		try:
-			row = con.execute("SELECT directory FROM session WHERE id = ?", (session_id,)).fetchone()
+			for table in ("session_v2", "session"):
+				try:
+					row = con.execute(f"SELECT directory FROM {table} WHERE id = ?", (session_id,)).fetchone()
+				except sqlite3.OperationalError:  # tabla ausente en esta versión
+					continue
+				if row and row[0]:
+					return str(row[0])
 		finally:
 			con.close()
 	except Exception:
 		return None
-	return str(row[0]) if row and row[0] else None
+	return None
+
+
+def _session_row(session_id: str) -> Optional[dict]:
+	"""Fila de una sesión opencode (v2 primero, v1 después), read-only, o None."""
+	db = _opencode_db_path()
+	if not db.exists():
+		return None
+	try:
+		con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+		con.row_factory = sqlite3.Row
+		try:
+			for table in ("session_v2", "session"):
+				try:
+					row = con.execute(f"SELECT * FROM {table} WHERE id = ?", (session_id,)).fetchone()
+				except sqlite3.OperationalError:  # tabla ausente en esta versión
+					continue
+				if row:
+					return dict(row)
+		finally:
+			con.close()
+	except Exception:
+		return None
+	return None
+
+
+def recent_session_by_activity(
+	provider: str, cwd: str, *, max_age_s: float = 120.0, tie_s: float = 30.0
+) -> Optional[str]:
+	"""Sesión de opencode que está PRODUCIENDO actividad en ESTE workspace ahora.
+
+	Es la señal que la correlación por cwd no tiene: `session_v2.time_updated`
+	avanza con cada mensaje/paso, así que la pestaña que acaba de emitir la
+	llamada es la más reciente. Se descartan las rancias (> `max_age_s`) y se
+	exige margen sobre la siguiente (`tie_s`): dos gemelas llamando a la vez es
+	ambigüedad, no una carrera que se resuelva por un empate técnico.
+
+	Read-only y nunca lanza: devuelve `session_id` o None.
+	"""
+	if not provider or not cwd:
+		return None
+	target = _norm(cwd)
+	if not target:
+		return None
+	db = _opencode_db_path()
+	if not db.exists():
+		return None
+	rows: list[dict] = []
+	try:
+		con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+		con.row_factory = sqlite3.Row
+		try:
+			for table in ("session_v2", "session"):
+				try:
+					got = con.execute(
+						f"SELECT id, directory, time_updated FROM {table} WHERE directory IS NOT NULL"
+					).fetchall()
+				except sqlite3.OperationalError:
+					continue
+				rows.extend(dict(r) for r in got)
+				if rows:
+					break  # la tabla viva manda; no se mezclan estratos
+		finally:
+			con.close()
+	except Exception:
+		return None
+	now = time.time()
+	candidates: list[tuple[float, str]] = []
+	for row in rows:
+		if _norm(str(row.get("directory") or "")) != target:
+			continue
+		try:
+			updated = float(row.get("time_updated") or 0) / 1000.0  # opencode: ms
+		except (TypeError, ValueError):
+			continue
+		if updated <= 0 or (now - updated) > max_age_s:
+			continue
+		candidates.append((updated, str(row.get("id") or "")))
+	if not candidates:
+		return None
+	candidates.sort(reverse=True)
+	best_ts, best_id = candidates[0]
+	if len(candidates) > 1 and (best_ts - candidates[1][0]) < tie_s:
+		return None
+	return best_id or None
 
 
 def list_session_bridges(provider: str, max_age_s: float = _CORRELATION_WINDOW_S) -> List[dict]:
@@ -167,8 +263,9 @@ def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 		el hook acaba de escribir el suyo y la sesión late, aunque aún no esté en
 		`opencode.db`. Si EXACTAMENTE uno casa → ese cuerpo.
 	2. **Correlación por `opencode.db`** (`session.directory` == cwd) entre las
-		sesiones **vivas**: confirma/desempata cuando la capa 1 no decide (varios
-		bridges en el mismo cwd, o el propio aún sin escribir).
+		sesiones **vivas**: desempata cuando la capa 1 no tiene ningún bridge vivo
+		en este cwd. Si la capa 1 ve DOS o más vivas aquí, NO se desempata: el
+		`directory` es el workspace, no la pestaña.
 	3. **Carrera:** varios bridges en el mismo cwd pero solo UNA sesión viva entre
 		ellos (los demás son pestañas cerradas con bridge rancio) → la viva.
 	4. Si nada casa de forma inequívoca → None (el proxy degrada al bridge global,
@@ -190,8 +287,17 @@ def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 	by_cwd_live = [e for e in by_cwd if e.get("session_id") in live_set]
 	if len(by_cwd_live) == 1:
 		return by_cwd_live[0]
+	if len(by_cwd_live) > 1:
+		# VARIAS sesiones vivas sirviendo el MISMO cwd: la correlación no puede
+		# decidir cuál hace la llamada (el proxy es UNO para toda la app). Y no se
+		# consulta la BD para "desempatar": `directory` confirma el workspace, no
+		# la pestaña. Desempatar aquí atribuyó el trabajo a otra alma y el coro
+		# rechazó un `send park` legítimo como "te estarías escribiendo a ti misma"
+		# (incidente 2026-11-14, dos gemelas en el mismo branch).
+		return None
 
-	# Capa 2: correlación por opencode.db entre las vivas (desempate).
+	# Capa 2: correlación por opencode.db entre las vivas (desempate). Solo llega
+	# aquí si NO hay dos bridges vivos en este cwd: con varios, ya es ambiguo.
 	db_matches = [sid for sid in live if _norm(str(_session_directory(sid) or "")) == target]
 	if len(db_matches) == 1:
 		entry = read_session_bridge(provider, db_matches[0])

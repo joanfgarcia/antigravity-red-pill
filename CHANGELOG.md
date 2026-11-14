@@ -1,5 +1,30 @@
 ## Unreleased
 
+### 🫂 Coro — dos gemelas en el mismo branch, dos almas distintas
+
+El proxy MCP es **uno para toda la app**. Con tres sesiones vivas en el mismo
+workspace, la petición no dice qué pestaña llama: la correlación por cwd no puede
+decidir y el backend caía al *bridge global* («el último que escribió»). Medido el
+2026-11-14: el `post blocked` de una hermana quedó **firmado por otra** y su
+`send park` a esa misma hermana rebotó con «te estarías escribiendo a ti misma».
+
+- **[FIX] identidad sin mentira** — con proxy no se usa el bridge global; con
+  **≥2 almas registradas en el workspace el proxy tampoco basta**. El cuerpo sale
+  de `caller_leg` verificado (fila viva, latido, mismo workspace y misión), del
+  diario del turno (prompt único) o de la actividad reciente (`time_updated`). Si
+  no hay cuerpo, **sin alma**: el coro pide `caller_leg` en vez de atribuir.
+- **[FIX] correlación por cwd** — dos vivas en el mismo cwd es ambiguo y **no se
+  desempata** con `opencode.db` (el `directory` es el workspace, no la sesión);
+  `_session_directory` lee también `session_v2`.
+- **[NEW] `<redpill_identity leg="…"/>` por petición** — el hook del arnés sí
+  sabe qué sesión llama; lo inyecta en el contexto de cada turno (sin persistir)
+  para que el agente pase `caller_leg`. `post`/`send` devuelven `de <marca>` para
+  que una atribución mala se vea en la propia respuesta.
+- **[FIX] avisos plegados en opencode 2.3.x** — la UI decodifica la presentación
+  con un `Struct` exacto `{displayText, comments, attachments}`; con solo
+  `displayText` no decodifica y pinta el sobre entero. El payload envía las tres.
+- **[DOC] `AD-119` + `CORO_PROTOCOL` §6.1** — precedencia del cuerpo, el caso de
+  las gemelas y el límite del proxy compartido. 28 tests del contrato.
 ### 🎨 Imagen — Krea-2-Turbo cabe en 8 GB, y el pico de VRAM deja de mentir
 
 Medido el 2026-11-14 en la RTX 5070 Laptop (8151 MiB), con `sd-cli` (commit

@@ -672,6 +672,11 @@ class TestPresentacionPlegada:
 		payload = json.loads(cmd[cmd.index("--data") + 1])
 		assert payload["text"] == "[CORO notify · hilo E-9]\ncuerpo"
 		assert payload["metadata"]["displayText"] == "Mensaje recibido · CORO E-9"
+		# La presentación de opencode 2.3.x es un Struct EXACTO: sin `comments` y
+		# `attachments` el metadata NO decodifica y la UI pinta el cuerpo crudo
+		# (regresión medida el 2026-11-14 sobre 2.3.0).
+		assert payload["metadata"]["comments"] == []
+		assert payload["metadata"]["attachments"] == []
 		assert kw["timeout"] == soul_notify.OPENCODE_API_TIMEOUT_S
 
 	def test_api_caida_cae_al_run_clasico(self):

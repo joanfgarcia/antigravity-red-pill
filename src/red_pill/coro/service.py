@@ -60,11 +60,22 @@ class CoroError(Exception):
 
 # ── Identidad del llamante ───────────────────────────────────────────────────
 
+# Qué hacer cuando el canal no puede decidir quién llama (varias sesiones vivas
+# en el mismo workspace). El agente SÍ sabe su cuerpo: el tag `<session …/>` del
+# handshake lleva `leg=`. Se le pide explícito en vez de adivinar (atribuir a un
+# alma ajena es peor que no atribuir).
+_IDENTITY_HINT = (
+	"deny-by-default (fail-closed): el canal no puede decidir quién eres (varias sesiones "
+	"vivas en este workspace). Repite la llamada con `caller_leg` = el `leg` del bloque "
+	"`<redpill_identity>` de tu contexto (o el `leg=` de tu tag `<session …/>`); se verifica "
+	"contra el registro."
+)
+
 
 def _require_body(session: Dict[str, Any]) -> str:
 	originator = str(session.get("originator") or "").strip()
 	if ":" not in originator:
-		raise CoroError("sin cuerpo compuesto (bridge/env); deny-by-default (fail-closed).")
+		raise CoroError(f"sin cuerpo compuesto (bridge/env); {_IDENTITY_HINT}")
 	return originator
 
 
@@ -78,7 +89,7 @@ def _require_mission(session: Dict[str, Any]) -> str:
 def _require_soul(session: Dict[str, Any]) -> str:
 	soul = str(session.get("continuity_id") or "").strip()
 	if not soul:
-		raise CoroError("sin alma resuelta (el registro no tiene tu continuity_id).")
+		raise CoroError(f"sin alma resuelta: {_IDENTITY_HINT}")
 	return soul
 
 
@@ -158,7 +169,8 @@ async def post(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		sealed=sealed,
 	)
 	tag = " [sealed]" if event.get("sealed") else ""
-	return f"[CORO post] {event['type']} · {event['mission_id']} · seq={event['event_seq']} · event={event['event_id']}{tag}"
+	who = protocol.soul_mark(session.get("continuity_id"))
+	return f"[CORO post] {event['type']} · {event['mission_id']} · de {who} · seq={event['event_seq']} · event={event['event_id']}{tag}"
 
 
 def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: str) -> str:
@@ -246,7 +258,10 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		raise CoroError("ese mensaje no era para ti: no puedes contestarlo.")
 	target = _resolve_soul(registry, str(payload.get("to") or (parent or {}).get("continuity_id") or ""))
 	if target == me:
-		raise CoroError("te estarías escribiendo a ti misma; usa `post` para tu tablón.")
+		raise CoroError(
+			f"te estarías escribiendo a ti misma (alma={protocol.soul_mark(me)}); usa `post` para tu tablón. "
+			"Si tu alma está mal resuelta por el canal, repite con `caller_leg` (el `leg=` de tu tag `<session …/>`)."
+		)
 
 	# Salto: la réplica NO consume (D-02); solo salta el mensaje iniciado.
 	ceiling = protocol.hop_max()
@@ -313,7 +328,7 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	reply_note = " · respuesta: SÍ" if expects else ""
 	why = f" · {reason}" if reason else ""
 	return (
-		f"[CORO send] {verb} → {protocol.soul_mark(target)} · hilo {thread} · salto {hop}/{ceiling} · "
+		f"[CORO send] {verb} → {protocol.soul_mark(target)} · de {protocol.soul_mark(me)} · hilo {thread} · salto {hop}/{ceiling} · "
 		f"estado={state}{reply_note} · expira en {protocol.budget_s(verb, value) / 86400:.0f}d · "
 		f"msg={event['event_id']} · seq={event['event_seq']}{why}"
 	)

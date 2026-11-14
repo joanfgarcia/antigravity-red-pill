@@ -325,6 +325,12 @@ NOTICE_TITLE_MAX = 120
 # La llamada es local (CLI → servicio de fondo). Si tarda más, se cae al `run`
 # clásico en vez de bloquear al llamante.
 OPENCODE_API_TIMEOUT_S = 8.0
+# La presentación del mensaje en la UI (opencode 2.3.x) es un Struct EXACTO:
+# `{displayText, comments, attachments}`. Un metadata sin `comments`/
+# `attachments` no decodifica (`decodePromptPresentation` → None) y el renderer
+# cae al cuerpo crudo — el aviso se pinta entero y con el sobre a la vista
+# (medido 2026-11-14 sobre 2.3.0; en 2.2.6 bastaba `displayText`).
+_PRESENTATION_EMPTY = {"comments": [], "attachments": []}
 
 
 def notice_title(text: str) -> str:
@@ -379,7 +385,7 @@ def _deliver_opencode_prompt(session_id: str, text: str) -> bool:
 		_set_last_error("opencode_sonda_fallida")
 		return False
 	payload = json.dumps(
-		{"text": text, "metadata": {"displayText": notice_title(text)}},
+		{"text": text, "metadata": {"displayText": notice_title(text), **_PRESENTATION_EMPTY}},
 		ensure_ascii=False,
 	)
 	try:
