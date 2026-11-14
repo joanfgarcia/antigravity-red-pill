@@ -1,4 +1,4 @@
-## Unreleased
+## [8.4.0] - 2026-11-14 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
 
 ### 🫀 Afecto — el fondo del Operador entra en el contexto (RFC-AFE-001 F1)
 

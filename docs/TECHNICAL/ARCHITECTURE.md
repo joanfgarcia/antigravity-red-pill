@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.3.0 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
+**System Version**: v8.4.0 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 
