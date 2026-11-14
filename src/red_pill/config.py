@@ -751,6 +751,22 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_WARN_BEFORE_DAYS: int = 7
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
+	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
+	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;
+	# la migración del corpus se decide aparte (D-11: listar, no migrar).
+	SW_HUB_KEYWORD_ENABLED: bool = False  # pata keyword de hubs (hub_title/hub_terms)
+	SW_HUB_BOOST_ENABLED: bool = False  # reordena hubs ya presentes en el top semántico
+	SW_HUB_MEMBERS_ENABLED: bool = False  # action MCP hub_members
+	SW_TRAVERSE_MEMBER_LIMIT_ENABLED: bool = False  # traverse level=member con default acotado (20)
+	SW_HUB_VERSION_INVALIDATION_ENABLED: bool = False  # re-sintetiza si cambia HUB_SYNTH_VERSION
+	SW_HUB_SCRUB_ENABLED: bool = True  # D-12: redacta secretos del body antes del upsert
+	MEMORY_HUB_KEYWORD_MAX_HUBS: int = 500  # hubs escaneados por la pata keyword
+	MEMORY_HUB_KEYWORD_MAX_CHARS: int = 500  # presupuesto BLANDO de la lista de keywords (keywords enteras)
+	MEMORY_HUB_KEYWORD_MIN_SCORE: float = 0.0  # corta la cola de términos poco relevantes
+	MEMORY_HUB_MEMBERS_MAX_TITLES: int = 20  # títulos devueltos por hub_members
+	MEMORY_HUB_MEMBERS_MAX_CHARS: int = 8000  # presupuesto total de hub_members mode=content
+	MEMORY_TRAVERSE_MEMBER_DEFAULT: int = 20  # default de traverse level=member con el flag ON
 	# Tope de sesiones sintetizadas por ciclo de sueño (0 = sin tope). Necesario
 	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
 	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
@@ -785,6 +801,59 @@ class RedPillConfig(BaseSettings):
 	# (≈ 2000-3200 tokens a ratio 2-2.5) cabe holgado con system + salida. El
 	# destilado por fases solapadas trocea lo que exceda (overlap = continuidad).
 	MEMENTO_FRAGMENT_MAX_CHARS: int = 8000
+	# Reuso incremental por unidad en distill (NB-001 F2a, RULE 4 default OFF):
+	# con ON, `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el
+	# `content_hash` del cuerpo + prompt_version/engine/fragmentación y reusa las
+	# secciones intactas entre noches en vez de borrar y rehacer (D-NB-03/08/09/11).
+	# OFF → comportamiento actual exacto (regeneración completa, jamás parcheo).
+	MEMENTO_DISTILL_REUSE_ENABLED: bool = False
+	# Reuso incremental por unidad en annotate (NB-001 F2b, RULE 4 default OFF):
+	# con ON, `annotate/_meta.json` persiste por `unit_key` (rango de mensajes) el
+	# `content_hash` del cuerpo + annotate_prompt_version/engine + la lista de notas
+	# por unidad, y reusa las unidades intactas entre noches sin llamar al modelo.
+	# El `_partial.json` sigue siendo el checkpoint INTRA-run (MEM-009), intacto.
+	# OFF → comportamiento actual exacto (se extrae todo, sin `units` en el meta).
+	MEMENTO_ANNOTATE_REUSE_ENABLED: bool = False
+	# Fusión work+social en UNA llamada en annotate (NB-001 F4/P7, RULE 4 default
+	# OFF): con ON, la extracción emite una sola llamada combinada (prompt con
+	# `scope` por idea) en vez de dos (work + social). Medido en el banco de
+	# annotate (docs/BENCHMARKS/ANNOTATE_BENCH.md): paridad de notas/fragmento y
+	# de rutas, 0 JSON inválido y la mitad de llamadas de extracción. El `scope`
+	# declarado se persiste en idea, parcial y frontmatter. OFF → dos llamadas por
+	# split (comportamiento actual exacto).
+	MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED: bool = False
+	# Techo de pared por compuesto en dag_job (NB-001 F3, RULE 4 default OFF):
+	# con ON, `control.deadline_minutes` (o `deadline_minutes` declarado por
+	# compuesto en el manifest) acota el FAN-OUT de cada compuesto: agotado, las
+	# instancias pendientes se difieren con JobDeferred("budget_exhausted") y el
+	# contador `deferred_by_budget` se publica en el checkpoint (D-NB-02/07/12/13).
+	# El techo SOLO corta fan-out: la cola del sueño (thread, finalize,
+	# memento-reinforce) nunca se difiere. OFF → comportamiento actual exacto.
+	JOB_COMPOUND_DEADLINE_ENABLED: bool = False
+	# Presupuesto por coste real por etapa en la selección nocturna (NB-001 F5/P8,
+	# RULE 4 default OFF): con ON, la selección presupuesta en la DIVISA de cada
+	# fase en vez de en mensajes (el tope por mensajes es un proxy, no el coste):
+	#   - distill es O(chars)        → presupuesto en chars de work-unit.
+	#   - annotate es O(unidades)×2 + O(notas) → presupuesto en unidades (splits) y
+	#     notas esperadas (predicción, para compararla con la duración real).
+	# Ambas conservan el tope de sesiones (NIGHT_LIMIT) y el anti-hambruna (la
+	# primera entra siempre). OFF → comportamiento actual exacto (msg_limit).
+	MEMENTO_NIGHT_COST_MODEL_ENABLED: bool = False
+	# Presupuesto de chars para la fase distill de una noche (suma de chars de los
+	# work units). Medido 2026-11-09: el monstruo de 140 secciones / 65 splits /
+	# 1.983 msgs costó 41,5 min de distill; el resto de las sesiones, 1,0-6,1 min.
+	# 200.000 chars ≈ el monstruo entero NO cabe (se difiere); las nominales sí.
+	MEMENTO_NIGHT_DISTILL_CHAR_LIMIT: int = 200_000
+	# Presupuesto de unidades (splits) para la fase annotate de una noche. El
+	# monstruo medido fueron 65 splits (74,1 min de annotate); una noche nominal
+	# anda por pocas unidades. No se tocan los umbrales del gate (D-NB-06).
+	MEMENTO_NIGHT_ANNOTATE_UNIT_LIMIT: int = 100
+	# Presupuesto de notas esperadas para la fase annotate de una noche (acota la
+	# cola de notas, no decide qué ideas entran). 800 ≈ 100 unidades × 8 notas/un.
+	MEMENTO_NIGHT_ANNOTATE_NOTE_LIMIT: int = 800
+	# Heurística de predicción de notas por unidad (calibrada con la evidencia:
+	# 519 notas / 65 splits ≈ 8). Alimenta la predicción expuesta (P8.4).
+	MEMENTO_NIGHT_ANNOTATE_NOTES_PER_UNIT: int = 8
 	# Los engramas ascendidos (origin=memento) erodan MUCHO más lento que el ruido:
 	# importance = significance × factor → el motor bayesiano (α=max(1,importance))
 	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días
@@ -920,6 +989,10 @@ class RedPillConfig(BaseSettings):
 	AFFECT_TTL_MIN: int = 15  # edad del estado antes de recalcular
 	AFFECT_WINDOW_MIN: int = 180  # ventana de turnos que se miran
 	AFFECT_TURNS: int = 8  # máximo de prompts por pasada
+	# FONDO declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta,
+	# no el que se infiere del texto. Sombra por defecto (feature nueva); se
+	# enciende en el `.env` del puesto. Letras y paleta en `data/affect_letters.yaml`.
+	AFFECT_FONDO_ENABLED: bool = False
 	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
 	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
@@ -1062,6 +1135,59 @@ class RedPillConfig(BaseSettings):
 	# SLEEP CYCLE
 	# -----------------------------------------------------------------------
 	SLEEP_CHUNK_SIZE: int = 500
+	# Hub synthesis: presupuesto por llamada (NO es el n_ctx del modelo). Si el
+	# input lo supera, `synthesize_hub_v2` lo trocea y reduce jerárquicamente en
+	# vez de truncar. 8000 chars ≈ 2-3k tokens: deja sitio al system prompt y a
+	# la salida (max_tokens del perfil). Subirlo acelera el map-reduce; el
+	# presupuesto real de cada lote se mide sobre el prompt renderizado.
+	SLEEP_MAX_HUB_INPUT_CHARS: int = 8000
+	SLEEP_HUB_MAP_REDUCE_ENABLED: bool = True  # deprecated: el over-budget SIEMPRE map-reduce (no truncar)
+	# Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de
+	# chars). Evita lotes de cientos de fragmentos diminutos poco coherentes.
+	SLEEP_HUB_MAX_CHUNKS_PER_BATCH: int = 48
+	# CONTRATO DE SALIDA del hub (AD-116, revisado 2026-11-09): un hub es un
+	# ÍNDICE de tamaño acotado, no un archivo. La reducción es SIEMPRE por
+	# síntesis (reescritura); si el modelo no obedece, el texto se conserva
+	# ENTERO y se marca `*_over_budget`. Nunca se corta. Si un campo de metadata
+	# supera `MAX_METADATA_STR`, se parte en `texture_parts` sin perder contenido.
+	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
+	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle, 8k).
+	# 6k permite agrupar 3-4 parciales y que el árbol REDUZCA; con 3k cada
+	# grupo tenía un solo parcial, el número de nodos no bajaba y se agotaban
+	# los 8 niveles (fallback). El maestro sigue siendo una idea, no una historia.
+	SLEEP_HUB_MASTER_INPUT_CHARS: int = 6000
+	# Tope DURO del summary que se escribe en Qdrant. Por encima: no se escribe
+	# el hub (se reintenta); nunca se inyecta un resumen de 3k en el contexto.
+	SLEEP_HUB_SUMMARY_HARD_LIMIT: int = 1000
+	SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS: int = 2
+	# Rechazos con el MISMO input antes de dejar la sesión en espera. Un rechazo
+	# ya pagó la síntesis LLM; repetirla cada ciclo de sueño con el mismo input
+	# (summary sobre el tope duro, idioma, compuerta de escritura) paga el mismo
+	# coste para el mismo veredicto. 0 = sin compuerta (reintento infinito).
+	SW_HUB_SYNTH_MAX_REJECTIONS: int = 2
+	# ESPERA (no "deferido": en este kernel `deferred` ya nombra la cola de
+	# entrega de mensajes y el fan-out cortado por presupuesto). Una entrada en
+	# ESPERA no lo está para siempre: pasados estos días merece UN intento más (el
+	# fallo re-arma la ventana, así que el coste queda acotado a una síntesis por
+	# ventana y sesión). Sin caducidad, una sesión cuya entrada no vuelve a
+	# cambiar (hash congelado) no se escribe nunca. 0 = espera indefinida.
+	SW_HUB_SYNTH_WAIT_RETRY_DAYS: float = 7.0
+	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
+	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2
+	SLEEP_HUB_TEXTURE_PARTS_MAX: int = 32  # tope de partes si la textura no cabe en metadata
+	# Último recurso si la partición por síntesis falla: partir el texto en
+	# trozos SIN perder caracteres (no es truncamiento). False = no escribir el
+	# hub y reintentarlo en otro ciclo (estrictamente solo síntesis).
+	SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK: bool = True
+	SLEEP_HUB_TITLE_MAX_CHARS: int = 120
+	# Híbrido de modelos (AD-115): se decide POR LLAMADA según el tamaño del
+	# prompt que se envía (no el total de la sesión). Con map-reduce ninguna
+	# llamada supera `SLEEP_MAX_HUB_INPUT_CHARS`, así que el path grande está
+	# apagado por defecto (0). Solo aplica al provider de producción
+	# (`provider_alias=sip`); un alias explícito (bake-off) manda.
+	SLEEP_HUB_LARGE_INPUT_CHARS: int = 0
+	SLEEP_HUB_LARGE_MODEL: str = "k2_horizon_7b"
+	SLEEP_HUB_LARGE_PROMPT: str = "hub_synthesis_v2_concise.txt"
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 

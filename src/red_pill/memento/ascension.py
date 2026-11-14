@@ -802,6 +802,17 @@ def ascender(
 		logger.warning(f"[ASCENSION] refine rechazado por el gate: {refine_path.name} → {collection}")
 		return {"ascended": False, "reason": "rejected", "collection": collection}
 
+	# Reversibilidad de hubs bloqueados: si esta sesión tenía un hub marcado
+	# `hub_migration_blocked`, la nueva ascensión puede devolverle >=2 miembros.
+	# Se recalcula el estado en ambas colecciones (no-op si no hay hub/cambio).
+	try:
+		from red_pill.metabolism.hub_synthesis import refresh_hub_block_state
+
+		for hub_collection in ("work_memories", "social_memories"):
+			refresh_hub_block_state(memory_manager, hub_collection, session_id, write=True)
+	except Exception as exc:
+		logger.debug(f"[ASCENSION] no se pudo reconciliar el hub de {session_id}: {exc}")
+
 	# Sello in-place en el frontmatter del refine (no mueve el cuerpo).
 	_stamp_refine(
 		refine_path,

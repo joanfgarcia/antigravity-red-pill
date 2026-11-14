@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import subprocess
 import sys
 import time
 
@@ -19,9 +20,27 @@ async def main():
 
 	logger.info("Sentinel Auditor: Commencing scheduled infrastructure audit...")
 
-	repos = [str(get_workspace_root() / "pure-mls"), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+	_kernel_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+	repos = [str(get_workspace_root() / "pure-mls"), _kernel_root]
 
 	auditor = SentinelAuditor(target_repos=repos)
+
+	# HANDOFF-001 (A+C): mide las ramas con contenido pendiente de aterrizar y
+	# publica `state/pending_branches.json` + la señal `branch_pending_landing`.
+	# De ahí lo lee `OPEN LOOPS` en cada sesión, sin correr git. Va aquí porque
+	# este servicio ya es el latido horario de salud del sistema: sin un latido,
+	# el dato se quedaría congelado y el aviso mentiría por omisión.
+	try:
+		proc = subprocess.run(
+			[sys.executable, os.path.join(_kernel_root, "scripts", "branch_landing_audit.py"), "--target", "next", "--publish"],
+			capture_output=True,
+			text=True,
+			timeout=120,
+		)
+		if proc.returncode not in (0, 1):
+			logger.warning(f"Branch landing audit devolvió {proc.returncode}: {proc.stderr.strip()[:200]}")
+	except Exception as exc:
+		logger.warning(f"Branch landing audit no ejecutado: {exc}")
 
 	# RFC-OBS-005: la ronda es el único sitio que ve las cuatro fases. Cada fase
 	# informa de lo que emitió y de lo que no pudo evaluar; al cerrar, se reconcilia.

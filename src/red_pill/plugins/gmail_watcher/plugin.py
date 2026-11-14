@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from red_pill.core.inbox import MinionInbox
 from red_pill.core.plugin_engine import PluginScope, SovereignPlugin
 from red_pill.memory import MemoryManager
 
@@ -60,13 +61,20 @@ class GmailWatcherPlugin(SovereignPlugin):
 		email = self.config.get("email_account", "unknown@domain.com")
 		logger.info(f"[GmailWatcher] Polling for new emails for {email}...")
 
-		# Simulate a failure occasionally to test the Muted PainSignal / AutoHealer
-		if int(time.time()) % 5 == 0:
+		# Simulación de fallo para probar el Muted PainSignal / AutoHealer.
+		# RULE 4: apagada por defecto — un plugin de producción no fabrica dolor
+		# (medido 2026-11-12: emitía una PAIN silenciada 1 de cada 5 segundos sin
+		# entierro, así que el buzón se quedaba con dolor inventado para siempre).
+		if self.config.get("simulate_errors", False) and int(time.time()) % 5 == 0:
 			logger.warning("[GmailWatcher] Simulated OAuth Error. Submitting pain signal.")
 			mgr = MemoryManager()
 			# Emitting a MUTED pain signal so it goes to MinionInbox for the AutoHealer
 			mgr.inject_signal(name="cloud_sync_error_gmail", intensity=6.0, signal_type="pain", source="GmailWatcher", muted=True)
 		else:
+			# Sincronización sana: se cierra el reporte del buzón (contrato de ciclo
+			# de vida). Su entierro es `resolve_report`, no `evaporate_signals`: la
+			# señal es silenciada y no vive en el tablero.
+			MinionInbox().resolve_report("signal_cloud_sync_error_gmail")
 			logger.debug("[GmailWatcher] No new emails.")
 
 	def generate_systemd_units(self):

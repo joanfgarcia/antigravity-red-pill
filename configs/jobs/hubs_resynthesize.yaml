@@ -1,0 +1,31 @@
+# Re-síntesis jerárquica de hubs truncados (map-reduce).
+#
+# Contexto: hasta v8.x, `synthesize_hub_v2` recortaba el prompt a
+# SLEEP_MAX_HUB_INPUT_CHARS (8000) si no cabía. El batching por fragmentos
+# existía en el drain pre-single-writer (SLEEP_MAX_CHUNKS_PER_HUB) y se perdió
+# al reescribir consolidation en 8.0.0; el marcador `hub_rebuild_pending`
+# (AD-023 §4) quedó como deuda. Este job cierra esa deuda sobre el corpus vivo:
+#   - `--list-stale` = inventario POR HUB fuera del contrato vigente (v<3 o
+#     summary>hard); es el que alimenta la migración (D-11: listar ahora,
+#     programar el job, NO ejecutar hasta que las pruebas estén verdes);
+#   - un step por sesión = re-síntesis con hubs parciales + reducción en árbol.
+#
+# Un step = una sesión (checkpoint por elemento, pausable/reanudable). Si una
+# sesión falla, se registra y se sale con skip_exit_code (79) → la cola sigue.
+# Lanzar:  .venv/bin/python -m red_pill.cli job submit --recipe hubs_resynthesize
+source: element_job
+priority: 6
+title: Re-síntesis jerárquica de hubs truncados
+mission_id: hubs-resynthesize
+step_command: .venv/bin/python scripts/resynthesize_hubs.py --run
+elements_command: .venv/bin/python scripts/resynthesize_hubs.py --list-stale --eligible
+defer_exit_code: 77
+skip_exit_code: 79
+llm:
+  task: hub
+  model: granite_8b
+  device_fallback: [gpu]
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 60   # el peor caso (586k chars, ~75 lotes) cabe de sobra

@@ -1,3 +1,418 @@
+## [8.4.0] - 2026-11-14 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
+
+### 🫀 Afecto — el fondo del Operador entra en el contexto (RFC-AFE-001 F1)
+
+El ánimo tenía **un solo eje y dos escalas**. El `TONE_COLOR` que llega al
+contexto sale del afecto léxico sobre los prompts de **todas** las sesiones vivas:
+medido hoy, decía `anger/red/0.8` con evidencia `["enfad"]` sacada de una frase
+hipotética del Operador hablando de un tercero. Y el fondo real —cómo está él— no
+está en ese texto: en **10 de 14 días** el fragmento del turno es plano mientras
+su fondo no lo es, y agregando el fragmento por día se acierta **4 de 14**.
+
+El fondo se **pregunta** y se guarda; no se infiere.
+
+- **[NEW] `core.affect_fondo`** — un registro **por puesto, no por sesión**
+  (`continuity_id` es per-leg: 6 filas, 6 ids; guardar «por alma» habría dado un
+  fondo por pestaña), **día natural** (no ventana móvil de 24 h: declarado ayer
+  23:55 y leído hoy 11:50 dice `ayer`), sin decaimiento en F1 (el *Fading Affect
+  Bias* escala erosión de engramas por color, no es ley de ánimo), y escritura con
+  `flock` + `tmp` único + guarda de monotonía.
+- **[NEW] `data/affect_letters.yaml`** — letra → emoción/color/etiqueta; los
+  colores existen en `CHROMA_TONE_MAPPING` (test de completitud).
+- **[NEW] bloque `ÁNIMO`** en el despertar (`full` y `medium`; en `low` no, porque
+  un despertar autónomo no tiene a quién preguntar) con los tres textos
+  byte-exactos: hoy / antes / `sin señal`.
+- **[FIX] jerarquía en código** — con fondo de hoy, la persona no imprime `chroma`
+  y `tone_analyzer` lo prefiere al afecto léxico: el mismo contexto ya no puede
+  decir `fondo: B · bien` y `chroma: red`.
+- **[NEW] `red-pill affect fondo --set C`** — captura por CLI (proceso nuevo, sin
+  reiniciar el MCP; la acción MCP llegará con su `auth_level`).
+- **[NEW] `AFFECT_FONDO_ENABLED`** — en sombra por defecto; se enciende por `.env`
+  y está documentado en `.env.example`.
+
+### 🫂 Coro — dos gemelas en el mismo branch, dos almas distintas
+
+El proxy MCP es **uno para toda la app**. Con tres sesiones vivas en el mismo
+workspace, la petición no dice qué pestaña llama: la correlación por cwd no puede
+decidir y el backend caía al *bridge global* («el último que escribió»). Medido el
+2026-11-14: el `post blocked` de una hermana quedó **firmado por otra** y su
+`send park` a esa misma hermana rebotó con «te estarías escribiendo a ti misma».
+
+- **[FIX] identidad sin mentira** — con proxy no se usa el bridge global; con
+  **≥2 almas registradas en el workspace el proxy tampoco basta**. El cuerpo sale
+  de `caller_leg` verificado (fila viva, latido, mismo workspace y misión), del
+  diario del turno (prompt único) o de la actividad reciente (`time_updated`). Si
+  no hay cuerpo, **sin alma**: el coro pide `caller_leg` en vez de atribuir.
+- **[FIX] correlación por cwd** — dos vivas en el mismo cwd es ambiguo y **no se
+  desempata** con `opencode.db` (el `directory` es el workspace, no la sesión);
+  `_session_directory` lee también `session_v2`.
+- **[NEW] `<redpill_identity leg="…"/>` por petición** — el hook del arnés sí
+  sabe qué sesión llama; lo inyecta en el contexto de cada turno (sin persistir)
+  para que el agente pase `caller_leg`. `post`/`send` devuelven `de <marca>` para
+  que una atribución mala se vea en la propia respuesta.
+- **[FIX] avisos plegados en opencode 2.3.x** — la UI decodifica la presentación
+  con un `Struct` exacto `{displayText, comments, attachments}`; con solo
+  `displayText` no decodifica y pinta el sobre entero. El payload envía las tres.
+- **[DOC] `AD-119` + `CORO_PROTOCOL` §6.1** — precedencia del cuerpo, el caso de
+  las gemelas y el límite del proxy compartido. 28 tests del contrato.
+### 🎨 Imagen — Krea-2-Turbo cabe en 8 GB, y el pico de VRAM deja de mentir
+
+Medido el 2026-11-14 en la RTX 5070 Laptop (8151 MiB), con `sd-cli` (commit
+`b13a482`) que ya soporta Krea2. El modelo son **12B de DiT destilado** + encoder
+Qwen3-VL-4B + VAE Wan 2.1, el mismo patrón de tres piezas que Qwen-Image.
+
+El hallazgo incómodo: el `peak_mb` que publicaba el harness era **siempre 0.0**
+con el backend `sd_cpp`. `torch.cuda.max_memory_allocated()` sólo ve el asignador
+de su propio proceso y ahí el modelo vive en `sd-cli` (subproceso) — así que el
+`vram_footprint` del elenco, que es lo que el router usa para decidir si un modelo
+cabe, era una estimación a ojo. Igual para Qwen-Image y FLUX.3.
+
+- **[NEW] `_DeviceVram`** — muestreo de `nvidia-smi` en streaming (sin
+  dependencias nuevas), línea base **antes** de cargar y pico como **incremento**
+  del dispositivo: comparable entre backends. Con `RP_VRAM_SAMPLER=off` se apaga;
+  sin `nvidia-smi` degrada a la cifra de torch en vez de romper.
+- **[NEW] `bench_imagegen` / `gen_image` / `gen_cli`** — publican `peak_source`,
+  `torch_peak_mb`, `device_baseline_mb` y `device_peak_abs_mb`; la consola
+  imprime el pico al terminar.
+- **[NEW] `ref_lora` en el bloque `sd_cpp:` del elenco** — LoRA de edición
+  dirigida por el dato: `sd-cli` aplica LoRAs por sintaxis de prompt, así que el
+  harness añade `<lora:file:weight>` **sólo cuando hay referencias**. Sin `dir` el
+  bloque se ignora; si el `.safetensors` no está, falla limpio (`falta ref_lora`).
+- **[FIX] Krea 2 NO edita por referencia sin LoRA** — con el modelo base las
+  referencias inyectan tokens que no sabe leer y la imagen sale con una rejilla de
+  bloques de 8 px. Con `preset=krea2_edit` + el LoRA identity-edit r64 la identidad
+  se conserva a 1024².
+- **[NEW] `configs/jobs/krea2_eval.yaml`** — A/B por quant (`element_job`,
+  fail-soft, descarga idempotente, muestreo de VRAM externo).
+- **[DOCS] `MEDIA_MODELS.md` §5** — knob `ref_lora` y el caso Krea2 medido.
+
+Cifras medidas @1024²: t2i **6457 MiB** / ~40 s por imagen; edición con una
+referencia **6579 MiB** / ~105 s. Q2_K (6079 MiB, mismo tiempo, peor calidad) se
+midió y se retiró. El LoRA de edición es **no comercial** (licencia del autor,
+aparte de la de Krea): queda escrito en `license.caveats`.
+### 🎙️ Cola — solo entra la voz del Operador
+
+Medido el 2026-11-14: `memory_queue` tenía **1.430 filas y 10 MB**, desde marzo, y
+**nada** las borraba. Peor: **148 no eran del Operador** — 113 bloques
+`<user_rules>` (de los que solo 6 traían su mensaje, marcado `[Joan]`; el resto
+eran despertares headless), 22 avisos de herramienta, 10 prompts de subagente y 3
+avisos de job/coro. Laya los etiquetaba como si fueran él y la marca `[Joan]` que
+sí era su voz quedaba enterrada dentro del bloque.
+
+La cola no es un archivo: es **el buffer del mood**. Solo alimenta el drenaje a
+`interaction_memories` (TTL 72 h) y al afecto léxico (ventana de 180 min); el
+verbatim canónico es el store del proveedor, que el Memento ya renderiza.
+
+- **[NEW] `core.operator_voice`** — guardián único: `extract()` devuelve la voz
+  del Operador o `None`. Rescata el mensaje del último `<current_message>` cuando
+  la sesión es de Telegram, quita la marca `[Joan]`/`[Operador]`, y rechaza
+  bloques del arnés, avisos de job/coro, encargos de subagente y despertares
+  headless.
+- **[FIX] filtro al escribir** — `enqueue_memory` lo aplica antes de insertar:
+  lo que no es su voz no llega ni a la cola ni al mood. Un solo punto para los
+  cinco escritores (relay del hook, bridges de opencode/pi, agent worker, MCP).
+- **[FIX] filtro al leer** — `operator_affect` deja su heurística local (solo
+  miraba `<`) y usa el mismo `extract()`.
+- **[FIX] purga por voz y edad** — `queue_purge_rendered` v2: sin voz → se va sin
+  mirar la edad; con voz → se conserva 7 días y después se va. **No consulta
+  Memento para decidir** (decisión del Operador): la cola es el buffer, no el
+  backup. El pase `mcp:` de v1 se conserva porque ahí la única copia sí es el
+  Memento renderizado.
+- **[MEDIDO]** dry-run 413 → real 413 (131 sin voz, 282 caducadas). Cola de 618 a
+  **205 filas**, 10 MB → **1,2 MB**; `completed` sin voz restantes: **0**.
+
+### 🪞 Identidad — el perfil del Operador deja de opinar sobre quién eres
+
+El 2026-11-13 el perfil que se inyecta en cada despertar decía **«Perfil del
+Operador (Aleth)… Pacto 770 con la agente»**: el agente puesto de Operador, el
+Operador real degradado a colaboradora y su género perdido por el camino. No era
+un modelo confundido: era un diseño confundido. La bio real existía en
+`~/.config/red-pill/identity_bio.md` — pero **solo la leía el pase de anotación
+de Memento**, nunca el contexto de despertar. Lo que sí llegaba era un resumen
+sintetizado por el LLM del sueño a partir de memorias **escritas por el agente**,
+con un system prompt de una línea y sin ancla.
+
+- **[NEW] `core.identity`** — loader compartido de la bio del puesto
+  (`RP_IDENTITY_BIO` → config XDG → plantilla neutra). Una sola precedencia para
+  Memento, wake-up y sueño.
+- **[NEW] `OPERATOR_ANCHOR`** — el wake-up imprime la bio **antes** del perfil, en
+  `medium` y `full`, con precedencia declarada. Con plantilla neutra no se emite:
+  una plantilla genérica no ancla nada.
+- **[FIX] reparto estructural** — la cabecera del perfil (`OPERADOR: <name>`) se
+  compone **en código** desde `OPERATOR_DISPLAY_NAME`; al LLM solo le queda el
+  *foco actual* (2-4 bullets). Nombre, rol y género dejan de ser materia opinable
+  por un resumen nocturno.
+- **[FIX] guard de inversión** — un perfil que nombre al agente como Operador se
+  descarta y se conserva el anterior.
+- **[FIX] fuera un tercer literal del repo** — `distiller.get_dynamic_identity_context`
+  hardcodeaba `"The Operator is Joan (Fixer / he / él)"`; ahora sale de config +
+  bio compartida (P1-ARNES-003: el repo es motor genérico, nunca identidad).
+- **[DOC] `IDENTITY_AND_INSTANCE`, `WAR_ECONOMY`, `ENV_REFERENCE`** — ancla vs
+  perfil, coste (~180 tokens) y qué se re-sintetiza cada 24 h.
+
+### 🌿 Ramas pendientes — el aviso nace de medir (HANDOFF-001 A+C)
+
+El 2026-11-12 el Operador tuvo que preguntar **cuatro veces** qué había dejado un
+despertar en una rama. El log y el acta estaban bien: el acta habla a las otras
+almas y él tenía que ir a leerla. Decisión: **A + C** — y con un principio por
+delante, que el aviso nazca de **medir**, no de creer («un despertar que cree que
+aterrizó ya nos ha mentido antes»).
+
+- **[NEW] `branch_landing_audit.py --publish`**: publica el resultado como estado
+  medido en `state/pending_branches.json` (solo ramas con contenido pendiente, con
+  `rama@sha`) y ajusta la señal `branch_pending_landing` — emitida con el
+  recuento y **enterrada a cero** (contrato de ciclo de vida).
+- **[NEW] `OPEN LOOPS` anuncia las ramas pendientes**: `open_loops_line` lee ese
+  JSON **sin correr git** (el handshake no puede esperar un `merge-tree` por rama)
+  y añade `N rama(s) pendiente(s) de aterrizar` a la línea que el Operador ve al
+  abrir cualquier sesión. Un dato de más de 24 h se ignora: silencio antes que una
+  cifra de ayer.
+- **[DOC] `docs/TECHNICAL/PENDING_BRANCHES.md`**: el circuito, el principio y
+  **lo que no se implementó**: «`notify` al alma viva del Operador» no es
+  implementable hoy porque no existe mapeo `leg → alma`; inventarlo sería el
+  error contrario al que la decisión corrige. B (Telegram) queda documentado como
+  una línea si algún día hace falta push.
+
+Verificado en las dos direcciones con ramas reales: aparece al crear una rama con
+un commit pendiente y desaparece al purgarla. El latido lo da
+`redpill-auditor.service` (horario): sin él el dato se congelaría y el aviso
+mentiría por omisión.
+
+### 🚨 Señales — el dolor nace con su entierro
+
+Medido el 2026-11-12: de las nueve señales que emiten los plugins del Janitor,
+**ocho no tenían camino de entierro**. Seguían en el tablero (o en el buzón)
+mucho después de que la causa cesara. Caso vivo: `memento_stale_distill` saltó a
+las 08:00 con 16 sesiones, la noche las destiló todas y la señal siguió ahí.
+
+Ese dolor huérfano es lo que hace que un despertar autónomo «encuentre» trabajo:
+el tablero le miente y él va a comprobarlo. No era un problema de los
+despertares; era un defecto de la capa que les habla.
+
+- **[FIX] Ocho emisores aprenden a enterrar**: `queue_stuck_tasks`,
+  `sw_hub_coverage_low`, `sw_solera_stale`, `session_mirror_growth`,
+  `session_mirror_budget`, `interaction_unrendered_purged` (tablero) y
+  `memento_stale_distill`, `cloud_sync_error_gmail` (silenciadas). Cada uno
+  entierra en el `else` del `if` que lo alza — **nunca** en un `else` del `try`,
+  que enterraría el dolor recién alzado.
+- **[NEW] `MinionInbox.resolve_report(event_id)`**: las señales silenciadas no
+  viven en Qdrant, así que `evaporate_signals` no las alcanzaba. Su entierro es
+  cerrar el reporte; hasta hoy **no existía ninguna API** para hacerlo.
+- **[NEW] `bury_signal(name, muted=…)`**: una sola puerta para ambos canales
+  (`evaporate_signals` / `resolve_report`), best-effort — un entierro que no pudo
+  ser no tumba al plugin.
+- **[NEW] Guard de contrato** (`tests/test_signal_lifecycle_contract.py`): recorre
+  el paquete con `ast` y **falla** si una señal `pain` no tiene su entierro. Es lo
+  que impide que el defecto nazca en el siguiente plugin; las instantáneas
+  (`status`/`info`) quedan exentas porque se sobrescriben en cada pase.
+- **[FIX] `gmail_watcher` deja de fabricar dolor**: simulaba un fallo de OAuth
+  1 de cada 5 segundos (una PAIN silenciada sin entierro). Ahora la simulación
+  está tras `simulate_errors` (default off, RULE 4) y el camino sano cierra el
+  reporte.
+- **[DOC] `docs/TECHNICAL/SIGNAL_LIFECYCLE.md`**: estado vs evento vs instantánea,
+  el entierro por canal, el `else` que muerde y el límite conocido del guard.
+
+### 🧠 Hubs — el maestro no pierde ideas, no las re-paga y la espera no es dolor
+
+Endurecimiento de la síntesis de hubs tras la primera noche medida de punta a
+punta (ciclo `4047324f`, 2026-11-12: 73/73 etapas, 76.8 min, 0 diferidos). Los
+cuatro hallazgos venían del mismo sitio: el hub se perdía, se re-pagaba o se
+anunciaba mal. Vocabulario y ciclo de vida completos:
+`docs/TECHNICAL/DEFERRALS.md`.
+
+- **[FIX] El JSON roto del maestro ya no tira el hub**: un summary que citaba
+  código con comillas dobles (`print("session:", …)`) invalidaba el JSON y la
+  síntesis entera se perdía. Ahora hay dos redes en el punto único de parseo
+  (heurística de puntuación y rescate **anclado en las claves** del contrato) y
+  una **puerta de completitud**: si la respuesta se cortó por `max_tokens` (sin
+  `texture`/`lang`), no se rescata — escribir media idea sería el truncamiento
+  que AD-115 prohíbe.
+- **[FIX] El fallback distingue determinista de transitorio**: `invalid_output` /
+  `map_reduce_exhausted` cuentan intento y acaban en espera; `llm_unavailable` se
+  reintenta gratis. Antes, un JSON roto se re-pagaba cada noche para siempre (el
+  agujero de la compuerta, por otra puerta).
+- **[FIX] El maestro sabe su presupuesto antes de escribir**: `TARGET_CHARS`
+  viaja en el prompt del maestro, del parcial y del path grande. Antes el número
+  solo se usaba **después** para compactar: el modelo escribía a ojo, se pasaba
+  un 4-17 % y el tope duro tumbaba el hub entero. El tope duro no se toca.
+- **[FIX] El aviso de hub deja de contar dos veces las sesiones**: el descriptor
+  de motivos ya cerraba con `· sesiones:` y el emisor añadía la suya (dos
+  recuentos distintos en una línea).
+- **[NEW] La espera CADUCA** (`SW_HUB_SYNTH_WAIT_RETRY_DAYS`, 7 d; `0` =
+  indefinida): sin caducidad, una sesión cerrada no cambia de entrada nunca y su
+  aviso no muere jamás. Coste acotado a **una síntesis por ventana y sesión**.
+- **[CHANGE] Una espera no es una herida**: dos canales separados.
+  `hub_synthesis_waiting` (INFO, con la fecha de la primera caducidad) para la
+  cita; `hub_synthesis_failed` (WARNING) solo para el fallo. Antes la espera
+  gritaba como WARNING cada noche con la intensidad escalando por edad sobre una
+  causa que ya no cambiaba.
+- **[CHANGE] `deferred` → `waiting`** en esta pieza. `deferred` ya nombraba la
+  cola de entrega (`session/delivery.py`) y el fan-out cortado por presupuesto
+  (`deferred_by_budget`): tres conductas incompatibles con una palabra. Rename
+  puro: estado `waiting`, contador `hubs_waiting`,
+  `SW_HUB_SYNTH_DEFER_RETRY_DAYS` → `SW_HUB_SYNTH_WAIT_RETRY_DAYS`.
+- **[DOC] `docs/TECHNICAL/DEFERRALS.md`**: tabla de verdad de los cuatro
+  aplazamientos del kernel (espera de síntesis, techo de presupuesto, entorno no
+  disponible, entrega de mensajes) con cuándo vuelve cada uno y si caduca.
+
+### ⚖️ Cola honesta — el descarte del Operador nace CANCELLED, no FRUSTRATED
+
+`job kill --discard` sellaba **FRUSTRATED**, el mismo estado del disyuntor de 3 fallos, con un `error_log` de texto para distinguirlos. Un fallo y una decisión compartían estado: el tablón mentía, y el dolor `jobs_frustrated` solo se salvó el 2026-11-10 con un filtro por texto. Ahora el descarte es **CANCELLED** (el mismo cierre que `job discard` al revisar).
+
+- **[FIX] `kill_task_ex(discard=True)` → `CANCELLED`** (y su cascada de hijos BLOCKED también). `FRUSTRATED` queda exclusivamente para lo que pide atención: el disyuntor abierto.
+- **[FIX] El runner trata CANCELLED como parada del Operador**: guardas antes del primer step, antes de cerrar como COMPLETED, en la frontera de step y en la excepción del step (nunca quema intentos ni levanta alarma). La frontera **solo** materializa la pausa en PAUSING/PAUSED — antes `mark_paused` habría degradado un CANCELLED a reanudable.
+- **[FIX] Ya no se resucita**: `mark_completed`/`mark_failed` excluyen CANCELLED, `resume_task` no lo devuelve a PENDING, y `enqueue_task` rechaza hijos de un padre CANCELLED (antes solo miraba FRUSTRATED).
+- **[KEEP] Rastro permanente**: `purge_hygiene` nunca retira CANCELLED (la dead-letter de 14 días no se lo lleva); se retira a mano con `job purge <id>`.
+- **[KEEP] Filtro legacy por `error_log`**: las colas vivas arrastran descartes sellados con el estado viejo; `OPERATOR_DISCARD_ERRORS` sigue excluyéndolos del recuento y la atribución del dolor.
+- **[TEST] 6 ficheros actualizados + 3 casos nuevos**: descarte→CANCELLED, fila legacy que sigue sin doler, CANCELLED que sobrevive a `purge_hygiene` y no se reanuda, y descarte en vuelo que no se degrada a PAUSED (552 passed en el filtro `job/queue/kill/cancel/hygiene/purge/runner`; 151 en los ficheros tocados de cola).
+
+### 🌙 Noche acotada — cota y coste del ciclo nocturno (NB-001)
+
+Presupuesto y reuso del ciclo nocturno `chronicle → sleep`. Todas las piezas con flag propio default OFF (RULE 4); apagadas, comportamiento idéntico al actual. Diseño y decisiones: `docs/TECHNICAL/DECISION_LOG.md` (AD-118).
+
+- **[NEW] F0 — medición con artefacto**: `stage_seconds` por etapa e `item_seconds` por instancia de fan-out fundidos en el checkpoint del `dag_job`, y `durations` por fase en `sleep_phase_status.json`. Telemetría aditiva, sin cambiar comportamiento ni decisiones.
+- **[FIX] F1 — hubs sin descarte silencioso**: la textura oversize sin `texture_parts` se parte **antes** de `add_memory`; el scrub de secretos corre antes de partir y en cada parte; `jobs/drivers/distill.py` propaga `texture_parts` al payload (antes se descartaba en esa ruta de promoción).
+- **[NEW] F2a — reuso incremental en distill** (`MEMENTO_DISTILL_REUSE_ENABLED`, OFF): `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el `content_hash` + `prompt_version`/`engine`/fragmentación y reusa las secciones intactas entre noches. Una sección `degraded` (prompt truncado en fallback HTTP 500) jamás se reusa. Siembra en la primera noche (D-NB-11).
+- **[NEW] F2b — reuso incremental en annotate** (`MEMENTO_ANNOTATE_REUSE_ENABLED`, OFF): `annotate/_meta.json` persiste por `unit_key` el hash + `annotate_prompt_version`/`engine` + notas por unidad y reusa las unidades intactas sin llamar al modelo; `_partial.json` sigue como checkpoint intra-run.
+- **[NEW] F3 — techo de pared por compuesto** (`JOB_COMPOUND_DEADLINE_ENABLED`, OFF): `control.deadline_minutes` (por compuesto, clamp `[0,720]`) ancla el techo al primer step de cada compuesto y acota su fan-out; agotado → `JobDeferred("budget_exhausted")` + `deferred_by_budget` en el checkpoint. Solo corta fan-out: la cola del sueño nunca se difiere.
+- **[NEW] F4 — fusión work+social en una llamada, GO** (`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`, OFF): con el banco reproducible previo (`docs/BENCHMARKS/ANNOTATE_BENCH.md`), la extracción combinada con `scope` por idea **pasa la paridad y decide GO** — notas/fragmento 1.25 vs 0.90 (≥ 0.855), `json_invalido` 0 vs 4.4, rutas dentro de ±5 pp, −50 % de llamadas de extracción. Detalle: `docs/TECHNICAL/COGNITIVE/ANNOTATE_FUSION_DECISION.md`.
+- **[NEW] F5 — presupuesto por coste real por etapa** (`MEMENTO_NIGHT_COST_MODEL_ENABLED`, OFF): la selección presupuesta en la divisa de cada fase (chars de work-unit en distill; unidades + notas esperadas en annotate) en vez de mensajes, conservando `NIGHT_LIMIT` y el anti-hambruna.
+- **[DOC] Guía del presupuesto nocturno**: `docs/TECHNICAL/NIGHTLY_BUDGET.md`.
+
+### 📨 Avisos inyectados — plegados con título (AD-117)
+
+- **[NEW] Presentación plegada en OpenCode**: los avisos de `soul_notify` (fin de job, tablón, sesiones hermanas) se entregan por `POST /api/session/<id>/prompt` con `metadata.displayText`; el IDE pinta una sola línea (`Mensaje recibido · job '…' → success`, `… · CORO E-…`, `… · tablón`) y el cuerpo completo sigue en el prompt para el modelo. Fallback automático a `opencode run --session` si la API falla o tarda más de 8 s.
+- **[FIX] Se conservan captura, handshake y acuse**: se descartó el mensaje `synthetic` porque **no dispara el hook `prompt`** (0 filas en `memory_queue` medido); el user message con `displayText` mantiene scribe → Búnker, reset del handshake y acuse `msg=<event_id>`.
+- **[TEST] 7 casos nuevos** (`TestPresentacionPlegada`): títulos (CORO/job/tablón/genérico), payload con `displayText`, fallback al `run` clásico y sesión inexistente. 146 passed en los módulos tocados; 4.336 en la suite (1 fallo preexistente de Sound of Silence).
+
+### 🎨 Media — MOSS-Image-SFT evaluado y descartado (ficha en `docs/BENCHMARKS/`)
+
+- **[DOC] Bench A/B completo (30 imágenes, 6 géneros)**: MOSS-Image-SFT (5,1 B DiT, apache-2.0) tarda **228 s/imagen** frente a 6,6 s de `flux2_klein`, 15,2 s de `flux3_klein`, 19,6 s de `zimage_turbo` y 32,5 s de `qwen_image_2_1_turbo`, **sin ganar en ningún género** y fallando tipografía (*"siven hills"*, cartel ilegible en ilustración); retrato con sobre-saturación de rojo y producto desobediente. **No entra en el elenco**; pesos purgados. Ficha + snippet de re-evaluación en `docs/BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md`.
+- **[NEW] `sd_cpp.tokenizer` en el elenco**: el harness pasa `--tokenizer` cuando el perfil lo declara (MOSS-Image lo exige aparte del `--llm`), con validación en carga y disponibilidad (fallo limpio si falta, nunca silencio). Genérico para cualquier DiT que necesite tokenizer externo.
+- **[NEW] `bench_imagegen.py --list-models --models a,b,c`**: A/B sobre un subconjunto del elenco sin editar código.
+- **[DOC] Curva de coste medida** (barrido 12/20/30/50 pasos): **4,19 s/paso + 13,7 s fijos**; encoder de texto en CPU ≈ 6 % del total, el cuello es el denoising con CFG (2 ramas). 50 ≈ 30 pasos en calidad.
+- **[TEST] `test_tokenizer_solo_si_el_elenco_lo_declara`**; 29 passed en imagegen, ruff limpio.
+
+### 🧠 Memoria — hubs sin truncamiento, compaction y modelo híbrido (AD-115)
+
+- **[FIX] Cero truncamiento en hubs**: `synthesize_hub_v2` ya no recorta el prompt, la textura ni el fallback mecánico. Si el prompt no cabe, map-reduce; si la textura supera el target, se conserva y se marca `texture_over_target`; si el summary sigue largo tras la compaction, se conserva **intacto** y se marca `summary_over_budget`.
+- **[NEW] Compaction por reescritura**: target de 900 chars y 2 intentos (`SLEEP_HUB_SUMMARY_TARGET_CHARS`, `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS`); si el modelo no reduce, no se pierde contenido. K2 no es fiable como editor (ignoró el target en 42k), así que la compaction es un lever blando, nunca un recorte.
+- **[NEW] Híbrido Granite + K2 concise**: hubs con prompt ≤100k siguen en Granite; >100k usan K2-Horizon 7B + prompt concise (donde Granite cae a coverage 0.1 y K2 llega a 0.467). Coste estimado ~2-4 min/ciclo (~8-9 min en backfill con 4 hubs grandes). Config: `SLEEP_HUB_LARGE_INPUT_CHARS`, `SLEEP_HUB_LARGE_MODEL`, `SLEEP_HUB_LARGE_PROMPT`; metadata `hub_large_path`/`hub_model`/`hub_prompt_file`.
+- **[DOC] Bake-off 15/15 sin truncado**: Granite 75 s / 0.233; K2 178 s / 0.322; K2 concise 149 s / **0.389**; K2 concise+compaction 204 s / 0.300; Bonsai 260 s / 0.267. Informe en `docs/BENCHMARKS/HUB_BAKEOFF.md`.
+- **[TEST] 73 passed** en hub/provider/sueño; smoke real con K2 concise (`large_path=True`, `truncated=False`).
+
+### 🛰️ Coro/Jobs — identidad del llamante y auditoría (AD-114)
+
+- **[FIX] `job_submit` no hereda el alma de otra pestaña**: el proxy prefiere `OPENCODE_SESSION_ID`/`OPENCODE_SESSION`, no cae al bridge global con ambigüedad y envía `ambiguous`; el backend propaga `proxy_ambiguous` y `job_submit` falla cerrado salvo `REDPILL_OPERATOR=1`.
+- **[NEW] Auditoría de procedencia**: `origin_session_id`/`submitted_by` en payload, `cognitive_tasks` (migración aditiva) y `job_identity`.
+- **[NEW] Escape del Operador**: `red-pill job submit --continuity <alma>` para atribuir un job cuando hay dos pestañas en el mismo workspace.
+- **[TEST] 129 passed, 2 skipped**; `conftest` deja de heredar `OPENCODE_SESSION_ID`.
+
+### 🔍 Planner — la mención en el cuerpo de un commit no es prueba de trabajo
+
+- **[FIX] Asunto vs cuerpo en la evidencia de git**: `scripts/planner_state_audit.py`
+  leía `git log --grep`, que casa también con el **cuerpo** del commit — y el
+  cuerpo de un squash es el CHANGELOG del release, que enumera ids de medio repo.
+  Así, un par de commits de release se convertían en «evidencia» de cualquier
+  documento: `RFC-DESPERTAR-001`, `RFC-LOCALTOOLS-001` y `MEM-006` (los tres
+  `draft`, sin una línea de trabajo detrás) salían con `stale-status` y una
+  propuesta falsa de `in-progress`. Ahora el commit cuenta como prueba solo si el
+  id aparece en su **asunto**; el cuerpo se reporta aparte como **mención**
+  (`mention-only`, medium, `suggest` = estado actual): ni promociona ni degrada,
+  pide confirmación a mano. La regla es simétrica con la del 17:00 — el error
+  contrario (degradar 18 documentos vivos a `draft` por no verlos en un asunto)
+  era igual de caro, así que la mención frena las dos direcciones.
+- **[FIX] El render no sepulta lo accionable**: lo que cambia estado va primero y
+  en detalle; las menciones se agrupan en una lista compacta al final
+  (16 fichas en el desk medido) en vez de 16 bloques que nadie lee. Efecto medido
+  en el desk: 10 propuestas → 4 accionables (3 `no-evidence` high ya medidos y el
+  `stale-status` real de `MEM-010`) + 16 menciones a revisar a mano.
+- **[TEST] 4 casos nuevos**: mención en el cuerpo no promociona un `draft` ni
+  degrada un `in-progress` a high, el asunto sigue siendo prueba, y el render
+  agrupa las menciones fuera de los bloques accionables. 23 passed, ruff limpio.
+
+### 🔍 Planner — el pre-pase deja de ser ciego a medias
+
+- **[FIX] `--repo` suma, no reemplaza**: `scripts/planner_state_audit.py` construía
+  la lista de repos como «o el del cwd, o los `--repo`», aunque su propio uso
+  prometía «añade». Auditar desde el desk perdía la evidencia de los repos de
+  proyecto (y desde el kernel, la del desk), así que RFCs implementados de verdad
+  salían como `implemented` sin evidencia: 14 banderas altas desde el kernel y 12
+  desde el desk, frente a 9 con la unión. El repo del cwd entra siempre (si es
+  git) y los `--repo` se añaden, con dedupe por ruta resuelta.
+- **[FIX] La evidencia por familia del id**: los commits rara vez citan el id
+  completo (citan la familia: el sufijo con su número), así que el pre-pase daba
+  por vacío trabajo real. Ahora prueba el id exacto, sus prefijos por la derecha y
+  el id sin prefijo de familia, **nunca** un token sin dígito (que arrastraría
+  medio repo y mentiría al revés). La evidencia hallada bajo otro token se declara
+  `weak-evidence` (medium, «confirma a mano antes de degradar»), no `no-evidence`
+  (high, «degrada a draft»), y el render dice bajo qué token apareció.
+- **[FIX] La evidencia que el documento ya declara**: `evidence: ["repo:sha", …]`
+  del frontmatter cuenta — pero no a ciegas: el sha tiene que existir en el repo
+  (`git cat-file -e`). La prosa («R5 del 2026-10-14») se ignora: aceptarla sería
+  mentir en la otra dirección.
+- **[FIX] El repo del proyecto, y `unscanned-project`**: el pre-pase resuelve el
+  repo por el `project:` del documento (hermanos del desk y `projects/`, con alias
+  `red-pill`→`sharing`) y, si no lo encuentra, dice «NO medido» (`low`) en vez de
+  vender la ausencia como `no-evidence`. Además, `closed` se verifica también por
+  un commit ya contenido en una rama viva: el release squash-mergea y no deja
+  merge que citar. Efecto medido: 14 propuestas → 8, y un doc cerrado de otro
+  proyecto deja de salir «sin evidencia» cuando su trabajo sí existe.
+
+### 🧭 Despertar — «pendiente de aterrizar» se mide, no se recuerda
+
+- **[NEW] `scripts/branch_landing_audit.py`**: auditoría determinista (sin LLM, sin
+  red) de las ramas pendientes. El handoff del despertar afirmaba «rama X pendiente
+  de aterrizar» sin comprobarlo, y se equivocó en las dos direcciones: ramas cuyo
+  contenido ya estaba en `main` (el release squash-mergea, cambian los SHA y no el
+  contenido) y ramas realmente pendientes que nadie miraba. `git branch --merged`
+  no ve un squash y `git cherry` tampoco (su patch-id es por commit), así que el
+  script compara lo único que no engaña: el **contenido** de los ficheros que tocó
+  cada rama contra el destino. Estados: `merged`, `no_changes`, `same_content`,
+  `clean`, `conflict`, `unrelated`; `--strict` sale 1 si queda algo pendiente,
+  para que el próximo despertar no pueda heredar la frase sin evidencia.
+- **[TEST] 8 casos con repos de verdad**: merge real, squash (SHA distinto,
+  contenido igual), rama divergente, conflicto con nombre de fichero, rama vacía,
+  filtros de patrón y destino inexistente.
+- **[FIX] No dar por pendiente lo que ya está**: comparar fichero completo dejaba
+  marcada para siempre una rama squash-mergeada cuyo fichero siguió creciendo
+  después (CHANGELOG, índices): `awaken/20261107-0900` salía `conflict` solo por su
+  CHANGELOG cuando su código era byte-idéntico al de `next`. `same_content` se
+  decide ahora por tres vías y el JSON dice cuál (`evidence`): `merge_noop`,
+  `whole_file` y `additions_present` (las líneas que la rama añade ya están,
+  literales, en el destino). La tercera solo se pronuncia con diffs de solo
+  adiciones, sin binarios ni cambios de modo: si la rama borra o reescribe, se
+  queda pendiente. Mejor de más que dar por aterrizado lo que no está.
+- **[FIX] `parked/*` fuera del gate**: se audita (visibilidad) pero no cuenta para
+  `--strict` salvo `--include-parked`. Una rama aparcada con `reason` es pendiente
+  por diseño, y con el patrón anterior `--strict` estaba en rojo permanente — el
+  siguiente despertar habría aprendido a ignorarlo.
+
+### 🔧 Instalación — el pin de BitNet compila en cualquier máquina
+
+- **[FIX] Cadena de pins reproducible**: `3rdparty/BitNet-1.58b` apuntaba a un
+  árbol que solo compilaba aquí (sus `build_*` estaban versionados y el
+  `llama.cpp` anidado incluía `bitnet_porter.cu` sin los headers que incluye). El
+  fork deja de versionar la compilación (3.210 ficheros → 77), el pin anidado
+  apunta a un commit que compila y su `.gitmodules` pasa a un fork público por
+  HTTPS: `git submodule update --init --recursive` funciona en otra máquina.
+- **[NEW] `scripts/bitnet_build.sh`**: compila un sabor (`cpu|cuda|vulkan`) tras
+  verificar el árbol e imprimir la cadena de pins; dice `npu` no soportado en vez
+  de fingirlo. Los binarios siguen siendo locales por diseño.
+- **[NEW] `scripts/llama_official_build.sh`**: el mismo trato para el llama.cpp
+  general (modelos GGUF no ternarios), con `--check` para validar el pin.
+- **[DOC] `BITNET_FLAVORS.md`**: mapa de fuentes (qué repo, rama y commit sirve
+  cada motor), receta para recrearlos —incluido qué hacer cuando el upstream se
+  mueve— y la comprobación de que un pin es reproducible.
+
+### 🧠 Memoria — el tope doble llega también al pase clásico
+
+- **[FIX] Un solo tope, dos puertas**: la selección con los dos presupuestos vive
+  ahora en `memento/agentic/selection.py` y la usan tanto el `discover` del DAG
+  como el pase clásico (`memento_agentic.py` sin `--target`), que se había
+  quedado con el tope de sesiones solo. `--limit 0` apaga **ambos** topes, como
+  dice la config.
+
 ## [8.3.0] - 2026-11-03 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
 
 ### 🧠 Memoria — el buffer deja de perder turnos

@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,9 @@ class SwObservabilityPlugin(JanitorPlugin):
 						source="Janitor",
 						message=json.dumps(low, ensure_ascii=False),
 					)
+				else:
+					# La cobertura volvió: el dolor se entierra (contrato de ciclo de vida).
+					bury_signal("sw_hub_coverage_low", memory_manager=mem)
 			age = health.get("solera_age_h")
 			if age is not None and age > 168:
 				mem.inject_signal(
@@ -74,6 +77,8 @@ class SwObservabilityPlugin(JanitorPlugin):
 					source="Janitor",
 					message=f"Solera sin actualizar {age}h (¿drenaje/LLM parados?).",
 				)
+			else:
+				bury_signal("sw_solera_stale", memory_manager=mem)
 		except Exception as e:
 			logger.debug(f"[SW-OBS] señal no inyectada: {e}")
 		return health

@@ -226,6 +226,31 @@ automáticamente. Sirve para que un modelo con DiT residente (FLUX.3) llegue a
 ~2 MPix en 8 GB sin penalizar el t2i pequeño (p. ej. `1500000` = offload por
 encima de ~1.5 MPix).
 
+**`tokenizer: <tokenizer.json>`** — para arquitecturas que lo exigen aparte del
+`--llm` (MOSS-Image: `sd-cli` aborta con *"requires the official Qwen3.5
+tokenizer.json"* si falta). Es **opcional y dirigido por el dato**: si el bloque
+no lo declara no se pasa ninguna flag; si lo declara y el fichero no existe, la
+carga falla limpio (`falta tokenizer`) en vez de degradar en silencio.
+
+**`ref_lora: {file, dir, weight?}`** — LoRA de **edición** (solo se pasa cuando hay
+referencias o `img2img`; en text2img puro no se toca). `sd-cli` aplica LoRAs por
+sintaxis de prompt, así que el harness añade `<lora:file:weight>` **al prompt
+efectivo** y `dir` como `--lora-model-dir`: el operador nunca escribe la etiqueta a
+mano. Sin `dir` el bloque se ignora (no se adivinan rutas) y el modelo sigue siendo
+usable en t2i; si `dir` está y el `.safetensors` no, la carga falla limpio (`falta
+ref_lora`).
+
+Ejemplo medido (`krea2_turbo_q3`, 2026-11-14): **Krea 2 NO edita por referencia sin
+LoRA** — las referencias inyectan tokens que el modelo base no interpreta y la
+imagen sale con una rejilla de bloques de 8 px. Con `preset=krea2_edit` +
+`ref_lora: {file: krea2_identity_edit_v2_r64, dir: …/lora}` la identidad se conserva
+a 1024² en **~105 s** (vs ~40 s en t2i) y **~6.6–7.0 GB** de pico. Ojo con la
+licencia: ese LoRA es gratis **solo** para uso personal/no comercial (ver
+`license.caveats` en el elenco).
+
+**`--list-models --models a,b,c`** permite lanzar un A/B sobre un subconjunto del
+elenco sin editar código (el `element_job` recibe solo esos elementos).
+
 ---
 
 ## 6. License

@@ -278,10 +278,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 		try:
 			while True:
 				# El kill puede aterrizar entre el pop y el primer step (o entre dos
-				# steps). Releer SIEMPRE antes de empezar: un FRUSTRATED/PAUSED no
-				# debe ejecutar un step más ni resucitar a COMPLETED.
+				# steps). Releer SIEMPRE antes de empezar: un PAUSED/FRUSTRATED/
+				# CANCELLED no debe ejecutar un step más ni resucitar a COMPLETED.
+				# CANCELLED es el descarte deliberado (`job kill --discard`): mismo
+				# verbo de parada que PAUSED, pero sin vuelta.
 				guard = cog_queue.get_task(job_id)
-				if guard and str(guard.get("status") or "") in ("PAUSED", "FRUSTRATED"):
+				if guard and str(guard.get("status") or "") in ("PAUSED", "FRUSTRATED", "CANCELLED"):
 					checkpoint = guard.get("checkpoint_data") or checkpoint
 					if isinstance(checkpoint, dict) and checkpoint.get("dirty_kill"):
 						try:
@@ -334,7 +336,7 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					pre_final = cog_queue.get_task(job_id)
 					if (
 						pre_final
-						and str(pre_final.get("status") or "") in ("PAUSED", "FRUSTRATED")
+						and str(pre_final.get("status") or "") in ("PAUSED", "FRUSTRATED", "CANCELLED")
 						and (pre_final.get("checkpoint_data") or {}).get("dirty_kill")
 					):
 						try:
@@ -382,10 +384,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 				# R3: releer estado — una pausa del operador a mitad de step gana (PAUSING/PAUSED)
 				current = cog_queue.get_task(job_id)
-				if current and current.get("status") in ("PAUSING", "PAUSED", "FRUSTRATED"):
+				if current and current.get("status") in ("PAUSING", "PAUSED", "FRUSTRATED", "CANCELLED"):
 					checkpoint = current.get("checkpoint_data") or checkpoint
 					killed = isinstance(checkpoint, dict) and bool(checkpoint.get("dirty_kill"))
-					if current.get("status") != "FRUSTRATED":
+					if current.get("status") in ("PAUSING", "PAUSED"):
+						# Pausa: se materializa. FRUSTRATED/CANCELLED son
+						# terminales — `mark_paused` los degradaría a reanudables.
 						cog_queue.mark_paused(job_id)
 					if killed:
 						try:
@@ -407,6 +411,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					raise JobDeferred("cede el paso a un job PENDING de mayor prioridad")
 
 		except JobDeferred as deferral:
+			# El techo de pared por compuesto (NB-001 F3) difiere el fan-out con un
+			# checkpoint adjunto: persistirlo ANTES de devolver a PENDING para que
+			# `deferred_by_budget` y las hojas diferidas no se pierdan (D-NB-07/13).
+			attached = getattr(deferral, "checkpoint", None)
+			if isinstance(attached, dict):
+				cog_queue.save_checkpoint(job_id, attached, progress)
 			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
 			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")
 		except JobPauseRequested as pause:
@@ -437,12 +447,16 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			current = cog_queue.get_task(job_id)
 			try:
 				if isinstance(driver, ResumableJobDriver):
-					reason = "operator_kill" if current and current.get("status") in ("PAUSED", "FRUSTRATED") else str(e)
+					reason = (
+						"operator_kill"
+						if current and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED")
+						else str(e)
+					)
 					checkpoint = driver.abort_step(task["payload"], checkpoint, reason)
 					cog_queue.save_checkpoint(job_id, checkpoint, progress)
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed: {abort_err}")
-			if current and current.get("status") in ("PAUSED", "FRUSTRATED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
+			if current and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
 				try:
 					driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
 				except Exception as term_err:

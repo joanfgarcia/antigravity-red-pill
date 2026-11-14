@@ -128,6 +128,32 @@ def main() -> None:
 		handle_mcp(args)
 		return
 
+	elif args.command == "affect":
+		# RFC-AFE-001 F1: el fondo se captura, no se infiere. Proceso nuevo, sin
+		# reiniciar el MCP (la acción MCP llegará en F2 con su auth_level).
+		from red_pill.core import affect_fondo
+
+		if getattr(args, "aff_cmd", None) == "fondo" and getattr(args, "set", None):
+			try:
+				registro = affect_fondo.write(args.set, note=getattr(args, "note", "") or "", by=os.getenv("AGENT_ID", "operator"))
+			except affect_fondo.FondoNoSobrescrito as exc:
+				print(f"[affect] no sobrescrito: {exc}")
+				sys.exit(3)
+			except ValueError as exc:
+				print(f"[affect] {exc}")
+				sys.exit(2)
+			if getattr(args, "json", False):
+				print(json.dumps(registro, ensure_ascii=False))
+			else:
+				print(f"[affect] fondo guardado: {registro['letra']} ({registro['updated_by']})")
+			return
+		registro = affect_fondo.read()
+		if getattr(args, "json", False):
+			print(json.dumps(registro or {}, ensure_ascii=False))
+		else:
+			print(affect_fondo.describe(registro))
+		return
+
 	elif args.command == "mini":
 		sys.exit(handle_mini(args))
 

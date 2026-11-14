@@ -4,6 +4,9 @@
 > las transformaciones que requiere cada backend, y las intervenciones manuales que hemos
 > tenido que hacer para que funcione en la RTX 5070. Este documento existe para que no
 > tengamos que redescubrir todo esto cada vez.
+>
+> **Ver también**: [BITNET_FLAVORS.md](./BITNET_FLAVORS.md) — mapa de fuentes (qué fork,
+> qué rama, qué commit), sabores y receta para recrear los motores en otra máquina.
 
 ## Table of Contents
 
@@ -428,6 +431,14 @@ del BOS si el chat template no está correctamente configurado.
 - [ ] **4. Verificar `block_i2_s` = 36 bytes** en `ggml-common.h`
 
 - [ ] **5. Compilar el backend deseado**
+
+  Atajo del kernel (verifica el árbol y la cadena de pins antes de compilar):
+  ```bash
+  bash scripts/bitnet_build.sh --check   # fuente completa + pins
+  bash scripts/bitnet_build.sh cuda      # cpu | cuda | vulkan
+  ```
+
+  A mano, si prefieres control total:
   ```bash
   # CPU
   mkdir build_cpu && cd build_cpu

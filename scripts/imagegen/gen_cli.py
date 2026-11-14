@@ -512,6 +512,9 @@ def main() -> int:
 		_unload_vram(os.environ.get("DUAL_BIND_PROXY_URL") or "http://127.0.0.1:8760")
 
 	kind, pipe = B._load(model)
+	# VRAM pico medida en el DISPOSITIVO (el asignador de torch no ve sd-cli, que es subproceso):
+	# la línea base se toma ANTES de cargar y la ventana cubre la generación.
+	vram = B._DeviceVram().prime()
 	# Composición (referencia/edición) unificada: la filtra el harness según lo que declara el elenco. Lo no
 	# soportado AVISA (soft-fail, política `compatible`) y se renderiza igual; en `strict`, falla.
 	policy = os.environ.get("RP_MEDIA_COMPOSITION_POLICY", "compatible")
@@ -531,11 +534,16 @@ def main() -> int:
 		eff_guid = args.guidance if args.guidance is not None else base.get("guidance")
 		print(f"[gen] effort: steps={eff_steps} guidance={eff_guid}", file=sys.stderr)
 	try:
-		img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta, steps=args.steps, guidance=args.guidance)
+		with vram:
+			img = G._gen(kind, pipe, model, prompt, args.seed, w, h, meta, steps=args.steps, guidance=args.guidance)
 	except RuntimeError as e:  # noqa: BLE001 — fallo del backend → error limpio, sin traceback
 		msg = str(e)
 		hint = " (posible VRAM agotada: baja la resolución)" if "memory" in msg.lower() else ""
 		raise SystemExit(f"[error] generación falló{hint}: {msg[:300]}") from e
+
+	peak = vram.peak_delta_mb
+	if peak is not None:
+		print(f"[gen] VRAM pico {peak:.0f} MiB (nvidia-smi, línea base {vram.baseline_mb:.0f} MiB)", file=sys.stderr)
 
 	outdir = Path(args.out)
 	outdir.mkdir(parents=True, exist_ok=True)

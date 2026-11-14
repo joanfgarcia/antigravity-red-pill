@@ -41,3 +41,8 @@ produce firmas distintas a propósito. `validate` no depende de config.
   `tests/test_core_prompts.py` contra goldens pre-migración.
 - La variante v2 de annotate (`MEMENTO_ANNOTATE_VOICE_V2=true`) tiene su propia
   firma agregada (work/social v2 + rewrite v2 + scorer v2 + sistemas).
+- La fusión work+social (NB-001 F4/P7, flag `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`)
+  sustituye los DOS prompts de extracción (work+social) por el combinado
+  `annotate_combined_user[_v2|_v3]` (system `annotate_combined_system.txt`), con
+  `scope` por idea. La firma de la etapa cambia SOLO con el flag ON y lleva la
+  marca `annotate_extract=single`; OFF deja la firma intacta (D-NB-04/06).

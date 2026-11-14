@@ -35,6 +35,9 @@ class SleepContext:
 	# `total_processed` es la suma de los valores de fase. Sustituye al contador
 	# vestigial que la retirada de la ingesta legacy (v8.0.0) dejó clavado en 0.
 	metrics: Dict[str, int] = field(default_factory=dict)
+	# Duración por fase en segundos (telemetría F0 de NB-001): medición pura,
+	# no participa en decisiones ni en `total_processed`. Clave = nombre de fase.
+	durations: Dict[str, float] = field(default_factory=dict)
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
 	# Consolidation drain cutoff (epoch seconds). 0 = unset → the phase captures it
 	# at execute() start. The dag_job sleep recipe pins it at job start (first
@@ -66,6 +69,18 @@ class SleepContext:
 				self.metrics[f"{phase}.{key}"] = int(value)
 			except (TypeError, ValueError):
 				continue
+
+	def record_duration(self, phase: str, seconds: float) -> None:
+		"""Duración de una fase en segundos (telemetría F0 de NB-001).
+
+		Medición pura para calibrar el techo nocturno: no participa en
+		`total_processed`, no cambia decisiones y no altera la semántica actual
+		del estado. Best-effort: un valor no numérico jamás tumba la fase.
+		"""
+		try:
+			self.durations[phase] = float(seconds)
+		except (TypeError, ValueError):
+			pass
 
 	def update_status(
 		self,
@@ -99,6 +114,7 @@ class SleepContext:
 				"total_phases": total_phases,
 				"total_processed": self.total_processed,
 				"metrics": self.metrics,
+				"durations": self.durations,
 				"deferred": self.deferred,
 				"updated_at": time.time(),
 			}

@@ -162,9 +162,25 @@ class SipInferenceProvider(BaseInferenceProvider):
 	def _build_payload(self, *, task: str, messages: list, temperature: float, **extra) -> dict:
 		"""Payload OpenAI-compatible para el daemon (sin `model` si está vacío)."""
 		payload: dict = {"task": task, "messages": messages, "temperature": temperature}
-		if self.model:
-			payload["model"] = self.model
-		for key in ("max_tokens", "stop", "seed", "response_format", "tools", "tool_choice"):
+		# `model` por llamada (AD-115 híbrido de hubs): gana sobre el modelo del
+		# provider; vacío = no se envía y el daemon resuelve por `task`.
+		model = str(extra.get("model") or self.model or "").strip()
+		if model:
+			payload["model"] = model
+		for key in (
+			"max_tokens",
+			"stop",
+			"seed",
+			"response_format",
+			"tools",
+			"tool_choice",
+			"top_p",
+			"top_k",
+			"min_p",
+			"thinking",
+			"reasoning_effort",
+			"chat_template_kwargs",
+		):
 			if extra.get(key) is not None:
 				payload[key] = extra[key]
 		return payload
@@ -201,6 +217,13 @@ class SipInferenceProvider(BaseInferenceProvider):
 			stop=kwargs.get("stop"),
 			seed=kwargs.get("seed"),
 			response_format=kwargs.get("response_format"),
+			model=kwargs.get("model"),
+			top_p=kwargs.get("top_p"),
+			top_k=kwargs.get("top_k"),
+			min_p=kwargs.get("min_p"),
+			thinking=kwargs.get("thinking"),
+			reasoning_effort=kwargs.get("reasoning_effort"),
+			chat_template_kwargs=kwargs.get("chat_template_kwargs"),
 		)
 
 		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)

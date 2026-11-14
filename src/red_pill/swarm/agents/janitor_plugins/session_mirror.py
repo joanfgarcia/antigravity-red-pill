@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +45,26 @@ class SessionMirrorPurgePlugin(JanitorPlugin):
 		purged = mirror.purge(registry, retention_days=retention_days)
 		budget = mirror.enforce_budget()
 		after = mirror.stats(retention_days=retention_days)
+		# `orphan_rows` sin denominador miente por exageración: el registro solo
+		# conserva las almas VIVAS, así que «huérfana» es la forma normal de toda
+		# alma ya cerrada. Medido 2026-11-12: 20 795 filas huérfanas de 20 956
+		# (99,2 %) con 114 almas y 4 legs vivos — un número enorme que no
+		# significaba ningún problema. El recuento de almas y la lista de trabajo
+		# (`expired_candidates`) van en la MISMA señal para que se lea sin código.
+		# Nota: `dead_rows + orphan_rows` NO suma `rows` — las almas activas suman
+		# sus turnos pero no se reparten en esos dos cubos (por diseño).
 		metrics = {
 			"session_mirror_rows_before": before["rows"],
 			"session_mirror_rows_after": after["rows"],
 			"session_mirror_rows_purged": purged["rows_purged"],
 			"session_mirror_souls": after["souls"],
 			"session_mirror_souls_purged": purged["souls_purged"],
+			"session_mirror_active_souls": after["active_souls"],
+			"session_mirror_dead_souls": after["dead_souls"],
+			"session_mirror_orphan_souls": after["orphan_souls"],
 			"session_mirror_dead_rows": after["dead_rows"],
 			"session_mirror_orphan_rows": after["orphan_rows"],
+			"session_mirror_expired_candidates": after["expired_candidates"],
 			"session_mirror_undated_rows": after["undated_rows"],
 			"session_mirror_unknown_age_souls": after["unknown_age_souls"],
 			"session_mirror_bytes": after["db_bytes"] + after["wal_bytes"],
@@ -102,6 +114,9 @@ def _emit_signals(memory_manager: Any, metrics: Dict[str, Any], after: Dict[str,
 				source="Janitor",
 				message="; ".join(problems),
 			)
+		else:
+			# El espejo volvió a su sitio: el aviso de crecimiento se entierra.
+			bury_signal("session_mirror_growth", memory_manager=memory_manager)
 		import red_pill.config as cfg
 
 		app_cfg = cfg.get_config()
@@ -120,5 +135,8 @@ def _emit_signals(memory_manager: Any, metrics: Dict[str, Any], after: Dict[str,
 					+ (" — EMERGENCIA aplicada" if after.get("over_budget") else "")
 				),
 			)
+		else:
+			# Presupuesto bajo control: el dolor se entierra (contrato de ciclo de vida).
+			bury_signal("session_mirror_budget", memory_manager=memory_manager)
 	except Exception as e:
 		logger.debug(f"[Janitor] session_mirror señal no inyectada: {e}")

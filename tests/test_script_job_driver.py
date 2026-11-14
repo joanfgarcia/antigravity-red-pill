@@ -562,13 +562,13 @@ def test_kill_marks_paused_with_dirty_flag_and_keeps_checkpoint(queue):
 	assert queue.list_tasks()[0]["dirty_kill"] == "operator"  # `job list` lo muestra como PAUSED*
 
 
-def test_kill_discard_is_a_dead_letter_not_a_deletion(queue):
+def test_kill_discard_is_a_decision_not_a_deletion(queue):
 	job_id = queue.enqueue_task(source="script_job", payload={"title": "abortado"})
 
 	queue.kill_task(job_id, discard=True)
 	task = queue.get_task(job_id)
 
-	assert task["status"] == "FRUSTRATED"
+	assert task["status"] == "CANCELLED"  # decisión del Operador, no fallo del disyuntor
 	assert "cancelled by operator" in task["error_log"]  # Trazabilidad > limpieza inmediata
 
 
@@ -594,6 +594,30 @@ def test_operator_kill_is_not_a_failure_for_the_runner(queue, clean_registry, mo
 	assert task["attempts"] == 0  # Ni un intento quemado
 	assert task["status"] == "PAUSED"
 	assert reports == ["killed"]  # Cierre informativo, nunca "failed" (sin alarma falsa)
+
+
+def test_operator_discard_mid_step_leaves_the_job_cancelled(queue, clean_registry, monkeypatch):
+	"""Un descarte en vuelo no se degrada a PAUSED: el step revienta con el estado
+	ya en CANCELLED y el runner lo reporta como kill, sin tocar el disyuntor."""
+	reports = []
+	monkeypatch.setattr("red_pill.core.queue_worker._report_job", lambda jid, task, status, content: reports.append(status))
+
+	class DiscardedMidStepDriver(ResumableJobDriver):
+		source = "test_discarded"
+
+		def step(self, payload, checkpoint_data):
+			queue.kill_task(self.job_id, discard=True)
+			raise RuntimeError("step_command murió tras el discard")
+
+	register_driver(DiscardedMidStepDriver)
+	job_id = queue.enqueue_task(source="test_discarded", payload={})
+
+	process_driver_jobs(queue)
+	task = queue.get_task(job_id)
+
+	assert task["status"] == "CANCELLED"  # ni PAUSED (reanudable) ni FRUSTRATED (dolor)
+	assert task["attempts"] == 0
+	assert reports == ["killed"]
 
 
 def test_dirty_resume_validates_state_before_relaunching(tmp_path):

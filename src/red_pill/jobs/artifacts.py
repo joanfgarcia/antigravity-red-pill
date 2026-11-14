@@ -30,6 +30,10 @@ def _identity(task: Dict[str, Any]) -> Dict[str, str]:
 		),
 		"originator": str(checkpoint.get("originator") or payload.get("originator") or ""),
 		"role": str(checkpoint.get("role") or payload.get("role") or ("job" if task.get("continuity_id") else "")),
+		# Auditoría de procedencia: el cuerpo/tool que envió el job. No sustituye
+		# al continuity_id (que es el destinatario del aviso); lo complementa.
+		"origin_session_id": str(task.get("origin_session_id") or payload.get("origin_session_id") or ""),
+		"submitted_by": str(task.get("submitted_by") or payload.get("submitted_by") or ""),
 	}
 
 

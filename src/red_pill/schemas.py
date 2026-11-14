@@ -63,6 +63,19 @@ class CreateEngramRequest(BaseModel):
 			if key in cls.RESERVED_KEYS:
 				raise ValueError(f"Reserved key '{key}' found")
 
+			if key == "texture_parts":
+				# AD-116 revisado: una textura que no cabe se parte sin perder
+				# contenido. Cada parte es un string dentro del tope de metadata.
+				if not isinstance(val, list) or not all(isinstance(item, str) for item in val):
+					raise ValueError("texture_parts must be a list of strings")
+				if len(val) > 64:
+					raise ValueError("texture_parts exceeds 64 parts")
+				for item in val:
+					_check_null_bytes(item, "texture_parts item")
+					if len(item) > cfg.MAX_METADATA_STR:
+						raise ValueError("texture_parts item exceeds limit")
+				continue
+
 			if isinstance(val, (dict, list)) and key != "associations":
 				if isinstance(val, list):
 					for item in val:

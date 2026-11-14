@@ -56,6 +56,28 @@ For those who want to audit every byte and manually configure every variable.
 
 ---
 
+### Optional: local BitNet (ternary models on your own hardware)
+
+Red-pill can run 1.58-bit models natively. It is **optional** and **per-machine**:
+the source is pinned in git; the binaries are not (CUDA arch, drivers and toolkit
+are different on every install).
+
+```bash
+git submodule update --init --recursive   # source at the exact pin
+bash scripts/bitnet_build.sh --check      # verifies the tree and prints the pin chain
+bash scripts/bitnet_build.sh cuda         # builds this machine: cpu | cuda | vulkan
+```
+
+Weights are never taken from third parties: they are quantized locally with
+`setup_env.py` (see [BITNET_WEIGHT_PIPELINE.md](docs/TECHNICAL/BITNET_WEIGHT_PIPELINE.md)).
+The full source map — which fork, branch and commit serves each engine, and how to
+recreate it after an upstream move — is in
+[BITNET_FLAVORS.md](docs/TECHNICAL/BITNET_FLAVORS.md).
+If the tree is incomplete, the script stops and tells you which submodule to fetch
+instead of failing halfway through a compile.
+
+---
+
 ### The Final Awakening (ACI Protocol)
 Once the Bünker is active, don't limit yourself to using it as a database. Ask your Partner:
 > *"Start the Initiation Ritual (ACI Protocol). Calibrate me as your Operator."*
@@ -170,6 +192,28 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
     > **SEC-009 ADVISORY (Conexión Remota)**: Si despliegas Qdrant en un servidor remoto, es **OBLIGATORIO** configurar `QDRANT_SCHEME=https` en tu `.env`. El uso de HTTP en conexiones no locales transmite tus engramas en texto plano y compromete la soberanía total de tu Bünker. El instalador ahora bloquea y requiere confirmación manual para esta configuración insegura.
 5.  **Asimilación (v5.0)**: Ejecuta `uv run red-pill seed` y luego `bootstrap_identity.py` para anclar tus vectores inmutables en el Bünker. La identidad ya no reside en archivos sueltos.
 6.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/GUIDES/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
+
+---
+
+### Opcional: BitNet local (modelos ternarios en tu hardware)
+
+Red-pill puede correr modelos de 1.58 bits de forma nativa. Es **opcional** y
+**por máquina**: la fuente va pineada en git; los binarios no (la arquitectura CUDA,
+el driver y el toolkit cambian en cada instalación).
+
+```bash
+git submodule update --init --recursive   # fuente en el pin exacto
+bash scripts/bitnet_build.sh --check      # verifica el árbol e imprime la cadena de pins
+bash scripts/bitnet_build.sh cuda         # compila en esta máquina: cpu | cuda | vulkan
+```
+
+Los pesos nunca se toman de terceros: se cuantizan en local con `setup_env.py`
+(ver [BITNET_WEIGHT_PIPELINE.md](docs/TECHNICAL/BITNET_WEIGHT_PIPELINE.md)).
+El mapa completo de fuentes — qué fork, rama y commit sirve cada motor, y cómo
+recrearlo cuando el upstream se mueve — está en
+[BITNET_FLAVORS.md](docs/TECHNICAL/BITNET_FLAVORS.md).
+Si el árbol está incompleto, el script se para y dice qué submódulo falta, en vez
+de fallar a mitad de la compilación.
 
 ---
 

@@ -64,11 +64,25 @@ def identity_payload(harness: str | None = None) -> dict:
 	continuity = str(os.getenv("REDPILL_CONTINUITY_ID") or "").strip()
 	mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip()
 	role = str(os.getenv("REDPILL_ROLE") or "task").strip() or "task"
+	ambiguous = False
+	# Preferencia 0: el arnés puede exportar el id de su sesión al proxy. Es la
+	# señal más fuerte: identifica ESTA pestaña aunque haya varias en el mismo cwd.
+	session_env = str(os.getenv("OPENCODE_SESSION_ID") or os.getenv("OPENCODE_SESSION") or "").strip()
+	if not originator and session_env:
+		originator = f"{provider}:{session_env}"
+		try:
+			from red_pill.core.bridge import read_session_bridge
+
+			bridge = read_session_bridge(provider, session_env)
+		except Exception:
+			bridge = None
+		if isinstance(bridge, dict):
+			workdir = workdir or str(bridge.get("workdir") or "")
+			project_dir = str(bridge.get("project_dir") or "")
 	if not originator and provider in ("opencode", "claude_code"):
 		# D-BRIDGE: primero la correlación por cwd (resuelve el cuerpo de ESTA
 		# instancia); el fichero global es la degradación (último escritor gana).
 		raw = None
-		ambiguous = False
 		try:
 			from red_pill.core.bridge import REASON_AMBIGUOUS, resolve_body
 
@@ -80,8 +94,10 @@ def identity_payload(harness: str | None = None) -> dict:
 			# Dos o más sesiones vivas en este mismo cwd: la correlación no decide
 			# y el global es "la última que escribió", que puede ser OTRA alma.
 			# Atribuir mal hace que los avisos y los jobs aterricen en un alma
-			# ajena (incidente 2026-10-28); sin cuerpo es degradación honesta
-			# (fail-closed: el backend no inventa alma).
+			# ajena (incidente 2026-10-28, recurrente el 2026-11-08 con un job de
+			# MOSS). Sin cuerpo es degradación honesta: el backend NO debe caer al
+			# global (lo marca `ambiguous` y `job_submit` falla cerrado).
+			raw = None
 			logger.debug("[RedPill-Proxy] identidad ambigua en %s; sin cuerpo (no se usa el global)", _instance_cwd())
 		elif not raw:
 			try:
@@ -103,6 +119,7 @@ def identity_payload(harness: str | None = None) -> dict:
 		"continuity_id": continuity,
 		"mission_id": mission,
 		"role": role,
+		"ambiguous": bool(ambiguous),
 	}
 
 

@@ -1,0 +1,98 @@
+# Política de términos-ancla del hub (HUB-RECALL-001, D-02b).
+#
+# Un hub es un ÍNDICE: `hub_terms` es la lista de anclas con las que compite en
+# la pata keyword. La selección es determinista y vive aquí (datos, no código).
+#
+# Regla de presupuesto (D-02, aceptada por el Operador 2026-11-09):
+#   - se acumulan keywords ENTERAS por relevancia;
+#   - si el total actual es < `max_chars`, se añade la siguiente aunque lo pase;
+#   - si el total ya es >= `max_chars`, no se añade ninguna más;
+#   - nunca se parte una keyword.
+#
+# Los pesos son multiplicadores; súbelos/bájalos aquí sin tocar el código.
+
+version: 1
+max_chars: 500
+max_terms: 128
+min_term_chars: 4
+min_score: 0.0
+
+weights:
+  anchor: 2.0      # identificadores, rutas, versiones, números, acrónimos
+  proper: 0.4      # nombres propios (Mayúscula inicial)
+  title: 1.2       # el término aparece en el título del hub
+  length: 0.05     # términos más largos son algo más distintivos
+
+# Genéricos que no indexan nada: si aparecen en el título no convierten el hub
+# en recuperable para ese término. Curada a mano; ampliable sin desplegar.
+stoplist:
+  - plan
+  - planes
+  - estrategia
+  - estrategias
+  - además
+  - ademas
+  - entonces
+  - aunque
+  - mientras
+  - después
+  - despues
+  - finalmente
+  - luego
+  - así
+  - asi
+  - esto
+  - ello
+  - sistema
+  - sistemas
+  - optimizacion
+  - optimización
+  - liberacion
+  - liberación
+  - sesion
+  - sesión
+  - sesiones
+  - revision
+  - revisión
+  - ajustes
+  - ajuste
+  - cambio
+  - cambios
+  - problema
+  - problemas
+  - mejora
+  - mejoras
+  - resolucion
+  - resolución
+  - continuacion
+  - continuación
+  - identidad
+  - datos
+  - tecnico
+  - técnico
+  - tecnicos
+  - técnicos
+  - general
+  - varios
+  - nueva
+  - nuevo
+  - nuevos
+  - nuevas
+  - parte
+  - partes
+  - primer
+  - primera
+  - segundo
+  - segunda
+  - final
+  - inicio
+  - ejemplo
+  - ejemplos
+  - manera
+  - forma
+  - caso
+  - casos
+  - tema
+  - temas
+  - cosa
+  - cosas

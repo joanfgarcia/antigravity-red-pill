@@ -60,40 +60,72 @@ def annotate_prompt_version() -> str:
 	Incluye system prompts (vía stage_signature), re-escritura de voz y scorer
 	dual — antes quedaban fuera de la huella v1 (A2-B2/A3-H2 del RFC). La Bio y
 	los scopes entran como valores estáticos; la vista de fragmento como marcador.
+
+	F4-fusión (NB-001 P7): con `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` ON, los dos
+	prompts de extracción (work+social) se sustituyen por el combinado y la firma
+	lo marca (`annotate_extract=single`) para disparar la regeneración prevista.
+	OFF → firma idéntica a la anterior (comportamiento exacto).
 	"""
 	work_scope, social_scope = annotate_scopes()
 	view = fragment_view_settings()
 	extra = {"view": "|".join(view)} if view[0] != "raw" else None
+	combined = annotate_combined_prompt_id()
+	combined_static = {combined: {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}} if combined else {}
+	combined_extra = {"annotate_extract": "single"} if combined else {}
 	if annotate_prompt_set() == "v3":
-		return prompts.stage_signature(
-			["annotate_work_user_v3", "annotate_social_user_v3", "voice_rewrite_user_v2", "dual_score_user_v2"],
-			static={
+		extract_ids = [combined] if combined else ["annotate_work_user_v3", "annotate_social_user_v3"]
+		extract_static = (
+			combined_static
+			if combined
+			else {
 				"annotate_work_user_v3": {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope},
 				"annotate_social_user_v3": {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope},
+			}
+		)
+		return prompts.stage_signature(
+			extract_ids + ["voice_rewrite_user_v2", "dual_score_user_v2"],
+			static={
+				**extract_static,
 				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
 				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
 			},
-			extra={**(extra or {}), "annotate_set": "v3"},
+			extra={**(extra or {}), "annotate_set": "v3", **combined_extra},
 		)
 	if voice_v2_enabled():
-		return prompts.stage_signature(
-			["annotate_work_user_v2", "annotate_social_user_v2", "voice_rewrite_user_v2", "dual_score_user_v2"],
-			static={
+		extract_ids = [combined] if combined else ["annotate_work_user_v2", "annotate_social_user_v2"]
+		extract_static = (
+			combined_static
+			if combined
+			else {
 				"annotate_work_user_v2": {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope},
 				"annotate_social_user_v2": {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope},
+			}
+		)
+		return prompts.stage_signature(
+			extract_ids + ["voice_rewrite_user_v2", "dual_score_user_v2"],
+			static={
+				**extract_static,
 				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
 				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
 			},
-			extra=extra,
+			extra={**(extra or {}), **combined_extra},
 		)
-	return prompts.stage_signature(
-		["annotate_work_user", "annotate_social_user", "voice_rewrite_user", "dual_score_user"],
-		static={
+	extract_ids = [combined] if combined else ["annotate_work_user", "annotate_social_user"]
+	extract_static = (
+		combined_static
+		if combined
+		else {
 			"annotate_work_user": {"identity": prompts.IDENTITY_BIO},
 			"annotate_social_user": {"identity": prompts.IDENTITY_BIO},
+		}
+	)
+	return prompts.stage_signature(
+		extract_ids + ["voice_rewrite_user", "dual_score_user"],
+		static={
+			**extract_static,
 			"voice_rewrite_user": {"identity": prompts.IDENTITY_BIO},
 		},
-		extra=extra,
+		extra={**(extra or {}), **combined_extra},
 	)
 
 
@@ -241,6 +273,27 @@ def voice_v2_enabled() -> bool:
 	return annotate_prompt_set() in ("v2", "v3")
 
 
+def single_call_enabled() -> bool:
+	"""`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` (RULE 4, default OFF): fusión work+social
+	en UNA llamada (NB-001 F4, P7). OFF → dos llamadas por split (comportamiento exacto)."""
+	import red_pill.config as cfg
+
+	return bool(getattr(cfg, "MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED", False))
+
+
+def annotate_combined_prompt_id() -> Optional[str]:
+	"""Prompt de extracción combinada (work+social) según la variante vigente, o None si el flag está OFF.
+
+	F4-fusión: con el flag ON la extracción emite UNA llamada (no dos) usando el
+	prompt combinado con `scope` por idea. La variante sigue a `annotate_prompt_set()`
+	(v3/v2/v1) para conservar voz y contrato del juez actual.
+	"""
+	if not single_call_enabled():
+		return None
+	setc = annotate_prompt_set()
+	return {"v3": "annotate_combined_user_v3", "v2": "annotate_combined_user_v2"}.get(setc, "annotate_combined_user")
+
+
 # ── MEM-010 F1: manifest estructurado del pipeline annotate ──────────────────
 # Capa NUEVA y aditiva: `annotate_prompt_version()` no cambia (compatibilidad
 # con las metas existentes). El manifest expone los componentes por separado
@@ -282,6 +335,11 @@ def annotate_manifest() -> Dict[str, Any]:
 	work_scope, social_scope = annotate_scopes()
 	view = "|".join(fragment_view_settings())
 	bio = _sha_text(prompts.IDENTITY_BIO)
+	combined = annotate_combined_prompt_id()
+	if combined:
+		extract_combined = _component_signature(combined, {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope})
+	else:
+		extract_combined = None
 	if voice_v2_enabled():
 		extract_work = _component_signature("annotate_work_user_v2", {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope})
 		extract_social = _component_signature("annotate_social_user_v2", {"identity": prompts.IDENTITY_BIO, "social_scope": social_scope})
@@ -298,8 +356,6 @@ def annotate_manifest() -> Dict[str, Any]:
 		"dead_zone": float(getattr(cfg, "MEMENTO_ANNOTATE_DEAD_ZONE", 0.05)),
 	}
 	components: Dict[str, Any] = {
-		"extract_work": extract_work,
-		"extract_social": extract_social,
 		"voice_rewrite_prompt": voice_prompt,
 		"voice_rewrite_enabled": bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_REWRITE", False)),
 		"dual_score": dual,
@@ -310,18 +366,35 @@ def annotate_manifest() -> Dict[str, Any]:
 		"dedup_policy": {"algo": "p1a-hash+tokens", "threshold": memento_dedup_threshold()},
 		"thresholds": thresholds,
 	}
-	extract_contract = _sha_text(
-		json.dumps(
-			{
-				"extract_work": extract_work,
-				"extract_social": extract_social,
-				"voice_rewrite_prompt": voice_prompt,
-				"bio": bio,
-				"fragment_view": view,
-			},
-			sort_keys=True,
+	if extract_combined is not None:
+		components["extract_combined"] = extract_combined
+		components["annotate_extract"] = "single"
+		extract_contract = _sha_text(
+			json.dumps(
+				{
+					"extract_combined": extract_combined,
+					"voice_rewrite_prompt": voice_prompt,
+					"bio": bio,
+					"fragment_view": view,
+				},
+				sort_keys=True,
+			)
 		)
-	)
+	else:
+		components["extract_work"] = extract_work
+		components["extract_social"] = extract_social
+		extract_contract = _sha_text(
+			json.dumps(
+				{
+					"extract_work": extract_work,
+					"extract_social": extract_social,
+					"voice_rewrite_prompt": voice_prompt,
+					"bio": bio,
+					"fragment_view": view,
+				},
+				sort_keys=True,
+			)
+		)
 	score_contract = _sha_text(json.dumps({"dual_score": dual, "thresholds": thresholds}, sort_keys=True))
 	return {"schema": MANIFEST_SCHEMA, "components": components, "extract_contract": extract_contract, "score_contract": score_contract}
 
@@ -343,6 +416,18 @@ def refine_prompt_version() -> str:
 
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs
 Transport = Callable[[str, str, int], str]
+
+
+# Marca inequívoca de prompt truncado en fallback (NB-001 F2a, D-NB-03): cuando
+# `http_transport` recorta el user ante un 500 por exceso de contexto (0.6×), la
+# respuesta se marca con este sufijo. `distill` lo detecta con `is_degraded` y
+# sella la sección `degraded` — y una sección degraded NUNCA se reusa.
+DEGRADED_MARKER = "[REDPILL:DEGRADED:TRUNCATED]"
+
+
+def is_degraded(raw: str) -> bool:
+	"""True si el transporte truncó el prompt en un fallback (marca inequívoca)."""
+	return DEGRADED_MARKER in raw
 
 
 def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
@@ -501,6 +586,7 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		payload["thinking"] = llm["thinking"]
 	if llm["device_fallback"]:
 		payload["device_fallback"] = llm["device_fallback"]
+	truncated = False
 	for _attempt in range(4):
 		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
 		if response.status_code == 500 and len(attempt_user) > 1500:
@@ -509,6 +595,7 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 			logger.warning(f"LLM 500 (posible contexto) — recortando prompt {len(attempt_user)}→{new_len} chars y reintentando")
 			attempt_user = attempt_user[:new_len]
 			payload["messages"][1]["content"] = attempt_user
+			truncated = True
 			continue
 		response.raise_for_status()
 		_body = response.json()
@@ -533,7 +620,12 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 				f"LLM truncado (finish_reason=length, max_tokens={max_tokens}, modelo={_body.get('model')}) "
 				"— la respuesta se cortó; si es JSON, el pase la descartará"
 			)
-		return str(_choice.get("message", {}).get("content") or "").strip()
+		content = str(_choice.get("message", {}).get("content") or "").strip()
+		if truncated:
+			# Marca inequívoca (D-NB-03): el modelo vio solo una fracción del
+			# prompt; el consumidor (distill) debe sellar la sección `degraded`.
+			content += DEGRADED_MARKER
+		return content
 	# Agotados los reintentos: propagar el error real del último intento.
 	response.raise_for_status()
 	return ""

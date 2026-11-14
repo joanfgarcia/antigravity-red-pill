@@ -816,7 +816,7 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 				]
 			)
 			to_delete = []
-			hub_members: set = set()
+			hub_ids_to_release: list = []
 			offset = None
 			while True:
 				points, offset = memory_manager.client.scroll(
@@ -835,23 +835,46 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 					if now - float(base) > life:
 						to_delete.append(str(p.id))
 						# Si es un hub, liberar sus miembros (hubbed=False) para que
-						# vuelvan al recall primario (D9): si no, quedarían invisibles.
+						# vuelvan al recall primario (D9): se resuelven por `hub_id`
+						# (AD-116: el hub ya no duplica la lista de miembros).
 						if is_hub:
-							for mid in pl.get("members") or []:
-								hub_members.add(str(mid))
+							hub_ids_to_release.append(str(p.id))
 				if offset is None:
 					break
 			if to_delete:
 				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)  # type: ignore[arg-type]
 				stats["demoted"] += len(to_delete)
 				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
-			release = [mid for mid in hub_members if mid not in set(to_delete)]
+			release: set = set()
+			for hid in hub_ids_to_release:
+				try:
+					flt = qm.Filter(must=[qm.FieldCondition(key="hub_id", match=qm.MatchValue(value=hid))])
+					off = None
+					while True:
+						members, off = memory_manager.client.scroll(
+							collection, scroll_filter=flt, limit=1000, offset=off, with_payload=False, with_vectors=False
+						)
+						release.update(str(m.id) for m in members)
+						if off is None:
+							break
+				except Exception as e:
+					logger.warning(f"[SLEEP ENGINE] No se pudieron resolver miembros del hub {hid}: {e}")
+			release -= set(to_delete)
 			if release:
 				try:
-					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=release)
+					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=list(release))
 					stats["released"] = stats.get("released", 0) + len(release)
 				except Exception as e:
 					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
+			# La erosión puede dejar islas (miembros demotados, hub vivo): se
+			# reconcilia el estado blocked/count para no reintentar a ciegas.
+			if to_delete:
+				try:
+					from red_pill.metabolism.hub_synthesis import reconcile_hub_blocks
+
+					reconcile_hub_blocks(memory_manager, collections=(collection,), apply=True)
+				except Exception as e:
+					logger.warning(f"[SLEEP ENGINE] No se pudo reconciliar hubs bloqueados en {collection}: {e}")
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
 	return stats

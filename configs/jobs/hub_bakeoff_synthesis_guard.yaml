@@ -1,0 +1,27 @@
+# Hub bake-off — K2 con compactación por SÍNTESIS (sin corte).
+#
+# Mide el contrato de salida AD-116 revisado (2026-11-09): la compactación es
+# SIEMPRE por reescritura; si el modelo no obedece, el texto se conserva entero
+# y se marca. Si la textura no cabe en metadata, se parte en `texture_parts`
+# (síntesis de partes; segmentación lossless solo como último recurso). NUNCA
+# se recorta por corte.
+#
+# Un step = una combinación (sesión × modelo). La lista se congela en el primer
+# step y el job es reanudable por elemento. No escribe hubs: solo sintetiza y
+# registra `docs/BENCHMARKS/HUB_BAKEOFF.jsonl` + `.md`.
+#
+# Lanzar como job (no en foreground):
+#   red-pill job submit --recipe hub_bakeoff_synthesis_guard
+# Requiere GPU libre; si hay otro job de hubs, encadenar con --parent.
+source: element_job
+priority: 4
+title: Hub bake-off — K2 síntesis sin corte (target 400)
+mission_id: hub-bakeoff
+step_command: .venv/bin/python scripts/hub_bakeoff.py --run-element --concise --suffix synth400 --texture-max-chars 400 --models granite_8b,k2_horizon_7b
+elements_command: .venv/bin/python scripts/hub_bakeoff.py --list --concise --suffix synth400 --texture-max-chars 400 --models granite_8b,k2_horizon_7b
+defer_exit_code: 77
+skip_exit_code: 79
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 60

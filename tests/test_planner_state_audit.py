@@ -84,3 +84,344 @@ def test_render_no_aplica_nada(tmp_path):
 	md = m.render_markdown(results, desk, [])
 	assert "Propuestas, no órdenes" in md
 	assert (desk / "planner" / "design" / "X" / "RFC_X.md").read_text(encoding="utf-8").startswith("---\nid: AWAKEN-333\nstatus: blocked")
+
+
+def test_repo_suma_al_del_cwd_y_no_duplica(tmp_path, monkeypatch):
+	"""`--repo` AÑADE al repo del cwd: reemplazarlo perdía media evidencia."""
+	m = _load()
+	here = _git_repo(tmp_path, "AWAKEN-999")
+	other = tmp_path / "other"
+	other.mkdir()
+	subprocess.run(["git", "-C", str(other), "init", "-q", "-b", "main"], check=True, capture_output=True, text=True)
+	monkeypatch.chdir(here)
+
+	repos = m._resolve_repos([str(other)])
+	assert repos == [here.resolve(), other.resolve()]
+
+	# Repetir el repo del cwd no lo duplica.
+	assert m._resolve_repos([str(here), str(here)]) == [here.resolve()]
+
+	# Fuera de un repo git, quedan solo los declarados.
+	monkeypatch.chdir(tmp_path / "nowhere" if (tmp_path / "nowhere").mkdir() is None else tmp_path)
+	assert m._resolve_repos([str(other)]) == [other.resolve()]
+
+
+def test_token_candidates_baja_a_la_familia_pero_no_al_generico(tmp_path):
+	"""Un commit cita `AWAKEN-002`, casi nunca `AWAKEN-002-DESIGN`."""
+	m = _load()
+	assert m._token_candidates("AWAKEN-002-DESIGN") == ["AWAKEN-002-DESIGN", "AWAKEN-002"]
+	assert m._token_candidates("SPEC-B01-001") == ["SPEC-B01-001", "SPEC-B01", "B01-001"]
+	# Sin dígito no se baja más: `SPEC`/`PLAN` arrastrarían medio repo.
+	assert "SPEC" not in m._token_candidates("SPEC-B01-001")
+	# El prefijo de familia se cae, el número se queda.
+	assert m._token_candidates("PLAN-OBS-001") == ["PLAN-OBS-001", "OBS-001"]
+	assert m._token_candidates("MEM-010-F7") == ["MEM-010-F7", "MEM-010"]
+
+
+def test_evidencia_bajo_la_familia_no_se_lee_como_vacia(tmp_path):
+	"""Trabajo real bajo la familia NO puede salir como `no-evidence` high."""
+	m = _load()
+	repo = _git_repo(tmp_path, "AWAKEN-999")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999-DESIGN", "in-progress")
+	results = m.audit(desk, [repo], max_commits=10)
+	assert len(results) == 1
+	kinds = {p["kind"] for p in results[0]["proposals"]}
+	assert "no-evidence" not in kinds
+	assert "weak-evidence" in kinds
+	assert results[0]["evidence"]["token_used"] == "AWAKEN-999"
+	assert all(p["severity"] != "high" for p in results[0]["proposals"])
+
+
+def test_sin_evidencia_ni_bajo_la_familia_sigue_siendo_high(tmp_path):
+	"""La bajada a la familia no puede tapar la ausencia real de evidencia."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999-DESIGN", "implemented")
+	results = m.audit(desk, [repo], max_commits=10)
+	kinds = {p["kind"] for p in results[0]["proposals"]}
+	assert "no-evidence" in kinds
+
+
+def test_render_dice_bajo_que_token_hay_evidencia(tmp_path):
+	m = _load()
+	repo = _git_repo(tmp_path, "AWAKEN-999")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999-DESIGN", "in-progress")
+	md = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert "token de evidencia: `AWAKEN-999`" in md
+	# La cabecera no anuncia un "cambio" que no cambia nada.
+	assert "`in-progress` → sin cambio (revisar a mano)" in md
+
+
+def _head(repo: Path) -> str:
+	out = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True)
+	return out.stdout.strip()
+
+
+def test_evidencia_declarada_en_el_frontmatter_no_es_no_evidence(tmp_path):
+	"""Un doc que nombra sus commits en `evidence:` no puede salir como vacío.
+
+	El mensaje del commit no cita el id: la única ruta a esa evidencia es la
+	declaración del propio documento. Antes salía `no-evidence` high.
+	"""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	sha = _head(repo)
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999", "implemented", extra=f'evidence: ["{repo.name}:{sha}"]\n')
+	assert m.audit(desk, [repo], max_commits=10) == []
+
+
+def test_evidencia_declarada_que_no_existe_no_se_acepta(tmp_path):
+	"""Declarar no es probar: un sha que no está en el repo no tapa la ausencia."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999", "implemented", extra=f'evidence: ["{repo.name}:deadbeef"]\n')
+	kinds = {p["kind"] for p in m.audit(desk, [repo], max_commits=10)[0]["proposals"]}
+	assert "no-evidence" in kinds
+
+
+def test_evidencia_en_prosa_no_cuenta_como_evidencia(tmp_path):
+	"""«R5 del 2026-10-14» no es direccionable: aceptarlo sería mentir al revés."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999", "implemented", extra="evidence: Remediación R5 del 2026-10-14 (rama feat/x)\n")
+	kinds = {p["kind"] for p in m.audit(desk, [repo], max_commits=10)[0]["proposals"]}
+	assert "no-evidence" in kinds
+
+
+def test_evidencia_declarada_bajo_otro_nombre_de_repo_cuenta(tmp_path):
+	"""Un worktree del mismo repo tiene otro nombre: el prefijo es pista, no candado."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	sha = _head(repo)
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999", "closed", extra=f'evidence: ["sharing:{sha}"]\n')
+	# El prefijo se resuelve al repo real aunque se llame distinto.
+	assert m._declared_evidence([repo], [f"sharing:{sha}"]) == [f"{repo.name}:{sha}"]
+	# Y con la evidencia ya en una rama viva, `closed` queda verificado: nada que proponer.
+	assert m.audit(desk, [repo], max_commits=10) == []
+
+
+def _git_repo_named(parent: Path, name: str, token: str) -> Path:
+	repo = parent / name
+	repo.mkdir()
+
+	def g(*a):
+		subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+
+	g("init", "-q", "-b", "main")
+	g("config", "user.email", "t@t")
+	g("config", "user.name", "t")
+	(repo / "f.txt").write_text("x", encoding="utf-8")
+	g("add", ".")
+	g("commit", "-q", "-m", f"feat: {token} implemented")
+	return repo
+
+
+def test_proyecto_no_escaneado_no_se_vende_como_no_evidence(tmp_path):
+	"""No haber mirado no es lo mismo que no existir: baja a `unscanned-project`."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	desk = _desk_with_rfc(tmp_path, "AWAKEN-999", "in-progress", extra="project: inexistente\n")
+	results = m.audit(desk, [repo], max_commits=10)
+	assert len(results) == 1
+	props = results[0]["proposals"]
+	assert {p["kind"] for p in props} == {"unscanned-project"}
+	assert all(p["severity"] != "high" for p in props)
+	assert "NO medido" in props[0]["reason"]
+
+
+def test_repo_del_proyecto_se_descubre_junto_al_desk(tmp_path):
+	"""El trabajo de un doc de `frankenswarm` está en su repo, no en el del cwd."""
+	m = _load()
+	_git_repo_named(tmp_path, "frankenswarm", "WSP-777")
+	desk = _desk_with_rfc(tmp_path, "WSP-777", "in-progress", extra="project: frankenswarm\n")
+	assert m.audit(desk, [], max_commits=10) == []
+
+
+def test_alias_del_kernel_se_resuelve_al_repo_sharing(tmp_path):
+	"""El proyecto `red-pill` vive en el repo `sharing`: sin alias no se mira."""
+	m = _load()
+	repo = _git_repo_named(tmp_path, "sharing", "SPEC-888")
+	sha = _head(repo)
+	desk = _desk_with_rfc(tmp_path, "SPEC-888", "implemented", extra=f'project: red-pill\nevidence: ["sharing:{sha}"]\n')
+	assert m.audit(desk, [], max_commits=10) == []
+
+
+def _commit_on(repo: Path, branch: str, token: str) -> str:
+	def g(*a):
+		subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+
+	g("checkout", "-q", "-b", branch)
+	(repo / f"{branch.replace(chr(47), chr(95))}.txt").write_text("y", encoding="utf-8")
+	g("add", ".")
+	g("commit", "-q", "-m", f"feat: {token} implemented")
+	return _head(repo)
+
+
+def test_closed_con_commit_en_la_rama_viva_no_pide_merge(tmp_path):
+	"""El release squash-mergea: no hay commit de merge. `closed` con el trabajo
+	en `next` (la rama viva de frankenswarm) está cerrado, no 'sin verificar'."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	sha = _commit_on(repo, "next", "WSP-555")
+	desk = _desk_with_rfc(tmp_path, "WSP-555", "closed", extra=f'evidence: ["{repo.name}:{sha}"]\n')
+	assert m.audit(desk, [repo], max_commits=10) == []
+
+
+def test_closed_con_commit_fuera_de_la_rama_viva_sigue_bandera(tmp_path):
+	"""En una rama de trabajo sin aterrizar, `closed` NO está verificado."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	sha = _commit_on(repo, "feat/x", "WSP-666")
+	desk = _desk_with_rfc(tmp_path, "WSP-666", "closed", extra=f'evidence: ["{repo.name}:{sha}"]\n')
+	kinds = {p["kind"] for p in m.audit(desk, [repo], max_commits=10)[0]["proposals"]}
+	assert "unverified-closed" in kinds
+
+
+def _commit_body_only(repo: Path, token: str, branch: str = "main") -> str:
+	"""Commit cuyo CUERPO enumera el id (como el CHANGELOG de un release)."""
+
+	def g(*a):
+		subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+
+	g("checkout", "-q", branch)
+	(repo / "CHANGELOG.md").write_text(f"z {token}", encoding="utf-8")
+	g("add", ".")
+	g("commit", "-q", "-m", "Release 9.9.9 — muchas cosas", "-m", f"* feat: algo que cita {token} de pasada")
+	return _head(repo)
+
+
+def test_mencion_en_el_cuerpo_no_promociona_un_draft(tmp_path):
+	"""Un release que enumera el id en su cuerpo NO es prueba de trabajo: no
+	convierte un `draft` en `in-progress` (falso positivo medido en el desk)."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-001")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-001", "draft")
+	results = m.audit(desk, [repo], max_commits=10)
+	kinds = {p["kind"] for p in results[0]["proposals"]}
+	assert "stale-status" not in kinds
+	assert "mention-only" in kinds
+	assert {p["suggest"] for p in results[0]["proposals"]} == {"draft"}
+
+
+def test_mencion_en_el_cuerpo_no_degrada_a_high(tmp_path):
+	"""Y tampoco al revés: la mención impide vender `no-evidence` (la ausencia
+	no está probada cuando el id aparece en algún sitio)."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-002")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-002", "in-progress")
+	props = m.audit(desk, [repo], max_commits=10)[0]["proposals"]
+	assert not any(p["kind"] == "no-evidence" for p in props)
+	assert {p["kind"] for p in props} == {"mention-only"}
+	assert props[0]["severity"] == "medium"
+
+
+def test_asunto_sigue_siendo_prueba(tmp_path):
+	"""El asunto sí anuncia el trabajo: `draft` → `in-progress` se mantiene."""
+	m = _load()
+	repo = _git_repo(tmp_path, "RFC-SUBJECT-001")
+	desk = _desk_with_rfc(tmp_path, "RFC-SUBJECT-001", "draft")
+	results = m.audit(desk, [repo], max_commits=10)
+	assert {p["kind"] for p in results[0]["proposals"]} == {"stale-status"}
+
+
+def test_mention_only_aparece_en_el_render(tmp_path):
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(repo, "RFC-MENTION-003")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-003", "in-progress")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert "Revisar a mano — solo mención en cuerpo de commit" in out
+	assert "`RFC-MENTION-003` (`in-progress`) — 1 mención(es)" in out
+	# Y no se vende como bloque accionable: no hay nada que decidir.
+	assert "## RFC-MENTION-003" not in out
+
+
+def test_repo_ajeno_no_mete_menciones_en_un_doc_de_otro_proyecto(tmp_path):
+	"""El CHANGELOG de `sharing` citaba `POP-001` y `BITACORA-BIT-V2`, que son de
+	`frankenswarm`: salían «a revisar» por un release que no es suyo. La mención
+	solo cuenta en el repo del documento."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "OTRA-COSA-1")
+	_commit_body_only(ajeno, "WSP-901")
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-2")
+	desk = _desk_with_rfc(tmp_path, "WSP-901", "in-progress", extra="project: frankenswarm\n")
+	results = m.audit(desk, [ajeno], max_commits=10)
+	# Sin evidencia en su repo: `no-evidence` (medido), pero la mención del repo
+	# ajeno NO entra — ni como mención ni como prueba.
+	assert results[0]["evidence"]["mentions"] == []
+	assert not any(p["kind"] == "mention-only" for p in results[0]["proposals"])
+
+
+def test_repo_ajeno_no_promociona_un_doc_de_otro_proyecto(tmp_path):
+	"""Ni siquiera el ASUNTO de un repo ajeno es prueba: el commit no es suyo."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "WSP-902")
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-3")
+	desk = _desk_with_rfc(tmp_path, "WSP-902", "draft", extra="project: frankenswarm\n")
+	assert m.audit(desk, [ajeno], max_commits=10) == []
+
+
+def test_mencion_en_su_propio_repo_sigue_contando(tmp_path):
+	"""Lo que se retira es el barrido ajeno, no la señal: en su repo la mención
+	sigue apareciendo como «revisar a mano»."""
+	m = _load()
+	ajeno = _git_repo(tmp_path, "OTRA-COSA-4")
+	propio = _git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-5")
+	_commit_body_only(propio, "WSP-903")
+	desk = _desk_with_rfc(tmp_path, "WSP-903", "in-progress", extra="project: frankenswarm\n")
+	props = m.audit(desk, [ajeno], max_commits=10)[0]["proposals"]
+	assert {p["kind"] for p in props} == {"mention-only"}
+
+
+def test_evidencia_declarada_de_otro_repo_cuenta_para_un_doc_ajeno(tmp_path):
+	"""`evidence:` es una declaración explícita: se acepta aunque el sha viva en
+	otro repo (el frontmatter dice `sharing:<sha>`, no un barrido por id)."""
+	m = _load()
+	sharing = _git_repo_named(tmp_path, "sharing", "OTRA-COSA-6")
+	sha = _head(sharing)
+	_git_repo_named(tmp_path, "frankenswarm", "OTRA-COSA-7")
+	desk = _desk_with_rfc(
+		tmp_path,
+		"WSP-904",
+		"implemented",
+		extra=f'project: frankenswarm\nevidence: ["sharing:{sha}"]\n',
+	)
+	assert m.audit(desk, [sharing], max_commits=10) == []
+
+
+def test_mencion_cita_el_commit_y_no_solo_el_recuento(tmp_path):
+	"""«1 mención» sin sha no se puede comprobar: el acta cita el commit que la
+	provoca (sha corto + asunto), o el operador no tiene nada que decidir."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-9")
+	sha = _commit_body_only(repo, "RFC-MENTION-005")
+	desk = _desk_with_rfc(tmp_path, "RFC-MENTION-005", "closed")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert f"`{repo.name}:{sha[:7]}`" in out
+	assert "Release 9.9.9 — muchas cosas" in out
+
+
+def test_mencion_bajo_familia_lo_declara(tmp_path):
+	"""`AUDIT-FUSION-901` casa por la familia `FUSION-901`: la mención es real
+	pero de la familia. El acta lo dice en vez de confundir los dos ids."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-10")
+	_commit_body_only(repo, "FUSION-901")
+	desk = _desk_with_rfc(tmp_path, "AUDIT-FUSION-901", "closed")
+	out = m.render_markdown(m.audit(desk, [repo], max_commits=10), desk, [repo])
+	assert "bajo la familia `FUSION-901`" in out
+
+
+def test_fichero_con_otro_separador_cuenta_como_evidencia(tmp_path):
+	"""`BITACORA-BIT-V2` vive en `docs/BITACORA_BIT_V2.md`: el pathspec tolera
+	guion y guion bajo, o el doc salía `no-evidence` con su fichero delante."""
+	m = _load()
+	repo = _git_repo(tmp_path, "OTRA-COSA-8")
+	(repo / "docs").mkdir()
+	(repo / "docs" / "BITACORA_BIT_V2.md").write_text("bitácora", encoding="utf-8")
+	subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True, text=True)
+	subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "docs: bitácora"], check=True, capture_output=True, text=True)
+	desk = _desk_with_rfc(tmp_path, "BITACORA-BIT-V2", "in-progress")
+	assert m.audit(desk, [repo], max_commits=10) == []

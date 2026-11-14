@@ -41,7 +41,8 @@ async def test_interaction_ttl_purges_only_stale_points():
 	mem.client.delete("interaction_memories", points_selector=models.PointIdsList(points=[fresh_id]), wait=True)
 
 
-async def test_queue_purge_rendered_only_rendered_completed_and_cold(tmp_path):
+async def test_queue_purge_rendered_mcp_groups_and_voice_age(tmp_path):
+	"""El pase `mcp:` (única copia en Memento) y el de voz/edad conviven."""
 	from red_pill.memento.registry import MementoRegistry
 
 	db = tmp_path / "bunker_queue.db"
@@ -49,11 +50,11 @@ async def test_queue_purge_rendered_only_rendered_completed_and_cold(tmp_path):
 	con.execute("CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, status TEXT, created_at REAL, originator TEXT)")
 	old_day_epoch = 1785542400.0 + 3600  # 2026-08-01, frío (margen 7d desde el 26-08)
 	rows = [
-		("purgable", "r", "completed", old_day_epoch, "Aleth (Test)"),  # renderizado + completed + frío → fuera
+		("purgable", "r", "completed", old_day_epoch, "Aleth (Test)"),  # grupo renderizado + frío → fuera
 		("pendiente", "r", "pending", old_day_epoch, "Aleth (Test)"),  # no completed → se queda
-		("sin render", "r", "completed", old_day_epoch, "otro_origen"),  # grupo no renderizado → se queda
+		("sin render", "r", "completed", old_day_epoch, "otro_origen"),  # frío para el mood → fuera
 		("null purgable", "r", "completed", old_day_epoch, None),  # grupo unknown renderizado → fuera
-		("reciente", "r", "completed", time.time(), "Aleth (Test)"),  # día caliente → se queda
+		("reciente", "r", "completed", time.time(), "Aleth (Test)"),  # dentro del margen → se queda
 	]
 	con.executemany("INSERT INTO memory_queue (prompt, response, status, created_at, originator) VALUES (?,?,?,?,?)", rows)
 	con.commit()
@@ -66,9 +67,54 @@ async def test_queue_purge_rendered_only_rendered_completed_and_cold(tmp_path):
 	registry.save()
 
 	result = await QueuePurgeRenderedPlugin().execute(FakeJanitor(), {}, queue_db_path=db, registry_path=tmp_path / "reg.json")
-	assert result["purged"] == 2
+	assert result["purged_groups"] == 2, result
+	assert result["purged_expired"] == 1, result  # "sin render" ya frío para el mood
+	assert result["purged"] == 3
 
 	con = sqlite3.connect(db)
 	remaining = sorted(r[0] for r in con.execute("SELECT prompt FROM memory_queue").fetchall())
 	con.close()
-	assert remaining == ["pendiente", "reciente", "sin render"]
+	assert remaining == ["pendiente", "reciente"]
+
+
+async def test_queue_purge_rendered_by_voice_and_age(tmp_path):
+	"""v2: sin voz del Operador se va ya; con voz, solo cuando caduca para el mood."""
+
+	db = tmp_path / "bunker_queue.db"
+	con = sqlite3.connect(db)
+	con.execute(
+		"CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, status TEXT, "
+		"created_at REAL, originator TEXT, session_id TEXT)"
+	)
+	cold = time.time() - 30 * 86400
+	rows = [
+		("revisa el log del despertar y dime qué ves", "r", "completed", cold, "opencode", "ses_aaa"),
+		("revisa el log de hoy, que no me fío", "r", "completed", time.time(), "opencode", "ses_aaa"),
+		("<task-notification><task-id>x</task-id></task-notification>", "r", "completed", time.time(), "claude_code", "ses_bbb"),
+		("[CORO notify · hilo E-1 · salto 0/2] de: abc", "r", "completed", cold, "opencode", "ses_aaa"),
+		("You are a subagent spawned by another session. Lens: gaps.", "r", "completed", cold, "opencode", "ses_ccc"),
+		("<user_rules> <RULE[user_global]> CRITICAL: Respond ONLY to the current message", "r", "completed", cold, "opencode", "ses_ccc"),
+		("pendiente de drenar", "r", "pending", cold, "opencode", "ses_aaa"),
+	]
+	con.executemany(
+		"INSERT INTO memory_queue (prompt, response, status, created_at, originator, session_id) VALUES (?,?,?,?,?,?)",
+		rows,
+	)
+	con.commit()
+	con.close()
+
+	plugin = QueuePurgeRenderedPlugin()
+	dry = await plugin.execute(FakeJanitor(), {}, queue_db_path=db, registry_path=tmp_path / "reg.json", dry_run=True)
+	assert dry["purged"] == 5, dry  # caducada + 4 sin voz
+	assert dry["purged_no_voice"] == 4 and dry["purged_expired"] == 1
+	con = sqlite3.connect(db)
+	assert con.execute("SELECT COUNT(*) FROM memory_queue").fetchone()[0] == 7, "dry-run no borra"
+	con.close()
+
+	result = await plugin.execute(FakeJanitor(), {}, queue_db_path=db, registry_path=tmp_path / "reg.json")
+	assert result["purged"] == 5
+
+	con = sqlite3.connect(db)
+	remaining = sorted(r[0] for r in con.execute("SELECT prompt FROM memory_queue").fetchall())
+	con.close()
+	assert remaining == ["pendiente de drenar", "revisa el log de hoy, que no me fío"]

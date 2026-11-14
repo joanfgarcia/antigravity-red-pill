@@ -93,7 +93,7 @@ def test_failed_step_after_kill_does_not_resurrect(queue):
 	assert queue.pop_next_task() is None  # y nadie lo vuelve a reclamar
 
 
-def test_failed_step_after_discard_keeps_frustrated(queue):
+def test_failed_step_after_discard_keeps_cancelled(queue):
 	"""Con `discard`, el fallo del step tampoco reabre el circuito."""
 	job_id = queue.enqueue_task(source="samantha", payload={})
 	queue.pop_next_task()
@@ -102,7 +102,7 @@ def test_failed_step_after_discard_keeps_frustrated(queue):
 	queue.mark_failed(job_id, "boom tras el discard")
 
 	row = queue.get_task(job_id)
-	assert row["status"] == "FRUSTRATED"
+	assert row["status"] == "CANCELLED"
 	assert row["attempts"] == 0
 
 

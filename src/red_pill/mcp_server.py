@@ -513,6 +513,40 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
+def _hub_pointer(payload: Dict[str, Any]) -> str:
+	"""Línea compacta de punteros hub (D-07): id, sesión, rangos y nº de miembros.
+
+	Se imprime para TODO hit con `hub_id` (hub o miembro rescatado): el agente
+	necesita el puntero para abrir el detalle con `hub_members`, no el texto.
+	"""
+	hub_id = str(payload.get("hub_id") or "")
+	is_hub = payload.get("node_type") == "synthesis_hub" or payload.get("lazarus_phase") == "synthesis_hub"
+	if not hub_id and is_hub:
+		hub_id = str(payload.get("_point_id") or "")
+	if not hub_id and not is_hub:
+		return ""
+	bits = [f"hub_id={hub_id[:36]}"]
+	sid = payload.get("session_id")
+	if sid:
+		bits.append(f"session={str(sid)[:24]}")
+	if is_hub:
+		members = payload.get("hub_members_count")
+		if members is not None:
+			bits.append(f"members={int(members)}")
+		ranges = payload.get("hub_partition_ranges") or []
+		if isinstance(ranges, (list, tuple)) and ranges:
+			pairs = [f"{ranges[i]}-{ranges[i + 1]}" for i in range(0, min(len(ranges) - 1, 15), 2)]
+			bits.append("ranges=" + ",".join(pairs))
+		terms = payload.get("hub_terms")
+		if isinstance(terms, (list, tuple)):
+			bits.append(f"terms={len(terms)}")
+		if payload.get("hub_synth_version"):
+			bits.append(f"v={payload.get('hub_synth_version')}")
+	else:
+		bits.append("member")
+	return "  ↳ " + " ".join(bits)
+
+
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="recall",
@@ -572,6 +606,9 @@ async def handle_recall(arguments: Dict[str, Any]):
 		intensity = payload.get("intensity", 1.0)
 		status = " [IMMUNE]" if payload.get("immune") else f" (Score: {float(score):.2f})"
 		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
+		pointer = _hub_pointer({**payload, "_point_id": str(getattr(hit, "id", ""))})
+		if pointer:
+			lines.append(pointer)
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
@@ -602,6 +639,19 @@ async def handle_recall(arguments: Dict[str, Any]):
 				"enum": ["session", "member"],
 				"description": "session = cadena de hubs (macro); member = cadena intra-sesión de miembros (micro). Default: session.",
 			},
+			"limit": {
+				"type": "integer",
+				"description": "level=member: max miembros a devolver (default 20 con SW_TRAVERSE_MEMBER_LIMIT_ENABLED; si no, 500 legado).",
+			},
+			"offset": {
+				"type": "integer",
+				"description": "level=member: miembros a saltar (paginación). Default 0.",
+			},
+			"mode": {
+				"type": "string",
+				"enum": ["titles", "content"],
+				"description": "level=member: titles (≤60 chars) o content (≤200 chars). Default: content.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -620,7 +670,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		client = manager.client
 
 		# 1. Find the best matching synthesis_hub via semantic search (search wider, filter to hubs)
-		hits = manager.search_and_reinforce(collection, query, limit=50, caller="traverse")
+		hits = manager.search_and_reinforce(collection, query, limit=50, caller="traverse", hybrid=True)
 		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
 		if not hub_hits:
 			return [
@@ -635,33 +685,62 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 
 		start = hub_hits[0]
 
-		# ── MICRO (D8): cadena intra-sesión de miembros (orden de refine) ──────
+		# ── MICRO (D8): cadena intra-sesión de miembros (orden created_at) ────
 		if level == "member":
 			sid = start.payload.get("session_id")
 			if not sid:
 				return [types.TextContent(type="text", text="El nodo inicial no tiene session_id; no hay micro-hilo.")]
 			from qdrant_client.http import models as _qm
 
-			from red_pill.metabolism.thread_synthesis import order_members
+			from red_pill.config import get_config
+			from red_pill.metabolism.hub_synthesis import is_content_node, sort_members_chronologically
 
+			cfg_now = get_config()
+			bounded = bool(getattr(cfg_now, "SW_TRAVERSE_MEMBER_LIMIT_ENABLED", False))
+			offset = max(0, int(arguments.get("offset", 0) or 0))
+			raw_limit = arguments.get("limit")
+			if raw_limit is None:
+				limit = int(getattr(cfg_now, "MEMORY_TRAVERSE_MEMBER_DEFAULT", 20)) if bounded else 500
+			else:
+				limit = int(raw_limit)
+			limit = max(1, min(limit, 500))
+			mode = str(arguments.get("mode", "content"))
+			content_chars = 60 if mode == "titles" else 200
+			# Con el flag OFF se conserva el comportamiento legado (500×200);
+			# con el flag ON se aplica el presupuesto de salida (D-13).
+			max_total_chars = int(getattr(cfg_now, "MEMORY_HUB_MEMBERS_MAX_CHARS", 8000) or 8000) if bounded else 10**9
+
+			# Qdrant no ordena por payload: se trae una ventana acotada y se
+			# ordena/ paginación en memoria. Nunca 500×200 chars por defecto
+			# cuando el flag está ON.
+			scan_limit = min(500, max(limit + offset, 100 if bounded else 500))
 			pts, _ = client.scroll(
 				collection,
 				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=sid))]),
-				limit=500,
+				limit=scan_limit,
 				with_payload=True,
 			)
 			members = [
 				(str(p.id), p.payload or {})
 				for p in pts
-				if (p.payload or {}).get("lazarus_phase") != "synthesis_hub" and (p.payload or {}).get("node_type") != "synthesis_hub"
+				if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")
 			]
-			ordered = order_members(members)
+			ordered = sort_members_chronologically(members)
+			window = ordered[offset : offset + limit]
 			start_id = str(start.id)
-			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} miembros", ""]
-			for mid, mp in ordered:
+			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} escaneados", ""]
+			used = 0
+			for mid, mp in window:
+				text = str(mp.get("content", "")).replace("\n", " ").strip()
+				text = text[:content_chars]
 				mark = "  ← START" if mid == start_id else ""
-				lines.append(f"· [{mid[:8]}] {str(mp.get('content', ''))[:200]}{mark}")
-			lines.append(f"\nTotal: {len(ordered)} miembros (orden por member_index/refine)")
+				line = f"· [{mid[:8]}] {text}{mark}"
+				if used + len(line) > max_total_chars:
+					lines.append(f"… (ventana {offset}-{offset + len(window)}; salida acotada a {max_total_chars} chars)")
+					break
+				used += len(line)
+				lines.append(line)
+			lines.append(f"\nTotal: {len(ordered)} miembros | ventana {offset}-{offset + len(window)} (orden created_at)")
 			return [types.TextContent(type="text", text="\n".join(lines))]
 
 		def _fetch(point_id: str) -> dict | None:
@@ -711,6 +790,104 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 	except Exception as e:
 		logger.error(f"traverse_thread failed: {e}")
 		return [types.TextContent(type="text", text=f"Thread traversal error: {e}")]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="hub_members",
+	description=(
+		"[OFFICIAL] Abre un hub como ÍNDICE: lista sus miembros (títulos o contenido acotado) "
+		"con paginación. No inyecta el detalle completo. Requiere SW_HUB_MEMBERS_ENABLED."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"hub_id": {"type": "string", "description": "Point id del hub devuelto por recall/traverse."},
+			"collection": {
+				"type": "string",
+				"enum": ["work_memories", "social_memories"],
+				"description": "Collection del hub. Default: work_memories.",
+			},
+			"limit": {"type": "integer", "description": "Máximo de miembros (default 10, tope 50)."},
+			"offset": {"type": "integer", "description": "Miembros a saltar. Default 0."},
+			"mode": {
+				"type": "string",
+				"enum": ["titles", "content"],
+				"description": "titles = primera línea ≤60 chars; content = ≤200 chars por miembro. Default: titles.",
+			},
+			"max_chars_total": {"type": "integer", "description": "Presupuesto total de salida. Default 8000."},
+		},
+		"required": ["hub_id"],
+	},
+)
+async def handle_hub_members(arguments: Dict[str, Any]):
+	from qdrant_client.http import models as _qm
+
+	from red_pill.cli import get_collection
+	from red_pill.config import get_config
+	from red_pill.memory import MemoryManager
+	from red_pill.metabolism.hub_synthesis import is_content_node, sort_members_chronologically
+
+	cfg_now = get_config()
+	if not bool(getattr(cfg_now, "SW_HUB_MEMBERS_ENABLED", False)):
+		return [types.TextContent(type="text", text="[HUB MEMBERS] disabled (SW_HUB_MEMBERS_ENABLED=false).")]
+
+	hub_id = str(arguments.get("hub_id") or "").strip()
+	if not hub_id:
+		return [types.TextContent(type="text", text="[HUB MEMBERS] falta hub_id.")]
+	collection = get_collection(str(arguments.get("collection") or "work_memories"))
+	limit = max(1, min(int(arguments.get("limit", 10) or 10), 50))
+	offset = max(0, int(arguments.get("offset", 0) or 0))
+	mode = str(arguments.get("mode", "titles"))
+	max_total = max(500, int(arguments.get("max_chars_total", getattr(cfg_now, "MEMORY_HUB_MEMBERS_MAX_CHARS", 8000)) or 8000))
+
+	try:
+		manager = MemoryManager()
+		client = manager.client
+		hub_points = client.retrieve(collection_name=collection, ids=[hub_id], with_payload=True)
+		if not hub_points:
+			return [types.TextContent(type="text", text=f"[HUB MEMBERS] hub no encontrado: {hub_id} en {collection}.")]
+		hub_payload = hub_points[0].payload or {}
+		session_id = hub_payload.get("session_id")
+		if not session_id:
+			return [types.TextContent(type="text", text="[HUB MEMBERS] el hub no tiene session_id; no hay miembros que abrir.")]
+
+		scan_limit = min(500, max(limit + offset, 100))
+		points, _ = client.scroll(
+			collection,
+			scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))]),
+			limit=scan_limit,
+			with_payload=True,
+		)
+		members = [
+			(str(point.id), point.payload or {})
+			for point in points
+			if is_content_node(point.payload or {}) and not (point.payload or {}).get("_is_fragment")
+		]
+		ordered = sort_members_chronologically(members)
+		window = ordered[offset : offset + limit]
+		total_hint = int(hub_payload.get("hub_members_count") or len(ordered))
+		header = (
+			f"[HUB MEMBERS] collection={collection} | session={session_id} | "
+			f"{total_hint} miembros (escaneados {len(ordered)}) | ventana {offset}-{offset + len(window)} | mode={mode}"
+		)
+		lines = [header, ""]
+		used = 0
+		for mid, payload in window:
+			text = str(payload.get("content", "")).replace("\n", " ").strip()
+			text = text[:60] if mode == "titles" else text[:200]
+			line = f"· [{mid[:8]}] {text}"
+			if used + len(line) > max_total:
+				lines.append(f"… (salida acotada a {max_total} chars; usa offset para seguir)")
+				break
+			used += len(line)
+			lines.append(line)
+		if not window:
+			lines.append("(sin miembros en esta ventana)")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		logger.error(f"hub_members failed: {e}", exc_info=True)
+		return [types.TextContent(type="text", text=f"[HUB MEMBERS] error: {e}")]
 
 
 @registry.register_action(
@@ -1464,6 +1641,10 @@ async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
 				"enum": ["full", "medium", "low"],
 				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": "Solo si el canal avisa de identidad AMBIGUA (varias sesiones en el mismo workspace): el `leg=` de tu tag `<session …/>`.",
+			},
 		},
 	},
 )
@@ -1481,7 +1662,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	# ── LOW/MEDIUM MODE: use wake_up_v6.py with matching depth, no hot-reload ──
 	if mode in ("low", "medium"):
 		try:
-			session = await _caller_session({})
+			session = await _caller_session({"caller_leg": arguments.get("caller_leg")})
 			continuity = str((session or {}).get("continuity_id") or "")
 		except Exception:
 			continuity = ""
@@ -1559,7 +1740,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"{info_msg}\n\n{reload_report}")]
 
 	try:
-		session = await _caller_session({})
+		session = await _caller_session({"caller_leg": arguments.get("caller_leg")})
 		continuity = str((session or {}).get("continuity_id") or "")
 	except Exception:
 		continuity = ""
@@ -1933,14 +2114,178 @@ def _harness_bridge(provider: Optional[str] = None) -> Dict[str, str]:
 	return best[1] if best else {"originator": "", "workdir": ""}
 
 
+def _registry_ttl_s() -> float:
+	"""TTL de una fila del registro (misma ley que el tablón)."""
+	from red_pill.core.session_index import _registry_ttl_s as ttl
+
+	try:
+		return float(ttl())
+	except Exception:
+		return 6 * 3600.0
+
+
+def _declared_leg_row(leg: Optional[str], *, workspace: Optional[str] = None) -> Optional[dict]:
+	"""Fila del cuerpo DECLARADO por el agente, solo si es un eco verificable.
+
+	Con el proxy compartido, varias pestañas en el mismo workspace no dejan
+	señal por-request: el cuerpo lo declara el agente (`caller_leg`, el `leg=` de
+	su tag `<session …/>`) y aquí se **verifica**: debe existir una fila, estar
+	viva (no expirada, latido reciente) y — si se conoce — trabajar en ESTE
+	workspace. Un cuerpo desconocido, muerto o de otro workspace se descarta:
+	preferimos no atribuir a atribuir a un alma ajena.
+	"""
+	raw = str(leg or "").strip()
+	if ":" not in raw:
+		return None
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		row = SessionRegistry().get_by_originator(raw)
+	except Exception:
+		return None
+	if not row:
+		return None
+	if str(row.get("ttl_state") or "") == "expired":
+		return None
+	try:
+		updated = float(row.get("updated_at") or 0.0)
+	except (TypeError, ValueError):
+		updated = 0.0
+	if updated <= 0.0 or (time.time() - updated) > _registry_ttl_s():
+		return None
+	row_ws = str(row.get("worktree") or "").strip()
+	if workspace and row_ws:
+		from red_pill.core.bridge import _norm
+
+		mine, theirs = _norm(workspace), _norm(row_ws)
+		if mine and theirs and mine != theirs and not theirs.startswith(mine + "/") and not mine.startswith(theirs + "/"):
+			return None
+	return row
+
+
+def _leg_from_turn_prompt(prompt: str, workspace: str) -> Optional[str]:
+	"""Cuerpo del turno EN VUELO cuyo prompt es el que acaba de pasar el agente.
+
+	El proxy es uno para toda la app: cuando hay varias pestañas vivas en el
+	mismo workspace, la petición no dice qué pestaña la hace. Pero el hook sí
+	escribió el diario del turno (`external_turns/current/`) con el **prompt
+	exacto**. Si exactamente UN turno pendiente de este workspace casa con el
+	`user_prompt`, ese es el cuerpo — sin adivinar y sin tocar el arnés.
+
+	Sin match único (prompt vacío, dos gemelas con el mismo mensaje, prompt
+	parafraseado) devuelve None: el llamante decidirá (puede pedir `caller_leg`).
+	"""
+	text = _norm_prompt(prompt)
+	if len(text) < 24:
+		return None
+	from red_pill.core.bridge import _norm
+	from red_pill.core.paths import get_state_dir
+
+	current = get_state_dir() / "external_turns" / "current"
+	try:
+		paths = list(current.glob("*.json"))
+	except (FileNotFoundError, NotADirectoryError):
+		return None
+	matches: set[str] = set()
+	partial: set[str] = set()
+	now = time.time()
+	for path in paths:
+		try:
+			data = json.loads(path.read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		if not isinstance(data, dict) or data.get("status") != "pending":
+			continue
+		# Un `current/` pendiente y RANCIO (turno que murió sin sellar) no puede
+		# firmar un prompt de dentro de una hora: solo vale el turno de ahora.
+		try:
+			started = float(data.get("started_at") or 0.0)
+		except (TypeError, ValueError):
+			started = 0.0
+		if started > 0.0 and (now - started) > _TURN_PROMPT_MAX_AGE_S:
+			continue
+		cwd = str(data.get("cwd") or "").strip()
+		if workspace and cwd and _norm(cwd) != _norm(workspace):
+			continue
+		other = _norm_prompt(data.get("prompt"))
+		originator = str(data.get("originator") or "").strip()
+		if not originator and data.get("session_id"):
+			originator = f"{data.get('provider') or 'opencode'}:{data['session_id']}"
+		if not originator:
+			continue
+		if other == text:
+			matches.add(originator)
+		elif len(text) >= 40 and len(other) >= 40 and (text in other or other in text):
+			# El modelo pudo recortar el prompt: contención con longitud mínima.
+			partial.add(originator)
+	if len(matches) == 1:
+		return matches.pop()
+	if matches:
+		return None  # dos gemelas con el mismo mensaje: ambiguo, no se adivina
+	return partial.pop() if len(partial) == 1 else None
+
+
+def _norm_prompt(value: Any) -> str:
+	"""Normaliza un prompt para comparar: minúsculas, sin puntuación, sin bordes.
+
+	El modelo copia el prompt, pero al escribirlo dentro de `execute` suele
+	normalizar comillas y guiones; la comparación no puede depender de eso.
+	Se conservan letras y dígitos: `«Hola — dije»` == `hola dije`.
+	"""
+	import unicodedata
+
+	raw = unicodedata.normalize("NFKC", str(value or "")).lower()
+	clean = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in raw)
+	return " ".join(clean.split())
+
+
+# Antigüedad máxima del diario de turno para casar un prompt: la ventana del
+# latido. Un `current/` pendiente más viejo es un turno que murió sin sellar.
+_TURN_PROMPT_MAX_AGE_S = 900.0
+
+
+def _workspace_souls(workspace: str) -> int:
+	"""Cuántos cuerpos vivos comparten este workspace (para avisar del `caller_leg`).
+
+	Es una señal de PRESENCIA (filas activas del tablón en el mismo worktree), no
+	de identidad: sirve para que el agente sepa que el canal puede confundirlo y
+	pase `caller_leg` en las llamadas al coro.
+	"""
+	if not workspace:
+		return 0
+	from red_pill.core.bridge import _norm
+
+	mine = _norm(workspace)
+	if not mine:
+		return 0
+	try:
+		from red_pill.session.store import SessionRegistry
+
+		rows = SessionRegistry().list_sessions(limit=1000)
+	except Exception:
+		return 0
+	count = 0
+	for row in rows:
+		if str(row.get("ttl_state") or "") == "expired":
+			continue
+		theirs = _norm(str(row.get("worktree") or ""))
+		if theirs and (theirs == mine or theirs.startswith(mine + "/") or mine.startswith(theirs + "/")):
+			count += 1
+	return count
+
+
 async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool = True) -> Dict[str, Any]:
 	"""Resuelve cuerpo (originator), alma, misión, rol y afinidad (A1/A2/F5).
 
-	- `originator`: `REDPILL_ORIGINATOR` (job) → bridge del arnés → argumento. Con
-		un arnés de hook y sin bridge NO hay cuerpo (fail-closed); sin hook,
-		el argumento es el último recurso. Puede quedar vacío (`leg=unknown`).
+	- `originator`: con el proxy delante, SOLO el proxy manda (o un cuerpo
+		declarado y verificado: `caller_leg` / diario del turno). Sin proxy:
+		`REDPILL_ORIGINATOR` (job) → declarado → bridge del arnés → argumento.
+		Con un arnés de hook y sin bridge NO hay cuerpo (fail-closed). Puede
+		quedar vacío (`leg=unknown`) — nunca se rellena con el bridge global si
+		varias sesiones comparten el workspace (eso atribuía el turno a otra alma).
 	- `continuity_id`: del argumento; si no, se RECUPERA del registro por
-		originator; si no hay, se EMITE una nueva (emitir ≠ hidratar).
+		originator; si no hay, se EMITE una nueva **solo si hay cuerpo** (un alma
+		sin leg no existe en el registro y el tag mentiría).
 	- `mission_id`: `REDPILL_MISSION_ID` (env) → param → `repo:<rama>` →
 		`mission:adhoc-<fecha>`.
 	- `role`: por defecto 'task'. `affinity`: resolver compartido + canonizada.
@@ -1958,28 +2303,98 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 	# comparten STATE_DIR). Siempre se consulta el bridge para el WORKSPACE (A2),
 	# aunque el originator venga explícito.
 	shared = _shared_identity_var.get()
+	shared_originator = str((shared or {}).get("originator") or "").strip() or None
+	# El proxy es el canal de confianza: si dice que la identidad es ambigua
+	# (varias pestañas vivas en el mismo cwd) o no trae cuerpo, el backend NO
+	# debe inventar alma cayendo al global (esa era la mentira: atribuía el turno
+	# al último escritor del bridge, que puede ser OTRA alma).
+	proxy_ambiguous = bool(shared is not None and (bool((shared or {}).get("ambiguous")) or not shared_originator))
 	explicit_originator = str(arguments.get("originator") or "").strip() or None
-	env_originator = str(os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
+	raw_env_leg = str(os.getenv("REDPILL_ORIGINATOR") or "").strip() or None
 	harness_env = os.getenv("REDPILL_HARNESS") or None
 	if shared:
-		# Canal de confianza del proxy (AD-018): sustituye env/bridge del backend
+		# Canal de confianza del proxy (AD-018): sustituye el bridge del backend
 		# compartido, que es común a todas las instancias.
-		shared_originator = str(shared.get("originator") or "").strip() or None
 		if shared_originator:
 			explicit_originator = shared_originator
-			env_originator = shared_originator
 		if str(shared.get("harness") or "").strip():
 			harness_env = str(shared["harness"]).strip()
 	harness = harness_env or (explicit_originator.split(":", 1)[0] if explicit_originator else None)
 	bridge = _harness_bridge(harness)
 	bridge_originator = bridge["originator"] or None
 	hook_harness = harness_env in ("opencode", "claude_code")
-	if hook_harness:
-		# Arnés con hook: identidad SOLO por env/bridge; sin bridge, fail-closed.
-		originator = env_originator or bridge_originator
+	# Workspace que declara el canal (cwd de la instancia en el proxy): sirve para
+	# VERIFICAR un cuerpo declarado y para casar el diario del turno.
+	channel_workspace = str((shared or {}).get("workdir") or bridge.get("workdir") or os.getenv("REDPILL_WORKSPACE") or "").strip()
+	# ── Cuerpo ────────────────────────────────────────────────────────────────
+	# Con el proxy delante, la identidad SOLO puede venir de él (o de un cuerpo
+	# declarado y verificado). Nunca del bridge global: con varias pestañas en el
+	# mismo workspace es "el último que escribió", y atribuir a un alma ajena es
+	# peor que no atribuir (incidente 2026-11-08; recurrente el 2026-11-14 con dos
+	# gemelas en el mismo branch: el coro contestó "te estarías escribiendo a ti
+	# misma" a un `send park` a la hermana).
+	identity_source: Optional[str] = None
+	declared_leg: Optional[str] = None
+	declared_row: Optional[dict] = None
+	if not raw_env_leg:
+		# 1) Cuerpo declarado por el agente (`caller_leg`): el hook lo escribe en su
+		# contexto por petición y aquí se VERIFICA (fila viva, mismo workspace).
+		# Manda sobre el proxy: su correlación por cwd es una heurística de un
+		# workspace COMPARTIDO y ya atribuyó turnos a la hermana equivocada
+		# (2026-11-08 y 2026-11-14).
+		candidate = str(arguments.get("caller_leg") or "").strip() or None
+		row = _declared_leg_row(candidate, workspace=channel_workspace) if candidate else None
+		if row:
+			declared_leg, declared_row, identity_source = candidate, row, "declared"
+		# 2) Diario del turno: casa el `user_prompt` con UNA sesión viva.
+		if not declared_row:
+			recovered = _leg_from_turn_prompt(str(arguments.get("user_prompt") or ""), channel_workspace)
+			if recovered:
+				row = _declared_leg_row(recovered, workspace=channel_workspace)
+				if row:
+					declared_leg, declared_row, identity_source = recovered, row, "turn_journal"
+		# 3) Actividad reciente: la pestaña que acaba de emitir un paso es la que
+		# llama (el proxy no puede verlo; `time_updated` de opencode sí). Con dos
+		# gemelas emitiendo a la vez no hay margen → no se elige.
+		if not declared_row and hook_harness:
+			from red_pill.core.bridge import recent_session_by_activity
+
+			sid = recent_session_by_activity(harness or "opencode", channel_workspace)
+			if sid:
+				candidate = f"{harness or 'opencode'}:{sid}"
+				row = _declared_leg_row(candidate, workspace=channel_workspace)
+				if row:
+					declared_leg, declared_row, identity_source = candidate, row, "activity"
+		if declared_leg and shared_originator and declared_leg != shared_originator:
+			logger.warning(
+				f"[identity] cuerpo declarado {declared_leg[:40]} != proxy {shared_originator[:40]}; se usa el declarado (verificado)"
+			)
+	originator: Optional[str] = None
+	if shared is not None:
+		# Canal proxy (AD-018): NUNCA se cae al bridge global. Con VARIAS almas en
+		# este workspace la correlación por cwd tampoco basta (es una heurística
+		# sobre un directorio compartido), así que el cuerpo tiene que venir
+		# declarado o deducido; si no, sin cuerpo (el coro pedirá `caller_leg`).
+		souls_here = _workspace_souls(channel_workspace)
+		originator = raw_env_leg or declared_leg or (shared_originator if souls_here <= 1 else None)
+	elif hook_harness:
+		# Arnés con hook sin proxy (servidor directo): env → declarado → bridge.
+		originator = raw_env_leg or declared_leg or bridge_originator
 	else:
-		# Arnés sin hook (pi/antigravity): env → bridge → argumento.
-		originator = env_originator or bridge_originator or explicit_originator
+		# Arnés sin hook (pi/antigravity): env → declarado → bridge → argumento.
+		originator = raw_env_leg or declared_leg or bridge_originator or explicit_originator
+	if not originator:
+		identity_source = None
+	elif declared_leg and originator == declared_leg and declared_row:
+		identity_source = identity_source or "declared"
+	elif raw_env_leg and originator == raw_env_leg:
+		identity_source = "env"
+	elif shared_originator and originator == shared_originator:
+		identity_source = "proxy"
+	elif originator == bridge_originator:
+		identity_source = "bridge"
+	else:
+		identity_source = "argument"
 	# Workspace del agente (A2/`ws:`): proxy/bridge → env → cwd del proceso.
 	# El puente es UN fichero global (gana el último escritor) y ese escritor puede
 	# ser una instancia abierta en una carpeta padre que NO es repo (la app desktop
@@ -2014,7 +2429,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 			existing = registry_obj.get_by_originator(originator)
 		except Exception as e:
 			logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
-	if shared and existing and existing.get("continuity_id"):
+	if existing and existing.get("continuity_id"):
 		# Primer enlace gana: el registro manda sobre el hint del proxy.
 		continuity_id = existing["continuity_id"]
 	# Campaña: env (canal de confianza) → la ya atada al leg. Sin valor, no se infiere.
@@ -2080,7 +2495,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		if not continuity_id:
 			if existing and existing.get("continuity_id"):
 				continuity_id = existing["continuity_id"]
-			else:
+			elif originator:
+				# Emitir alma SOLO con cuerpo: un UUID fantasma sin leg no existe en
+				# el registro y el tag mentiría con un alma que nadie puede reclamar.
 				continuity_id = new_continuity_id()
 		previous_event_seq = int((existing or {}).get("last_seen_event_seq") or 0)
 		if existing is None and continuity_id:
@@ -2125,7 +2542,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				logger.debug(f"[SessionRegistry] purge unavailable: {e}")
 	except Exception as e:
 		logger.warning(f"Sovereign Handshake — session registry unavailable: {e}")
-		if not continuity_id:
+		if not continuity_id and originator:
 			continuity_id = new_continuity_id()
 
 	return {
@@ -2135,6 +2552,9 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 		"role": role,
 		"affinity": affinity,
 		"previous_event_seq": previous_event_seq,
+		"proxy_ambiguous": proxy_ambiguous,
+		"identity_source": identity_source,
+		"workspace": workspace,
 	}
 
 
@@ -2332,6 +2752,14 @@ def _reconcile_pull_first(identity: Dict[str, Any], until_seq: int) -> None:
 				"type": "string",
 				"description": "El cuerpo: `proveedor:id-nativo` (p.ej. `claude_code:<session_id>`). Precedencia: `REDPILL_ORIGINATOR` (job) → bridge del arnés → este argumento. Con un arnés de hook y sin bridge NO se usa (fail-closed).",
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": (
+					"Solo si el canal avisa de identidad AMBIGUA (varias sesiones vivas en el "
+					"mismo workspace): el `leg=` de tu tag `<session …/>`. Se verifica contra el "
+					"registro (fila viva, mismo workspace); nunca se acepta a ciegas."
+				),
+			},
 		},
 		"required": ["user_prompt"],
 	},
@@ -2362,7 +2790,7 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 	# ── Phase 1: Identity Resync (only on new session / model change) ──
 	if is_new_session:
 		try:
-			ctx_result = await handle_refresh_session_context({"mode": mode})
+			ctx_result = await handle_refresh_session_context({"mode": mode, "caller_leg": arguments.get("caller_leg")})
 			for item in ctx_result:
 				if hasattr(item, "text"):
 					outputs.append(item.text)
@@ -2413,6 +2841,20 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 
 	from red_pill.session import decorate_with_session_tag
 
+	if not identity.get("identity_source"):
+		outputs.append(
+			"[IDENTIDAD] el canal no pudo resolver tu cuerpo (varias sesiones vivas en este "
+			"workspace). Repite con `caller_leg` = el `leg` del bloque `<redpill_identity>` de "
+			"tu contexto; se verifica contra el registro."
+		)
+	else:
+		souls = _workspace_souls(str(identity.get("workspace") or ""))
+		if souls > 1 or identity.get("proxy_ambiguous"):
+			outputs.append(
+				f'[IDENTIDAD] {souls} sesiones comparten este workspace: pasa `caller_leg="{identity.get("originator")}"` '
+				f"en CADA llamada a `coro_api` (post/send/fetch/inbox/ack) y en el handshake. "
+				f"Sin él, el coro no puede distinguirte de tu hermana y te lo pedirá."
+			)
 	joined = "\n\n".join(outputs)
 	decorated = decorate_with_session_tag(
 		joined,
@@ -2426,11 +2868,12 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 	"""Identidad del llamante para acciones de misión (sin reloj ni upsert).
 
-	**Solo canales de confianza**: bridge del arnés (hook) y env
-	(`REDPILL_ORIGINATOR` / `REDPILL_MISSION_ID`). Los argumentos del modelo
-	(`originator`, `mission_id`, `continuity_id`…) se IGNORAN: si el llamante
-	pudiera auto-declarar su cuerpo, el "anti-spoof" sería papel mojado. La
-	misión del evento se valida aparte contra esta identidad.
+	**Canales de confianza**: el proxy (AD-018), el env (`REDPILL_ORIGINATOR` /
+	`REDPILL_MISSION_ID`) y el bridge del arnés. Con el proxy delante y varias
+	sesiones vivas en el mismo workspace, el canal no puede decidir: entonces se
+	acepta `caller_leg` — el `leg=` del tag `<session …/>` del propio agente —
+	pero VERIFICADO contra el registro (fila viva, latido reciente, mismo
+	workspace). Sin esa verificación no hay alma: nunca se atribuye a ciegas.
 
 	Sin cuerpo compuesto no hay alma: `continuity_id` queda `None` (no se emite
 	un UUID fantasma que no existe en el registro).
@@ -2438,20 +2881,38 @@ async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 	from red_pill.session.store import SessionRegistry
 
 	manifest_mission = str(os.getenv("REDPILL_MISSION_ID") or "").strip() or None
-	ident = await _resolve_session_identity({}, persist=False)
+	ident = await _resolve_session_identity(arguments, persist=False)
 	originator = ident.get("originator")
+	proxy_ambiguous = bool(ident.get("proxy_ambiguous"))
+	identity_source = ident.get("identity_source")
 	row = SessionRegistry().get_by_originator(originator) if originator else None
+	if originator and not row:
+		logger.warning(f"[caller-session] originator {str(originator)[:40]} sin fila en el registro (job soulless / D-02)")
 	# La misión autoritativa sale del canal de confianza (env o rama), NUNCA de la
 	# fila: la escribe el modelo en el handshake y puede envenenarse. La campaña
 	# de la fila solo se usa si su misión coincide con la de confianza.
 	trusted_mission = manifest_mission or ident.get("mission_id")
 	row_mission = (row or {}).get("mission_id")
+	# Un cuerpo DECLARADO (no resuelto por el canal) solo vale si su fila es de la
+	# misma misión: si no, sería un alma de otra misión firmando aquí.
+	if identity_source in ("declared", "turn_journal") and row and row_mission and trusted_mission and str(row_mission) != str(trusted_mission):
+		logger.warning(
+			f"[caller-session] cuerpo declarado {str(originator)[:40]} es de otra misión ({row_mission} != {trusted_mission}); se descarta"
+		)
+		row = None
+		originator = None
+	elif row and row_mission and trusted_mission and str(row_mission) != str(trusted_mission):
+		logger.warning(
+			f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}"
+		)
 	return {
 		"originator": originator,
 		"continuity_id": (row or {}).get("continuity_id"),
 		"mission_id": trusted_mission,
 		"campaign_id": (row or {}).get("campaign_id") if row_mission == trusted_mission else None,
 		"role": (row or {}).get("role") or ident.get("role"),
+		"proxy_ambiguous": proxy_ambiguous,
+		"identity_source": identity_source if row else None,
 	}
 
 
@@ -3386,6 +3847,25 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		trusted_continuity = str(session.get("continuity_id") or "").strip()
 		trusted_mission = str(session.get("mission_id") or "").strip()
 		operator = os.getenv("REDPILL_OPERATOR") == "1"
+		if session.get("proxy_ambiguous") and not operator:
+			logger.warning("[job_submit] identidad ambigua (varias pestañas en el mismo cwd); job rechazado")
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						"[ERROR] identidad de sesión ambigua: hay dos o más pestañas vivas en el mismo "
+						"workspace y el proxy no puede atribuir este job con seguridad. Cierra una "
+						"pestaña o usa `red-pill job submit --continuity <alma>` como Operador."
+					),
+				)
+			]
+		# Auditoría de procedencia: el continuity_id puede ser heredado/ambiguo,
+		# pero el cuerpo que envió el job queda registrado en la cola y el payload.
+		caller_originator = str(session.get("originator") or "").strip()
+		payload["submitted_by"] = f"mcp:{caller_originator or 'unknown'}"
+		payload["origin_session_id"] = caller_originator.split(":", 1)[1] if ":" in caller_originator else ""
+		if caller_originator and not trusted_continuity:
+			logger.warning(f"[job_submit] {caller_originator[:40]} sin alma en el registro; job soulless (D-02)")
 		provided_continuity = str(payload.get("continuity_id") or "").strip()
 		if provided_continuity and not operator:
 			if not trusted_continuity or provided_continuity != trusted_continuity:

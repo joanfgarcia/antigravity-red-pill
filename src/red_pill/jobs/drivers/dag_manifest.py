@@ -23,6 +23,10 @@ _VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
 _MAX_PARALLEL_LEVEL_DEFAULT = 2
 _MAX_CONCURRENCY_DEFAULT = 4
 
+# Techo de pared por compuesto (NB-001 F3, D-NB-12): clamp [0, 720] minutos.
+# 0/ausente/negativo = sin techo declarado.
+_DEADLINE_MINUTES_MAX = 720
+
 # A stage `id` becomes a path component under .cell/reports — restrict the charset
 # so it can never traverse out of the confín (§7; SHARD-PSEC-02).
 _SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -35,6 +39,23 @@ _PROTECTED_STAGE_PARAMS = frozenset({
 	"sleep_cutoff_ts", "item", "continuity_id", "parent_mission_id", "originator", "role",
 	"mission_id",
 })
+
+
+def clamp_deadline_minutes(value: Any) -> int:
+	"""Clamp de `deadline_minutes` a [0, 720] (D-NB-12).
+
+	0, ausente, negativo o no numérico → 0 (sin techo declarado). El valor se
+	registra como tal al no anclar ningún `stage_deadline_ts` para el compuesto.
+	"""
+	if value is None:
+		return 0
+	try:
+		minutes = int(value)
+	except (TypeError, ValueError):
+		return 0
+	if minutes <= 0:
+		return 0
+	return min(minutes, _DEADLINE_MINUTES_MAX)
 
 
 def _resolve_minion_kind(minion_id: str) -> Optional[str]:

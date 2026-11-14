@@ -142,24 +142,23 @@ def test_audit_engram_quality():
 
 
 def test_multi_hub_batching_partitioning():
-	import red_pill.config as cfg
+	"""El batching es de producción (partition_hub_items), no una copia local.
 
-	max_chunks_per_hub = getattr(cfg, "SLEEP_MAX_CHUNKS_PER_HUB", 6)
-	surviving_chunks = [{"summary": f"Chunk {i}", "emotion": "neutral", "intensity": 0.5, "category": "work"} for i in range(14)]
-	fragment_affects = [{"child_id": f"id_{i}", "emotion": "neutral", "intensity": 0.5, "category": "work"} for i in range(14)]
+	Antes este test reimplementaba el slicing y pasaba aunque el pipeline
+	hubiera perdido el batching (regresión de 8.0.0). Ahora ejerce el helper
+	real que usa `synthesize_hub_v2`.
+	"""
+	from red_pill.metabolism.distiller import partition_hub_items, render_hub_items
 
-	if len(surviving_chunks) > max_chunks_per_hub:
-		chunk_batches = [surviving_chunks[k : k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
-		affects_batches = [fragment_affects[k : k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
-	else:
-		chunk_batches = [surviving_chunks]
-		affects_batches = [fragment_affects]
+	chunks = [
+		{"summary": f"Chunk {i} " + ("x" * 80), "texture": "", "emotion": "neutral", "intensity": 0.5, "category": "work"}
+		for i in range(14)
+	]
+	batches = partition_hub_items(chunks, budget=500, max_chunks=4)
 
-	assert len(chunk_batches) == 3
-	assert len(chunk_batches[0]) == 6
-	assert len(chunk_batches[1]) == 6
-	assert len(chunk_batches[2]) == 2
-	assert len(affects_batches) == 3
+	assert sum(len(b) for b in batches) == 14
+	assert all(len(render_hub_items(b)) <= 500 for b in batches)
+	assert max(len(b) for b in batches) <= 4
 
 
 def test_cleanup_orphan_raw_parents():

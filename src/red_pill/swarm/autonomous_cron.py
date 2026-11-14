@@ -32,57 +32,129 @@ PI_SESSIONS_DIR = Path.home() / ".pi" / "agent" / "sessions"
 # `<timestamp>_<uuid>.jsonl` → el `session_id` que registra el bridge de Pi.
 _PI_SESSION_ID = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$", re.IGNORECASE)
 
+# Registro del último despertar (lo escribe `agent_worker` al abrir/cerrar el run).
+AWAKENING_STATE_FILE = "last_awakening.json"
+
+# Tolerancia entre el touch del handshake y el cierre registrado del despertar:
+# el bridge escribe el estado al terminar, pero el último turno pudo tocar el
+# fichero unos segundos antes (o después, si el cierre tarda).
+_AWAKENING_TOUCH_GRACE = 120.0
+
 
 def _pi_session_id(path: Path) -> str:
 	match = _PI_SESSION_ID.search(path.name)
 	return match.group(1) if match else path.stem
 
 
-def is_ide_idle(idle_seconds=3600):
+def _newest_age(paths):
+	"""Antigüedad (s) del fichero más reciente de `paths`, o None si no hay."""
+	newest = None
+	for path in paths:
+		try:
+			age = time.time() - path.stat().st_mtime
+		except Exception:
+			continue
+		if newest is None or age < newest:
+			newest = age
+	return newest
+
+
+def _read_last_awakening(now, idle_seconds):
+	"""Registro del último despertar si su cierre cae dentro del periodo vigilado.
+
+	Lo escribe `agent_worker` en `state/last_awakening.json` al abrir y cerrar
+	cada run (`running` → `worked` / `silence` / `error`). Sin este registro el
+	gate no puede distinguir el touch del handshake del propio despertar de una
+	presencia real del Operador.
 	"""
-	Heurística de inactividad multi-señal.
+	path = get_state_dir() / AWAKENING_STATE_FILE
+	try:
+		data = json.loads(path.read_text())
+	except Exception:
+		return None
+	if not isinstance(data, dict):
+		return None
+	ended = data.get("ended_at", data.get("started_at"))
+	if not isinstance(ended, (int, float)) or (now - ended) > idle_seconds:
+		return None
+	return data
+
+
+def _attribute_touch(record, mtime):
+	"""A quién pertenece la frescura de `last_user_activity.txt`.
+
+	Devuelve `(clase, detalle)`: `operator`, `awakening_worked` o
+	`awakening_silence`. Un despertar que **trabajó** cuenta como actividad (se
+	respeta el intervalo de una hora, pero el log lo dice: no es el Operador);
+	uno que ejerció el **Derecho al Silencio** no cuenta — su turno tocó el
+	fichero solo por el handshake y no debe bloquear el siguiente despertar.
+	"""
+	if not record:
+		return "operator", "sin registro de despertar reciente"
+	started = record.get("started_at")
+	ended = record.get("ended_at", started)
+	if not isinstance(started, (int, float)) or not isinstance(ended, (int, float)):
+		return "operator", "registro de despertar incompleto"
+	if mtime < started - _AWAKENING_TOUCH_GRACE or mtime > ended + _AWAKENING_TOUCH_GRACE:
+		return "operator", "touch posterior al cierre del despertar"
+	status = record.get("status")
+	if status == "silence":
+		return "awakening_silence", "Derecho al Silencio: no cuenta como actividad"
+	if status in ("worked", "running", "error"):
+		return "awakening_worked", f"despertar {status}"
+	return "operator", f"estado de despertar desconocido: {status!r}"
+
+
+def activity_state(idle_seconds=3600):
+	"""
+	Estado de presencia del Operador con su causa (bool `is_ide_idle` delega aquí).
 
 	Señales (OR — cualquiera activa = operador presente):
-	1. last_user_activity.txt (handshake de CUALQUIER IDE / Telegram worker)
+	1. last_user_activity.txt (handshake de CUALQUIER IDE / Telegram worker),
+	atribuido al Operador o al último despertar según su registro
 	2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
 	3. Claude Code: transcripts JSONL de ~/.claude/projects (escritos en vivo)
 	4. opencode: su base local (db/WAL mutan en cada turno)
 	5. Pi: transcripts JSONL de ~/.pi/agent/sessions (escritos en vivo; los runs
 	headless de awakening se excluyen por el registro de orígenes)
 
-	Returns True ONLY if ALL signals indicate idle > idle_seconds.
+	`idle` es True solo si TODAS las señales indican inactividad > `idle_seconds`.
 	"""
 	now = time.time()
 
-	def _any_fresh(paths):
-		for path in paths:
-			try:
-				if (now - path.stat().st_mtime) <= idle_seconds:
-					return True
-			except Exception:
-				continue
-		return False
+	def _active(reason, detail, age):
+		return {"idle": False, "reason": reason, "detail": detail, "age_s": age}
 
-	# Signal 1: handshake de cualquier IDE / Telegram worker touch file
+	# Signal 1: handshake de cualquier IDE / Telegram worker touch file. El
+	# despertar también lo toca (sus turnos llaman al handshake), así que la
+	# frescura se atribuye con el registro del último despertar.
 	state_file = get_state_dir() / "last_user_activity.txt"
-	if state_file.exists() and _any_fresh([state_file]):
-		return False
+	try:
+		age = now - state_file.stat().st_mtime
+	except OSError:
+		age = None
+	if age is not None and age <= idle_seconds:
+		reason, detail = _attribute_touch(_read_last_awakening(now, idle_seconds), state_file.stat().st_mtime)
+		if reason != "awakening_silence":
+			return _active(reason, f"{detail} · last_user_activity.txt", age)
 
 	# Signal 2: Antigravity IDE active conversations
 	# Transcripts are written in real-time during IDE sessions.
 	antigravity_brain = get_antigravity_brain_dir()
 	if antigravity_brain.is_dir():
 		try:
-			if _any_fresh(antigravity_brain.rglob("transcript.jsonl")):
-				return False
+			age = _newest_age(antigravity_brain.rglob("transcript.jsonl"))
+			if age is not None and age <= idle_seconds:
+				return _active("operator", "Antigravity: transcript.jsonl", age)
 		except Exception:
 			pass
 
 	# Signal 3: Claude Code sessions (interactivas, chips y headless)
 	if CLAUDE_PROJECTS_DIR.is_dir():
 		try:
-			if _any_fresh(CLAUDE_PROJECTS_DIR.rglob("*.jsonl")):
-				return False
+			age = _newest_age(CLAUDE_PROJECTS_DIR.rglob("*.jsonl"))
+			if age is not None and age <= idle_seconds:
+				return _active("operator", "Claude Code: transcript .jsonl", age)
 		except Exception:
 			pass
 
@@ -99,18 +171,20 @@ def is_ide_idle(idle_seconds=3600):
 				cutoff_ms = int((now - idle_seconds) * 1000)
 				con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 				try:
-					fresh = con.execute("SELECT id FROM session WHERE time_updated > ?", (cutoff_ms,)).fetchall()
+					fresh = con.execute("SELECT id, time_updated FROM session WHERE time_updated > ?", (cutoff_ms,)).fetchall()
 				finally:
 					con.close()
-				for (sid,) in fresh:
-					if origins.get(sid, {}).get("origin", "user") != "awakening":
-						return False
+				ages = [now - ts / 1000 for sid, ts in fresh if origins.get(sid, {}).get("origin", "user") != "awakening"]
+				if ages:
+					return _active("operator", "opencode: sesión activa", min(ages))
 			else:
-				if _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
-					return False
+				age = _newest_age(OPENCODE_DATA_DIR.glob("opencode.db*"))
+				if age is not None and age <= idle_seconds:
+					return _active("operator", "opencode.db reciente", age)
 		except Exception:
-			if _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
-				return False
+			age = _newest_age(OPENCODE_DATA_DIR.glob("opencode.db*"))
+			if age is not None and age <= idle_seconds:
+				return _active("operator", "opencode.db reciente", age)
 
 	# Signal 5: Pi sessions (`~/.pi/agent/sessions`). Its extension does not touch
 	# the activity file per turn, so the JSONL transcript is the only live signal.
@@ -119,19 +193,40 @@ def is_ide_idle(idle_seconds=3600):
 	if PI_SESSIONS_DIR.is_dir():
 		try:
 			pi_origins = read_origins(PROVIDER_PI)
+			ages = []
 			for path in PI_SESSIONS_DIR.rglob("*.jsonl"):
 				try:
-					if (now - path.stat().st_mtime) > idle_seconds:
-						continue
+					age = now - path.stat().st_mtime
 				except OSError:
 					continue
+				if age > idle_seconds:
+					continue
 				if (pi_origins.get(_pi_session_id(path)) or {}).get("origin") != "awakening":
-					return False
+					ages.append(age)
+			if ages:
+				return _active("operator", "Pi: sesión activa", min(ages))
 		except Exception:
 			pass
 
 	# All signals indicate idle
-	return True
+	return {"idle": True, "reason": "idle", "detail": "", "age_s": None}
+
+
+def is_ide_idle(idle_seconds=3600):
+	"""True solo si TODAS las señales indican inactividad > `idle_seconds`."""
+	return activity_state(idle_seconds)["idle"]
+
+
+def describe_activity(state):
+	"""Mensaje honesto del aborto: distingue al Operador del propio despertar."""
+	if state.get("reason") == "awakening_worked":
+		age = state.get("age_s")
+		mins = int(age // 60) if isinstance(age, (int, float)) else 0
+		return (
+			f"El último despertar trabajó hace {mins} min ({state.get('detail')}). "
+			"Se respeta el intervalo de una hora, aunque no haya Operador delante."
+		)
+	return "El Operador sigue activo en el IDE. Abortando despertar autónomo para no interrumpir."
 
 
 def _log(msg: str) -> None:
@@ -152,9 +247,11 @@ def main():
 	db_path = os.environ.get("NEON_LINK_DB_PATH", get_neon_link_db_path())
 	user_name = os.environ.get("USER_NAME", "Operador")
 
-	# Comprobar si el Operador lleva inactivo 1 hora (3600 segundos)
-	if not is_ide_idle(3600):
-		_log("El Operador sigue activo en el IDE. Abortando despertar autónomo para no interrumpir.")
+	# Comprobar si el Operador lleva inactivo 1 hora (3600 segundos) — y de quién
+	# es la actividad: el propio despertar también toca el fichero del handshake.
+	state = activity_state(3600)
+	if not state["idle"]:
+		_log(describe_activity(state))
 		return
 
 	conn = sqlite3.connect(db_path)

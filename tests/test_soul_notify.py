@@ -622,3 +622,76 @@ class TestClaudeSocket:
 		with self._bridge(path):
 			assert soul_notify._deliver_claude_socket("uuid-c1", "x") is False
 		assert soul_notify.last_error() == "claude_socket_rechazo"
+
+
+class TestPresentacionPlegada:
+	"""El aviso viaja entero al modelo, pero el IDE solo pinta el título.
+
+	`metadata.displayText` es presentación: el cuerpo sigue en el prompt y la
+	captura/el handshake/el acuse no se tocan (por eso NO se usa `synthetic`).
+	"""
+
+	def test_titulo_de_coro_lleva_el_hilo(self):
+		title = soul_notify.notice_title("[CORO notify · hilo E-865860 · salto 0/2 · respuesta: NO]\ncuerpo")
+		assert title == "Mensaje recibido · CORO E-865860"
+		# Cualquier verbo del protocolo (`reply`, `post`…), no solo `notify`.
+		assert soul_notify.notice_title("[CORO reply · hilo E-1 · salto 1/2]\ncuerpo") == "Mensaje recibido · CORO E-1"
+
+	def test_titulo_de_job_lleva_job_y_estado(self):
+		text = soul_notify.build_job_notice("Watcher migración", "script_job", "success", "ok")
+		title = soul_notify.notice_title(text)
+		assert "job 'Watcher migración'" in title
+		assert "→ success" in title
+
+	def test_titulo_no_filtra_el_cuerpo(self):
+		text = "[CORO notify · hilo E-1]\nsecreto que no debe verse"
+		assert "secreto" not in soul_notify.notice_title(text)
+
+	def test_titulo_generico(self):
+		assert soul_notify.notice_title("hola") == "Mensaje recibido"
+
+	@staticmethod
+	def _run(rc=0, stdout="", stderr=""):
+		return types.SimpleNamespace(returncode=rc, stdout=stdout, stderr=stderr)
+
+	def test_entrega_por_api_con_display_text(self):
+		calls = []
+
+		def fake_run(cmd, **kw):
+			calls.append((cmd, kw))
+			return self._run(0, '{"data":{}}')
+
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(
+			soul_notify, "opencode_session_exists", return_value=True
+		), patch.object(soul_notify.subprocess, "run", side_effect=fake_run):
+			ok = soul_notify._deliver_opencode_prompt("ses_a", "[CORO notify · hilo E-9]\ncuerpo")
+
+		assert ok is True
+		cmd, kw = calls[0]
+		assert cmd[:4] == ["/x/opencode", "api", "post", "/api/session/ses_a/prompt"]
+		payload = json.loads(cmd[cmd.index("--data") + 1])
+		assert payload["text"] == "[CORO notify · hilo E-9]\ncuerpo"
+		assert payload["metadata"]["displayText"] == "Mensaje recibido · CORO E-9"
+		# La presentación de opencode 2.3.x es un Struct EXACTO: sin `comments` y
+		# `attachments` el metadata NO decodifica y la UI pinta el cuerpo crudo
+		# (regresión medida el 2026-11-14 sobre 2.3.0).
+		assert payload["metadata"]["comments"] == []
+		assert payload["metadata"]["attachments"] == []
+		assert kw["timeout"] == soul_notify.OPENCODE_API_TIMEOUT_S
+
+	def test_api_caida_cae_al_run_clasico(self):
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(
+			soul_notify, "opencode_session_exists", return_value=True
+		), patch.object(soul_notify.subprocess, "run", return_value=self._run(1, "", "boom")), patch.object(
+			soul_notify, "_deliver_cli", return_value=True
+		) as cli:
+			assert soul_notify._deliver_opencode_prompt("ses_a", "hola") is True
+		cli.assert_called_once_with("ses_a", "hola")
+
+	def test_sesion_inexistente_no_se_inyecta(self):
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(
+			soul_notify, "opencode_session_exists", return_value=False
+		), patch.object(soul_notify.subprocess, "run") as run:
+			assert soul_notify._deliver_opencode_prompt("ses_a", "hola") is False
+		run.assert_not_called()
+		assert soul_notify.last_error() == soul_notify.STALE_LEG

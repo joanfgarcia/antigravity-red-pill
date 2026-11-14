@@ -58,6 +58,29 @@ prompts:
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
+  # F4-fusión (NB-001 P7): work+social en UNA llamada, con `scope` por idea.
+  # Seleccionados por el flag MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED (default OFF).
+  annotate_combined_user:
+    template: annotate_combined_user.txt
+    system: annotate_combined_system.txt
+    fragments: {voice: voice.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, work_scope, social_scope, prompt_language, agent_name, operator_name]
+    runtime: [fragment]
+
+  annotate_combined_user_v2:
+    template: annotate_combined_user_v2.txt
+    system: annotate_combined_system.txt
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, work_scope, social_scope, prompt_language, agent_name, operator_name]
+    runtime: [fragment]
+
+  annotate_combined_user_v3:
+    template: annotate_combined_user_v3.txt
+    system: annotate_combined_system.txt
+    fragments: {voice: voice_annotate.txt, emotion_legend: emotion_legend.txt, language: language.txt}
+    static: [identity, work_scope, social_scope, prompt_language, agent_name, operator_name]
+    runtime: [fragment]
+
   voice_rewrite_user:
     template: voice_rewrite_user.txt
     system: voice_rewrite_system.txt

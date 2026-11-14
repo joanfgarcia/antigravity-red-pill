@@ -14,11 +14,12 @@ lanzó el job.
 
 ⚠️ TRANSPORTE TEMPORAL (decisión del Operador, 2026-10-28)
 ---------------------------------------------------------
-El transporte de este módulo es **provisional**. Hoy entrega con el CLI del
-arnés (`opencode run --session <id>`, el patrón probado con la sesión hermana
-en E-001..E-005). **Cuando `neon-link` esté girado hacia dentro** (canal `soul`,
-D-06), **esta pieza debe reapuntarse a ese canal** y el transporte CLI quedará
-como fallback.
+El transporte de este módulo es **provisional**. Hoy entrega por la API V2 del
+arnés (`POST /api/session/<id>/prompt`, con `metadata.displayText` para que el
+IDE pinte el aviso plegado bajo un título) y cae al CLI clásico
+(`opencode run --session <id>`) si la API no responde. **Cuando `neon-link`
+esté girado hacia dentro** (canal `soul`, D-06), **esta pieza debe reapuntarse
+a ese canal** y el transporte del arnés quedará como fallback.
 
 Para que el repunte sea un cambio de UNA línea y no una reescritura, todo el
 transporte vive detrás de `_TRANSPORTS` + `_resolve_transport()`. Nada más en
@@ -30,7 +31,8 @@ Reutiliza `resolve_live_leg` y `notify_soul`; no abre otro canal.
 
 Segundo transporte (F6, 2026-10-30): `claude_socket`, el socket de mensajería
 por sesión de Claude Code. El transporte se elige por el arnés del cuerpo
-(`_PROVIDER_TRANSPORT`): opencode sigue en `cli` y claude_code va por su socket.
+(`_PROVIDER_TRANSPORT`): opencode va por `cli` (API con `displayText`, `run`
+de fallback) y claude_code por su socket.
 `REDPILL_SOUL_NOTIFY_TRANSPORT` sigue forzando uno para todos.
 
 Reglas que respeta (no las salta)
@@ -38,8 +40,9 @@ Reglas que respeta (no las salta)
 - **D-07 (quién puede despertar a quién)**: un job es hijo del alma que lo
 	lanzó, así que notificar a esa alma es *cadena de mando* — permitido.
 - **D-09**: el aviso es **dato**, nunca una orden; no pide nada al receptor.
-- **D-11**: `opencode run --session` **inyecta**; `api POST` fallaría cerrado
-	y el mensaje desaparecería. Por eso se usa `run --session`.
+- **D-11**: la inyección tiene que ser **durable**, no un `api POST` que falle
+	cerrado y pierda el mensaje. En V2 la ruta durable es
+	`POST /api/session/<id>/prompt` (y, si no responde, `run --session`).
 - **No bloquea al worker ni hereda su vida**: el CLI se lanza como hijo en su
 	propia sesión de procesos y sin timeout. Ni el llamante espera al turno del
 	receptor, ni el turno muere si el llamante (un MCP directo, la CLI) sale antes.
@@ -52,6 +55,7 @@ es malo; tumbar el runner por un aviso, peor.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -313,6 +317,99 @@ def _deliver_cli(session_id: str, text: str) -> bool:
 	return True
 
 
+# ── Entrega con presentación plegada (opencode V2) ──────────────────────────
+
+# Título de una línea: la UI del IDE lo pinta como cabecera del mensaje
+# (`metadata.displayText`) y el cuerpo completo queda detrás, sin mostrarse.
+NOTICE_TITLE_MAX = 120
+# La llamada es local (CLI → servicio de fondo). Si tarda más, se cae al `run`
+# clásico en vez de bloquear al llamante.
+OPENCODE_API_TIMEOUT_S = 8.0
+# La presentación del mensaje en la UI (opencode 2.3.x) es un Struct EXACTO:
+# `{displayText, comments, attachments}`. Un metadata sin `comments`/
+# `attachments` no decodifica (`decodePromptPresentation` → None) y el renderer
+# cae al cuerpo crudo — el aviso se pinta entero y con el sobre a la vista
+# (medido 2026-11-14 sobre 2.3.0; en 2.2.6 bastaba `displayText`).
+_PRESENTATION_EMPTY = {"comments": [], "attachments": []}
+
+
+def notice_title(text: str) -> str:
+	"""Título de UNA línea para el aviso; nunca el cuerpo (D-09: es dato).
+
+	No decide nada ni se guarda aparte: solo alimenta `metadata.displayText`,
+	que la UI usa como cabecera del mensaje. El cuerpo completo sigue viajando
+	en el prompt (el modelo lo lee; el IDE no lo pinta).
+	"""
+	raw = str(text or "")
+	head = next((line.strip() for line in raw.splitlines() if line.strip()), "")
+	label = "Mensaje recibido"
+	if head.startswith("[CORO "):
+		thread = re.search(r"hilo\s+([A-Za-z0-9_.:-]+)", head)
+		label += " · CORO" + (f" {thread.group(1)}" if thread else "")
+	elif "fin de job" in head:
+		job = re.search(r"Job '([^']{1,80})'", raw)
+		label += " · job" + (f" '{job.group(1)}'" if job else "")
+		status = re.search(r"→\s*([A-Za-z_]+)", raw)
+		if status:
+			label += f" → {status.group(1)}"
+	elif "tablón" in head or "tablon" in head:
+		label += " · tablón"
+	return label[:NOTICE_TITLE_MAX].rstrip()
+
+
+def _deliver_opencode_prompt(session_id: str, text: str) -> bool:
+	"""Inyecta con `POST /api/session/<id>/prompt` y un `displayText` de título.
+
+	Por qué no `synthetic`: el mensaje sintético se pinta como aviso del sistema,
+	pero **no dispara el hook `prompt`** del arnés, así que se perderían la
+	captura del turno (scribe → Bünker), el reset del handshake y el acuse
+	`msg=<event_id>`. Un user message normal conserva todo eso; solo se le añade
+	`metadata.displayText`, que la UI usa como texto visible **en lugar** del
+	cuerpo (el modelo sigue recibiendo el cuerpo entero).
+
+	Durable: la API V2 admite el mensaje en el inbox y programa el turno. Si la
+	llamada falla (servicio caído, versión sin ese endpoint, timeout), se cae al
+	`run --session` clásico: perder un aviso es peor que pintarlo sin plegar.
+	"""
+	exe = opencode_binary()
+	if exe is None:
+		_set_last_error("opencode_no_encontrado")
+		logger.error("[soul-notify] binario `opencode` no encontrado (¿systemd sin PATH?); aviso NO entregado")
+		return False
+	exists = opencode_session_exists(session_id, exe=exe)
+	if exists is False:
+		_set_last_error(STALE_LEG)
+		logger.warning(f"[soul-notify] la sesión opencode {session_id[:16]} no existe; no se inyecta")
+		return False
+	if exists is None:
+		_set_last_error("opencode_sonda_fallida")
+		return False
+	payload = json.dumps(
+		{"text": text, "metadata": {"displayText": notice_title(text), **_PRESENTATION_EMPTY}},
+		ensure_ascii=False,
+	)
+	try:
+		res = subprocess.run(
+			[exe, "api", "post", f"/api/session/{session_id}/prompt", "--data", payload],
+			stdin=subprocess.DEVNULL,
+			capture_output=True,
+			text=True,
+			timeout=OPENCODE_API_TIMEOUT_S,
+		)
+	except (OSError, subprocess.TimeoutExpired) as e:
+		logger.warning(f"[soul-notify] API de opencode no respondió ({e}); fallback a `run --session`")
+		return _deliver_cli(session_id, text)
+	if res.returncode == 0:
+		_set_last_error("")
+		_set_last_trace("")
+		return True
+	logger.warning(
+		f"[soul-notify] API de opencode rechazó el aviso a {session_id[:16]} "
+		f"(rc={res.returncode}): {(res.stderr or res.stdout or '')[:200]}; fallback a `run --session`"
+	)
+	return _deliver_cli(session_id, text)
+
+
 # Directorios donde Claude Code crea sus sockets de mensajería (los mismos que
 # acepta el propio binario: `/run/user/<uid>/cc-socks`, `/tmp/cc-socks[-<uid>]`).
 _CLAUDE_SOCKET_DIR = re.compile(r"^(/run/user/\d+/cc-socks|/tmp/cc-socks(-\d+)?|/private/tmp/cc-socks(-\d+)?)$")
@@ -403,7 +500,7 @@ def _deliver_neon_link(session_id: str, text: str) -> bool:
 
 # El repunte a neon-link es cambiar cuál de estos es el DEFAULT.
 _TRANSPORTS = {
-	"cli": _deliver_cli,
+	"cli": _deliver_opencode_prompt,
 	"claude_socket": _deliver_claude_socket,
 	"neon_link": _deliver_neon_link,
 }

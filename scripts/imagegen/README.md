@@ -22,6 +22,7 @@ Modelos: **NO hardcodeados** — el harness los lee del elenco de máquina
 - `bonsai_ternary` — `GpuPipeline` (image-studio/backend_gpu), Bonsai Image 4B ternario (gemlite INT2) (Apache-2.0).
 - `qwen_image_2_1_turbo` — backend `sd_cpp` (stable-diffusion.cpp, GGUF), Qwen-Image-2.1-Turbo + encoder Qwen3-VL-8B (qwen-research, **no comercial**).
 - `flux3_klein` — backend `sd_cpp` (GGUF), FLUX.3 Image Klein 5.6B (destilado) + encoder Qwen3-VL-4B (flux-kommunity, **no comercial**); t2i + edición/multiref (hasta 10 refs a 512² vía `ref_image_args`).
+- `krea2_turbo_q3` — backend `sd_cpp` (GGUF), **Krea-2-Turbo 12B DiT** (destilado, 8 steps) + encoder Qwen3-VL-4B **compartido con `flux3_klein`** + VAE Wan 2.1 (krea-2-community: comercial **solo <$1M/año**). Medido 2026-11-14 @1024²: t2i pico **6457 MiB** (incremento sobre la línea base) ~40 s/img; **edición por referencia** (`composition: reference_image` + `ref_lora` identity-edit r64) pico **6579 MiB**, ~105 s/img. El LoRA de edición es **no comercial** (licencia propia del autor). El Q2_K se midió (6079 MiB, mismo tiempo) y se retiró.
 
 ## Rutas configurables (opción por defecto del puesto; override por entorno)
 
