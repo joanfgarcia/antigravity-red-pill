@@ -29,7 +29,9 @@ step_command:
     set -u
     FORGE="${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"
     MODELS_ROOT="${REDPILL_IMAGE_MODELS_DIR:-$HOME/opt/red-pill-custom-image-models}"
-    IA_DIR="${IA_DIR:-/home/joan/Documents/IA/sharing}"
+    # IA_DIR lo exporta el runner (`queue_worker._load_job_env`): una receta no
+    # lleva la ruta de un usuario concreto (tests/test_job_recipes_portable.py).
+    IA_DIR="${IA_DIR:?IA_DIR no definido: el runner lo exporta}"
     DIR="$MODELS_ROOT/krea-2-turbo"
     OUT="${RP_MEDIA_STAGING:-$FORGE/staging}/krea2-eval"
     mkdir -p "$DIR" "$OUT"
