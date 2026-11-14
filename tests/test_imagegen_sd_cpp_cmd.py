@@ -119,3 +119,40 @@ def test_gen_sd_cpp_usa_cfg_override(monkeypatch):
 	loaded_ctx = {"binary": "/bin/sd-cli", "cfg": {"id": "flux3_klein", "steps": 8}, "sd": {}, "paths": {}}
 	assert m._gen_sd_cpp(cfg, loaded_ctx, "p", 1, 512, 512, {}) == "IMG"
 	assert seen["steps"] == 4 and seen["guidance"] == 0.5
+
+
+# ── LoRA de edición (`ref_lora`) ─────────────────────────────────────────────
+# Krea2 NO edita por referencia con el modelo base: las referencias inyectan tokens
+# que solo sabe leer un LoRA de edición entrenado para ello (medido 2026-11-14: sin
+# LoRA → rejilla de bloques y la identidad se ignora). sd-cli aplica LoRAs por
+# sintaxis de prompt, así que el sufijo `<lora:nombre:peso>` lo pone el harness desde
+# el DATO del elenco — nunca a mano en el prompt del operador.
+
+def test_ref_lora_solo_en_composicion(monkeypatch):
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["ref_lora"] = {"file": "edit_r64", "dir": "/loras", "weight": 0.8}
+	t2i = m._sd_cpp_command(ctx, "p", 1, 1024, 1024, "/o.png")
+	assert "<lora:" not in t2i[t2i.index("-p") + 1] and "--lora-model-dir" not in t2i
+
+	cmd = m._sd_cpp_command(ctx, "c", 1, 1024, 1024, "/o.png", ref_images=["/a.png"])
+	assert cmd[cmd.index("-p") + 1] == "c<lora:edit_r64:0.8>"
+	assert cmd[cmd.index("--lora-model-dir") + 1] == "/loras"
+
+
+def test_ref_lora_peso_por_defecto_y_ruido_ignorado(monkeypatch):
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["ref_lora"] = {"file": "edit", "dir": "/loras", "weight": "no-es-un-numero"}
+	cmd = m._sd_cpp_command(ctx, "c", 1, 512, 512, "/o.png", ref_images=["/a.png"])
+	assert cmd[cmd.index("-p") + 1] == "c<lora:edit:1.0>"
+
+
+def test_ref_lora_incompleta_no_se_inventa(monkeypatch):
+	"""Sin `dir` no se adivina la carpeta: se ignora (el modelo sigue siendo usable en t2i)."""
+	m = _load(monkeypatch)
+	ctx = _ctx(vision=False)
+	ctx["sd"]["ref_lora"] = {"file": "edit"}
+	cmd = m._sd_cpp_command(ctx, "c", 1, 512, 512, "/o.png", ref_images=["/a.png"])
+	assert "--lora-model-dir" not in cmd and "<lora:" not in cmd[cmd.index("-p") + 1]
+	assert m._sd_ref_lora(None) is None and m._sd_ref_lora("solo-nombre") is None

@@ -1,0 +1,82 @@
+# Krea-2-Turbo GGUF — evaluación en 8 GB (VRAM real medida + s/imagen).
+#
+# UN step = UN quant (element_job, fail-soft): si un quant no entra en VRAM, se
+# REGISTRA en failures.jsonl, sale con skip_exit_code y la cola SIGUE con el otro
+# (job_dag_execution §2: dos elementos independientes, un fallo no invalida el otro).
+#
+# Autosuficiente: cada step descarga lo suyo con `hf download` (idempotente y
+# reanudable) antes de generar. El VAE Wan 2.1 es compartido y se baja en ambos
+# (no-op la segunda vez). El encoder Qwen3-VL-4B NO se baja: se reutiliza el de
+# flux3_klein (MODEL_STORAGE §3.2, componente compartido sin duplicar bytes).
+#
+# VRAM: `bench_imagegen` mide `torch.max_memory_allocated()`, que para el backend
+# sd_cpp (subproceso) es siempre ~0 — de ahí el muestreador `nvidia-smi` externo
+# que escribe `vram-<modelo>.log` y resume el pico en `vram.jsonl`.
+#
+# Requiere en el elenco de máquina: krea2_turbo_q3, krea2_turbo_q2
+# (~/.config/red-pill/media_profiles.yaml). SALIDA: staging (desechable).
+source: element_job
+priority: 7
+title: Krea-2-Turbo GGUF — Q3_K_M vs Q2_K, 3 géneros @1024² (VRAM medida)
+mission_id: krea2-eval
+elements:
+  - {"model": "krea2_turbo_q3"}
+  - {"model": "krea2_turbo_q2"}
+step_command:
+  - sh
+  - -c
+  - |
+    set -u
+    FORGE="${IMAGE_FORGE_HOME:-$HOME/opt/image-forge}"
+    MODELS_ROOT="${REDPILL_IMAGE_MODELS_DIR:-$HOME/opt/red-pill-custom-image-models}"
+    IA_DIR="${IA_DIR:-/home/joan/Documents/IA/sharing}"
+    DIR="$MODELS_ROOT/krea-2-turbo"
+    OUT="${RP_MEDIA_STAGING:-$FORGE/staging}/krea2-eval"
+    mkdir -p "$DIR" "$OUT"
+
+    MODEL=$(printf '%s' "$RP_ELEMENT" | "$FORGE/venv/bin/python" -c 'import json,sys;print(json.load(sys.stdin)["model"])')
+    echo "[element] $MODEL"
+
+    # 1) VAE Wan 2.1 (compartido, idempotente)
+    "$FORGE/venv/bin/hf" download Comfy-Org/Wan_2.1_ComfyUI_repackaged \
+      split_files/vae/wan_2.1_vae.safetensors --local-dir "$DIR" || exit 1
+
+    # 2) DiT del quant de ESTE elemento (idempotente, reanudable)
+    case "$MODEL" in
+      krea2_turbo_q3)
+        "$FORGE/venv/bin/hf" download realrebelai/KREA-2_GGUFs \
+          TURBO/Krea-2-Turbo-Q3_K_M.gguf --local-dir "$DIR" || exit 1 ;;
+      krea2_turbo_q2)
+        "$FORGE/venv/bin/hf" download vantagewithai/Krea-2-Turbo-GGUF \
+          krea2_turbo-Q2_K.gguf --local-dir "$DIR" || exit 1 ;;
+      *) echo "elemento desconocido: $MODEL" >&2; exit 1 ;;
+    esac
+
+    # 3) Generar con muestreo de VRAM del dispositivo (pico real, no el de torch)
+    VM="$OUT/vram-$MODEL.log"
+    nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -lms 250 > "$VM" &
+    SPID=$!
+    "$FORGE/venv/bin/python" -u "$IA_DIR/scripts/imagegen/bench_imagegen.py" \
+      --element --genres photo_portrait,illustration,typography --seeds 42 --size 1024 \
+      --out "$OUT"
+    RC=$?
+    kill "$SPID" 2>/dev/null
+
+    PEAK=$(sort -n "$VM" 2>/dev/null | tail -1)
+    echo "[peak] ${PEAK:-?} MiB"
+    printf '{"element":"%s","peak_vram_mb":%s,"rc":%s}\n' "$MODEL" "${PEAK:-0}" "$RC" >> "$OUT/vram.jsonl"
+
+    if [ "$RC" -ne 0 ]; then
+      echo "$MODEL rc=$RC" >> "$OUT/failures.jsonl"
+      exit 79
+    fi
+    exit 0
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 90
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 16G

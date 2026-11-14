@@ -1,5 +1,41 @@
 ## Unreleased
 
+### 🎨 Imagen — Krea-2-Turbo cabe en 8 GB, y el pico de VRAM deja de mentir
+
+Medido el 2026-11-14 en la RTX 5070 Laptop (8151 MiB), con `sd-cli` (commit
+`b13a482`) que ya soporta Krea2. El modelo son **12B de DiT destilado** + encoder
+Qwen3-VL-4B + VAE Wan 2.1, el mismo patrón de tres piezas que Qwen-Image.
+
+El hallazgo incómodo: el `peak_mb` que publicaba el harness era **siempre 0.0**
+con el backend `sd_cpp`. `torch.cuda.max_memory_allocated()` sólo ve el asignador
+de su propio proceso y ahí el modelo vive en `sd-cli` (subproceso) — así que el
+`vram_footprint` del elenco, que es lo que el router usa para decidir si un modelo
+cabe, era una estimación a ojo. Igual para Qwen-Image y FLUX.3.
+
+- **[NEW] `_DeviceVram`** — muestreo de `nvidia-smi` en streaming (sin
+  dependencias nuevas), línea base **antes** de cargar y pico como **incremento**
+  del dispositivo: comparable entre backends. Con `RP_VRAM_SAMPLER=off` se apaga;
+  sin `nvidia-smi` degrada a la cifra de torch en vez de romper.
+- **[NEW] `bench_imagegen` / `gen_image` / `gen_cli`** — publican `peak_source`,
+  `torch_peak_mb`, `device_baseline_mb` y `device_peak_abs_mb`; la consola
+  imprime el pico al terminar.
+- **[NEW] `ref_lora` en el bloque `sd_cpp:` del elenco** — LoRA de edición
+  dirigida por el dato: `sd-cli` aplica LoRAs por sintaxis de prompt, así que el
+  harness añade `<lora:file:weight>` **sólo cuando hay referencias**. Sin `dir` el
+  bloque se ignora; si el `.safetensors` no está, falla limpio (`falta ref_lora`).
+- **[FIX] Krea 2 NO edita por referencia sin LoRA** — con el modelo base las
+  referencias inyectan tokens que no sabe leer y la imagen sale con una rejilla de
+  bloques de 8 px. Con `preset=krea2_edit` + el LoRA identity-edit r64 la identidad
+  se conserva a 1024².
+- **[NEW] `configs/jobs/krea2_eval.yaml`** — A/B por quant (`element_job`,
+  fail-soft, descarga idempotente, muestreo de VRAM externo).
+- **[DOCS] `MEDIA_MODELS.md` §5** — knob `ref_lora` y el caso Krea2 medido.
+
+Cifras medidas @1024²: t2i **6457 MiB** / ~40 s por imagen; edición con una
+referencia **6579 MiB** / ~105 s. Q2_K (6079 MiB, mismo tiempo, peor calidad) se
+midió y se retiró. El LoRA de edición es **no comercial** (licencia del autor,
+aparte de la de Krea): queda escrito en `license.caveats`.
+
 ### 🪞 Identidad — el perfil del Operador deja de opinar sobre quién eres
 
 El 2026-11-13 el perfil que se inyecta en cada despertar decía **«Perfil del
