@@ -1,0 +1,30 @@
+# Letras del fondo declarado por el Operador (RFC-AFE-001, D-01).
+#
+# El fondo SE CAPTURA, no se infiere: son las letras que él contesta cuando se le
+# pregunta "¿cómo estás hoy?". El color no se inventa aquí: cada uno existe en
+# `CHROMA_TONE_MAPPING` de config.py, y el test lo verifica. La directiva de tono
+# sale de ese mapa, así que elegir color es elegir cómo hablarle.
+C:
+  emotion: tired
+  color: purple
+  label: cansancio
+F:
+  emotion: frustrated
+  color: red
+  label: frustración
+T:
+  emotion: sad
+  color: blue
+  label: tristeza
+X:
+  emotion: tense
+  color: orange
+  label: tensión
+B:
+  emotion: good
+  color: yellow
+  label: bien
+"-":
+  emotion: neutral
+  color: gray
+  label: sin carga

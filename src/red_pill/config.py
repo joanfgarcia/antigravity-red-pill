@@ -989,6 +989,10 @@ class RedPillConfig(BaseSettings):
 	AFFECT_TTL_MIN: int = 15  # edad del estado antes de recalcular
 	AFFECT_WINDOW_MIN: int = 180  # ventana de turnos que se miran
 	AFFECT_TURNS: int = 8  # máximo de prompts por pasada
+	# FONDO declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta,
+	# no el que se infiere del texto. Sombra por defecto (feature nueva); se
+	# enciende en el `.env` del puesto. Letras y paleta en `data/affect_letters.yaml`.
+	AFFECT_FONDO_ENABLED: bool = False
 	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
 	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"

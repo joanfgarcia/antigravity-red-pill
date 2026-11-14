@@ -1,5 +1,35 @@
 ## Unreleased
 
+### 🫀 Afecto — el fondo del Operador entra en el contexto (RFC-AFE-001 F1)
+
+El ánimo tenía **un solo eje y dos escalas**. El `TONE_COLOR` que llega al
+contexto sale del afecto léxico sobre los prompts de **todas** las sesiones vivas:
+medido hoy, decía `anger/red/0.8` con evidencia `["enfad"]` sacada de una frase
+hipotética del Operador hablando de un tercero. Y el fondo real —cómo está él— no
+está en ese texto: en **10 de 14 días** el fragmento del turno es plano mientras
+su fondo no lo es, y agregando el fragmento por día se acierta **4 de 14**.
+
+El fondo se **pregunta** y se guarda; no se infiere.
+
+- **[NEW] `core.affect_fondo`** — un registro **por puesto, no por sesión**
+  (`continuity_id` es per-leg: 6 filas, 6 ids; guardar «por alma» habría dado un
+  fondo por pestaña), **día natural** (no ventana móvil de 24 h: declarado ayer
+  23:55 y leído hoy 11:50 dice `ayer`), sin decaimiento en F1 (el *Fading Affect
+  Bias* escala erosión de engramas por color, no es ley de ánimo), y escritura con
+  `flock` + `tmp` único + guarda de monotonía.
+- **[NEW] `data/affect_letters.yaml`** — letra → emoción/color/etiqueta; los
+  colores existen en `CHROMA_TONE_MAPPING` (test de completitud).
+- **[NEW] bloque `ÁNIMO`** en el despertar (`full` y `medium`; en `low` no, porque
+  un despertar autónomo no tiene a quién preguntar) con los tres textos
+  byte-exactos: hoy / antes / `sin señal`.
+- **[FIX] jerarquía en código** — con fondo de hoy, la persona no imprime `chroma`
+  y `tone_analyzer` lo prefiere al afecto léxico: el mismo contexto ya no puede
+  decir `fondo: B · bien` y `chroma: red`.
+- **[NEW] `red-pill affect fondo --set C`** — captura por CLI (proceso nuevo, sin
+  reiniciar el MCP; la acción MCP llegará con su `auth_level`).
+- **[NEW] `AFFECT_FONDO_ENABLED`** — en sombra por defecto; se enciende por `.env`
+  y está documentado en `.env.example`.
+
 ### 🫂 Coro — dos gemelas en el mismo branch, dos almas distintas
 
 El proxy MCP es **uno para toda la app**. Con tres sesiones vivas en el mismo

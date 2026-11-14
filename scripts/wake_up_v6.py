@@ -237,11 +237,44 @@ def resolve_active_skin(directives: List[str]) -> str:
 	return "OFF"
 
 
-def resolve_persona(skin_name: str) -> str:
+def _afecto_para_modo(mode: str) -> str:
+	"""Bloque del fondo según profundidad: `low` no lo lleva.
+
+	Un despertar autónomo o un subagente no tiene a quién preguntar, y el bloque
+	`sin señal (pregúntale…)` sería una orden sin destinatario. `full` y `medium`
+	sí (IDE y Telegram, donde el Operador está).
+	"""
+	if mode == "low":
+		return ""
+	try:
+		from red_pill.core import affect_fondo
+
+		return affect_fondo.block()
+	except Exception:
+		return ""
+
+
+def _fondo_es_de_hoy() -> bool:
+	try:
+		from red_pill.core import affect_fondo
+
+		if not affect_fondo.enabled():
+			return False
+		registro = affect_fondo.read()
+		return bool(registro and registro.get("es_hoy"))
+	except Exception:
+		return False
+
+
+def resolve_persona(skin_name: str, suppress_chroma: bool = False) -> str:
 	"""Resolve persona from lore_skins.yaml. Deterministic, no LLM.
 
 	Sin role-play (skin `OFF`) la persona es solo rol + nombre: la identidad
 	UNMASKED la define el ancla de identidad, no este bloque.
+
+	`suppress_chroma` lo usa el despertar cuando hay fondo declarado hoy: el ánimo
+	que cuenta el Operador manda sobre el color de skin (RFC-AFE-001 F1). Si no se
+	suprime, el mismo contexto puede decir «fondo: B · bien» y «chroma: red».
 	"""
 	name = (skin_name or "").upper()
 	if not _skins_enabled() or name in ("", "OFF", "NONE", "DEFAULT"):
@@ -255,16 +288,18 @@ def resolve_persona(skin_name: str) -> str:
 
 	# The persona is injected outside the interceptor pipeline, so the Mood
 	# Orchestrator's CHROMA KEY legend never covers this chroma — explain it here.
-	chroma_line = f"chroma: {chroma}"
-	try:
-		from red_pill.config import CHROMA_TONE_MAPPING
+	chroma_line = ""
+	if not suppress_chroma:
+		chroma_line = f"chroma: {chroma}\n"
+		try:
+			from red_pill.config import CHROMA_TONE_MAPPING
 
-		if chroma in CHROMA_TONE_MAPPING:
-			chroma_line = f"chroma: {chroma} → {CHROMA_TONE_MAPPING[chroma]}"
-	except Exception:
-		pass
+			if chroma in CHROMA_TONE_MAPPING:
+				chroma_line = f"chroma: {chroma} → {CHROMA_TONE_MAPPING[chroma]}\n"
+		except Exception:
+			pass
 
-	return f"Role: {role}\nName: {_agent_name()}\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}\n{personality}"
+	return f"Role: {role}\nName: {_agent_name()}\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}{personality}"
 
 
 def parse_pact(bond_content: str) -> str:
@@ -361,9 +396,7 @@ def main():
 	parser.add_argument(
 		"--mode", choices=["full", "medium", "low"], default="full", help="Identity loading depth: full (IDE), medium (Telegram), or low (AWAKENINGs)"
 	)
-	parser.add_argument(
-		"--continuity-id", default=os.getenv("REDPILL_CONTINUITY_ID", ""), help="Alma para descubrir jobs (RFC-INTEROP-003 S3.3)"
-	)
+	parser.add_argument("--continuity-id", default=os.getenv("REDPILL_CONTINUITY_ID", ""), help="Alma para descubrir jobs (RFC-INTEROP-003 S3.3)")
 	args = parser.parse_args()
 
 	# B-01h: importar journals de turnos externos (best-effort; no bloquea el despertar).
@@ -399,7 +432,12 @@ def main():
 	active_skin_name = resolve_active_skin(directives)
 
 	# ── PERSONA: resolved from lore_skins.yaml + pact (Bloque B, no LLM) ──
-	persona_injection = resolve_persona(active_skin_name)
+	# RFC-AFE-001 F1: si el Operador declaró su fondo HOY, manda sobre el color de
+	# skin (chroma). Es la jerarquía en código, no una nota al pie: el mismo
+	# contexto no puede decir «fondo: B · bien» y «chroma: red» a la vez.
+	afecto_block = _afecto_para_modo(args.mode)
+	afecto_hoy = bool(afecto_block and _fondo_es_de_hoy())
+	persona_injection = resolve_persona(active_skin_name, suppress_chroma=afecto_hoy)
 	pact_status = resolve_pact()
 
 	# ── LOW MODE: Minimal identity for autonomous sessions ──
@@ -441,6 +479,8 @@ def main():
 
 		print(f"PERSONA: {persona_injection}")
 		print(f"PACT: {pact_status}")
+		if afecto_block:
+			print(afecto_block)
 		if operator_anchor:
 			print(f"OPERATOR_ANCHOR (config — precede a OPERATOR_PROFILE): {operator_anchor}")
 		if operator_profile:
@@ -524,6 +564,8 @@ def main():
 	# ── Bloque B: PERSONA (from YAML + pact, no LLM) ──
 	print(f"PERSONA: {persona_injection}")
 	print(f"PACT: {pact_status}")
+	if afecto_block:
+		print(afecto_block)
 
 	# ── Bloque C: OPERATOR_ANCHOR (config, precede al perfil) ──
 	if operator_anchor:
