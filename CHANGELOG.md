@@ -90,6 +90,36 @@ Cifras medidas @1024²: t2i **6457 MiB** / ~40 s por imagen; edición con una
 referencia **6579 MiB** / ~105 s. Q2_K (6079 MiB, mismo tiempo, peor calidad) se
 midió y se retiró. El LoRA de edición es **no comercial** (licencia del autor,
 aparte de la de Krea): queda escrito en `license.caveats`.
+### 🎙️ Cola — solo entra la voz del Operador
+
+Medido el 2026-11-14: `memory_queue` tenía **1.430 filas y 10 MB**, desde marzo, y
+**nada** las borraba. Peor: **148 no eran del Operador** — 113 bloques
+`<user_rules>` (de los que solo 6 traían su mensaje, marcado `[Joan]`; el resto
+eran despertares headless), 22 avisos de herramienta, 10 prompts de subagente y 3
+avisos de job/coro. Laya los etiquetaba como si fueran él y la marca `[Joan]` que
+sí era su voz quedaba enterrada dentro del bloque.
+
+La cola no es un archivo: es **el buffer del mood**. Solo alimenta el drenaje a
+`interaction_memories` (TTL 72 h) y al afecto léxico (ventana de 180 min); el
+verbatim canónico es el store del proveedor, que el Memento ya renderiza.
+
+- **[NEW] `core.operator_voice`** — guardián único: `extract()` devuelve la voz
+  del Operador o `None`. Rescata el mensaje del último `<current_message>` cuando
+  la sesión es de Telegram, quita la marca `[Joan]`/`[Operador]`, y rechaza
+  bloques del arnés, avisos de job/coro, encargos de subagente y despertares
+  headless.
+- **[FIX] filtro al escribir** — `enqueue_memory` lo aplica antes de insertar:
+  lo que no es su voz no llega ni a la cola ni al mood. Un solo punto para los
+  cinco escritores (relay del hook, bridges de opencode/pi, agent worker, MCP).
+- **[FIX] filtro al leer** — `operator_affect` deja su heurística local (solo
+  miraba `<`) y usa el mismo `extract()`.
+- **[FIX] purga por voz y edad** — `queue_purge_rendered` v2: sin voz → se va sin
+  mirar la edad; con voz → se conserva 7 días y después se va. **No consulta
+  Memento para decidir** (decisión del Operador): la cola es el buffer, no el
+  backup. El pase `mcp:` de v1 se conserva porque ahí la única copia sí es el
+  Memento renderizado.
+- **[MEDIDO]** dry-run 413 → real 413 (131 sin voz, 282 caducadas). Cola de 618 a
+  **205 filas**, 10 MB → **1,2 MB**; `completed` sin voz restantes: **0**.
 
 ### 🪞 Identidad — el perfil del Operador deja de opinar sobre quién eres
 
