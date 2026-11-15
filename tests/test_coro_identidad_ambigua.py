@@ -329,6 +329,96 @@ class TestActividadReciente:
 		assert ident["identity_source"] == "activity"
 
 
+class TestNacimientoPorBridge:
+	"""Cuerpo NUEVO sin fila: el bridge per-sesión es su acta de nacimiento.
+
+	Regresión del 2026-11-15. Sesión de opencode **recién abierta** con la pestaña
+	del día anterior al lado (mismo cwd ⇒ el proxy no puede correlacionar) y la
+	fila del registro de la sesión vieja ya caducada. `caller_leg` se verificaba
+	CONTRA la fila: sin fila no hay cuerpo, sin cuerpo no hay `upsert`, y sin
+	`upsert` la fila no se crea nunca. Once minutos de turnos con `leg=unknown`
+	(sin reloj, sin tablón, sin avisos) hasta que la ambigüedad caducó sola.
+	"""
+
+	def _bridge(self, state, sid: str, *, workdir: str = WS, age_s: float = 0.0) -> None:
+		directory = state / "sessions" / "bridge"
+		directory.mkdir(parents=True, exist_ok=True)
+		directory.joinpath(f"opencode__{sid}.json").write_text(
+			json.dumps(
+				{
+					"provider": "opencode",
+					"session_id": sid,
+					"workdir": workdir,
+					"updated_at": time.time() - age_s,
+				}
+			)
+		)
+
+	def test_leg_nuevo_con_bridge_fresco_se_acepta(self, tmp_path):
+		state = tmp_path / "state"
+		self._bridge(state, "recien_abierta")
+		with patch("red_pill.core.bridge.get_state_dir", return_value=state):
+			row = srv._declared_leg_row("opencode:recien_abierta", workspace=WS)
+		assert row is not None
+		assert row["originator"] == "opencode:recien_abierta"
+		assert row["continuity_id"] is None, "el alma la emite la resolución, no el bridge"
+		assert row["birth"] == "bridge"
+
+	def test_bridge_rancio_no_acredita(self, tmp_path):
+		"""Una pestaña cerrada hace horas no puede dar de nacer un cuerpo."""
+		state = tmp_path / "state"
+		self._bridge(state, "vieja", age_s=4 * 3600)
+		with patch("red_pill.core.bridge.get_state_dir", return_value=state):
+			assert srv._declared_leg_row("opencode:vieja", workspace=WS) is None
+
+	def test_bridge_de_otro_workspace_no_acredita(self, tmp_path):
+		state = tmp_path / "state"
+		self._bridge(state, "ajena", workdir="/ws/ajeno")
+		with patch("red_pill.core.bridge.get_state_dir", return_value=state):
+			assert srv._declared_leg_row("opencode:ajena", workspace=WS) is None
+
+	def test_sin_bridge_no_hay_cuerpo(self, tmp_path):
+		"""Sin acta de nacimiento se mantiene el fail-closed de siempre."""
+		state = tmp_path / "state"
+		with patch("red_pill.core.bridge.get_state_dir", return_value=state):
+			assert srv._declared_leg_row("opencode:fantasma", workspace=WS) is None
+
+	def test_el_bridge_no_pisa_una_fila_viva(self, tmp_path, gemelas):
+		"""Con fila buena manda el registro (alma y linaje), no el bridge."""
+		state = tmp_path / "state"
+		self._bridge(state, LEG_A.split(":", 1)[1])
+		with patch("red_pill.core.bridge.get_state_dir", return_value=state):
+			row = srv._declared_leg_row(LEG_A, workspace=WS)
+		assert row is not None
+		assert row["continuity_id"] == SOUL_A
+		assert "birth" not in row
+
+	@pytest.mark.asyncio
+	async def test_handshake_crea_el_alma_de_una_sesion_nueva(self, monkeypatch, tmp_path):
+		"""Cadena completa: canal ambiguo + leg nuevo + bridge fresco ⇒ nace el alma."""
+		monkeypatch.setenv("REDPILL_HARNESS", "opencode")
+		monkeypatch.setenv("REDPILL_MISSION_ID", "repo:sharing")
+		monkeypatch.setattr(srv, "_harness_bridge", lambda *_: {"originator": "", "workdir": WS})
+		state = tmp_path / "state"
+		self._bridge(state, "recien_abierta")
+		leg = "opencode:recien_abierta"
+		token = srv._shared_identity_var.set(_ambigua())
+		try:
+			with (
+				patch("red_pill.core.bridge.get_state_dir", return_value=state),
+				patch("red_pill.core.session_liveness.list_sessions", lambda: []),
+			):
+				ident = await srv._resolve_session_identity({"user_prompt": "primer turno de la sesión nueva", "caller_leg": leg})
+		finally:
+			srv._shared_identity_var.reset(token)
+		assert ident["originator"] == leg
+		assert ident["identity_source"] == "declared"
+		assert ident["continuity_id"], "el cuerpo nuevo emite alma y la persiste"
+		row = SessionRegistry().get_by_originator(leg)
+		assert row and row["continuity_id"] == ident["continuity_id"]
+		assert row["ttl_state"] == "active"
+
+
 class TestCuerpoDeclarado:
 	"""`caller_leg`: eco del tag, verificado contra el registro (no creído)."""
 

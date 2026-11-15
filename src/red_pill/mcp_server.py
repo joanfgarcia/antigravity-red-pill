@@ -2124,6 +2124,81 @@ def _registry_ttl_s() -> float:
 		return 6 * 3600.0
 
 
+def _mismo_workspace(uno: str, otro: str) -> bool:
+	"""¿Dos rutas son el mismo workspace (o una contiene a la otra)?"""
+	if not uno or not otro:
+		return True
+	from red_pill.core.bridge import _norm
+
+	mine, theirs = _norm(uno), _norm(otro)
+	if not mine or not theirs:
+		return True
+	return mine == theirs or theirs.startswith(mine + "/") or mine.startswith(theirs + "/")
+
+
+def _fila_declarada_vale(row: Optional[dict], *, workspace: Optional[str] = None) -> bool:
+	"""Una fila del registro acredita el cuerpo: viva, con latido y en este workspace."""
+	if not row:
+		return False
+	if str(row.get("ttl_state") or "") == "expired":
+		return False
+	try:
+		updated = float(row.get("updated_at") or 0.0)
+	except (TypeError, ValueError):
+		updated = 0.0
+	if updated <= 0.0 or (time.time() - updated) > _registry_ttl_s():
+		return False
+	if not _mismo_workspace(str(workspace or ""), str(row.get("worktree") or "")):
+		return False
+	return True
+
+
+def _bridge_birth_row(leg: str, *, workspace: Optional[str] = None) -> Optional[dict]:
+	"""Acta de nacimiento de un cuerpo NUEVO: el bridge per-sesión del arnés.
+
+	Un leg recién abierto **no tiene fila** en el registro, y `caller_leg` se
+	verificaba CONTRA la fila: sin fila no hay cuerpo, y sin cuerpo no hay
+	`upsert` que cree la fila. El bucle se cierra sobre sí mismo y la sesión no
+	puede nacer nunca mientras el canal esté ambiguo. Medido el 2026-11-15: sesión
+	nueva abierta con la pestaña del día anterior al lado (mismo cwd ⇒ proxy
+	ambiguo) ⇒ once minutos de turnos con `leg=unknown`, sin reloj, sin tablón y
+	sin poder recibir avisos; el alma no nació hasta que la ambigüedad caducó por
+	casualidad.
+
+	El hook escribe `${STATE_DIR}/sessions/bridge/<provider>__<sid>.json` con el
+	workdir, así que existe prueba de cuerpo que **no depende del registro**. Se
+	acepta solo si casa la sesión EXACTA, el latido es fresco (la misma ventana
+	que usa el proxy para correlacionar) y el workspace coincide. Devuelve una
+	fila SINTÉTICA, sin alma: la emite `_resolve_session_identity` y el `upsert`
+	la persiste. Un bridge ausente, rancio o de otro workspace no acredita nada.
+	"""
+	raw = str(leg or "").strip()
+	provider, _, sid = raw.partition(":")
+	if not provider or not sid:
+		return None
+	try:
+		from red_pill.core.bridge import list_session_bridges
+
+		entries = list_session_bridges(provider)
+	except Exception:
+		return None
+	for entry in entries:
+		if str(entry.get("session_id") or "") != sid:
+			continue
+		bridge_ws = str(entry.get("workdir") or "").strip()
+		if not _mismo_workspace(str(workspace or ""), bridge_ws):
+			return None
+		return {
+			"originator": raw,
+			"continuity_id": None,
+			"worktree": bridge_ws or None,
+			"updated_at": float(entry.get("updated_at") or time.time()),
+			"ttl_state": "active",
+			"birth": "bridge",
+		}
+	return None
+
+
 def _declared_leg_row(leg: Optional[str], *, workspace: Optional[str] = None) -> Optional[dict]:
 	"""Fila del cuerpo DECLARADO por el agente, solo si es un eco verificable.
 
@@ -2131,8 +2206,13 @@ def _declared_leg_row(leg: Optional[str], *, workspace: Optional[str] = None) ->
 	señal por-request: el cuerpo lo declara el agente (`caller_leg`, el `leg=` de
 	su tag `<session …/>`) y aquí se **verifica**: debe existir una fila, estar
 	viva (no expirada, latido reciente) y — si se conoce — trabajar en ESTE
-	workspace. Un cuerpo desconocido, muerto o de otro workspace se descarta:
-	preferimos no atribuir a atribuir a un alma ajena.
+	workspace. Un cuerpo muerto o de otro workspace se descarta: preferimos no
+	atribuir a atribuir a un alma ajena.
+
+	Si no hay fila utilizable **no se rinde**: pide el acta de nacimiento al
+	bridge per-sesión (`_bridge_birth_row`), que es lo único que puede acreditar a
+	un cuerpo que todavía no existe en el registro. Sin esa pieza, una sesión
+	nueva con el canal ambiguo se quedaba sin alma para siempre.
 	"""
 	raw = str(leg or "").strip()
 	if ":" not in raw:
@@ -2142,25 +2222,10 @@ def _declared_leg_row(leg: Optional[str], *, workspace: Optional[str] = None) ->
 
 		row = SessionRegistry().get_by_originator(raw)
 	except Exception:
-		return None
-	if not row:
-		return None
-	if str(row.get("ttl_state") or "") == "expired":
-		return None
-	try:
-		updated = float(row.get("updated_at") or 0.0)
-	except (TypeError, ValueError):
-		updated = 0.0
-	if updated <= 0.0 or (time.time() - updated) > _registry_ttl_s():
-		return None
-	row_ws = str(row.get("worktree") or "").strip()
-	if workspace and row_ws:
-		from red_pill.core.bridge import _norm
-
-		mine, theirs = _norm(workspace), _norm(row_ws)
-		if mine and theirs and mine != theirs and not theirs.startswith(mine + "/") and not mine.startswith(theirs + "/"):
-			return None
-	return row
+		row = None
+	if _fila_declarada_vale(row, workspace=workspace):
+		return row
+	return _bridge_birth_row(raw, workspace=workspace)
 
 
 def _leg_from_turn_prompt(prompt: str, workspace: str) -> Optional[str]:
@@ -2507,7 +2572,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				previous_event_seq = max((int(r.get("last_seen_event_seq") or 0) for r in siblings), default=0)
 			except Exception:
 				previous_event_seq = 0
-		if persist and linkable and originator:
+		if persist and linkable and originator and continuity_id:
 			# F1: el reloj global late UNA vez por turno conversacional (D2-a:
 			# señales/jobs sin afinidad no pasan por aquí y no incrementan). Un
 			# fallo del reloj NO debe perder el registro (best-effort por separado).
