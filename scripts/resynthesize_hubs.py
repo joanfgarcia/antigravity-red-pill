@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from red_pill.memory import MemoryManager  # noqa: E402
 from red_pill.metabolism.hub_synthesis import (  # noqa: E402
 	backup_hub_payload,
+	compact_legacy_hub,
 	find_oversized_sessions,
 	find_stale_hubs,
 	load_session_members,
@@ -80,6 +81,11 @@ def main() -> None:
 		"--include-blocked",
 		action="store_true",
 		help="Con --promote-compact, incluye los hubs bloqueados (huérfanos sin miembros). Conserva el bloqueo: el flag dice la verdad.",
+	)
+	parser.add_argument(
+		"--compact-legacy",
+		action="store_true",
+		help="Reescribe por síntesis el content de hubs legacy que superan el tope duro (no corta; si no cabe, no escribe).",
 	)
 	parser.add_argument("--ensure-indexes", action="store_true", help="Crea los índices de payload hub→miembro (idempotente).")
 	parser.add_argument("--restore", metavar="JSON", help="Revierte un hub desde un backup (payload+vector+marcas de miembros).")
@@ -181,8 +187,50 @@ def main() -> None:
 			raise SystemExit(1)
 		return
 
+	if args.compact_legacy:
+		# Modo elemento (element_job): un step = una sesión, vía --collection/--session
+		# o RP_ELEMENT. Sin elemento declarado recorre los stale (uso manual).
+		if (args.collection and args.session) or os.environ.get("RP_ELEMENT"):
+			element = _element_from_args(args)
+			collection = str(element.get("collection") or "")
+			session_id = str(element.get("session_id") or "")
+			result = compact_legacy_hub(memory, collection, session_id, apply=not args.dry_run)
+			print(
+				json.dumps(
+					{"dry_run": bool(args.dry_run), "collection": collection, "session_id": session_id, "result": result},
+					ensure_ascii=False,
+				)
+			)
+			if result in ("over_hard", "no_compactor", "missing"):
+				# Fail-soft del elemento: se registra y la cola sigue con el resto.
+				raise SystemExit(int(os.environ.get("RP_SKIP_EXIT_CODE") or 79))
+			raise SystemExit(0)
+		rows = find_stale_hubs(memory)
+		results = []
+		for row in rows:
+			blocked = bool(row.get("hub_migration_blocked"))
+			if blocked and not args.include_blocked:
+				continue
+			result = compact_legacy_hub(
+				memory,
+				row["collection"],
+				row["session_id"],
+				apply=not args.dry_run,
+			)
+			results.append(
+				{
+					"collection": row["collection"],
+					"session_id": row["session_id"],
+					"content_chars": row["content_chars"],
+					"result": result,
+				}
+			)
+		counts = {key: sum(1 for r in results if r["result"] == key) for key in ("compacted", "would_compact", "already", "over_hard", "no_compactor", "missing")}
+		print(json.dumps({"dry_run": bool(args.dry_run), "counts": counts, "results": results}, ensure_ascii=False))
+		return
+
 	if not args.run and not args.dry_run:
-		parser.error("indica --list, --list-stale, --mark-blocked, --promote-compact, --ensure-indexes, --restore, --run o --dry-run")
+		parser.error("indica --list, --list-stale, --mark-blocked, --promote-compact, --compact-legacy, --ensure-indexes, --restore, --run o --dry-run")
 
 	element = _element_from_args(args)
 	collection = str(element.get("collection") or "")

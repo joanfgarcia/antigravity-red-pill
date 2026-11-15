@@ -1,0 +1,27 @@
+# Compactación por SÍNTESIS de hubs legacy que superan el tope duro.
+#
+# Contexto (2026-11-15): 8 hubs pre-v3 (feb–oct) tienen `content` de 1.112–1.463
+# chars. El tope duro (`SLEEP_HUB_SUMMARY_HARD_LIMIT`, 1.000) solo se aplica al
+# escribir, así que esos hubs se inyectarían enteros en contexto. No pueden
+# re-sintetizarse: 6 no tienen miembros y 2 uno solo (sus engramas se purgaron).
+# La única salida honesta es reescribir el texto que ya existe, por síntesis
+# (AD-116: compactación por síntesis, NUNCA por corte). Si el modelo no baja del
+# tope, el hub NO se escribe y el elemento se salta (fail-soft).
+#
+# Un step = una sesión (checkpoint por elemento, pausable/reanudable).
+# Lanzar:  .venv/bin/python -m red_pill.cli job submit --recipe hubs_compact_legacy
+source: element_job
+priority: 5
+title: Compactar hubs legacy over_hard (síntesis, sin corte)
+mission_id: hubs-compact-legacy
+step_command: .venv/bin/python scripts/resynthesize_hubs.py --compact-legacy
+elements_command: .venv/bin/python scripts/resynthesize_hubs.py --list-stale
+defer_exit_code: 77
+skip_exit_code: 79
+llm:
+  task: hub
+  model: granite_8b
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 20

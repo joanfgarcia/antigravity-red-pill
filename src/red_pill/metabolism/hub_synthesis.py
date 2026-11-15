@@ -1237,6 +1237,121 @@ def promote_compact_hub(
 	return "promoted"
 
 
+def compact_legacy_hub(
+	memory_manager: Any,
+	collection: str,
+	session_id: str,
+	target: Optional[int] = None,
+	apply: bool = True,
+	compactor: Optional[Callable[[str], str]] = None,
+) -> str:
+	"""Reescribe por SÍNTESIS el `content` de un hub legacy que no cabe (AD-116).
+
+	Los hubs pre-v3 anteriores al tope duro pueden superar `SLEEP_HUB_SUMMARY_HARD_LIMIT`
+	y, como el límite solo se aplica al escribir, se inyectarían enteros en contexto.
+	No tienen miembros (sus engramas se purgaron), así que no se pueden re-sintetizar:
+	lo único honesto es compactar el texto que ya existe — por reescritura, NUNCA por
+	corte (si el modelo no baja del tope, el hub no se escribe y se reporta).
+
+	Devuelve `compacted|would_compact|already|over_hard|no_compactor|missing`.
+	"""
+	from red_pill.memento.hub_terms import hub_terms_chars, select_hub_terms
+
+	hid = hub_point_id(collection, session_id)
+	try:
+		points = memory_manager.client.retrieve(collection_name=collection, ids=[hid], with_payload=True)
+	except Exception:
+		return "missing"
+	if not points:
+		return "missing"
+	payload = points[0].payload or {}
+	if int(payload.get("hub_synth_version") or 0) >= HUB_SYNTH_VERSION:
+		return "already"
+	content = str(payload.get("content") or "")
+	hard = int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000)
+	first = content.split("\n", 1)[0].strip()
+	title = first if len(first) <= 120 else ""
+	body = content[len(title) + 1 :] if title and content.startswith(title + "\n") else content
+	if len(body) <= hard:
+		return "already"  # cabe: el camino es promote_compact_hub (mecánico)
+	target_chars = int(target or getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900)
+	target_chars = min(target_chars, hard)
+
+	if compactor is None:
+		compactor = _hub_compactor(target_chars)
+		if compactor is None:
+			return "no_compactor"
+
+	attempts = max(1, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 2))
+	for _ in range(attempts):
+		if len(body) <= target_chars:
+			break
+		try:
+			candidate = str(compactor(body) or "").strip().strip('"').strip()
+		except Exception as exc:
+			logger.warning(f"[HUBS] compactación legacy falló en {collection}:{session_id}: {exc}")
+			break
+		if not candidate or len(candidate) >= len(body):
+			break
+		body = candidate
+	if len(body) > hard:
+		return "over_hard"
+	if not apply:
+		return "would_compact"
+
+	new_content = f"{title}\n{body}" if title else body
+	members = _load_session_members(memory_manager, collection, session_id)
+	terms = select_hub_terms(new_content, title=title)
+	backup_hub_payload(memory_manager, collection, session_id)
+	updates: Dict[str, Any] = {
+		"content": new_content,
+		"hub_synth_version": HUB_SYNTH_VERSION,
+		"hub_title": title,
+		"hub_terms": terms,
+		"hub_terms_chars": hub_terms_chars(terms),
+		"hub_summary_compacted": True,
+		"hub_compacted_from_legacy": True,
+		"hub_compaction_task": "hub",
+		"hub_members_count": len(members),
+		"hub_members_checked_at": time.time(),
+	}
+	try:
+		memory_manager.client.set_payload(collection_name=collection, payload=updates, points=[hid])
+	except Exception as exc:
+		logger.warning(f"[HUBS] no se pudo compactar {collection}:{session_id}: {exc}")
+		return "missing"
+	_mark_members(memory_manager, collection, members, hid)
+	return "compacted"
+
+
+def _hub_compactor(target_chars: int) -> Optional[Callable[[str], str]]:
+	"""Compactor por defecto: el carril `hub` (granite) con el prompt de compactación."""
+	try:
+		from red_pill.core.providers import ProviderRegistry
+		from red_pill.metabolism.distiller import HUB_SUMMARY_COMPACT_PROMPT, load_prompt_text
+
+		system = load_prompt_text(HUB_SUMMARY_COMPACT_PROMPT, fallback_prompt="")
+		if not system:
+			return None
+		provider = ProviderRegistry.get_inference_provider()
+	except Exception as exc:
+		logger.warning(f"[HUBS] sin compactor para hubs legacy: {exc}")
+		return None
+	system = system.replace("{target}", str(target_chars))
+
+	def _compact(text: str) -> str:
+		return str(
+			provider.generate(
+				prompt=text,
+				messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+				temperature=0.1,
+				task="hub",
+			)
+		)
+
+	return _compact
+
+
 def resynthesize_session(memory_manager: Any, collection: str, session_id: str, force: bool = True) -> str:
 	"""Re-sintetiza el hub de UNA sesión (map-reduce). Devuelve written|skipped|failed."""
 	from red_pill.metabolism.distiller import derive_hub_affect, synthesize_hub_v2
