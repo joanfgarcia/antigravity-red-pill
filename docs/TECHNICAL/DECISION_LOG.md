@@ -2059,6 +2059,19 @@ confianza (`X-RedPill-Proxy`) gana sobre env/bridge en el resolver del
 handshake, así que arreglar la resolución en el proxy basta. 10 tests nuevos
 (`tests/test_bridge_per_session.py` + 1 de plugin); lint y tipos limpios.
 
+### 5. Nota de tiempo del hook (2026-11-15)
+
+AD-050 §3 dice que el bridge se escribe **al inicio del turno**. El hook no tiene
+ese punto: `redpill-scribe.js` lo escribe en **`chat.message`**, que llega
+*después* del submit del prompt. No es un detalle de estilo: el bridge per-sesión
+es también el **acta de nacimiento** con la que el backend acredita un cuerpo que
+todavía no tiene fila en el registro (`_bridge_birth_row`, 2026-11-15). Si en el
+primer turno de una pestaña recién abierta el bridge aún no está escrito, el canal
+no tiene cuerpo que correlacionar y la salida honesta es `leg=unknown` con
+`caller_leg`, **no** inventar uno. La ventana es de segundos y no se ha medido una
+pérdida por esta carrera; queda escrito para que nadie lea AD-050 al pie de la
+letra.
+
 ---
 
 ## [AD-090] Aviso de fin de job al alma — pieza TEMPORAL, se reapunta a neon-link
