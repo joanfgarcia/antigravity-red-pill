@@ -63,7 +63,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +330,7 @@ OPENCODE_API_TIMEOUT_S = 8.0
 # `attachments` no decodifica (`decodePromptPresentation` → None) y el renderer
 # cae al cuerpo crudo — el aviso se pinta entero y con el sobre a la vista
 # (medido 2026-11-14 sobre 2.3.0; en 2.2.6 bastaba `displayText`).
-_PRESENTATION_EMPTY = {"comments": [], "attachments": []}
+_PRESENTATION_EMPTY: Dict[str, List[Any]] = {"comments": [], "attachments": []}
 
 
 def notice_title(text: str) -> str:

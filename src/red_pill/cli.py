@@ -147,11 +147,11 @@ def main() -> None:
 			else:
 				print(f"[affect] fondo guardado: {registro['letra']} ({registro['updated_by']})")
 			return
-		registro = affect_fondo.read()
+		actual = affect_fondo.read()
 		if getattr(args, "json", False):
-			print(json.dumps(registro or {}, ensure_ascii=False))
+			print(json.dumps(actual or {}, ensure_ascii=False))
 		else:
-			print(affect_fondo.describe(registro))
+			print(affect_fondo.describe(actual))
 		return
 
 	elif args.command == "mini":
