@@ -830,6 +830,14 @@ class RedPillConfig(BaseSettings):
 	# El techo SOLO corta fan-out: la cola del sueño (thread, finalize,
 	# memento-reinforce) nunca se difiere. OFF → comportamiento actual exacto.
 	JOB_COMPOUND_DEADLINE_ENABLED: bool = False
+	# F3.2 (NB-001, D-NB-16, RULE 4 default OFF): lo que el techo dejó fuera vuelve
+	# PRIMERO en el ciclo siguiente. El contador vive FUERA del job
+	# (`state/nightly_deferred.json`, clave `source:session`): cada noche es un job
+	# nuevo y el checkpoint no cruza. Orden: noches desc · coste asc · stale-first
+	# — sin el desempate por coste, «primero» sería «el monstruo otra vez», porque
+	# la selección corta en el primer desbordamiento. OFF → el driver no escribe el
+	# libro y la selección no lo lee (orden byte-idéntico al de siempre).
+	NIGHTLY_DEFERRED_FIRST_ENABLED: bool = False
 	# Presupuesto por coste real por etapa en la selección nocturna (NB-001 F5/P8,
 	# RULE 4 default OFF): con ON, la selección presupuesta en la DIVISA de cada
 	# fase en vez de en mensajes (el tope por mensajes es un proxy, no el coste):
