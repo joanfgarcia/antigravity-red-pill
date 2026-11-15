@@ -44,7 +44,10 @@ la compuerta).
 
 `SW_HUB_SYNTH_WAIT_RETRY_DAYS=0` desactiva la caducidad (espera indefinida, la
 conducta anterior a 2026-11-12). `SW_HUB_SYNTH_MAX_REJECTIONS=0` desactiva la
-compuerta entera (reintento cada noche).
+compuerta entera (reintento cada noche). Las dos son **latches**, no flags de
+rollout: su OFF es la conducta defectuosa que cerraron, y por eso salen ON dentro
+de `SW_HUBS_ENABLED` (default OFF). La ventana se lee en un solo punto
+(`hub_synthesis.wait_window_days()`), compartido por compuerta y aviso — AD-120.
 
 ## Por qué el nombre importa
 

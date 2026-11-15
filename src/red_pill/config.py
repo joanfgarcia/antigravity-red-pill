@@ -1171,6 +1171,10 @@ class RedPillConfig(BaseSettings):
 	# fallo re-arma la ventana, así que el coste queda acotado a una síntesis por
 	# ventana y sesión). Sin caducidad, una sesión cuya entrada no vuelve a
 	# cambiar (hash congelado) no se escribe nunca. 0 = espera indefinida.
+	# RULE 4: esto NO es un flag de rollout, es un latch DENTRO de
+	# `SW_HUBS_ENABLED` (default OFF) y su OFF (`0`) es la conducta defectuosa que
+	# la caducidad vino a cerrar — por eso sale ON. Se lee en un solo punto:
+	# `metabolism.hub_synthesis.wait_window_days()` (AD-120).
 	SW_HUB_SYNTH_WAIT_RETRY_DAYS: float = 7.0
 	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
 	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2

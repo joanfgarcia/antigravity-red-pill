@@ -3749,3 +3749,62 @@ La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0
 - Suites tocadas: `test_coro_identidad_ambigua`, `test_bridge_per_session`, `test_caller_identity_job`, `test_mcp_server`, `test_mcp_shared`, `test_coro_*`, `test_mcp_proxy_identity`, `test_opencode_plugin`, `test_soul_notify`, `test_*_bridge` → verde; suite completa **4484 passed, 0 failed** (sobre `next` rebasado).
 
 **Consequences**: dos gemelas pueden hablar por el coro sin confundirse; el coste es una línea `<redpill_identity>` por petición en el arnés y, si el agente no la pasa, un reintento con `caller_leg`. La raíz (un proxy compartido sin identidad por-petición) sigue ahí: si el arnés llegara a exponer el `session_id` en la propia llamada MCP, `caller_leg` desaparecería sin tocar el contrato. Mientras dure, la regla es la de siempre: **atribuir a un alma ajena es peor que no atribuir**.
+
+---
+
+## [AD-120] La caducidad de la espera de hubs es un latch, no un flag de rollout (RULE 4)
+**Date**: 2026-11-15
+**Status**: ACCEPTED & IMPLEMENTED (`fix/rule4-wait-latch`).
+
+**Context**: la compuerta de coste de hubs (2026-11-10) y su caducidad
+(2026-11-12) viajaron como dos números con default activo
+(`SW_HUB_SYNTH_MAX_REJECTIONS=2`, `SW_HUB_SYNTH_WAIT_RETRY_DAYS=7`), no como
+`<AREA>_<COMPONENT>_ENABLED`. Los despertares del 12-11 y del 15-11 dejaron
+abierto el borde «RULE 4 pide OFF», que se venía resolviendo como «veto en una
+línea de `.env`». El análisis del 2026-11-15 muestra que esa lectura es
+compliance de teatro: en esta pieza **el OFF es el defecto que la pieza cerró**.
+`SW_HUB_SYNTH_WAIT_RETRY_DAYS=0` restaura la espera indefinida: una sesión
+cerrada (hash congelado, sin miembros nuevos) no se escribe **nunca** y su señal
+de dolor no muere jamás — exactamente lo que la caducidad vino a cerrar. Un flag
+`…_ENABLED=False` habría reabierto ese agujero en cada despliegue sin la línea de
+`.env` (CI, otra máquina, un `.env.example` incompleto). Además, la pieza ya vive
+dentro de un flag default-OFF de verdad (`SW_HUBS_ENABLED=false`, `config.py`;
+producción lo enciende en `.env`), así que no es un componente nuevo de pipeline:
+es política interna de uno ya gateado.
+
+**Decision**:
+1. **No se añade flag.** El knob es un **latch** dentro de `SW_HUBS_ENABLED`: su
+   default es ON porque su OFF pierde memoria en silencio. Reversible, sí; flag
+   de rollout, no.
+2. **Un solo punto de lectura** (RULE 4 §3): `metabolism.hub_synthesis.
+   wait_window_days()` es la única lectura de `SW_HUB_SYNTH_WAIT_RETRY_DAYS`. La
+   usan la compuerta (decide si paga otro intento) y la cita INFO (dice cuándo
+   caduca); `scripts/hub_synth_state.py` la espeja en vez de re-leer el knob.
+   Antes había tres lecturas independientes: el aviso podía fechar una ventana
+   distinta de la que gobernaba el pago.
+3. **RULE 4 gana su cláusula de cambio correctivo** (`CONVENTIONS.md`): una
+   reparación de un contrato ya prometido (no perder datos en silencio, no dejar
+   señales inmortales) sale ON, pero debe ser reversible por knob, llevar test de
+   regresión y figurar en la tabla del doc dueño **con lo que significa OFF**. Así
+   la próxima corrección no tiene que disfrazarse de feature ni el equipo fingir
+   un default que rompe producción.
+4. **Tabla del latch** (la que RULE 4 §4 pedía y no existía):
+
+| Palanca | Default | ON significa | OFF significa | Dependencia |
+|---|---|---|---|---|
+| `SW_HUBS_ENABLED` | `false` | se sintetizan hubs de sesión | no hay hubs (comportamiento previo) | — |
+| `SW_HUB_SYNTH_MAX_REJECTIONS` | `2` | tras N rechazos con el mismo hash la sesión espera y no re-paga | `0` = sin compuerta: reintento cada ciclo (re-pago) | `SW_HUBS_ENABLED` |
+| `SW_HUB_SYNTH_WAIT_RETRY_DAYS` | `7.0` | pasada la ventana, **un** intento más; el fallo re-arma la ventana | `0` = espera indefinida: sesión cerrada sin hub para siempre y señal inmortal | `SW_HUBS_ENABLED` + `MAX_REJECTIONS>0` |
+
+**Evidence**: `tests/test_hub_synth_wait_expiry.py` (5 casos previos + 2 nuevos:
+`test_la_ventana_se_lee_en_un_solo_punto` cuenta las lecturas en el módulo (1) y
+comprueba que el instrumento no re-lee el knob; `test_wait_window_days_refleja_el_knob`
+fija 7 → 3,5 → 0). `tests/test_hub_synth_wait_expiry.py`,
+`test_hub_synth_rejection_gate.py` y `test_sw_m4_hubs.py` → 31 passed.
+`python scripts/hub_synth_state.py` sigue imprimiendo
+`MAX_REJECTIONS=2 · WAIT_RETRY_DAYS=7`.
+
+**Consequences**: cero cambio de conducta en producción (7 días se queda). El
+coste es una cláusula más en RULE 4 — estrecha y enumerada: si alguna vez una
+corrección discutible se ampara en ella, el criterio es «¿el OFF deja el defecto
+vivo?». Si ya no lo deja, es feature y vuelve a RULE 4 normal.

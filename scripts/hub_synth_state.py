@@ -93,10 +93,11 @@ def collect(memory_manager: Any, collections: Tuple[str, ...], cfg: Any) -> List
 		group_by_session,
 		hub_input_hash,
 		hub_point_id,
+		wait_window_days,
 	)
 
 	max_rejections = int(getattr(cfg, "SW_HUB_SYNTH_MAX_REJECTIONS", 2) or 0)
-	window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+	window = wait_window_days()
 	rows: List[Dict[str, Any]] = []
 	for collection in collections:
 		try:
@@ -168,9 +169,13 @@ def main() -> int:
 	if not args.all:
 		rows = [r for r in rows if r["verdict"] != "hub"]
 	sig = signals(manager)
+	from red_pill.metabolism.hub_synthesis import wait_window_days
+
 	levers = {
 		"SW_HUB_SYNTH_MAX_REJECTIONS": int(getattr(cfg, "SW_HUB_SYNTH_MAX_REJECTIONS", 2) or 0),
-		"SW_HUB_SYNTH_WAIT_RETRY_DAYS": float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0),
+		# Lectura única en `hub_synthesis.wait_window_days` (RULE 4 §3): el
+		# instrumento no re-lee el knob por su cuenta.
+		"SW_HUB_SYNTH_WAIT_RETRY_DAYS": wait_window_days(),
 		"as_of": time.strftime("%Y-%m-%dT%H:%M:%S"),
 	}
 

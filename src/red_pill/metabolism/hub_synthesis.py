@@ -64,6 +64,19 @@ _BILLABLE_FALLBACK_REASONS = frozenset({"invalid_output", "map_reduce_exhausted"
 # Marcador por miembro: hash + intentos + motivo + cuándo.
 
 
+def wait_window_days() -> float:
+	"""Ventana de caducidad de la espera, leída en UN solo punto (RULE 4 §3).
+
+	`0` = espera indefinida, la conducta previa a 2026-11-12 (una sesión cerrada
+	sin hub para siempre). La leen la compuerta —que decide si se paga otro
+	intento— y la cita INFO —que dice cuándo caduca—: si cada una leyera el knob
+	por su cuenta, el aviso podría fechar una ventana distinta de la que gobierna
+	el pago. `scripts/hub_synth_state.py` la refleja para el instrumento; allí la
+	lectura es de diagnóstico y no decide nada.
+	"""
+	return float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+
+
 def hub_point_id(collection: str, session_id: str) -> str:
 	"""Id determinista del hub de sesión (idempotencia por upsert)."""
 	return str(uuid.uuid5(_NS, f"hub:{collection}:{session_id}"))
@@ -335,7 +348,7 @@ def _synthesize_one(
 			# cambiar (sesión cerrada, miembro nuevo improbable) no se escribe
 			# NUNCA y su aviso de dolor no muere jamás — no hay ciclo limpio que
 			# lo entierre. Un intento por ventana mantiene el coste acotado.
-			window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+			window = wait_window_days()
 			age = _rejection_age_days(members)
 			if not (window > 0 and (age is None or age >= window)):
 				logger.info(
@@ -795,7 +808,7 @@ def _emit_hub_waiting_signal(
 		waiting = int(stats.get("hubs_waiting") or 0)
 		notes = list(waiting_notes or [])
 		sesiones = ", ".join(session for session, _ in notes[:5])
-		window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+		window = wait_window_days()
 		pending = [remaining for _, remaining in notes if remaining is not None]
 		if window <= 0:
 			cita = "espera indefinida (ventana 0: solo cambia la entrada)"

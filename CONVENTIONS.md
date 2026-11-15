@@ -109,6 +109,22 @@ Every **new pipeline component** MUST ship behind its **own independent flag**, 
 3. **Read in one place** (the component edge), not scattered across the codebase.
 4. **Documented** in `config` with a comment stating what it turns on, plus the flag table of the owning design doc (with its turn-on **dependency**).
 
+### When RULE 4 does not apply: corrective changes
+
+RULE 4 governs **new behaviour someone can opt into**. It does not cover a change
+that **repairs a contract already promised** (no silent data loss, no signal
+outliving its cause): there an OFF default would ship the defect and the flag
+would be theatre. Such a change ships **ON** and must instead:
+
+1. be **reversible** by a documented knob — the OFF switch exists even when the
+   default is ON;
+2. carry a **regression test** that fails without the change;
+3. be recorded in the owning design doc's knob table, **including what OFF means**.
+
+A knob whose `0` means "the old, broken behaviour" (e.g.
+`SW_HUB_SYNTH_WAIT_RETRY_DAYS`) is one of these: a **latch**, not a rollout flag.
+See `docs/TECHNICAL/DECISION_LOG.md` AD-120.
+
 ### Why This Matters
 
 On 2026-09-21 the nightly dag_job reported **"18/18 success"** while its `chronicle/memento-agentic` stage had silently **timed out** (`on_fail: warn`) — a false positive that distilled **zero** memory. A multi-component refactor with a single on/off switch is all-or-nothing: one silent regression in one piece forces a full rollback, and there is no way to verify a piece in isolation. Independent flags let us **enable → verify → advance** one piece at a time.
