@@ -75,6 +75,35 @@ Dos defectos además de la falta de KV: `n_ctx: 16384` es inalcanzable con f16
 Latencia media 5,3 s. Fallo conocido y estable: no llega a 6/8 hechos en resumen de
 3 frases.
 
+## Procedencia del corpus de hubs (2026-11-15)
+
+Los **434 hubs** de `work_memories` + `social_memories` salieron de este modelo. No
+lo dice el payload — `hub_model` solo se rellena cuando se usa el camino grande y
+`hub_large_path` nunca se disparó en producción — lo dice el rastro:
+
+| Evidencia | Alcance |
+| --- | --- |
+| Journal del proxy (retención desde 2026-09-11) | **2.787** llamadas `task 'hub'` → `granite_8b`; **0** con otro modelo |
+| `task_profiles.yaml` (actual + backups del 2026-10-30) | `hub` → `granite_8b` `default: true`; k2 y spark solo candidatos no-default desde 2026-11-09 |
+| Job `b42602f3` (2026-11-09, 228/228 steps) | migración de hubs declarando `llm.model: granite_8b` |
+| Job `a5790505` (2026-11-15) | re-síntesis forzada de una sesión: el proxy cargó `granite_8b` (`Granite-4.1-8B-Q4_K_M.gguf`, n_ctx 16384) y cayó a CPU; hub de 948 chars escrito |
+| `scripts/hub_bakeoff.py` | mide sin escribir hubs: **no** hay hubs de k2/spark en producción |
+| Atestación del Operador (2026-11-15) | los **62** hubs de feb–ago, fuera de la retención del journal, también son suyos |
+
+**El carril de re-síntesis es granite por decisión, no por costumbre**
+(Operador, 2026-11-15): la migración de noviembre, la caducidad de la espera y el
+forzado manual comparten el mismo `task: hub` → `granite_8b`. Cambiar de modelo en
+ese carril exige bake-off previo (`scripts/hub_bakeoff.py`, que no escribe) y una
+entrada en este doc; k2 y spark siguen siendo candidatos no-default.
+
+Consecuencia: el corpus es homogéneo **en modelo**, no **en contrato**. **77** hubs
+pre-v3 (feb–oct) no tienen `hub_title` ni `hub_terms`, campos que el contrato actual
+escribe siempre; re-sintetizarlos homogeneizaría la forma, no el fondo.
+
+Pendiente de mayor retorno para auditar bake-offs: registrar el modelo **por fase**
+(map/reduce/master) en vez de un único nombre — hoy el campo solo existe para el
+camino grande, y un nombre único mentiría por simplificación.
+
 ## Licencia
 
 | Campo | Valor |
