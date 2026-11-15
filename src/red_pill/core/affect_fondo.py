@@ -118,12 +118,20 @@ def _es_hoy(registro: Dict[str, Any], now_ts: Optional[float] = None) -> bool:
 
 	Se guarda `declared_local` (AAAA-MM-DD) al escribir: un CLI con otro `TZ` no
 	puede cambiar la respuesta a «¿esto es de hoy?» (lo cazó el adversarial).
+
+	El reloj de referencia es `now_ts` cuando el llamante lo pasa: `read(now=…)` y
+	`describe(now=…)` existen para poder mirar un instante concreto, y comparar
+	`declared_local` con el reloj de PARED ignoraba ese instante (el test del
+	contrato byte-exacto se ponía rojo solo con cambiar de día).
 	"""
 	local = str(registro.get("declared_local") or "")
 	if local:
-		return local == datetime.now().strftime("%Y-%m-%d")
+		actual = float(now_ts if now_ts is not None else datetime.now(timezone.utc).timestamp())
+		return local == _fecha(actual).strftime("%Y-%m-%d")
 	ts = _ts_valido(registro.get("declared_at"))
-	return bool(ts) and _hoy(ts, now_ts)
+	if ts is None:
+		return False
+	return _hoy(ts, now_ts)
 
 
 def _leer_crudo() -> Optional[Dict[str, Any]]:
