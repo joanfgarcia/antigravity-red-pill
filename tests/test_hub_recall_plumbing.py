@@ -443,3 +443,35 @@ def test_synthesize_one_skip_clears_blocked_when_members_return() -> None:
 	assert result == "skipped"
 	assert client.points[hub_id]["hub_migration_blocked"] is False
 	assert client.points[hub_id]["hub_members_count"] == 2
+
+
+def test_promote_compact_fossil_keeps_block() -> None:
+	"""Un hub huérfano (0 miembros) recibe título/terms pero NO se desbloquea.
+
+	El bloqueo no es burocracia: dice que no puede re-sintetizarse. Borrarlo al
+	promocionar convertiría un fósil honesto en un hub que miente sobre su estado.
+	"""
+	collection = "work_memories"
+	session_id = "ses_fossil"
+	hub_id = hub_point_id(collection, session_id)
+	content = "Integración del Maix Dock en el Búnker\nResumen corto que cabe."
+	client = _BackupClient(
+		{
+			hub_id: {
+				"node_type": "synthesis_hub",
+				"session_id": session_id,
+				"content": content,
+				"hub_synth_version": 0,
+				"hub_migration_blocked": True,
+				"hub_migration_blocked_reason": "no_members",
+			},
+		}
+	)
+	manager = types.SimpleNamespace(client=client)
+	assert promote_compact_hub(manager, collection, session_id, keep_block=True) == "promoted"
+	point = client.points[hub_id]
+	assert point["hub_synth_version"] == HUB_SYNTH_VERSION
+	assert point["hub_title"] == "Integración del Maix Dock en el Búnker"
+	assert point["hub_terms"]
+	assert point["hub_migration_blocked"] is True
+	assert point["hub_migration_blocked_reason"] == "no_members"

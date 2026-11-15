@@ -1178,6 +1178,7 @@ def promote_compact_hub(
 	session_id: str,
 	hard_limit: Optional[int] = None,
 	apply: bool = True,
+	keep_block: bool = False,
 ) -> str:
 	"""Promociona a v3 un hub legacy cuyo `content` YA cumple el tope duro.
 
@@ -1185,6 +1186,10 @@ def promote_compact_hub(
 	los contadores. Es la salida para hubs viejos compactos que el LLM no logra
 	re-sintetizar por debajo de 1.000 (se quedarían en bucle). Devuelve
 	`promoted|already|over_hard|missing`.
+
+	`keep_block=True` conserva `hub_migration_blocked` y su motivo: lo usan los
+	hubs huérfanos (fósiles sin miembros), que no pueden re-sintetizarse aunque se
+	les dé título y terms — el bloqueo dice la verdad y no debe borrarse.
 	"""
 	from red_pill.memento.hub_terms import hub_terms_chars, select_hub_terms
 
@@ -1217,11 +1222,12 @@ def promote_compact_hub(
 		"hub_terms": terms,
 		"hub_terms_chars": hub_terms_chars(terms),
 		"hub_members_count": len(members),
-		"hub_migration_blocked": False,
-		"hub_migration_blocked_reason": "",
 		"hub_members_checked_at": time.time(),
 		"hub_promoted_mechanical": True,
 	}
+	if not keep_block:
+		updates["hub_migration_blocked"] = False
+		updates["hub_migration_blocked_reason"] = ""
 	try:
 		memory_manager.client.set_payload(collection_name=collection, payload=updates, points=[hid])
 	except Exception as exc:

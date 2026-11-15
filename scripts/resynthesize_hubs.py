@@ -76,6 +76,11 @@ def main() -> None:
 		action="store_true",
 		help="Promociona a v3 (metadata, sin tocar content) hubs legacy compactos que no logran re-sintetizarse.",
 	)
+	parser.add_argument(
+		"--include-blocked",
+		action="store_true",
+		help="Con --promote-compact, incluye los hubs bloqueados (huérfanos sin miembros). Conserva el bloqueo: el flag dice la verdad.",
+	)
 	parser.add_argument("--ensure-indexes", action="store_true", help="Crea los índices de payload hub→miembro (idempotente).")
 	parser.add_argument("--restore", metavar="JSON", help="Revierte un hub desde un backup (payload+vector+marcas de miembros).")
 	parser.add_argument("--backup-dir", help="Directorio de backups (default: state/backups/hub_payloads_YYYYMMDD).")
@@ -123,9 +128,20 @@ def main() -> None:
 		rows = find_stale_hubs(memory)
 		results = []
 		for row in rows:
-			if row.get("hub_migration_blocked"):
+			blocked = bool(row.get("hub_migration_blocked"))
+			# Los hubs huérfanos (fósiles sin miembros) solo se promocionan a mano
+			# y conservando el bloqueo: no pueden re-sintetizarse y el flag lo dice.
+			if blocked and not args.include_blocked:
 				continue
-			result = promote_compact_hub(memory, row["collection"], row["session_id"], apply=not args.dry_run)
+			if not args.dry_run and not args.no_backup:
+				backup_hub_payload(memory, row["collection"], row["session_id"])
+			result = promote_compact_hub(
+				memory,
+				row["collection"],
+				row["session_id"],
+				apply=not args.dry_run,
+				keep_block=blocked,
+			)
 			results.append(
 				{
 					"collection": row["collection"],
