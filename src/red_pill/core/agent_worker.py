@@ -218,7 +218,8 @@ def _awakening_channel_directive(operator: str | None = None) -> str:
 		"Si algo necesita una DECISIÓN del Fixer, déjale una nota `para: <Operador>` en ese "
 		"buzón: su próxima sesión la verá en el digest.\n"
 		"Índice completo de tu tiempo libre (vigilancia del planner + pre-pase determinista "
-		"`scripts/planner_state_audit.py`): `planner/design/AWAKEN-002-despertares-utiles/README.md`."
+		"`scripts/planner_state_audit.py` del repo red-pill): "
+		"`planner/design/AWAKEN-002-despertares-utiles/INDEX.md`."
 	)
 	try:
 		from red_pill.core import awakening_channel as ch

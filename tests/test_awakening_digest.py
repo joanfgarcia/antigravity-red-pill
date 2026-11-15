@@ -21,7 +21,8 @@ def test_directiva_canal_apunta_al_indice(tmp_path, monkeypatch):
 	worker = importlib.import_module("red_pill.core.agent_worker")
 	out = worker._awakening_channel_directive()
 	assert "AWAKEN-002" in out
-	assert "planner/design/AWAKEN-002-despertares-utiles/README.md" in out
+	assert "planner/design/AWAKEN-002-despertares-utiles/INDEX.md" in out
+	assert "README.md" not in out
 	assert "awakening/notes/" in out
 
 
