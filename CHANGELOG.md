@@ -43,6 +43,16 @@ decidir y el backend caía al *bridge global* («el último que escribió»). Me
   de `caller_leg` verificado (fila viva, latido, mismo workspace y misión), del
   diario del turno (prompt único) o de la actividad reciente (`time_updated`). Si
   no hay cuerpo, **sin alma**: el coro pide `caller_leg` en vez de atribuir.
+- **[FIX] un cuerpo NUEVO puede nacer** — `caller_leg` se verificaba CONTRA la
+  fila del registro: sin fila no hay cuerpo, sin cuerpo no hay `upsert`, y sin
+  `upsert` la fila no se crea nunca. Bucle cerrado y real: sesión recién abierta
+  con la pestaña del día anterior al lado (mismo cwd ⇒ canal ambiguo) ⇒ **11 min
+  de turnos con `leg=unknown`**, sin reloj, sin tablón y sin poder recibir avisos,
+  hasta que la ambigüedad caducó por casualidad (2026-11-15). Cuando la fila no
+  acredita, el **bridge per-sesión** del arnés hace de acta de nacimiento: sesión
+  exacta, latido fresco (la misma ventana que usa el proxy) y mismo workspace;
+  entonces se emite el alma y el `upsert` la persiste. Sin bridge, rancio o de
+  otro workspace, sigue el fail-closed de siempre.
 - **[FIX] correlación por cwd** — dos vivas en el mismo cwd es ambiguo y **no se
   desempata** con `opencode.db` (el `directory` es el workspace, no la sesión);
   `_session_directory` lee también `session_v2`.
@@ -412,6 +422,23 @@ Presupuesto y reuso del ciclo nocturno `chronicle → sleep`. Todas las piezas c
   como el pase clásico (`memento_agentic.py` sin `--target`), que se había
   quedado con el tope de sesiones solo. `--limit 0` apaga **ambos** topes, como
   dice la config.
+
+### 🛡️ Seguridad y tipos — el CI vuelve a poder decir que no
+
+El PR de 8.4.0 quedó en rojo por el paso **bloqueante** de `pip-audit`: `oauthlib`
+4.0.0 arrastraba `CVE-2026-49272` (corregido en 4.0.1, publicada el 2026-10-31),
+y `oauthlib` es dependencia **directa** del kernel, no transitiva. Detrás esperaba
+el paso de Mypy, que ni llegó a correr.
+
+- **[FIX] `oauthlib>=4.0.1`** + relock: la CVE sale del grafo y el paso bloqueante
+  vuelve a medir de verdad en vez de fallar por una versión que ya tiene parche.
+- **[FIX] cuatro errores de tipos** que el CI habría cobrado acto seguido, tres de
+  ellos introducidos ayer: `_es_hoy` compara `Optional[float]` sin estrechar
+  (`arg-type`), `_PRESENTATION_EMPTY` sin anotar (`var-annotated`), `cli.affect`
+  reutilizaba una variable tipada como `dict` para un `Optional` (`assignment`) y
+  el `upsert` del registro aceptaba un `continuity_id` opcional (`arg-type`).
+- **[FIX] `uv.lock` vuelve a decir 8.4.0**: el bump de versión se hizo en
+  `pyproject` sin relock, así que el lock seguía anclado a 8.3.0.
 
 ## [8.3.0] - 2026-11-03 (Memoria sin fugas silenciosas: el buffer no pierde turnos, el backlog se cuenta solo y la cola se puede triar)
 
