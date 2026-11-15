@@ -53,6 +53,15 @@ class DagRefStageType(StageType):
 		for key in ("on_fail", "parallel", "depends_on"):
 			if stage.get(key) is not None:
 				compound[key] = stage[key]
+		# Techo de pared por compuesto (NB-001 F3): la receta referenciada declara
+		# su techo en `control.deadline_minutes` (D-NB-12); se lleva al compuesto
+		# para que el driver lo lea por ruta. Un `deadline_minutes` explícito en la
+		# etapa `type: dag` pisa al de la receta.
+		declared = stage.get("deadline_minutes")
+		if declared is None:
+			declared = (sub_payload.get("control") or {}).get("deadline_minutes")
+		if declared is not None:
+			compound["deadline_minutes"] = declared
 		return compound
 
 

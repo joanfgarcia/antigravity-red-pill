@@ -16,7 +16,7 @@ import logging
 import time
 from typing import Any, Dict
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +166,11 @@ class InteractionTTLPlugin(JanitorPlugin):
 					)
 				except Exception as _e:
 					logger.debug(f"interaction_ttl: señal no inyectada: {_e}")
+			else:
+				# El chronicle volvió a ir al día: no se está perdiendo nada, así que
+				# el aviso se entierra. Es ESTADO (¿está el chronicle perdiendo
+				# turnos?), no un evento: mientras pierda, duele; cuando no, calla.
+				bury_signal("interaction_unrendered_purged")
 			janitor.log(f"[Janitor] interaction_ttl (gated): {len(ids)} purgados ({orphaned} sin renderizar).")
 			return {"purged": len(ids), "orphaned": orphaned, "ttl_hours": ttl_hours, "gate": True}
 

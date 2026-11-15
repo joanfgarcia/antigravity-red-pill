@@ -149,6 +149,23 @@ def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[st
 	# Afecto de los turnos vivos (2026-11-03): la cola se escribe por turno; los
 	# engramas son lo que ascendió anoche. Si el clasificador no da nada, se cae
 	# al camino antiguo — degradar, nunca romper el turno.
+	#
+	# RFC-AFE-001 F1: si el Operador declaró su fondo HOY, manda sobre el afecto
+	# léxico. El léxico mezcla los prompts de todas las sesiones vivas (medido:
+	# `anger/red` por una frase hipotética sobre un tercero) y no distingue rol;
+	# el fondo lo dijo él. Sin fondo fresco, el camino antiguo queda igual.
+	try:
+		from red_pill.core import affect_fondo
+
+		registro = affect_fondo.read() if affect_fondo.enabled() else None
+		if registro and registro.get("es_hoy"):
+			color = (affect_fondo.letters().get(str(registro.get("letra")), {}) or {}).get("color")
+			if color:
+				logger.debug(f"Fondo declarado hoy ({registro.get('letra')}) → {color}")
+				return {"mood": str(color), "directive": ToneAnalyzer.get_tone_directive(str(color))}
+	except Exception as e:
+		logger.debug(f"Fondo no disponible ({e}); se sigue con el afecto de la cola")
+
 	if bool(getattr(cfg, "AFFECT_FROM_QUEUE", False)):
 		try:
 			from red_pill.utils import operator_affect

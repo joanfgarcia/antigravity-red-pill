@@ -1,0 +1,2 @@
+[Refraction: HUB_TEXTURE_SPLIT]
+Split the following atmosphere note into the FEWEST coherent parts that each fit in at most {target} characters. Preserve every idea, image, relationship nuance and emotional beat; do NOT summarize, merge, drop or shorten content. Each part must be a complete phrase or short paragraph, in the same language and tone as the input. Return ONLY valid raw JSON: {"parts": ["...", "..."]}.

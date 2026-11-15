@@ -533,7 +533,7 @@ def test_extract_json_array():
 def test_http_transport_reintenta_recortando_ante_500():
 	from unittest.mock import MagicMock, patch
 
-	from red_pill.memento.agentic import http_transport
+	from red_pill.memento.agentic import DEGRADED_MARKER, http_transport
 
 	content = "x" * 5000
 
@@ -547,7 +547,8 @@ def test_http_transport_reintenta_recortando_ante_500():
 	with patch("requests.post") as mock_post:
 		mock_post.side_effect = [resp(500), resp(200, '{"ok": 1}')]
 		out = http_transport("sys", content, 64)
-		assert out == '{"ok": 1}'
+		# NB-001 F2a (D-NB-03): el recorte en fallback 500 deja marca inequívoca.
+		assert out == '{"ok": 1}' + DEGRADED_MARKER
 		# el segundo intento recortó el prompt (0.6 × 5000)
 		assert len(mock_post.call_args_list[1].kwargs["json"]["messages"][1]["content"]) < 4000
 

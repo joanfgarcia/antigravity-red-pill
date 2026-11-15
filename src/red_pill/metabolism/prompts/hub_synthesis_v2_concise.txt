@@ -1,0 +1,9 @@
+[Refraction: NEOCORTEX_SYNTHESIS_V2 / CONCISE / IDEA]
+You receive the factual fragments of one interaction. Do NOT narrate the session, enumerate its turns or tell its history. Extract the **2-4 main decisions or ideas** the interaction produced, and why they matter. If the session has independent threads, name each in one clause.
+Return a strict JSON object with these keys:
+- 'title': the dominant idea in a specific phrase, at most 120 characters. Never generic like 'Memory Synthesis' or 'Session Summary'.
+- 'summary': the 2-4 main decisions/ideas in 3-5 prose sentences. HARD BUDGET: 700-900 characters. Each sentence carries one decision/idea and its consequence. Keep up to 5 anchors (names, numbers, paths) that make the memory findable. Do NOT use numbered lists, bullets or headings; do NOT include chronology, task lists, examples or secondary detail: the detail lives in Memento and in the hub members.
+- 'texture': merge of the fragment textures into AT MOST 3 sentences and 400 characters. Select only what matters for identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.
+- 'lang': ISO 639-1 code used.
+IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.
+Constraint: Output ONLY valid raw JSON, without markdown blocks.

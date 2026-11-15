@@ -74,6 +74,42 @@ def test_sin_registro_el_tope_por_mensajes_no_aplica():
 	assert len(m.select_targets(pending, 10, msg_limit=1)) == 3
 
 
+def test_limit_cero_apaga_los_dos_presupuestos():
+	"""`0` = sin tope (rescates manuales) — antes solo apagaba el de sesiones."""
+	m = _load_discover()
+	reg = _RegistryFake([2000, 2000])
+	pending = [("opencode", f"s{i}", "new") for i in range(2)]
+
+	assert m.select_targets(pending, 0, msg_limit=3000, registry=reg) == ["opencode:s0", "opencode:s1"]
+
+
+def _load_script(path: Path):
+	spec = importlib.util.spec_from_file_location(path.stem, path)
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def test_el_pase_clasico_y_el_discover_comparten_politica():
+	"""El tope por mensajes nació en el `discover`; el pase clásico sin `--target`
+	seguía con el tope de sesiones solo. Dos puertas, un presupuesto invisible."""
+	from red_pill.memento.agentic import selection
+
+	m = _load_discover()
+	magentic = _load_script(REPO / "scripts" / "memento_agentic.py")
+
+	# Una sola implementación: si alguien vuelve a duplicarla, esto cae.
+	assert magentic.select_targets is selection.select_targets
+
+	reg = _RegistryFake([1000, 1000, 1000])
+	pending = [("opencode", f"s{i}", "new") for i in range(3)]
+	assert magentic.select_targets(pending, 10, msg_limit=2500, registry=reg) == [
+		("opencode", "s0", "new"),
+		("opencode", "s1", "new"),
+	]
+	assert m.select_targets(pending, 10, msg_limit=2500, registry=reg) == ["opencode:s0", "opencode:s1"]
+
+
 def test_chronicle_usa_fanout_por_sesion():
 	cfg = yaml.safe_load((REPO / "configs" / "jobs" / "chronicle.yaml").read_text(encoding="utf-8"))
 	stages = cfg["manifest"]["stages"]

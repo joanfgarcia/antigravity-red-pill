@@ -194,7 +194,7 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | Hours between automatic `operator_profile.md` updates during sleep ritual. |
+| `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | Hours between automatic `operator_profile.md` updates during sleep ritual. Only the **focus tail** is re-synthesized; the identity header is deterministic (config) and `OPERATOR_ANCHOR` precedes the artifact in the wake context. |
 | `RECENT_ACTIVITY_UPDATE_INTERVAL_HOURS` | `4` | Freshness window for `recent_activity.md`: RecentActivityPhase skips re-synthesis while the artifact is younger than this. |
 | `PRE_HEATING_MAX_TRACKED_PROJECTS` | `3` | Max tracked workspaces to show in PROJECT_STATUS (opt-in via `track: true` in workspaces.yaml). |
 
@@ -286,6 +286,22 @@ Plugins 05–10. Each is independently toggleable.
 | `SW_DEDUP_ENABLED` | `False` | Dedup-at-ascension: un ganador por grupo `session_id`+`source_lines`. |
 | `SW_HUBS_ENABLED` | `False` | Síntesis de hubs de sesión sobre engramas curados (idempotente por `hub_input_hash`). |
 | `SW_HUBS_MAX_SESSIONS_PER_CYCLE` | `0` | Tope de sesiones sintetizadas por ciclo (0 = sin tope). Acota el backfill inicial. |
+| `SLEEP_MAX_HUB_INPUT_CHARS` | `8000` | Presupuesto de chars por llamada de hub. Si el prompt no cabe, `synthesize_hub_v2` aplica map-reduce (no trunca). No es el `n_ctx` del modelo. |
+| `SLEEP_HUB_MAP_REDUCE_ENABLED` | `True` | **Deprecated.** El over-budget SIEMPRE se resuelve con map-reduce (lotes → parciales → reducción en árbol); ya no existe el recorte legacy. |
+| `SLEEP_HUB_MAX_CHUNKS_PER_BATCH` | `48` | Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de chars). |
+| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `900` | **Target de síntesis** del summary maestro. Si se supera, se reescribe (compaction); si el modelo no baja, se conserva **entero** y se marca `hub_summary_over_budget=true`. Nunca se corta. El número viaja también en el prompt del maestro: el modelo sabe el presupuesto **antes** de escribir. |
+| `SLEEP_HUB_SUMMARY_HARD_LIMIT` | `1000` | Tope duro del summary escrito: por encima no se escribe el hub (se reintenta; el detalle vive en Memento). El margen entre `TARGET` y `HARD_LIMIT` absorbe el desvío normal del modelo sin recortar nada (AD-115: nunca se corta). |
+| `SW_HUB_SYNTH_MAX_REJECTIONS` | `2` | Compuerta de coste: rechazos con el **mismo** `hub_input_hash` antes de que la sesión quede **EN ESPERA** (`waiting`) sin pagar otra síntesis. `0` = sin compuerta (reintento cada ciclo). Los fallos transitorios (proveedor caído) no cuentan. |
+| `SW_HUB_SYNTH_WAIT_RETRY_DAYS` | `7.0` | Caducidad de la **espera**: pasados estos días la sesión merece **un** intento más, y un fallo re-arma la ventana (una síntesis por ventana y sesión). `0` = espera indefinida. La espera se publica como INFO (`hub_synthesis_waiting`) con su fecha; el dolor (`hub_synthesis_failed`) es solo del fallo. Vocabulario completo: `docs/TECHNICAL/DEFERRALS.md`. |
+| `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura del summary (síntesis, nunca corte). |
+| `SLEEP_HUB_TEXTURE_MAX_CHARS` | `400` | **Target de síntesis** de la textura (2-3 frases). Si no baja, se conserva entera y se marca `hub_texture_over_target=true`; si supera el tope de metadata, se parte en `texture_parts` sin perder contenido. |
+| `SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura de la textura (síntesis). |
+| `SLEEP_HUB_TEXTURE_PARTS_MAX` | `32` | Tope de partes si la textura no cabe en un campo de metadata. Superarlo → el hub no se escribe y se reintenta (nunca se corta). |
+| `SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK` | `True` | Si la partición por síntesis falla: `True` parte el texto SIN perder caracteres (no es truncamiento); `False` no escribe el hub y lo reintenta (estrictamente solo síntesis). |
+| `SLEEP_HUB_TITLE_MAX_CHARS` | `120` | Target del título; si no baja, se conserva y se marca `hub_title_over_target=true`. |
+| `SLEEP_HUB_LARGE_INPUT_CHARS` | `0` | Umbral del híbrido **por llamada** (no por sesión): prompts ≥ este tamaño usan `SLEEP_HUB_LARGE_MODEL` + prompt concise. `0` = off (con map-reduce ninguna llamada supera el presupuesto de 8k). |
+| `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para llamadas grandes (candidato del perfil `hub`; `thinking: off`). |
+| `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para llamadas grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
@@ -325,6 +341,31 @@ Plugins 05–10. Each is independently toggleable.
 > `scripts/llama_cli_runner.py`; EdgeEngine runs 8192). Whoever configures a
 > deployment — operator or agent — must recompute it when the hardware or the
 > model context changes, and re-run `memento_migrate --all` to re-chunk.
+
+---
+
+### 🌙 Cota y coste del ciclo nocturno (NB-001)
+
+Flags de la misión NB-001 (RULE 4: un flag por pieza, default OFF). Los dos
+primeros viven en `.env.example`; los otros tres son tunables de `config.py`
+(sin entrada en `.env.example`).
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` | `False` | F4 — fusión work+social en UNA llamada. ON: la extracción emite una sola llamada combinada (prompt con `scope` por idea) en vez de dos; `scope` se persiste en idea, parcial y frontmatter. Paridad medida en el banco (`docs/BENCHMARKS/ANNOTATE_BENCH.md`). OFF: dos llamadas por split. |
+| `MEMENTO_NIGHT_COST_MODEL_ENABLED` | `False` | F5 — presupuesto por coste real por etapa. ON: la selección presupuesta en la divisa de cada fase (chars de work-unit en distill; unidades + notas esperadas en annotate) en vez de mensajes. Conserva `MEMENTO_AGENTIC_NIGHT_LIMIT` y el anti-hambruna. OFF: msg_limit (byte-idéntico). |
+| `MEMENTO_DISTILL_REUSE_ENABLED` | `False` | F2a — reuso incremental por unidad en distill. ON: `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el `content_hash` + `prompt_version`/`engine`/fragmentación y reusa las secciones intactas entre noches en vez de borrar y rehacer. Una sección `degraded` jamás se reusa. OFF: regeneración completa. |
+| `MEMENTO_ANNOTATE_REUSE_ENABLED` | `False` | F2b — reuso incremental por unidad en annotate. ON: `annotate/_meta.json` persiste por `unit_key` el `content_hash` + `annotate_prompt_version`/`engine` + notas por unidad y reusa las unidades intactas sin llamar al modelo. `_partial.json` sigue como checkpoint intra-run. OFF: extracción completa, sin `units` en el meta. |
+| `JOB_COMPOUND_DEADLINE_ENABLED` | `False` | F3 — techo de pared por compuesto en `dag_job`. ON: `control.deadline_minutes` (o `deadline_minutes` por compuesto, clamp `[0,720]`) acota el fan-out de cada compuesto; agotado → `JobDeferred("budget_exhausted")` + `deferred_by_budget` en el checkpoint. Solo corta fan-out; la cola del sueño nunca se difiere. Un compuesto SIN fan-out (el sueño: 16 etapas atómicas) no queda acotado por más que declare minutos. OFF: comportamiento actual exacto. |
+
+Presupuestos de la fase F5 (`MEMENTO_NIGHT_COST_MODEL_ENABLED` ON):
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_NIGHT_DISTILL_CHAR_LIMIT` | `200000` | Presupuesto de chars para la fase distill (suma de chars de work-unit). |
+| `MEMENTO_NIGHT_ANNOTATE_UNIT_LIMIT` | `100` | Presupuesto de unidades (splits) para la fase annotate. |
+| `MEMENTO_NIGHT_ANNOTATE_NOTE_LIMIT` | `800` | Presupuesto de notas esperadas para annotate (acota la cola, no decide qué ideas entran). |
+| `MEMENTO_NIGHT_ANNOTATE_NOTES_PER_UNIT` | `8` | Heurística de predicción de notas por unidad (calibrada: 519 notas / 65 splits ≈ 8). |
 
 ---
 

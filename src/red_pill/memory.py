@@ -4,7 +4,7 @@ import os
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from qdrant_client.http import models
 
@@ -700,7 +700,10 @@ class MemoryManager:
 
 		use_hybrid = bool(hybrid and getattr(self.cfg, "MEMORY_HYBRID_RECALL_ENABLED", False) and collection in ("work_memories", "social_memories"))
 		use_mmr = bool(getattr(self.cfg, "MEMORY_RECALL_MMR_ENABLED", False))
-		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr) else limit
+		use_hub_index = bool(
+			getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False)
+		)
+		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr or use_hub_index) else limit
 		try:
 			results = self.client.query_points(
 				collection_name=collection,
@@ -713,8 +716,10 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
 			return []
-		if use_hybrid or use_mmr:
-			results = self._rerank_hybrid_mmr(collection, query, vector, results, limit, use_hybrid, use_mmr, deep_recall, structural_exclusions)
+		if use_hybrid or use_mmr or use_hub_index:
+			results = self._rerank_hybrid_mmr(
+				collection, query, vector, results, limit, use_hybrid, use_mmr, deep_recall, structural_exclusions, use_hub_index=use_hub_index
+			)
 
 		increment_map: Dict[str, float] = {}
 		decayed_results = []
@@ -937,12 +942,15 @@ class MemoryManager:
 		use_mmr: bool,
 		deep_recall: bool,
 		structural_exclusions: List[Any],
+		use_hub_index: bool = False,
 	) -> List[Any]:
-		"""Fusión RRF semántico + palabras clave (Memento) y selección MMR del top-k.
+		"""Fusión RRF semántico + palabras clave (Memento + hubs) y MMR del top-k.
 
 		Los candidatos por palabra clave pasan los mismos filtros que la consulta
 		semántica (exclusiones estructurales y `reinforcement_score` sin deep recall).
-		Nunca rompe el recall: cualquier fallo devuelve el top semántico.
+		`use_hub_index` añade la pata keyword de hubs (`hub_title`/`hub_terms`); es
+		independiente de `use_hybrid` (D-13). Nunca rompe el recall: cualquier
+		fallo devuelve el top semántico.
 		"""
 		import numpy as np
 
@@ -971,7 +979,28 @@ class MemoryManager:
 						score = float(v @ q / ((float(np.linalg.norm(v)) or 1.0) * qn)) if v is not None else 0.0
 						candidates[str(rec.id)] = models.ScoredPoint(id=rec.id, version=0, score=score, payload=pl, vector=vec)
 				rankings.append([pid for pid, _ in kw if pid in candidates])
+			if use_hub_index:
+				hub_kw = self._hub_keyword_hits(query, collection, limit=len(semantic) or limit * 4)
+				missing_hubs = [pid for pid, _ in hub_kw if pid not in candidates]
+				if missing_hubs:
+					q = np.asarray(vector, dtype=float)
+					qn = float(np.linalg.norm(q)) or 1.0
+					for rec in self.client.retrieve(collection_name=collection, ids=missing_hubs, with_payload=True, with_vectors=use_mmr):
+						pl = rec.payload or {}
+						if self._excluded_by(pl, structural_exclusions):
+							continue
+						if not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2:
+							continue
+						vec = rec.vector if not isinstance(rec.vector, dict) else next(iter(rec.vector.values()), None)
+						score = 0.0
+						if vec is not None:
+							v = np.asarray(vec, dtype=float)
+							score = float(v @ q / ((float(np.linalg.norm(v)) or 1.0) * qn))
+						candidates[str(rec.id)] = models.ScoredPoint(id=rec.id, version=0, score=score, payload=pl, vector=vec)
+				rankings.append([pid for pid, _ in hub_kw if pid in candidates])
 			fused = [(pid, sc) for pid, sc in hy.rrf_scores(rankings) if pid in candidates]
+			if bool(getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False)):
+				fused = self._boost_hubs(query, fused, candidates)
 			ordered = [candidates[pid] for pid, _ in fused]
 			if use_mmr:
 				lam = float(getattr(self.cfg, "MEMORY_RECALL_MMR_LAMBDA", 0.7))
@@ -986,6 +1015,120 @@ class MemoryManager:
 			for h in semantic:
 				h.vector = None
 			return semantic[:limit]
+
+	def _hub_keyword_hits(self, query: str, collection: str, limit: int = 50) -> List[Tuple[str, float]]:
+		"""Ranking keyword de hubs (título + anclas) con IDF sobre el corpus escaneado.
+
+		Read-only y acotado a `MEMORY_HUB_KEYWORD_MAX_HUBS`. Los hubs viejos sin
+		`hub_terms` caen a su `content`, así que siguen siendo recuperables sin
+		migrarlos (D-11). Cualquier fallo devuelve [] y no rompe el recall.
+		"""
+		if not bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False)):
+			return []
+		try:
+			from qdrant_client.http import models as qm
+
+			from red_pill.memento import hub_terms
+			from red_pill.memento.hybrid import salient_terms
+
+			query_terms: List[str] = []
+			seen_terms: set = set()
+			policy = hub_terms.load_policy()
+			for term in list(salient_terms(query, max_terms=8)) + hub_terms.tokenize(query):
+				low = term.lower()
+				if low in seen_terms or hub_terms.is_stopword(term, policy):
+					continue
+				if len(term) < int(policy.get("min_term_chars", 4)) and not hub_terms.is_anchor(term):
+					continue
+				seen_terms.add(low)
+				query_terms.append(term)
+			if not query_terms:
+				return []
+			max_hubs = max(1, int(getattr(self.cfg, "MEMORY_HUB_KEYWORD_MAX_HUBS", 500) or 500))
+			docs: List[Tuple[str, str, set, str]] = []
+			offset = None
+			while len(docs) < max_hubs:
+				batch, offset = self.client.scroll(
+					collection,
+					scroll_filter=qm.Filter(
+						should=[
+							qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
+							qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
+						]
+					),
+					limit=min(256, max_hubs - len(docs)),
+					offset=offset,
+					with_payload=True,
+					with_vectors=False,
+				)
+				for point in batch:
+					payload = point.payload or {}
+					text = hub_terms.hub_search_text(payload).lower()
+					terms = {str(t).lower() for t in (payload.get("hub_terms") or [])}
+					docs.append((str(point.id), text, terms, str(payload.get("hub_title") or "").lower()))
+				if offset is None:
+					break
+			if not docs:
+				return []
+			doc_freq: Dict[str, int] = {}
+			for term in query_terms:
+				low = term.lower()
+				doc_freq[low] = sum(1 for _pid, text, terms, _title in docs if low in terms or low in text)
+			scored: List[Tuple[str, float]] = []
+			for pid, text, terms, title in docs:
+				score = 0.0
+				for term in query_terms:
+					low = term.lower()
+					if low in terms:
+						weight = 1.5
+					elif low in title:
+						weight = 1.2
+					elif low in text:
+						weight = 0.8
+					else:
+						continue
+					idf = hub_terms.term_idf(len(docs), doc_freq.get(low, 0))
+					score += idf * weight * (1.5 if hub_terms.is_anchor(term) else 1.0)
+				if score > 0:
+					scored.append((pid, score))
+			scored.sort(key=lambda item: (-item[1], item[0]))
+			return scored[:limit]
+		except Exception as e:
+			logger.warning(f"[HUB-KW] ranking keyword de hubs falló: {e}")
+			return []
+
+	def _boost_hubs(self, query: str, fused: List[Tuple[str, float]], candidates: Dict[str, Any]) -> List[Tuple[str, float]]:
+		"""Reordena hubs YA presentes en el top semántico por solape de anclas.
+
+		Nunca inventa candidatos ni mete un hub ausente: solo sube (hasta +0.20)
+		a los hubs del top-N cuyo `hub_title`/`hub_terms` solapan la consulta.
+		Flag `SW_HUB_BOOST_ENABLED` (default OFF).
+		"""
+		try:
+			from red_pill.memento import hub_terms
+			from red_pill.memento.hybrid import salient_terms
+
+			terms = [t.lower() for t in salient_terms(query, max_terms=8)]
+			if not terms:
+				return fused
+			top_n = 5
+			top_ids = {pid for pid, _ in fused[:top_n]}
+			boosted: List[Tuple[str, float]] = []
+			for pid, score in fused:
+				hit = candidates.get(pid)
+				payload = getattr(hit, "payload", {}) or {}
+				is_hub = payload.get("node_type") == "synthesis_hub" or payload.get("lazarus_phase") == "synthesis_hub"
+				if pid in top_ids and is_hub:
+					text = hub_terms.hub_search_text(payload).lower()
+					overlap = sum(1 for term in terms if term in text)
+					if overlap:
+						score += 0.05 * min(4, overlap)
+				boosted.append((pid, score))
+			boosted.sort(key=lambda item: (-item[1], item[0]))
+			return boosted
+		except Exception as e:
+			logger.warning(f"[HUB-BOOST] no aplicado: {e}")
+			return fused
 
 	@staticmethod
 	def _excluded_by(payload: Dict[str, Any], exclusions: List[Any]) -> bool:

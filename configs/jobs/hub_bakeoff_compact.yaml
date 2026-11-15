@@ -1,0 +1,21 @@
+# Hub bake-off — K2 con prompt CONCISE + COMPACTION (sin truncar).
+#
+# Mide el coste extra de la compaction: el maestro usa
+# `hub_synthesis_v2_concise.txt` y, si supera `SLEEP_HUB_SUMMARY_TARGET_CHARS`
+# (900), se REESCRIBE con `hub_summary_compact.txt`. Nunca se recorta; si no
+# cabe tras N intentos, se deja intacto y se marca `summary_over_budget`.
+#
+# Las filas se distinguen por el sufijo `_compacted` (no pisan las del bake-off
+# conciso sin compaction). Un step = una sesión.
+source: element_job
+priority: 4
+title: Hub bake-off — K2 conciso + compaction
+mission_id: hub-bakeoff
+step_command: .venv/bin/python scripts/hub_bakeoff.py --run-element --concise --suffix compacted --models k2_horizon_7b
+elements_command: .venv/bin/python scripts/hub_bakeoff.py --list --concise --models k2_horizon_7b
+defer_exit_code: 77
+skip_exit_code: 79
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 60

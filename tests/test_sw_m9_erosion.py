@@ -18,6 +18,13 @@ class FakeClient:
 		return c == "work_memories"
 
 	def scroll(self, c, scroll_filter=None, limit=500, offset=None, with_payload=True, with_vectors=False):
+		# AD-116: la liberación de miembros se resuelve por `hub_id`, no por
+		# una lista duplicada en el payload del hub.
+		must = getattr(scroll_filter, "must", None) or []
+		for cond in must:
+			if getattr(cond, "key", "") == "hub_id":
+				val = cond.match.value
+				return [SimpleNamespace(id=i, payload=p) for i, p in self._points if (p or {}).get("hub_id") == val], None
 		# Como Qdrant: solo devuelve los curados que el filtro `should` selecciona.
 		curated = [
 			(i, p) for i, p in self._points if p.get("node_type") in ("memento_engram", "synthesis_hub") or p.get("lazarus_phase") == "synthesis_hub"
@@ -83,8 +90,10 @@ def test_demote_hub_libera_sus_miembros(monkeypatch):
 	monkeypatch.setattr(cfgmod, "CURATED_MIN_LIFETIME_YEARS", 5.0, raising=False)
 	monkeypatch.setattr(cfgmod, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0, raising=False)
 	old = time.time() - 11 * 365 * 86400  # supera el piso de 10y del hub
-	hub = ("hub", {"lazarus_phase": "synthesis_hub", "members": ["m1", "m2"], "created_at": old})
-	client = FakeClient([hub])
+	hub = ("hub", {"lazarus_phase": "synthesis_hub", "created_at": old})
+	m1 = ("m1", {"node_type": "memento_engram", "hub_id": "hub", "hubbed": True, "created_at": time.time()})
+	m2 = ("m2", {"node_type": "memento_engram", "hub_id": "hub", "hubbed": True, "created_at": time.time()})
+	client = FakeClient([hub, m1, m2])
 	stats = erode_curated(FakeMM(client), collections=("work_memories",))
 	assert client.deleted == ["hub"]
 	assert client.payloads["m1"]["hubbed"] is False and client.payloads["m2"]["hubbed"] is False

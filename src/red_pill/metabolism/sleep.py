@@ -34,6 +34,7 @@ partial deferral instead of the old all-or-nothing abort.
 """
 
 import logging
+import time
 
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.categorizer import detect_category_heuristics
@@ -99,15 +100,18 @@ def run_sleep_phase(ctx: SleepContext, phase_index: int) -> None:
 	from red_pill.jobs.drivers.base import JobPauseRequested  # local: rompe el ciclo jobs↔metabolismo
 
 	phase = SLEEP_PHASES[phase_index]
+	started = time.monotonic()
 	try:
 		ctx.update_status(phase.name, status="running", phase_index=phase_index + 1, total_phases=total_phases)
 		phase.execute(ctx)
+		ctx.record_duration(phase.name, time.monotonic() - started)
 		ctx.update_status(phase.name, status="completed", phase_index=phase_index + 1, total_phases=total_phases)
 	except JobPauseRequested:
 		# Pausa del operador a mitad de fase (sonda del drenaje): propaga al
 		# runner, que sella PAUSED con el checkpoint intacto — jamás un fallo.
 		raise
 	except Exception as e:
+		ctx.record_duration(phase.name, time.monotonic() - started)
 		ctx.update_status(phase.name, status=f"failed: {e}", phase_index=phase_index + 1, total_phases=total_phases)
 		logger.error(f"[SLEEP ENGINE] Phase '{phase.name}' failed: {e}")
 

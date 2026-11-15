@@ -243,13 +243,26 @@ class OpenCodeBridge(AgentBridge):
 			# envuelto sin respuesta. En el resto, el flag decide quién captura.
 			if not self._scribe_plugin or self._origin == "telegram":
 				extra["REDPILL_SCRIBE_DISABLE"] = "1"
-			env = {**os.environ, **extra} if extra else None
+			env = {**os.environ, **extra}
+			# V2 resuelve el workspace de la SESIÓN por `$PWD`, no por el cwd real
+			# del proceso (verificado 2026-11-10: cwd=<worktree> + PWD=/home/joan →
+			# sesión registrada en /home/joan). `subprocess.run(cwd=…)` NO actualiza
+			# PWD, y con el worker sin PWD el CLI caía al home: las etapas agénticas
+			# nacían en `/home/joan` con acceso a todo (misión NB-001). El workspace
+			# efectivo (cwd o el fallback de siempre) se refleja en PWD para que la
+			# sesión y el proceso no puedan discrepar.
+			effective_cwd = cwd or str(get_bunker_root().parent)
+			env["PWD"] = str(effective_cwd)
+			try:
+				env.setdefault("OLDPWD", os.getcwd())
+			except OSError:
+				pass
 			result = subprocess.run(
 				cmd,
 				capture_output=True,
 				text=True,
 				timeout=timeout + 10,
-				cwd=cwd or str(get_bunker_root().parent),
+				cwd=str(effective_cwd),
 				env=env,
 			)
 		except subprocess.TimeoutExpired as e:

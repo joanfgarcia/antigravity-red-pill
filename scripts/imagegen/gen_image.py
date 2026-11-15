@@ -145,6 +145,8 @@ def _run_element(el: dict) -> int:
 
 	t0 = time.perf_counter()
 	print(f"##### {model_id} @ {width}x{height} s{seed} #####", flush=True)
+	# Línea base de VRAM ANTES de cargar: el peso del modelo cuenta como footprint.
+	vram = BENCH._DeviceVram().prime()
 	try:
 		kind, pipe = BENCH._load(model_id)
 	except Exception as e:  # noqa: BLE001
@@ -167,10 +169,15 @@ def _run_element(el: dict) -> int:
 
 	try:
 		torch.cuda.reset_peak_memory_stats()
-		t1 = time.perf_counter()
-		img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta, steps=el.get("steps"), guidance=el.get("guidance"))
-		wall = time.perf_counter() - t1
-		peak = torch.cuda.max_memory_allocated() / (1024**2)
+		with vram:
+			t1 = time.perf_counter()
+			img = _gen(kind, pipe, model_id, prompt, seed, width, height, meta, steps=el.get("steps"), guidance=el.get("guidance"))
+			wall = time.perf_counter() - t1
+		torch_peak = torch.cuda.max_memory_allocated() / (1024**2)
+		# `peak_mb` = incremento del DISPOSITIVO sobre la línea base (ver bench_imagegen._DeviceVram).
+		dev = vram.peak_delta_mb
+		peak = dev if dev is not None else torch_peak
+		source = "nvidia-smi" if dev is not None else "torch"
 		img.save(png)
 		rec = {
 			"model": model_id,
@@ -181,6 +188,10 @@ def _run_element(el: dict) -> int:
 			"load_s": round(load_s, 2),
 			"wall_s": round(wall, 2),
 			"peak_mb": round(peak, 1),
+			"peak_source": source,
+			"torch_peak_mb": round(torch_peak, 1),
+			"device_baseline_mb": vram.baseline_mb,
+			"device_peak_abs_mb": vram.peak_abs_mb,
 			"png": png.name,
 		}
 		raw_warn = os.environ.get("RP_MEDIA_WARNINGS")
@@ -191,7 +202,7 @@ def _run_element(el: dict) -> int:
 				rec["warnings"] = [raw_warn]
 		with metrics.open("a", encoding="utf-8") as f:
 			f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-		print(f"  [ok] {wall:.1f}s  peak {peak:.0f}MB  → {png.name}", flush=True)
+		print(f"  [ok] {wall:.1f}s  peak {peak:.0f}MB ({source})  → {png.name}", flush=True)
 		return 0
 	except Exception as e:  # noqa: BLE001
 		print(f"  FALLO: {e}", flush=True)

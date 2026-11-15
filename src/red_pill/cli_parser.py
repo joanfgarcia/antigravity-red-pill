@@ -378,6 +378,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
+	job_submit.add_argument(
+		"--continuity",
+		help=(
+			"Atribuir el job a un alma concreta (continuity_id; canal de Operador). "
+			"Útil cuando el proxy MCP no puede desambiguar dos pestañas en el mismo workspace."
+		),
+	)
 	job_submit.add_argument("--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`.")
 	job_submit.add_argument(
 		"--allow-tmp", action="store_true", help="Permitir rutas volátiles (/tmp, /dev/shm, /run/user) en el payload: no sobreviven a un reinicio."
@@ -412,13 +419,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	job_cancel = job_sub.add_parser("cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED")
 	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
 
-	job_review = job_sub.add_parser(
-		"review", help="Reservar un job FRUSTRATED para revisión (REVIEW): la purga automática y el dolor no lo tocan"
-	)
+	job_review = job_sub.add_parser("review", help="Reservar un job FRUSTRATED para revisión (REVIEW): la purga automática y el dolor no lo tocan")
 	job_review.add_argument("job_id", help="Id completo o prefijo corto")
-	job_review.add_argument(
-		"--undo", action="store_true", help="Liberar la reserva: vuelve a FRUSTRATED (de nuevo en el pool de la purga)"
-	)
+	job_review.add_argument("--undo", action="store_true", help="Liberar la reserva: vuelve a FRUSTRATED (de nuevo en el pool de la purga)")
 
 	job_discard = job_sub.add_parser("discard", help="Cerrar un job revisado definitivamente (CANCELLED): no se ejecuta y no cuenta como dolor")
 	job_discard.add_argument("job_id", help="Id completo o prefijo corto")
@@ -491,5 +494,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry check (Oneshot)")
 	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
 	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
+
+	# Fondo declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta.
+	affect_parser = subparsers.add_parser("affect", help="Ánimo declarado por el Operador (RFC-AFE-001)")
+	affect_sub = affect_parser.add_subparsers(dest="aff_cmd")
+	aff_fondo = affect_sub.add_parser("fondo", help="Ver o declarar el fondo del día")
+	aff_fondo.add_argument("--set", help="Letra: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
+	aff_fondo.add_argument("--note", help="Nota breve (máx. 280 chars)")
+	aff_fondo.add_argument("--json", action="store_true", help="Salida JSON")
 
 	return parser, config_parser

@@ -733,7 +733,7 @@ def test_purge_task_force_never_touches_live_rows(queue):
 
 
 def test_kill_blocked_cancela_limpio_y_en_cascada(queue):
-	"""BLOCKED (DAG en espera del padre) se puede cancelar: FRUSTRATED sin marca
+	"""BLOCKED (DAG en espera del padre) se puede cancelar: CANCELLED sin marca
 	de kill sucio y con cascada a los hijos BLOCKED (nadie espera a un padre caído)."""
 	parent = queue.enqueue_task(source="samantha", payload={})
 	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
@@ -742,11 +742,11 @@ def test_kill_blocked_cancela_limpio_y_en_cascada(queue):
 
 	assert queue.kill_task(parent, discard=True) is True
 	parent_row = queue.get_task(parent)
-	assert parent_row["status"] == "FRUSTRATED"
-	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert parent_row["status"] == "CANCELLED"
+	assert queue.get_task(child)["status"] == "CANCELLED"
 	assert not queue.get_task(child).get("dirty_kill")  # BLOCKED → cancelación limpia
 	assert queue.get_task(child)["error_log"] == "parent cancelled"
-	assert queue.get_task(grand)["status"] == "FRUSTRATED"
+	assert queue.get_task(grand)["status"] == "CANCELLED"
 
 
 def test_kill_blocked_sin_discard_queda_paused(queue):

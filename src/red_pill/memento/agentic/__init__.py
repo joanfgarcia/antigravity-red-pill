@@ -30,6 +30,10 @@ from .fragments import (
 )
 from .prompts import (
 	_VOICE_RULE,
+	ANNOTATE_COMBINED_SYSTEM,
+	ANNOTATE_COMBINED_USER,
+	ANNOTATE_COMBINED_USER_V2,
+	ANNOTATE_COMBINED_USER_V3,
 	ANNOTATE_SOCIAL_SYSTEM,
 	ANNOTATE_SOCIAL_USER,
 	ANNOTATE_WORK_SYSTEM,
@@ -69,6 +73,7 @@ from .runner import (
 	session_max_work_unit_chars,
 )
 from .runtime import (
+	DEGRADED_MARKER,
 	EDGE_ENGINE_URL,
 	EDGE_HEALTH_URL,
 	EDGE_MODEL,
@@ -83,15 +88,21 @@ from .runtime import (
 	distill_prompt_version,
 	engine_id,
 	http_transport,
+	is_degraded,
 	llm_available,
 	model_prompt_budget,
 	refine_prompt_version,
 	validate_prompt_version,
 )
+from .selection import predict_session_cost, select_targets, work_unit_chars, work_unit_count
 from .validate import pending_validations, validate_note, validate_notes
 
 __all__ = [
 	"_VOICE_RULE",
+	"ANNOTATE_COMBINED_SYSTEM",
+	"ANNOTATE_COMBINED_USER",
+	"ANNOTATE_COMBINED_USER_V2",
+	"ANNOTATE_COMBINED_USER_V3",
 	"ANNOTATE_SOCIAL_SYSTEM",
 	"ANNOTATE_SOCIAL_USER",
 	"ANNOTATE_WORK_SYSTEM",
@@ -121,6 +132,8 @@ __all__ = [
 	"distill_prompt_version",
 	"engine_id",
 	"http_transport",
+	"DEGRADED_MARKER",
+	"is_degraded",
 	"llm_available",
 	"model_prompt_budget",
 	"refine_prompt_version",
@@ -158,6 +171,10 @@ __all__ = [
 	"pending_agentic",
 	"_distill_refine_present",
 	"session_max_work_unit_chars",
+	"predict_session_cost",
+	"select_targets",
+	"work_unit_chars",
+	"work_unit_count",
 	"_is_llm_connection_error",
 	"run_agentic",
 	"_advance_checkpoint",

@@ -209,13 +209,21 @@ const tryTool = async (sessionID, tool, input = {}) => {
 const reminders = async (sessionID) => {
   const event = { sessionID, system: [] };
   await fire(sessionHooks, "context", event);
-  return event.system;
+  return event.system.filter((p) => String(p?.text || "").includes("<redpill_handshake_reminder>"));
+};
+const identityBlocks = async (sessionID) => {
+  const event = { sessionID, system: [] };
+  await fire(sessionHooks, "context", event);
+  return event.system.filter((p) => String(p?.text || "").trim().startsWith("<redpill_identity"));
 };
 
 const result = {};
 // 1) turno nuevo: el contexto lleva recordatorio y una tool cualquiera se niega.
 await fire(sessionHooks, "prompt", { sessionID: "s1", prompt: { text: "hola" } });
 result.reminderBefore = (await reminders("s1")).length;
+// La identidad por petición (leg) va SIEMPRE, con el gate encendido o apagado:
+// es lo que permite pasar `caller_leg` al coro cuando hay varias sesiones.
+result.identityBefore = (await identityBlocks("s1")).map((p) => p.text);
 result.nonHandshakeBefore = await tryTool("s1", "RedPill-Kernel_check_parallel_sessions");
 // 1b) Code Mode: `execute` (gateway) nunca se niega, porque el handshake puede ir dentro.
 result.gateway = await tryTool("s1", "execute");
@@ -275,6 +283,10 @@ def _run_plugin_handshake(tmp_path: Path, env_extra: dict | None = None) -> dict
 def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 	out = _run_plugin_handshake(tmp_path)
 	assert out["reminderBefore"] == 1, "el contexto del turno no lleva el recordatorio"
+	# Identidad POR PETICIÓN (AD-119): el bloque va siempre y nombra el leg real de
+	# este turno — es lo que el agente pasa como `caller_leg` al coro.
+	assert len(out["identityBefore"]) == 1, "el contexto no lleva el bloque de identidad"
+	assert 'leg="opencode:s1"' in out["identityBefore"][0]
 	assert out["nonHandshakeBefore"]["status"] == "refused", "una tool sin handshake debería negarse"
 	# Code Mode envuelve el handshake: el gateway `execute` no se gatea (si no,
 	# el propio handshake quedaría inalcanzable).
@@ -306,6 +318,9 @@ def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 def test_handshake_gate_se_puede_desactivar(tmp_path):
 	out = _run_plugin_handshake(tmp_path, {"REDPILL_HANDSHAKE_GATE": "off"})
 	assert out["reminderBefore"] == 0
+	# El gate se apaga; la identidad por petición NO (es del coro, no del gate).
+	assert len(out["identityBefore"]) == 1, "la identidad por petición no depende del gate"
+	assert 'leg="opencode:s1"' in out["identityBefore"][0]
 	assert out["nonHandshakeBefore"]["status"] == "allowed"
 
 

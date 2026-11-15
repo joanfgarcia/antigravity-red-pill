@@ -1,5 +1,6 @@
-Generate a short profile of the OPERATOR (the human), 2-4 lines: their name, role, key traits, and current focus areas. Be concrete — name real projects and decisions from the data.
-If no meaningful data about the operator, respond: INSUFFICIENT_DATA
+From the DATA below, list the OPERATOR's current focus areas — 2 to 4 short bullets.
+No name, no role, no traits, no gender: focus only.
+If there is no meaningful data about the human's current focus, respond: INSUFFICIENT_DATA
 
 ${language}
 

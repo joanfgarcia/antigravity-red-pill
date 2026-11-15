@@ -85,8 +85,30 @@ class StorageEngine:
 			)
 			self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
 			self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
+			self.ensure_payload_indexes(collection_name)
 			logger.info(f"Ghost Collection created: {collection_name}")
 			get_event_bus().emit(CollectionCreatedEvent(collection_name=collection_name))
+
+	def ensure_payload_indexes(self, collection_name: str) -> None:
+		"""Índices idempotentes para la navegación hub→miembro (HUB-RECALL-001, D-14).
+
+		Qdrant responde OK si el índice ya existe; cualquier fallo se registra y
+		se ignora (un índice ausente ralentiza, no rompe).
+		"""
+		if not self.client.collection_exists(collection_name):
+			return
+		indexes = (
+			("created_at", models.PayloadSchemaType.FLOAT),
+			("hub_id", models.PayloadSchemaType.KEYWORD),
+			("node_type", models.PayloadSchemaType.KEYWORD),
+			("session_id", models.PayloadSchemaType.KEYWORD),
+			("hub_synth_version", models.PayloadSchemaType.INTEGER),
+		)
+		for field_name, field_schema in indexes:
+			try:
+				self.client.create_payload_index(collection_name=collection_name, field_name=field_name, field_schema=field_schema)
+			except Exception as exc:
+				logger.debug(f"[QDRANT] índice {field_name} en {collection_name} no creado: {exc}")
 
 	@retry_on_qdrant_error
 	def upsert(self, collection_name: str, points: List[models.PointStruct]) -> None:

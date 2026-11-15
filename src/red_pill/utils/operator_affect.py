@@ -110,19 +110,19 @@ def _write_state(state: Dict[str, Any]) -> None:
 		pass
 
 
-def _es_bloque_inyectado(texto: str) -> bool:
-	"""¿El `prompt` es un bloque del arnés (`<user_rules>…`) y no la voz del Operador?"""
-	limpio = str(texto or "").lstrip().lstrip("\"'`").lstrip()
-	return limpio.startswith("<")
-
-
 def _recent_prompts(limit: int, window_min: int, now: float) -> List[str]:
 	"""Los últimos prompts del Operador en la cola viva (`memory_queue.prompt`).
 
 	En `memory_queue` cada fila guarda el par: `prompt` es lo que escribió el
-	Operador y `response` lo que respondió el agente. Solo interesa el primero.
+	Operador y `response` lo que respondió el agente. Solo interesa el primero, y
+	solo si es su voz: la cola recibe también bloques del arnés (`<user_rules>`),
+	avisos de job/coro y encargos de subagente, que metían ruido en el léxico (un
+	`calma` de las reglas pintaba el turno de cian). El filtro vive en
+	`core.operator_voice`: una sola definición para el léxico, el enqueue y la
+	purga.
 	"""
 	try:
+		from red_pill.core.operator_voice import extract
 		from red_pill.core.paths import get_queue_dir
 
 		db = Path(get_queue_dir()) / "bunker_queue.db"
@@ -131,15 +131,11 @@ def _recent_prompts(limit: int, window_min: int, now: float) -> List[str]:
 		since = now - max(1, int(window_min)) * 60
 		with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
 			rows = conn.execute(
-				"SELECT prompt FROM memory_queue WHERE created_at >= ? AND length(trim(prompt)) > 0 "
-				"ORDER BY created_at DESC LIMIT ?",
+				"SELECT prompt FROM memory_queue WHERE created_at >= ? AND length(trim(prompt)) > 0 ORDER BY created_at DESC LIMIT ?",
 				(since, max(1, int(limit))),
 			).fetchall()
-		# La cola guarda como `prompt` también los bloques inyectados por el arnés
-		# (`<user_rules>`, `<workspace_rules>`): no son la voz del Operador y metían
-		# ruido en el léxico (un `calma` de las reglas pintaba el turno de cian).
-		# Llegan a veces entrecomillados (`"<user_rules>…"`), de ahí el lstrip de comillas.
-		return [str(r[0]) for r in rows if not _es_bloque_inyectado(str(r[0]))]
+		voces = [v for r in rows if (v := extract(str(r[0])))]
+		return voces[: max(1, int(limit))]
 	except Exception:
 		return []
 

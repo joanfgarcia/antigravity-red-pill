@@ -9,7 +9,7 @@ mecánico de drivers se auto-recupera vía requeue_stale a los 15 minutos.
 import logging
 from typing import Any, Dict
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -48,5 +48,8 @@ class QueueHygienePlugin(JanitorPlugin):
 				)
 			except Exception as sig_err:
 				logger.warning(f"[Janitor] Failed to inject queue_stuck_tasks signal: {sig_err}")
+		else:
+			# El estado cesó: el aviso se entierra (contrato de ciclo de vida).
+			bury_signal("queue_stuck_tasks", memory_manager=kwargs.get("memory_manager"))
 
 		return hygiene

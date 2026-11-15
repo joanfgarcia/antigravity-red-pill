@@ -3577,3 +3577,175 @@ Con la ley actual, un fin de semana sin turnos suma +0.6/h a `necesidad` (≈ +2
 **Rationale / Evidence**: medido antes/después: opencode 819 · pi 26 · telegram 12, idéntico (hoy es un no-op). `tests/test_origin_precedence.py` (4 casos) + los tests de descubrimiento actualizados. La sesión real de pi 1.4.0 confirmó el formato v3 y el parseo (docstring de la fuente).
 
 **Consequences**: el respaldo sigue cubriendo las 12 conversaciones reales. Deuda acotada: si el bridge ejecuta un provider con un `session_id` distinto del id de la conversación, hace falta registrar el vínculo (`record_origin(provider, conversation_id, "telegram")`) para que Telegram sepa que está cubierta.
+
+## [AD-113] Síntesis de hubs jerárquica (map-reduce): fin del truncado silencioso
+**Date**: 2026-11-08
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/hub-hierarchical-synthesis`; pendiente de PR a `next`).
+
+**Context**: la auditoría del sueño del 2026-11-08 midió 48 sesiones cuyo prompt de hub supera `SLEEP_MAX_HUB_INPUT_CHARS` (8000): la mayor, 578.537 chars / 1.308 miembros, produjo un hub de 1.107 chars; en total se descartaban ~2,0M de chars (84 %) por noche de backfill. Los miembros van `hubbed=true` y se excluyen de la pata semántica del recall (`memory.py`), así que el hub truncado era la **entrada principal** a esas sesiones, no un detalle cosmético. El cap no es el contexto del modelo: el carril `hub` corre `granite_8b` (Granite 4.1 8B Q4_K_M) con `n_ctx: 16384` y `max_tokens: 4096`; 8000 chars ≈ 2-3k tokens.
+
+**Por qué se escapó** (revisión documental): v7.12.0 introdujo a la vez el batching `SLEEP_MAX_CHUNKS_PER_HUB` y el recorte `SLEEP_MAX_HUB_INPUT_CHARS`. v8.0.0 (single-writer) reescribió `consolidation.py` a hubs-only y **no portó el batching**: quedó solo el recorte. AD-023 §4 dejó `hub_rebuild_pending` como "queue marker for a future LLM re-synthesis pass" y el `AGENT_UPDATE_GUIDE` lo repitió como deuda. El test `test_multi_hub_batching_partitioning` reimplementaba el slicing **localmente** y seguía verde aunque el pipeline hubiera perdido el batching: falsa confianza. El map-reduce de Memento (RFC-002 §5.4.1) sí estaba implementado, pero en el carril chronicle, no en hubs.
+
+**Decision**:
+- `synthesize_hub_v2` aplica **map-reduce** cuando el prompt renderizado no cabe: lotes por presupuesto de chars (fragmentos completos; un texto individual gigante se segmenta por líneas/frases, nunca se descarta), un hub parcial por lote con `hub_synthesis_v2_partial.txt`, y reducción en árbol hasta un hub maestro con `hub_synthesis_v2.txt`. La textura legible de cada fragmento (`theme` + `relics`) se pasa como texto, no como `str(dict)`.
+- El resultado maestro guarda `partitions` (nivel intermedio: summary, texture, lang) y `_synthesize_one` lo persiste como `hub_partitions`, junto a `hub_hierarchical`, `hub_partition_count`, `hub_map_reduce_levels`, `hub_input_chars`, `hub_truncated` y `hub_synth_version=2`. Los `members` del hub siguen siendo el nivel de detalle final.
+- `SLEEP_MAX_HUB_INPUT_CHARS`, `SLEEP_HUB_MAP_REDUCE_ENABLED` y `SLEEP_HUB_MAX_CHUNKS_PER_BATCH` quedan **declarados** en `config.py` (antes el cap solo existía en un `getattr` y era inmutable).
+- La remediación del corpus usa `force_sessions` (salta la idempotencia por `hub_input_hash` sin tocar el hash) + `scripts/resynthesize_hubs.py` + `configs/jobs/hubs_resynthesize.yaml` (`element_job`: un step por sesión, fail-soft con `skip_exit_code 79`). El script consume `hub_rebuild_pending` al escribir el hub real (AD-023 §4).
+
+**Alternatives rechazadas**: subir solo el cap (acelera el caso medio pero deja truncadas las sesiones de 100k-578k); cambiar a `bonsai_2_27b` (24.576) o `tiny_aya_water` (32.768) como parche (VRAM/calidad y el caso de 578k sigue sin caber); escribir varios hubs "[Parte i/N]" sin maestro (diseño pre-8.0.0: no hay síntesis de síntesis ni entrada única).
+
+**Rationale / Evidence**: `tests/test_hub_map_reduce.py` (partición por presupuesto, un solo batch sin regresión, map-reduce sin truncado, niveles de reducción, fallo parcial mecánico, fallo final, metadata, force, textura). Suite sleep/hub: **106 passed**. Smoke real sin escritura: sesión de 8.241 chars → 2 parciales, `truncated=false`; sesión de 41.994 chars → 6 parciales, `truncated=false`, summary 1.235 chars. `--list` en vivo: 48 sesiones afectadas.
+
+**Consequences**: ningún hub nuevo se trunca en silencio; las sesiones largas obtienen un maestro + parciales navegables (los `members` siguen accesibles). `hub_partitions` añade payload acotado (cada parcial ≤1.500 chars). Coste de la re-síntesis completa: ~180-390 llamadas LLM (lotes de 8k-16k), 30-90 min; se ejecuta como job reanudable, no en el turno. La deuda de AD-023 queda cerrada; `hub_rebuild_pending` ya no es un marcador sin consumidor.
+
+## [AD-114] Identidad del llamante en `job_submit`: ambigüedad fail-closed + auditoría
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `fix/caller-identity`).
+
+**Context**: el job de descarga de MOSS (`a7c9e3c6`, misión `media-moss-eval`) se encoló con el `continuity_id` de la sesión `ses_e435…` (`repo:sharing`) en vez de la sesión `ses_e42ab8ea…` (“Comparar MOSS-Image-SFT-GGUF”, alma `01a1bd54…`). El aviso de fin de job se entregó a la sesión equivocada. Es una **recurrencia del incidente 2026-10-28** documentado en `core/bridge.py`: el proxy ya distinguía AMBIGUO de NO-SÉ y no usaba el global con ambigüedad, pero el **backend** (`_resolve_session_identity`) volvía a caer al bridge global (`opencode_session.json`, “último escritor gana”) cuando el proxy no traía `originator`. El anti-spoof de `job_submit` no podía detectarlo: para él, el llamante era la sesión que el backend había resuelto. La prueba reveló además que el arnés real **sí exporta `OPENCODE_SESSION_ID`** al proxy; era la señal fuerte que faltaba.
+
+**Decision**:
+- `mcp_proxy.identity_payload` prefiere **`OPENCODE_SESSION_ID`/`OPENCODE_SESSION`** (lee el bridge por sesión); después la correlación por cwd (`resolve_body`); el global solo si no hay pistas. Si hay ambigüedad, **no usa el global**, y envía `ambiguous: true`.
+- El backend expone `proxy_ambiguous` en `_resolve_session_identity`/`_caller_session`. `job_submit` **falla cerrado** ante ambigüedad salvo `REDPILL_OPERATOR=1`; el escape normal del Operador es `red-pill job submit --continuity <alma>` (resuelve la misión/sesión desde el registro).
+- **Auditoría de procedencia**: `origin_session_id` y `submitted_by` se guardan en el payload, `cognitive_tasks` (migración aditiva), y el `job_identity`/artefacto. El `continuity_id` sigue siendo el destinatario del aviso; los nuevos campos dicen quién envió realmente. Avisos si el llamante no tiene fila en el registro o su misión no coincide con la de confianza.
+- **El router de notify no se toca**: entrega al `continuity_id` del job. El bug estaba en el encolado, no en la entrega.
+
+**Alternatives rechazadas**: fail-closed en `handshake`/lecturas (rompe ambas pestañas mientras haya dos vivas; el fix del bootstrap requiere que el proxy reciba el session id, ya cubierto por la nueva preferencia); confiar en argumentos del modelo (anti-spoof papel mojado); enrutar por misión (las dos sesiones son `repo:sharing`).
+
+**Rationale / Evidence**: `tests/test_caller_identity_job.py` (rechazo ambiguo, auditoría en payload, columnas de cola, `job_identity`) y `tests/test_mcp_proxy_identity.py` (ambigüedad sin global, preferencia por `OPENCODE_SESSION_ID`). `tests/test_bridge_per_session.py`, `test_mcp_server.py`, `test_mcp_shared.py`, `test_cli_jobs_smoke.py`: **129 passed, 2 skipped**. `conftest.py` deja de heredar el `OPENCODE_SESSION_ID` del operador (suite hermética).
+
+**Consequences**: los `job_submit` MCP con dos pestañas en el mismo cwd se rechazan con un error legible en vez de atribuirse a un alma ajena; el Operador puede usar `--continuity`. La procedencia queda auditada. El `handshake` y las lecturas conservan el comportamiento previo; la desambiguación completa de esas rutas depende de que el arnés exporte el session id (ya preferido) o de cerrar la pestaña hermana.
+
+## [AD-115] Hubs: cero truncamiento y compaction blanda (medición K2 vs Granite)
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `next`).
+
+**Context**: AD-113 introdujo el map-reduce, pero quedaban dos recortes silenciosos en el camino: la textura se cortaba a `HUB_TEXTURE_MAX_CHARS` (800) y, con `SLEEP_HUB_MAP_REDUCE_ENABLED=false`, el prompt se recortaba a `SLEEP_MAX_HUB_INPUT_CHARS`; además el fallback mecánico cortaba a 1.500 chars. El bake-off Bonsai/K2 vs Granite mostró que K2 gana cobertura pero tarda ~2×, y que la compaction de K2 no siempre reduce. El contrato del Operador es explícito: **no truncar nunca**.
+
+**Decision**:
+- `synthesize_hub_v2` **siempre** aplica map-reduce cuando el prompt renderizado no cabe (el flag queda *deprecated*); el fallback mecánico ya no recorta; la textura por encima del target se conserva intacta y se marca `texture_over_target`.
+- El maestro se **compacta por reescritura** (`hub_summary_compact.txt`) si supera `SLEEP_HUB_SUMMARY_TARGET_CHARS` (900), con `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` (2). Si tras los intentos no baja, se conserva el texto original y se marca `summary_over_budget`; **nunca se corta**.
+- La procedencia de la compaction se persiste en el hub: `hub_summary_compacted`, `hub_summary_over_budget`, `hub_texture_over_target`, `hub_compaction_calls`, `hub_compaction_latency_s`.
+- Se añade el prompt `hub_synthesis_v2_concise` (presupuesto 700-900 chars) y las variantes `--concise`/`--suffix compacted` del harness para medir sin escribir hubs.
+- **Híbrido de modelos (decisión 2026-11-09)**: si el prompt renderizado ≥ `SLEEP_HUB_LARGE_INPUT_CHARS` (100.000), el hub usa `SLEEP_HUB_LARGE_MODEL` (K2-Horizon 7B) y `SLEEP_HUB_LARGE_PROMPT` (concise); por debajo, Granite. Solo aplica con `provider_alias=sip` (un alias explícito del bake-off manda). El modelo/prompt efectivos se persisten (`hub_large_path`, `hub_model`, `hub_prompt_file`).
+
+**Evidence** (bake-off 2026-11-08, 15/15 OK, `truncated=false` en todas): Granite 75,2 s / 770 chars / coverage 0,233; K2 178,4 s / 1.549 / 0,322; K2 concise 148,6 s / 1.204 / **0,389**; K2 concise+compaction 203,9 s / 1.216 / 0,300 (8,6 s extra); Bonsai 259,7 s / 832 / 0,267. La compaction de K2 falló en 42k (1.427 chars, `summary_compacted=false`) y fue parcial en 166k (1.374 chars): es un lever blando. Ciclo nocturno `6ecdfe81`: 1 h 57 min; fase `consolidation` ~10,5 min para 84 hubs; K2 concise+compaction añadiría ~12-19 min. Híbrido: `tests/test_hub_v2.py` (modelo/prompt en el path grande, default intacto en el pequeño) y `tests/test_sip_provider_payload.py` (override por llamada). Detalle en `DISTILLER_SELECTION.md` y `docs/BENCHMARKS/HUB_BAKEOFF.md`.
+
+**Consequences**: ningún hub se trunca, ni en el prompt, ni en la textura, ni en el summary; lo que no se puede compactar queda largo y auditado. El default efectivo es **híbrido**: Granite para ≤100k y K2 concise para >100k, con un coste estimado de ~2-4 min por ciclo (≈8-9 min en una noche de backfill con ~4 hubs grandes). Bonsai queda descartado. La decisión es revisable con las métricas `hub_model`/`hub_large_path` de los hubs reales.
+
+## [AD-116] Contrato de salida del hub: índice acotado, navegación por rangos y síntesis incremental
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (revisado 2026-11-09: contrato **sin corte**; rama `fix/hub-output-contract`).
+
+**Context**: AD-115 eliminó los topes de salida ("no truncar nunca") y el ciclo del 2026-11-09 lo expuso: el hub de la sesión de 736.959 chars / 1.670 miembros quedó con summary 3.641 + textura 2.662 + `hub_partitions` (87,5 KB) + `members` (52,3 KB) = **145.377 bytes de payload**. La escritura falló porque `texture` (2.662) superaba `MAX_METADATA_STR` (1.024), y el `try/except` de la colección abortó 7 grupos pendientes. Además, el híbrido AD-115 decidía `large_path` por el total de la sesión y aplicaba K2 a las 97 llamadas del map: 40 min solo para ese hub.
+
+**Decision**:
+- Un hub es un **índice**, no un archivo: `title ≤120`, `summary ≤900`, `texture ≤400` (total ~1,4k chars ≈ 400 tokens) como **targets de síntesis**. La ENTRADA no se trunca; la SALIDA tampoco se corta.
+- Enforcement: compactación **por síntesis** (reescritura) de summary y textura. Si el modelo no obedece, el texto se conserva **entero** y se marca `hub_summary_over_budget`/`hub_texture_over_target`; nunca se recorta. Si la textura supera el tope duro de metadata (`MAX_METADATA_STR`), se parte en `texture_parts` por síntesis (y, como último recurso configurable, por segmentación lossless); el contenido se conserva. `hub_truncated` sigue significando "entrada truncada" y es siempre False en este camino. `SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK=false` obliga a reintentar en vez de segmentar.
+- `hub_partitions` (texto) y `members` (lista) **fuera del payload**. Navegación barata: `hub_partition_ranges` (lista plana de enteros) + `hub_members_count`; los miembros se resuelven por `hub_id`. El demote de hubs libera por `hub_id` (no por lista duplicada).
+- Orden **cronológico real** de los miembros por `created_at` (el scroll de Qdrant va por id) antes de trocear.
+- Fail-soft **por sesión** + señal de dolor `hub_synthesis_failed` si algún hub no se escribe.
+- `large_path` se decide **por llamada**; con map-reduce ninguna llamada supera 8k, así que queda OFF por defecto.
+- **Caché de parciales y reducciones** en el state dir (no en Qdrant), clave por contenido exacto: una sesión viva solo paga el lote frontera + el maestro en la siguiente pasada.
+
+**Evidence** (real, 2026-11-09 08:44, sesión `ses_e9f357…`):
+- 736.959 chars de entrada, 1.670 miembros, 97 lotes, 2 niveles de reducción: **13m25s en frío** (vs 40 min con K2), `truncated=false`, `summary=746`, `texture=350`, `output_chars=1.097`, payload **3.710 bytes** (−97,4 % vs 145.377), rangos contiguos `0..1670`, 3 compactions, Granite.
+- Caché: **97/97 parciales y 13/13 reducciones** reutilizables. Medido con Granite real y los datos del gigante:
+  - 1ª pasada con map caliente y reduce frío: **2m16s** (12 llamadas).
+  - 2ª pasada con todo caliente: **19,3 s** (maestro + 2 compactaciones).
+  - Escritura real del hub en caliente: **13,6 s** de pared (incluye arranque y carga del embedder).
+- Calidad del maestro en caliente: summary 889/900, textura 360/400, `output_chars` 1.284-1.326, `truncated=false`; cubre K-65P, `parent-of`, GBNF, gate-1, 2,47 bits/palabra, 99,4 % de retención, autoridad lexicográfica (delta 67) y migración v65→v67.
+- Tests: hub/sleep 42+55 verdes; suite completa 4.300 passed (2 fallos preexistentes de Sound of Silence en `branch_landing_audit.py`/`HUB_BAKEOFF.md`).
+
+**Revisión 2026-11-09 (sin corte + barrido de thinking)**. La primera versión de AD-116 resolvía el exceso con **recorte determinista** de la salida. El Operador lo rechazó: la compactación debe ser **de síntesis, no por corte**. Sustituido por: compactación por síntesis; si no baja, se conserva entero y se marca; si no cabe en metadata, `texture_parts` (síntesis de partes; segmentación lossless solo como fallback configurable). Además se midieron los parámetros oficiales de thinking en la sesión `large-166k` (441 miembros):
+
+| Config | Tiempo | Summary | Textura | Calidad |
+| :--- | ---: | ---: | ---: | :--- |
+| Granite (titular) | **199 s** | 1.591 | 340 | Limpio y conciso; pierde anclas |
+| K2 off (actual) | 466 s | 2.492 | 344 | Coherente y detallado; mejor fidelidad/tiempo |
+| K2 `reasoning_effort=high` + budget 256 | 577 s | 1.654 | 593 | **Degradado**: texto garbled/poético |
+| K2 high sin budget | timeout 429 s (small-8k) | fallback | — | Inviable en 8 GB / 10k ctx |
+| Spark thinking off | **225 s** | 1.037 | 339 | Rápido/conciso, pero **castellano degradado** |
+| Spark budget 256 | 707 s | 2.246 | 446 | Detallado; errores de lengua |
+
+La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0.95` y **≥32.768 tokens de salida**; con 10.240 de contexto y 8 GB no cabe, y el high sin budget hace timeout. La de Spark documenta `enable_thinking`/`reasoning_effort` high/low, pero en este build de llama.cpp high y low son un no-op; el que manda es `--reasoning-budget`. **Decisión**: Granite sigue siendo el titular de `hub` (rápido, limpio y con caché: 13m25 en frío / 19,3 s en caliente sobre el gigante); K2 off queda como candidato no-default para fidelidad; Spark no se promueve a titular por calidad de lengua (queda como candidato no-default/experimento). El guardia sin corte protege el esquema con cualquier modelo.
+
+**Consequences**: el hub no puede volver a reventar por tamaño ni llenar el contexto; la navegación hub→miembro→Memento sigue disponible y cuesta ~1 KB; el coste nocturno del hub pasa de 40 min a (frontera + maestro) en régimen. El ciclo total sigue dominado por el chronicle (K2 annotate, 2h31), fuera del alcance de este AD.
+
+## [AD-117] Avisos inyectados: presentación plegada con título (`metadata.displayText`)
+**Date**: 2026-11-09
+**Status**: ACCEPTED & IMPLEMENTED (rama `feat/notice-display`).
+
+**Context**: los avisos de `soul_notify` (fin de job, nudge de evento del tablón, mensaje de sesión hermana) se inyectaban con `opencode run --session` y el IDE los pintaba como un mensaje de usuario con el cuerpo crudo. El Operador pidió que se vieran **plegados y con un título de procedencia**, sin cambiar lo que ve el modelo. OpenCode V2 ofrece dos caminos: el mensaje `synthetic` (aviso de sistema, una línea tenue) y el user message normal con `metadata.displayText`.
+
+**Decision**:
+- El transporte `cli` de `soul_notify` entrega por **`POST /api/session/<id>/prompt`** usando `opencode api post` (resuelve servicio y auth) con `metadata.displayText = notice_title(text)`. Si la llamada falla (rc≠0, timeout de 8 s, servicio caído), cae al `opencode run --session` clásico: perder un aviso es peor que pintarlo sin plegar.
+- `notice_title()` deriva un título de **una línea**: `Mensaje recibido · CORO <hilo>`, `Mensaje recibido · job '<título>' → <estado>`, `Mensaje recibido · tablón`, o `Mensaje recibido`. Máximo 120 caracteres; **nunca usa el cuerpo** como título (D-09: el aviso es dato, no orden).
+- **No se usa `synthetic`**: no dispara el hook `prompt` del arnés, así que se perderían la captura del turno (scribe → Búnker), el reset del handshake y el acuse `msg=<event_id>`.
+- `delivery.INJECTION_POINTS` no cambia (`opencode` sigue en `cli`); solo se actualiza la tabla de honestidad para describir la ruta real.
+- La entrega conserva `steer` por defecto y `resume=true` (despierta una sesión idle), igual que antes.
+
+**Evidence**:
+- E2E 2026-11-09: aviso de job entregado → mensaje `type: user` con `metadata.displayText` correcto, turno ejecutado (el modelo respondió al cuerpo) y prompt+respuesta completos en `memory_queue`.
+- Contraprueba `synthetic`: dos sesiones con mensaje sintético → **0 filas** en `memory_queue`; la misma sesión con `/prompt` → 1 fila. Confirma la pérdida de captura.
+- Renderer del desktop 2.2.6: `im` pasa `displayText ?? message.text` a `Pl`; la acción **Copy message** copia `message.text` completo.
+- `opencode api` devuelve rc=0 en éxito y rc≠0 en error (400 → rc=1); el HTTP directo exige Basic auth (`service.json`), por eso se usa el CLI.
+- Tests: `TestPresentacionPlegada` (7 casos: títulos, payload con `displayText`, fallback, sesión inexistente); 146 passed en los módulos tocados y 4.336 en la suite completa (1 fallo preexistente de Sound of Silence, ajeno).
+
+**Consequences**: el IDE muestra una tarjeta de una línea con la procedencia y el cuerpo queda oculto; el modelo recibe el cuerpo íntegro y el operador puede recuperarlo con **Copy message**. El runner de jobs recoge el cambio en el siguiente ciclo (proceso nuevo); el `mcp_proxy` de una sesión viva es un proceso largo y necesita reinicio o sesión nueva para el push de `coro_api.send`. Si una versión futura de OpenCode deja de honrar `metadata.displayText`, la degradación es pintar el mensaje completo, no perderlo. Claude Code ya tiene el marco nativo de mensaje peer (`isMeta` + `origin.kind=peer`, «Message from …»); Pi queda pendiente porque hoy no tiene punto de inyección en red-pill.
+
+**Update 2026-11-14 — la degradación se disparó en 2.3.0**: los avisos del coro volvieron a pintarse enteros (sobre incluido). Causa medida: el renderer de 2.3.x decodifica la presentación con un `Schema.Struct` **exacto** `{displayText, comments, attachments}`; un metadata con solo `displayText` no decodifica (`decodePromptPresentation` → `None`) y la UI cae a `message.text`. En 2.2.6 bastaba `displayText`. **Fix**: el payload de `soul_notify._deliver_opencode_prompt` envía `comments: []` y `attachments: []` junto al título (`_PRESENTATION_EMPTY`), y el test fija las tres claves para que una versión futura no vuelva a degradar en silencio. Evidencia: `session_message.data.metadata` de la sesión `01a1d8e6` (10:27) tenía solo `displayText` y el IDE mostró el cuerpo; el renderer de `/opt/OpenCode/resources/app.asar` (`composer/comment-note`) exige las tres.
+
+---
+
+## [AD-118] NB-001 — cota y coste del ciclo nocturno: techo por compuesto, reuso por unidad y fusión work+social
+**Date**: 2026-11-10
+**Status**: ACCEPTED & IMPLEMENTED (rama `mission/nb-001`, commits P1–P8).
+
+**Context**: el ciclo nocturno (`chronicle → sleep`) medía 105–198 min y lo dominaban 1-2 sesiones gigantes (58,5 % de una noche). Tres causas: `distill` borra y rehace todo cada noche, `annotate` borra su parcial al terminar (tampoco reusa entre noches), y no había techo ni presupuesto por coste real — el presupuesto de step no acota la noche (A-01) y el árbol se aplana en el submit (D-NB-01). El plan NB-001 (desk: `planner/design/nightly_budget/`) propuso F0-F5 bajo RULE 4 (un flag por pieza, default OFF). Este AD consolida las decisiones estructurales de la misión.
+
+**Decision**:
+1. **Techo por COMPUESTO, no por job** (D-NB-01): `control.deadline_minutes` (o `deadline_minutes` por compuesto en el manifest) ancla el techo al **primer step de cada compuesto** (crónica y sueño, cada uno con su techo). Un techo de job quedaría anclado a las 03:00 y apagaría el sueño. Flag `JOB_COMPOUND_DEADLINE_ENABLED` (default OFF). Clamp `[0, 720]`; 0/ausente/negativo = sin techo (D-NB-12). Agotado → se deja de arrancar fan-out y se difiere con `JobDeferred("budget_exhausted")` + contador `deferred_by_budget` en el checkpoint (D-NB-13); el techo **solo corta fan-out** — la cola del sueño (`thread`, `finalize`, `memento-reinforce`) nunca se difiere (D-NB-02).
+2. **Reuso por UNIDAD en distill Y annotate** (D-NB-08, D-NB-10): la unidad es el **rango de mensajes** (`memento/NNN-mensajes-XXXX-YYYY.md`), no la sesión. Flags `MEMENTO_DISTILL_REUSE_ENABLED` (F2a) y `MEMENTO_ANNOTATE_REUSE_ENABLED` (F2b), ambos default OFF.
+3. **Clave de reuso** (D-NB-03): `content_hash` del cuerpo + `prompt_version` + `engine` + fragmentación (`MEMENTO_FRAGMENT_MAX_CHARS`, `MEMENTO_FRAGMENT_OVERLAP`). El hash no cubre la línea `> [!ref]`. Cambiar la firma del prompt o el tamaño de fragmento invalida la clave → se re-procesa todo (no se mezclan estratos).
+4. **`degraded`** (D-NB-03): una sección/unidad con el prompt truncado en el fallback HTTP 500 se sella `degraded` y **jamás se reusa**, aunque su hash coincida. Distill y annotate comparten la marca.
+5. **`unit_key`** (D-NB-09): el `nnn` deja de ser la clave del enlace nota→polaroid; el frontmatter lleva `unit_key` (rango) y una fase de renombrado actualiza el `nnn` al insertar un split en medio, sin romper el enlace.
+6. **Siembra** (D-NB-11): la primera noche tras desplegar F2 no hay hashes; se calcula el hash del cuerpo de cada unidad y se **adopta** la sección existente solo si sus fragmentos declaran `prompt_version`/`engine` vigentes. Lo demás se re-procesa (una sola vez; las noches siguientes ya reusan).
+7. **Fusión work+social — GO** (D-NB-04 + P7): fundir las dos llamadas de extracción en una (prompt con `scope` por idea) era **condicional al banco** de annotate (inexistente hasta P6). P6 entregó el banco reproducible; P7 midió la fusión y **decidió GO**. Flag `MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED` (default OFF); `scope` se persiste en idea, parcial y frontmatter.
+
+**Evidence**:
+- F0 (P1, `ebea12d`): `stage_seconds` por etapa e `item_seconds` por instancia de fan-out fundidos en el checkpoint; `durations` por fase en `sleep_phase_status.json`.
+- F1 (P2, `3510335`): textura oversize se parte antes de `add_memory`; scrub antes de partir y en cada parte; `jobs/drivers/distill.py` propaga `texture_parts`.
+- F2a (P3, `7d838e3`): kill a mitad → relanza y reusa; sesión que crece → 64/65 reusadas; `degraded` nunca reusa; siembra adopta con `prompt_version` vigente.
+- F2b (P4, `42a6bf1`): sesión que crece → solo las unidades nuevas; kill a mitad con `_partial.json` intacto; cambio de `annotate_prompt_version` → re-anota todo.
+- F3 (P5, `1ebc128`): manifiesto de 6 items × 30 s con techo 60 s → 3 hechos, 3 diferidos (`deferred_by_budget=3`); las etapas no-fanout posteriores (`finalize`) se ejecutan; el job no reentra.
+- F4 (P6 `53218f4` + P7 `264bed3`): banco reproducible (`docs/BENCHMARKS/ANNOTATE_BENCH.md`); fusión medida (5 corridas reales, Granite-4.1-8B): `notas/fragmento` 1.25 vs 0.90 (≥ 0.855), `truncados` 0, `json_invalido` 0 vs 4.4, rutas work/social/none 66/22/12 % vs 66.7/25/8.3 % (todas ±5 pp), `extract_por_fragmento` 2.0 → 1.0 (−50 % llamadas). Detalle: `docs/TECHNICAL/COGNITIVE/ANNOTATE_FUSION_DECISION.md`.
+- F5 (P8, `66f8f07`): flag OFF byte-idéntico (msg_limit); ON presupuesta chars (distill) y unidades+notas (annotate) conservando `NIGHT_LIMIT` y el anti-hambruna; gate sin tocar (D-NB-06).
+
+**Consequences**: la noche queda acotada por tres palancas reversibles e independientes (reuso, techo por compuesto, presupuesto por coste), todas OFF por defecto. Lo diferido vuelve la noche siguiente por stale-first (D-NB-07). Pendiente de integración: el `discover` del DAG aún no pasa `--phase`, así que con `MEMENTO_NIGHT_COST_MODEL_ENABLED` ON el fan-out nocturno seguiría en msg_limit hasta cablear una discover por fase (gap declarado en P8). Los umbrales del gate (significance/dead-zone/dedup) no se tocan en ninguna fase (D-NB-06).
+
+---
+
+## [AD-119] Identidad del coro con gemelas en el mismo workspace: sin mentira y con cuerpo verificable
+**Date**: 2026-11-14
+**Status**: ACCEPTED & IMPLEMENTED (squash a `next`, 2026-11-14).
+
+**Context**: tres sesiones de opencode sobre el mismo branch y el mismo worktree. El proxy MCP es **uno para toda la app**, así que la petición no trae qué pestaña llama; `resolve_body_by_cwd` no puede decidir con 2+ vivas en el cwd y el backend caía entonces al **bridge global** (`opencode_session.json`), que es "el último que escribió". Incidente medido: `ses_e27195e55` (alma `01a1d8e6`) intentó `send park` a `01a1d914` y el coro contestó «te estarías escribiendo a ti misma»; segundos después su `post blocked` (seq=101) quedó **firmado por `01a1d914`** — el alma de la hermana a la que avisaba. El canal decía quién eras y mentía.
+
+**Decision**:
+1. **La correlación por cwd no desempata pestañas.** Con 2+ sesiones vivas con el mismo cwd, `resolve_body_by_cwd` devuelve `None` (ambiguo) aunque `opencode.db` conozca una sola: el `directory` confirma el *workspace*, no la *sesión*. `_session_directory` lee también `session_v2` (las vivas de opencode v2 no estaban en `session`).
+2. **Con proxy delante, el backend no cae al bridge global.** El cuerpo sale del proxy, de un cuerpo declarado verificado, o no hay cuerpo. Un alma ausente es degradación honesta; un alma ajena es corrupción del tablón. Y con **≥2 almas registradas en el workspace el proxy tampoco basta**: su correlación por cwd es una heurística sobre un directorio compartido.
+3. **Diario del turno como rescate determinista** (`identity_source=turn_journal`): `external_turns/current/` guarda el prompt exacto con su `session_id`, su `cwd` y su `started_at`; si UN solo turno pendiente y fresco (≤15 min) de este workspace casa con el `user_prompt` del handshake (normalizado: minúsculas y sin puntuación, para que las comillas que el modelo «arregla» no rompan el match; contención con ≥40 chars para prompts recortados), ese es el cuerpo.
+4. **`caller_leg` verificado y por delante del proxy** (`identity_source=declared`): el hook del arnés inyecta `<redpill_identity leg="opencode:<session_id>" />` en el contexto **de cada petición** (el proxy es uno, el hook sí sabe qué sesión llama); el agente lo pasa como `caller_leg`. El kernel exige fila en el registro, no expirada, latido dentro del TTL, mismo workspace (o subdirectorio) y misma misión. **Manda sobre la correlación del proxy**: esta es una heurística sobre un workspace compartido y en el incidente resolvió a la hermana que tenía el turno abierto.
+5. **Sin cuerpo no se emite alma fantasma**: `continuity_id` queda `None` y el tag dice `unknown`.
+6. **Actividad reciente como tercera vía** (`identity_source=activity`): `session_v2.time_updated` avanza con cada mensaje, así que la pestaña que acaba de emitir un paso es la que llama — la señal que la correlación por cwd no tiene. Se exige margen (30 s) sobre la siguiente sesión; sin margen no se elige.
+7. **El handshake avisa y el coro pide**: con varias almas en el workspace imprime `[IDENTIDAD]` con el `caller_leg` a pasar (contadas en el registro, no por latido); si no hay cuerpo, el error de `post`/`send` pide `caller_leg` en vez de adivinar. `post`/`send` devuelven `de <marca>` para que una atribución mala se vea en la propia respuesta.
+
+**Evidence**:
+- Verdad de campo (opencode.db): la llamada `send` de `ses_e27195e55` con `to=01a1d914…` y la respuesta «te estarías escribiendo a ti misma»; el `post` siguiente con `continuity_id=01a1d914` aunque el originator era `ses_e27195e55`. Bridges vivos en el cwd: 3 (11 min, 8 min y 1 min de antigüedad); el global apuntaba a `ses_e26ebe54` (= `01a1d914`).
+- Segunda medida al desplegar: con mi turno abierto desde hacía 45 min (fuera de la ventana de latido) el proxy resolvió al **único** cuerpo «vivo» del cwd — la hermana — y el handshake firmó con su alma (`leg=opencode:ses_e26dda00…`). Es el mismo defecto con otra cara: por eso el `caller_leg` verificado manda sobre el proxy.
+- Tests nuevos (`tests/test_coro_identidad_ambigua.py`, 28 casos): ambigüedad pese a match de BD, no-fallback al global, diario del turno (único / duplicado / otro workspace / turno cerrado / rancio / contención), `caller_leg` (vivo, rancio, otro workspace, subdirectorio, desconocido, desnudo, otra misión), actividad reciente (fresca / empate / rancia / otro workspace), declarado > proxy, proxy solo con un alma y env > declarado.
+- Prueba en vivo (2026-11-14, dos rondas `ask` a las tres gemelas): 3/3 entregadas y 3/3 respondidas, cada reply con el nonce de su mensaje, su propia alma y su propio `leg`, y con `to_continuity`/`ref` correctos — sin cruces. La primera ronda destapó el agujero residual (dos `send` sin `caller_leg` firmados por `01a1d922`), que es lo que añadió la actividad reciente y la degradación del proxy a "solo con una única alma".
+- Suites tocadas: `test_coro_identidad_ambigua`, `test_bridge_per_session`, `test_caller_identity_job`, `test_mcp_server`, `test_mcp_shared`, `test_coro_*`, `test_mcp_proxy_identity`, `test_opencode_plugin`, `test_soul_notify`, `test_*_bridge` → verde; suite completa **4484 passed, 0 failed** (sobre `next` rebasado).
+
+**Consequences**: dos gemelas pueden hablar por el coro sin confundirse; el coste es una línea `<redpill_identity>` por petición en el arnés y, si el agente no la pasa, un reintento con `caller_leg`. La raíz (un proxy compartido sin identidad por-petición) sigue ahí: si el arnés llegara a exponer el `session_id` en la propia llamada MCP, `caller_leg` desaparecería sin tocar el contrato. Mientras dure, la regla es la de siempre: **atribuir a un alma ajena es peor que no atribuir**.

@@ -7,6 +7,7 @@ y el despertar lo interrumpía en plena faena. Aquí se fija el contrato: la
 actividad EN DISCO de cualquiera de los tres IDEs cuenta como presencia.
 """
 
+import json
 import os
 import time
 
@@ -93,3 +94,82 @@ def test_fresh_pi_awakening_session_does_not_count(silent_world, monkeypatch):
 	session.mkdir()
 	(session / f"2026-10-23T06-49-31-451Z_{PI_SID}.jsonl").write_text("{}\n", encoding="utf-8")
 	assert autonomous_cron.is_ide_idle(3600) is True
+
+
+# ── Atribución del touch del handshake: el despertar no es el Operador ──
+# Un despertar que TRABAJÓ cuenta como actividad (se respeta el intervalo, pero
+# el log debe decirlo). Uno que ejerció el Derecho al Silencio NO cuenta: sus
+# turnos tocaron el fichero solo por el handshake y no deben bloquear el siguiente.
+
+
+def _awakening_record(state_dir, status, *, started_ago=600.0, ended_ago=300.0, touch_ago=None):
+	"""Escribe el registro del despertar y, si se pide, data el touch a su cierre.
+
+	En el caso real el último handshake toca el fichero ANTES de que el worker
+	cierre el run: el touch cae dentro de la ventana [started, ended].
+	"""
+	now = time.time()
+	(state_dir / "last_awakening.json").write_text(
+		json.dumps({"status": status, "started_at": now - started_ago, "ended_at": now - ended_ago}),
+		encoding="utf-8",
+	)
+	if touch_ago is not None:
+		activity = state_dir / "last_user_activity.txt"
+		activity.touch()
+		stamp = now - touch_ago
+		os.utime(activity, (stamp, stamp))
+
+
+def test_silence_awakening_touch_does_not_count(silent_world):
+	"""El Despertar Silencioso deja el fichero fresco, pero el siguiente debe correr."""
+	_awakening_record(silent_world["state"], "silence", started_ago=180, ended_ago=120, touch_ago=130)
+	assert autonomous_cron.is_ide_idle(3600) is True
+	assert autonomous_cron.activity_state(3600)["reason"] == "idle"
+
+
+def test_worked_awakening_touch_counts_and_is_reported(silent_world):
+	"""Trabajar en el despertar sí respeta el intervalo; el log no culpa al Operador."""
+	_awakening_record(silent_world["state"], "worked", started_ago=600, ended_ago=300, touch_ago=310)
+	state = autonomous_cron.activity_state(3600)
+	assert state["idle"] is False
+	assert state["reason"] == "awakening_worked"
+	message = autonomous_cron.describe_activity(state)
+	assert "último despertar trabajó" in message
+	assert "Operador sigue activo" not in message
+
+
+def test_operator_touch_after_silence_still_counts(silent_world):
+	"""Un touch posterior al cierre del silencio ya es del Operador, no del despertar."""
+	_awakening_record(silent_world["state"], "silence", started_ago=900, ended_ago=600)
+	(silent_world["state"] / "last_user_activity.txt").touch()
+	state = autonomous_cron.activity_state(3600)
+	assert state["idle"] is False
+	assert state["reason"] == "operator"
+
+
+def test_stale_silence_record_does_not_mask_operator(silent_world):
+	"""Fuera de la ventana, el registro del despertar no tapa actividad real."""
+	_awakening_record(silent_world["state"], "silence", started_ago=3 * 3600, ended_ago=2 * 3600)
+	(silent_world["state"] / "last_user_activity.txt").touch()
+	assert autonomous_cron.activity_state(3600)["reason"] == "operator"
+
+
+def test_other_signals_stay_operator_activity(silent_world):
+	"""La atribución solo afecta al touch: un transcript de IDE sigue siendo el Operador."""
+	_awakening_record(silent_world["state"], "silence", started_ago=180, ended_ago=120)
+	session = silent_world["brain"] / "conv-1"
+	session.mkdir()
+	(session / "transcript.jsonl").write_text("{}", encoding="utf-8")
+	state = autonomous_cron.activity_state(3600)
+	assert state["idle"] is False
+	assert state["reason"] == "operator"
+
+
+def test_agent_worker_records_last_awakening(tmp_path, monkeypatch):
+	"""El worker deja el registro que el gate consume (running → worked/silence)."""
+	from red_pill.core import agent_worker
+
+	monkeypatch.setattr(agent_worker, "get_state_dir", lambda: tmp_path)
+	agent_worker._record_awakening_state("silence", started_at=1000.0, ended_at=1010.0, response_len=71)
+	data = json.loads((tmp_path / "last_awakening.json").read_text(encoding="utf-8"))
+	assert data == {"status": "silence", "started_at": 1000.0, "ended_at": 1010.0, "response_len": 71}

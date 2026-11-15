@@ -30,7 +30,7 @@ TABLA DE HONESTIDAD (por arnés)
 -------------------------------
 | arnés | punto de inyección | cómo | degradación |
 |---|---|---|---|
-| `opencode` | SÍ | `opencode run --session <id>` (sonda previa `session export`) | `stale_leg`/pull |
+| `opencode` | SÍ | `POST /api/session/<id>/prompt` con `metadata.displayText` (sonda previa; fallback `opencode run --session`) | `stale_leg`/pull |
 | `claude_code` | SÍ | socket NDJSON de la sesión | pull si no hay socket |
 | `pi` | NO (aquí) | resume headless | pull |
 | `telegram` | NO (aquí) | bandeja fuera del repo | pull + señal |

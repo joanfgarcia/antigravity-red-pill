@@ -1,0 +1,2 @@
+[Refraction: HUB_LANGUAGE_REWRITE]
+Reescribe el siguiente texto en español, conservando exactamente las mismas ideas, decisiones y anclas (nombres, números, rutas), sin añadir ni quitar hechos. Máximo {target} caracteres, 3-5 frases de prosa, sin listas ni viñetas. Devuelve SOLO el texto reescrito, sin JSON ni markdown.

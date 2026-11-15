@@ -20,6 +20,13 @@ priority: 7
 title: Chronicle diario (ingesta de trayectorias)
 mission_id: chronicle-daily
 nightly_exempt: true
+control:
+  # NB-001 F3: techo de pared del compuesto (distill 45 + annotate 40). Es un
+  # techo REAL: este compuesto sí tiene fan-out (una hoja por sesión del delta).
+  # Capacidad medida (ciclo 4047324f, 2026-11-12): 74.6 s/hoja → ~34 sesiones
+  # caben en 85 min; con más, las hojas sobrantes quedan `deferred` y vuelven la
+  # noche siguiente por stale-first (D-NB-07/D-NB-13).
+  deadline_minutes: 85
 manifest:
   workdir: .
   stages:

@@ -21,6 +21,13 @@
 - `config.ABSOLUTE_KEYWORDS` = canónicas (`["Bünker","770","skin"]`) + extras del
   puesto (`ABSOLUTE_KEYWORDS_EXTRA`, csv) + `AGENT_NAME`/`OPERATOR_DISPLAY_NAME`.
 - Skins = **role-play opt-in** (`SKINS_ENABLED=false`); identidad por defecto UNMASKED.
+- **Ancla vs perfil** (2026-11-13): el bloque `OPERATOR_ANCHOR` sale de
+  `identity_bio.md` y se inyecta **antes** de `OPERATOR_PROFILE`, con precedencia
+  declarada. El perfil solo aporta **foco**: su cabecera (`OPERADOR: <name>`) se
+  compone **en código** desde `OPERATOR_DISPLAY_NAME`, nunca la sintetiza el LLM.
+  Motivo: las memorias que alimentan la síntesis las escribe el agente; sin ancla
+  el resumen acaba invirtiendo Operador y agente y perdiendo el género.
+  Loader compartido (una sola precedencia): `red_pill.core.identity`.
 
 ## Superficie que DEBE estar SIN nombres (guard: `tests/test_identity_policy.py`)
 

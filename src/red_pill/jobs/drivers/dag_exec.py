@@ -111,6 +111,9 @@ class DagExecMixin:
 		job_id: str
 		step_timeout_s: int
 		_step_started: Optional[float]
+		# Telemetría F0 (NB-001): acumuladores por step, reseteados en `step()`.
+		_telemetry_stage: Dict[str, float]
+		_telemetry_item: Dict[str, float]
 
 		def _workdir(self, payload: Dict[str, Any]) -> Path: ...
 
@@ -446,7 +449,15 @@ class DagExecMixin:
 
 			kwargs["env"] = enable_stage_progress(dict(kwargs.get("env") or os.environ), self.job_id)
 
+		started = time.monotonic()
 		result = asyncio.run(minion.execute(task, **kwargs))
+		elapsed = time.monotonic() - started
+		# F0 (NB-001): telemetría aditiva de duración. Cada hoja ejecutada deja su
+		# `stage_seconds`; las instancias de fan-out (`_item` presente) dejan además
+		# `item_seconds`. No cambia comportamiento ni decisiones.
+		self._telemetry_stage[stage_path] = elapsed
+		if item is not None:
+			self._telemetry_item[stage_path] = elapsed
 
 		reports_dir = workdir / ".cell" / "reports"
 		suffix = ".envelope.json" if stage.get("type") == _TYPE_AGENT else ".json"

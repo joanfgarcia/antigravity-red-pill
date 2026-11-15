@@ -4,7 +4,9 @@
 Clasifica modelos texto→imagen por TIPO DE ARTE (no descarta ninguno: cada uno
 hace las cosas a su manera, como el model_catalog clasifica los LLM por tarea).
 Un ELEMENTO = UN modelo, que recorre la matriz fija de GÉNEROS × seeds. Mide
-tiempo/imagen y VRAM pico, guarda PNG y un metrics.jsonl incremental.
+tiempo/imagen y VRAM pico DEL DISPOSITIVO (`nvidia-smi`: el asignador de torch no
+ve los subprocesos, así que con `sd_cpp` daba 0), guarda PNG y un metrics.jsonl
+incremental.
 
 Reanudable por género: si el PNG del par (modelo, género, seed) ya existe, se
 salta (idempotente). Fail-soft lo gestiona el element_job (skip_exit_code).
@@ -30,7 +32,9 @@ import argparse
 import io
 import json
 import os
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -156,10 +160,49 @@ def _resolve_sd_cpp(cfg: dict) -> dict:
 		if not vp.is_file():
 			raise RuntimeError(f"sd.cpp: vision (mmproj) no encontrado {vp} (modelo {cfg.get('id')})")
 		paths["vision"] = vp
+	# Tokenizer (tokenizer.json): solo algunos DiT lo exigen (MOSS-Image). Dirigido por el dato.
+	tokenizer = sd.get("tokenizer")
+	if tokenizer:
+		tp = Path(os.path.expanduser(str(tokenizer)))
+		if not tp.is_file():
+			raise RuntimeError(f"sd.cpp: tokenizer no encontrado {tp} (modelo {cfg.get('id')})")
+		paths["tokenizer"] = tp
+	# LoRA de edición (`ref_lora`): solo la usan los modelos que la declaran (Krea2 lo exige:
+	# sin ella las referencias inyectan tokens que el modelo base no sabe interpretar).
+	lora = _sd_ref_lora(sd.get("ref_lora"))
+	if lora:
+		lp = Path(lora["dir"]) / f"{lora['file']}.safetensors"
+		if not lp.is_file():
+			raise RuntimeError(f"sd.cpp: ref_lora no encontrado {lp} (modelo {cfg.get('id')})")
+		paths["ref_lora"] = lp
 	env = dict(os.environ)
 	for k, v in (rt.get("env") or {}).items():
 		env[str(k)] = os.path.expanduser(str(v))
 	return {"binary": binary, "paths": paths, "sd": sd, "rt": rt, "env": env, "cfg": cfg}
+
+
+def _sd_ref_lora(value) -> dict | None:
+	"""Normaliza `ref_lora` del elenco: `{file, dir, weight?}` → rutas expandidas.
+
+	`file` = nombre del `.safetensors` SIN extensión (sd-cli lo busca dentro de `dir`,
+	pasado como `--lora-model-dir`); `dir` = carpeta; `weight` def 1.0. Cadena suelta se
+	acepta como `{file: <cadena>}` solo si además hay `dir` (no adivinamos rutas).
+	"""
+	if not value:
+		return None
+	if isinstance(value, str):
+		value = {"file": value}
+	if not isinstance(value, dict):
+		return None
+	name = str(value.get("file") or "").strip()
+	directory = str(value.get("dir") or "").strip()
+	if not name or not directory:
+		return None
+	try:
+		weight = float(value.get("weight", 1.0))
+	except (TypeError, ValueError):
+		weight = 1.0
+	return {"file": name, "dir": os.path.expanduser(directory), "weight": weight}
 
 
 def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, out, image=None, mask=None, ref_images=None, strength=None) -> list:
@@ -171,6 +214,11 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 	"""
 	cfg = ctx["cfg"]
 	sd = ctx["sd"]
+	# LoRA de edición: sd-cli aplica LoRAs por SINTAXIS DE PROMPT (`<lora:nombre:peso>`),
+	# así que el sufijo entra en el prompt efectivo y el dir va aparte. Solo con referencias
+	# (o img2img): en text2img puro el LoRA de edición solo añadiría ruido y VRAM.
+	edit_lora = _sd_ref_lora(sd.get("ref_lora")) if (image or ref_images) else None
+	prompt_eff = f"{prompt}<lora:{edit_lora['file']}:{edit_lora['weight']}>" if edit_lora else prompt
 	cmd = [
 		str(ctx["binary"]),
 		"--diffusion-model",
@@ -194,10 +242,14 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 		"-s",
 		str(seed),
 		"-p",
-		prompt,
+		prompt_eff,
 		"-o",
 		str(out),
 	]
+	# `--tokenizer` solo si el elenco lo declara (MOSS-Image exige el Qwen3.5 oficial).
+	tok = (ctx.get("paths") or {}).get("tokenizer")
+	if tok:
+		cmd += ["--tokenizer", str(tok)]
 	sig = sd.get("sigmas")
 	if sig:
 		# `sigmas` fija el Nº de pasos (len-1 intervalos). Solo se pasa si el modelo va a
@@ -218,6 +270,8 @@ def _sd_cpp_command(ctx: dict, prompt: str, seed: int, width: int, height: int, 
 			cmd += ["--llm_vision", str(vision)]
 		if sd.get("ref_image_args"):
 			cmd += ["--ref-image-args", _sd_ref_args(sd["ref_image_args"])]
+		if edit_lora:
+			cmd += ["--lora-model-dir", edit_lora["dir"]]
 	if sd.get("offload_over_pixels") and int(width) * int(height) > int(sd["offload_over_pixels"]) and "--offload-to-cpu" not in cmd:
 		cmd.append("--offload-to-cpu")
 	cmd += [str(a) for a in (sd.get("extra_args") or [])]
@@ -234,9 +288,147 @@ def _sd_ref_args(value) -> str:
 	return str(value)
 
 
+def _parse_vram_mb(raw: object) -> float | None:
+	"""`memory.used` de nvidia-smi → MiB. Cualquier cosa rara (`[N/A]`, vacío) → None."""
+	try:
+		return float(str(raw).strip().split()[0])
+	except (TypeError, ValueError, IndexError):
+		return None
+
+
+class _DeviceVram:
+	"""Pico de VRAM del DISPOSITIVO durante una generación (no el del asignador de torch).
+
+	`torch.cuda.max_memory_allocated()` sólo ve las asignaciones de ESTE proceso: con el
+	backend `sd_cpp` (sd-cli en subproceso) devuelve SIEMPRE 0, así que `peak_mb` mentía
+	y con él el `vram_footprint` del elenco (que es lo que el router usa para decidir si
+	un modelo cabe). Aquí se muestrea `nvidia-smi` en streaming — sin dependencias
+	nuevas — y se reporta el incremento sobre la línea base tomada ANTES de cargar el
+	modelo: eso es lo que el modelo ocupa en la GPU (pesos + activaciones) y es
+	comparable entre backends.
+
+	Uso: `vram = _DeviceVram().prime()` (línea base) … `with vram:` (ventana medida) …
+	`vram.peak_delta`. Degrada limpio: sin nvidia-smi todo es None y el llamador se
+	queda con la cifra de torch. `RP_VRAM_SAMPLER=off` lo desactiva (máquinas sin GPU).
+
+	Nota honesta: el delta incluye cualquier otro proceso que crezca DURANTE la ventana
+	(por eso se reporta también `device_baseline_mb`: si la línea base no cuadra con el
+	escritorio, el número no es de fiar).
+	"""
+
+	def __init__(self, device: int = 0, interval_ms: int = 100, binary: str | None = None):
+		self.device = int(device)
+		self.interval_ms = int(interval_ms)
+		self.binary = binary or "nvidia-smi"
+		self.baseline_mb: float | None = None
+		self.peak_abs_mb: float | None = None
+		self._samples: list[float] = []
+		self._proc: subprocess.Popen | None = None
+		self._thread: threading.Thread | None = None
+		self._stop = threading.Event()
+		self._lock = threading.Lock()
+
+	# -- ciclo de vida -------------------------------------------------------
+	def _cmd(self) -> list[str]:
+		return [
+			self.binary,
+			f"--id={self.device}",
+			"--query-gpu=memory.used",
+			"--format=csv,noheader,nounits",
+			"-lms",
+			str(self.interval_ms),
+		]
+
+	def _query_once(self) -> float | None:
+		cmd = self._cmd()[:-2]  # sin `-lms N`: consulta única
+		try:
+			out = subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+		except (OSError, ValueError, subprocess.SubprocessError):
+			return None
+		line = (out or "").strip().splitlines()
+		return _parse_vram_mb(line[0]) if line else None
+
+	def prime(self) -> _DeviceVram:
+		"""Fija la línea base ANTES de cargar el modelo (una sola consulta)."""
+		if os.environ.get("RP_VRAM_SAMPLER") == "off":
+			return self
+		self.baseline_mb = self._query_once()
+		return self
+
+	def start(self) -> _DeviceVram:
+		if os.environ.get("RP_VRAM_SAMPLER") == "off":
+			return self
+		if self.baseline_mb is None:
+			self.prime()
+		with self._lock:
+			self._samples = []
+		self._stop.clear()
+		try:
+			self._proc = subprocess.Popen(
+				self._cmd(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
+			)
+		except (OSError, ValueError):
+			self._proc = None
+			return self
+		self._thread = threading.Thread(target=self._pump, daemon=True)
+		self._thread.start()
+		# la primera muestra es el arranque de la ventana: esperarla acota el error
+		deadline = time.monotonic() + 2.0
+		while time.monotonic() < deadline:
+			with self._lock:
+				if self._samples:
+					break
+			time.sleep(0.02)
+		return self
+
+	def _pump(self) -> None:
+		proc = self._proc
+		if proc is None or proc.stdout is None:
+			return
+		for line in proc.stdout:
+			if self._stop.is_set():
+				break
+			value = _parse_vram_mb(line)
+			if value is None:
+				continue
+			with self._lock:
+				self._samples.append(value)
+
+	def stop(self) -> _DeviceVram:
+		self._stop.set()
+		proc = self._proc
+		if proc is not None:
+			try:
+				proc.terminate()
+				proc.wait(timeout=2)
+			except (OSError, subprocess.SubprocessError):  # pragma: no cover — carrera al cerrar
+				try:
+					proc.kill()
+				except OSError:
+					pass
+		if self._thread is not None:
+			self._thread.join(timeout=2)
+		with self._lock:
+			self.peak_abs_mb = max(self._samples) if self._samples else None
+		return self
+
+	def __enter__(self) -> _DeviceVram:
+		return self.start()
+
+	def __exit__(self, *_exc: object) -> None:
+		self.stop()
+
+	# -- lectura -------------------------------------------------------------
+	@property
+	def peak_delta_mb(self) -> float | None:
+		"""Lo que el modelo añadió a la GPU sobre la línea base (None si no se pudo medir)."""
+		if self.peak_abs_mb is None or self.baseline_mb is None:
+			return None
+		return max(0.0, self.peak_abs_mb - self.baseline_mb)
+
+
 def _sd_cpp_generate(ctx: dict, prompt: str, seed: int, width: int, height: int, image=None, mask=None, ref_images=None, strength=None):
 	"""Ejecuta sd-cli (subprocess) y devuelve la PIL.Image del PNG resultante."""
-	import subprocess
 	import tempfile
 
 	from PIL import Image
@@ -588,6 +780,18 @@ def _avail_sd_cpp(prof: dict):
 		p = os.path.expanduser(str(sd.get(key) or ""))
 		if not p or not os.path.isfile(p):
 			return False, f"falta {key}"
+	# Tokenizer declarado = obligatorio para ese modelo (MOSS-Image); no se ignora en silencio.
+	tok = sd.get("tokenizer")
+	if tok:
+		p = os.path.expanduser(str(tok))
+		if not os.path.isfile(p):
+			return False, "falta tokenizer"
+	# LoRA de edición declarada = obligatoria para ese modelo (Krea2 edita con ella).
+	lora = _sd_ref_lora(sd.get("ref_lora"))
+	if lora:
+		p = os.path.join(lora["dir"], f"{lora['file']}.safetensors")
+		if not os.path.isfile(p):
+			return False, "falta ref_lora"
 	return True, None
 
 
@@ -627,6 +831,8 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 	cfg = MODELS[model_id]
 
 	print(f"##### {model_id} ({cfg['backend']}) — {len(genres)} géneros × {len(seeds)} seeds @ {size}² #####", flush=True)
+	# Línea base de VRAM ANTES de cargar: el peso del modelo cuenta como footprint.
+	vram = _DeviceVram().prime()
 	t_load0 = time.perf_counter()
 	try:
 		kind, pipe = _load(model_id)
@@ -650,11 +856,17 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 				continue
 			try:
 				torch.cuda.reset_peak_memory_stats()
-				t0 = time.perf_counter()
-				img = _generate(kind, pipe, model_id, genre["prompt"], seed, size)
-				wall = time.perf_counter() - t0
-				peak = torch.cuda.max_memory_allocated() / (1024**2)
+				with vram:
+					t0 = time.perf_counter()
+					img = _generate(kind, pipe, model_id, genre["prompt"], seed, size)
+					wall = time.perf_counter() - t0
+				torch_peak = torch.cuda.max_memory_allocated() / (1024**2)
 				reserved = torch.cuda.max_memory_reserved() / (1024**2)
+				# `peak_mb` = incremento del DISPOSITIVO (comparable entre backends; el de
+				# torch es 0 con sd_cpp porque el modelo vive en un subproceso).
+				dev = vram.peak_delta_mb
+				peak = dev if dev is not None else torch_peak
+				source = "nvidia-smi" if dev is not None else "torch"
 				img.save(png)
 				rec = {
 					"model": model_id,
@@ -664,13 +876,17 @@ def _run_model(model_id: str, genres: list, seeds: list, size: int, out_dir: Pat
 					"load_s": round(load_s, 2),
 					"wall_s": round(wall, 2),
 					"peak_mb": round(peak, 1),
+					"peak_source": source,
+					"torch_peak_mb": round(torch_peak, 1),
 					"reserved_mb": round(reserved, 1),
+					"device_baseline_mb": vram.baseline_mb,
+					"device_peak_abs_mb": vram.peak_abs_mb,
 					"png": png.name,
 				}
 				with metrics.open("a", encoding="utf-8") as f:
 					f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 				n_ok += 1
-				print(f"  [{gid} s{seed}] {wall:.1f}s  peak {peak:.0f}MB", flush=True)
+				print(f"  [{gid} s{seed}] {wall:.1f}s  peak {peak:.0f}MB ({source})", flush=True)
 			except Exception as e:  # noqa: BLE001 — fail-soft a nivel de género
 				print(f"  [{gid} s{seed}] FALLO: {e}", flush=True)
 				with metrics.open("a", encoding="utf-8") as f:
@@ -692,7 +908,12 @@ def main() -> int:
 	args = ap.parse_args()
 
 	if args.list_models:
-		print(json.dumps([{"model": m} for m in MODELS], ensure_ascii=False))
+		want = [m.strip() for m in (args.models or "").split(",") if m.strip()]
+		unknown = [m for m in want if m not in MODELS]
+		if unknown:
+			print(f"modelo desconocido: {', '.join(unknown)} (válidos: {', '.join(MODELS)})")
+			return 1
+		print(json.dumps([{"model": m} for m in (want or list(MODELS))], ensure_ascii=False))
 		return 0
 
 	_setup_caches()

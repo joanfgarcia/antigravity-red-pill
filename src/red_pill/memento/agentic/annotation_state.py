@@ -115,6 +115,9 @@ def _annotations_from_notes(annotate_dir: Path, contract: Dict[str, Any]) -> Opt
 			"split_ref": str(fm.get("split_ref") or fm.get("source_lines") or ""),
 			"nnn": note.name[:3],
 		}
+		# F4-fusión: el `scope` persiste solo si la nota lo selló (flag ON).
+		if fm.get("scope"):
+			idea["scope"] = str(fm.get("scope"))
 		idea["flags"] = quality_flags(idea["text"])
 		if fm.get("work_score") is not None and "unscored" not in _as_list(fm.get("quality_flags")):
 			idea["work_score"] = float(fm.get("work_score") or 0.0)
@@ -150,3 +153,97 @@ def _resolve_from(
 		logger.warning("annotate --from=%s sin prerrequisitos (ni parcial ni notas del contrato vigente) — degrado a extract", from_phase)
 		return "extract", None
 	return from_phase, [dict(a) for a in prior]
+
+
+# ── NB-001 F2b: manifest de reuso INTER-run (persistente, por unit_key) ────────
+# Distinto del `_partial.json` (checkpoint INTRA-run, MEM-009): el manifest
+# sobrevive al éxito y permite reusar entre noches las unidades cuyo
+# `content_hash` + `annotate_prompt_version` + `engine` no cambiaron, sin
+# llamar al modelo. Una unidad `degraded` (prompt truncado) nunca se reusa.
+
+
+def _load_reuse_manifest(annotate_dir: Path) -> Dict[str, Any]:
+	"""Manifest de reuso por `unit_key` desde `annotate/_meta.json`, o vacío."""
+	path = annotate_dir / "_meta.json"
+	if not path.exists():
+		return {}
+	try:
+		data = json.loads(path.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return {}
+	units = data.get("units") if isinstance(data, dict) else None
+	return dict(units) if isinstance(units, dict) else {}
+
+
+def _can_reuse_unit(
+	entry: Optional[Dict[str, Any]],
+	content_hash: str,
+	prompt_version: str,
+	engine: str,
+	annotate_dir: Path,
+) -> bool:
+	"""Reuso solo si coinciden hash+versión+motor, la unidad no está `degraded`
+	y sus notas siguen en disco (D-NB-03)."""
+	if not entry:
+		return False
+	if entry.get("degraded"):
+		return False
+	if entry.get("content_hash") != content_hash:
+		return False
+	if entry.get("annotate_prompt_version") != prompt_version:
+		return False
+	if entry.get("engine") != engine:
+		return False
+	files = entry.get("files") or []
+	if not files:
+		return False
+	return all((annotate_dir / f).exists() for f in files)
+
+
+def _reuse_unit_annotations(annotate_dir: Path, files: List[str], nnn: str, ref: str) -> List[Dict[str, Any]]:
+	"""Reconstruye las ideas de una unidad reusada desde sus notas materializadas.
+
+	Sin llamar al modelo: refresca `nnn`/`split_ref` (metadata, como en P3) y
+	conserva los scores ya persistidos + el sello de ascensión (`_seal`) para que
+	el renombrado (si cambió el `nnn`) no pierda el enlace a Qdrant.
+	"""
+	from red_pill.memento.ascension import parse_refine as _parse_refine
+
+	ideas: List[Dict[str, Any]] = []
+	for name in files:
+		path = annotate_dir / name
+		if not path.exists():
+			continue
+		try:
+			fm, body = _parse_refine(path.read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		raw_texture = fm.get("texture")
+		texture: Dict[str, Any] = raw_texture if isinstance(raw_texture, dict) else {}
+		idea: Dict[str, Any] = {
+			"title": str(fm.get("title") or "Anotación"),
+			"text": str(body or "").strip(),
+			"significance": fm.get("significance"),
+			"emotion": str(fm.get("emotion") or "gray"),
+			"intensity": fm.get("intensity"),
+			"theme": str(texture.get("theme") or ""),
+			"relics": [str(r) for r in _as_list(texture.get("relics"))][:4],
+			"split_ref": ref,
+			"nnn": nnn,
+		}
+		# F4-fusión: el `scope` persiste solo si la nota lo selló (flag ON).
+		if fm.get("scope"):
+			idea["scope"] = str(fm.get("scope"))
+		idea["flags"] = quality_flags(idea["text"])
+		if fm.get("work_score") is not None and "unscored" not in _as_list(fm.get("quality_flags")):
+			idea["work_score"] = float(fm.get("work_score") or 0.0)
+			idea["social_score"] = float(fm.get("social_score") or 0.0)
+		ascended_raw = fm.get("ascended")
+		idea["_seal"] = {
+			"ascended": ascended_raw if isinstance(ascended_raw, bool) else str(ascended_raw).strip().lower() == "true",
+			"ascended_at": fm.get("ascended_at"),
+			"ascended_to": fm.get("ascended_to"),
+			"ascended_point_id": fm.get("ascended_point_id"),
+		}
+		ideas.append(idea)
+	return ideas

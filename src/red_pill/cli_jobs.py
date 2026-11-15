@@ -74,7 +74,26 @@ def handle_job(args: argparse.Namespace) -> None:
 		if args.title:
 			payload["title"] = args.title
 
-		mission = getattr(args, "mission", None) or payload.get("mission_id")
+		# Atribución explícita del Operador (escape cuando el proxy MCP no puede
+		# desambiguar dos pestañas en el mismo workspace). Sin esto, el job hereda
+		# el continuity_id del canal; con esto, queda auditado y dirigido.
+		explicit_continuity = str(getattr(args, "continuity", None) or "").strip()
+		if explicit_continuity:
+			from red_pill.session.store import SessionRegistry
+
+			rows = SessionRegistry().get_by_continuity(explicit_continuity)
+			if not rows:
+				print(f"[ERROR] --continuity '{explicit_continuity}' no existe en el registro de almas.")
+				return
+			owner = rows[0]
+			payload["continuity_id"] = explicit_continuity
+			payload.setdefault("parent_mission_id", str(owner.get("mission_id") or ""))
+			payload["origin_session_id"] = str(owner.get("session_id") or "")
+			payload["submitted_by"] = "cli"
+		else:
+			payload.setdefault("submitted_by", "cli")
+
+		mission = getattr(args, "mission", None) or payload.get("mission_id") or payload.get("parent_mission_id")
 
 		# Los timers de calendario re-encolan a diario: si el job de ayer sigue
 		# vivo (p.ej. deferido toda la noche), duplicarlo solo ensucia la cola.

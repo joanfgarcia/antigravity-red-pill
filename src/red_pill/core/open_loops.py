@@ -97,6 +97,31 @@ def _shards_open(workspace: Path) -> int:
 	return sum(1 for s in shards if isinstance(s, dict) and str(s.get("status", "")).upper() == "OPEN")
 
 
+_PENDING_BRANCHES_MAX_AGE_S = 86400.0
+
+
+def _pending_branches(max_age_s: float = _PENDING_BRANCHES_MAX_AGE_S) -> int:
+	"""Ramas con contenido pendiente de aterrizar, según el último audit.
+
+	Lee `state/pending_branches.json`, escrito por
+	`scripts/branch_landing_audit.py --publish` (HANDOFF-001 A+C). No corre git:
+	el handshake no puede esperar un `merge-tree` por rama.
+
+	Un dato más viejo que `max_age_s` se ignora: mejor silencio que una cifra de
+	ayer (el audit no está corriendo, o el repo cambió desde entonces).
+	"""
+	try:
+		from red_pill.core.paths import get_state_dir
+
+		path = get_state_dir() / "pending_branches.json"
+		state = json.loads(path.read_text(encoding="utf-8"))
+		if time.time() - float(state.get("generated_at") or 0) > max_age_s:
+			return 0
+		return int(state.get("pending") or 0)
+	except Exception:
+		return 0
+
+
 def open_loops_line(desk: Optional[Path | str] = None, workspace: Optional[Path | str] = None) -> str:
 	"""Una línea `OPEN LOOPS: …` con lo pendiente, o `""` si no hay nada."""
 	desk_p = _desk_root(desk)
@@ -126,6 +151,14 @@ def open_loops_line(desk: Optional[Path | str] = None, workspace: Optional[Path 
 		n = _shards_open(ws_p)
 		if n > 0:
 			parts.append(f"{n} shards OPEN")
+	except Exception:
+		pass
+	try:
+		n = _pending_branches()
+		if n > 0:
+			# Medido por `branch_landing_audit.py --publish`, no autodeclarado:
+			# un despertar que cree que aterrizó ya nos ha mentido antes.
+			parts.append(f"{n} rama(s) pendiente(s) de aterrizar")
 	except Exception:
 		pass
 

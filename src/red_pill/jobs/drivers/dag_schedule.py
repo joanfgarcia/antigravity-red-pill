@@ -28,6 +28,7 @@ from red_pill.jobs.drivers.dag_manifest import (
 	_iter_leaves,
 	_resolve_on_fail,
 	_stage_fields,
+	clamp_deadline_minutes,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,10 @@ class DagScheduleMixin:
 		job_id: str
 		_step_started: Optional[float]
 		_sleep_cutoff_ts: float
+		# Telemetría F0 (NB-001): acumuladores por step (declarados también en
+		# DagExecMixin; aquí se funden en el checkpoint).
+		_telemetry_stage: Dict[str, float]
+		_telemetry_item: Dict[str, float]
 
 		def _expand_fanout(
 			self,
@@ -185,6 +190,92 @@ class DagScheduleMixin:
 		except Exception as exc:
 			logger.warning(f"[DagJob] no se pudieron publicar eventos: {exc}")
 
+	# ── Techo de pared por compuesto (F3, NB-001) ─────────────────────────────
+	def _deadline_enabled(self) -> bool:
+		"""RULE 4: el flag se lee en UN punto (default False = comportamiento actual)."""
+		import red_pill.config as cfg
+
+		return bool(getattr(cfg, "JOB_COMPOUND_DEADLINE_ENABLED", False))
+
+	def _compound_deadline(self, payload: Dict[str, Any], stages: List[Dict[str, Any]], prefix: str) -> Tuple[Optional[str], int]:
+		"""`(owner, minutes)` del compuesto que declara el techo de `prefix`.
+
+		Sube por la cadena de ancestros de `prefix` hasta el primer compuesto que
+		declara `deadline_minutes` (directo en el manifest o, por compuesto, en
+		`control.deadline_minutes`). Devuelve `(None, 0)` si no hay techo. El
+		valor se clampa a [0, 720] (D-NB-12): 0/ausente/negativo = sin techo.
+		"""
+		parts = prefix.split("/") if prefix else []
+		for i in range(len(parts), 0, -1):
+			anc = "/".join(parts[:i])
+			node = _find_node_by_path(stages, anc)
+			minutes = node.get("deadline_minutes") if node else None
+			if minutes is None:
+				ctrl = (payload.get("control") or {}).get("deadline_minutes")
+				if isinstance(ctrl, dict):
+					minutes = ctrl.get(anc)
+			if minutes is not None:
+				return anc, clamp_deadline_minutes(minutes)
+		return None, 0
+
+	def _scan_compound_deadlines(
+		self,
+		payload: Dict[str, Any],
+		stages: List[Dict[str, Any]],
+		front: List[Tuple[str, Dict[str, Any], str]],
+		deadline_ts: Dict[str, float],
+	) -> Tuple[Dict[str, float], List[str]]:
+		"""Ancla deadlines pendientes y detecta owners con fan-out agotado.
+
+		Devuelve `(anchors, cut_owners)`. `anchors` = `{owner: ts}` de compuestos
+		que arrancan su fan-out en este step (primer step del compuesto, mismo
+		patrón que `sleep_cutoff_ts`). `cut_owners` = owners cuyo deadline se
+		agotó y tienen fan-out pendiente en el frente. SOLO se inspecciona fan-out
+		(`_item` presente): el techo jamás corta etapas no-fanout (D-NB-02).
+		"""
+		anchors: Dict[str, float] = {}
+		cut: List[str] = []
+		now = time.time()
+		for _path, stage, prefix in front:
+			if stage.get("_item") is None:
+				continue
+			owner, minutes = self._compound_deadline(payload, stages, prefix)
+			if not owner or minutes <= 0:
+				continue
+			anchor = deadline_ts.get(owner)
+			if anchor is None:
+				if owner not in anchors:
+					anchors[owner] = now
+				continue
+			if owner not in cut and now > float(anchor) + minutes * 60:
+				cut.append(owner)
+		return anchors, cut
+
+	def _fanout_cut(self, stages: List[Dict[str, Any]], owner: str, terminal: set) -> Tuple[List[str], List[str]]:
+		"""Hojas de fan-out no terminales bajo `owner` a diferir + compuestos fan-out a cerrar."""
+		deferred: List[str] = []
+		closed: List[str] = []
+		node = _find_node_by_path(stages, owner)
+		if node is None:
+			return deferred, closed
+
+		def _walk(sub: List[Dict[str, Any]], prefix: str) -> None:
+			for s in sub:
+				path = f"{prefix}/{s['id']}" if prefix else s["id"]
+				if s.get("type") == _TYPE_COMPOUND:
+					if s.get("_fanout"):
+						closed.append(path)
+					_walk(s.get("sub_etapas", []), path)
+				elif s.get("_item") is not None and path not in terminal:
+					deferred.append(path)
+
+		_walk(node.get("sub_etapas", []), owner)
+		# Si el propio owner es un compuesto de fan-out (caso plantilla directa),
+		# cerrarlo también para desbloquear las etapas que dependen de él.
+		if node.get("_fanout"):
+			closed.append(owner)
+		return deferred, closed
+
 	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		self._step_started = time.monotonic()
@@ -194,6 +285,10 @@ class DagScheduleMixin:
 		results = dict(checkpoint_data.get("results", {}))
 		flags = dict(checkpoint_data.get("stage_flags", {}))
 		fanout_items = dict(checkpoint_data.get("fanout_items", {}))
+		stage_seconds = dict(checkpoint_data.get("stage_seconds", {}))
+		item_seconds = dict(checkpoint_data.get("item_seconds", {}))
+		self._telemetry_stage = {}
+		self._telemetry_item = {}
 		# Fan-out por items (RFC §4.6): expandir las plantillas `fan_out_from`
 		# cuyas fuentes ya completaron; las de lista vacía se marcan done sin
 		# ejecutar. El árbol resultante alimenta todo lo demás (frente, progreso,
@@ -202,6 +297,16 @@ class DagScheduleMixin:
 		completed = list(completed) + _skip_empty
 		total_leaves = _count_leaves(stages)
 		before_completed = set(completed)
+
+		# Techo de pared por compuesto (F3, NB-001): flag leído en UN punto (RULE 4).
+		# Con False (default) todo lo que sigue es no-op → comportamiento actual exacto:
+		# ni se leen ni se persisten marcas de techo/diferidos (un checkpoint de una
+		# corrida previa con el flag ON no puede colarse en una corrida con flag OFF).
+		deadline_enabled = self._deadline_enabled()
+		deadline_ts = dict(checkpoint_data.get("stage_deadline_ts") or {}) if deadline_enabled else {}
+		deferred_ids = list(checkpoint_data.get("deferred_stage_ids") or []) if deadline_enabled else []
+		deferred_budget = int(checkpoint_data.get("deferred_by_budget") or 0) if deadline_enabled else 0
+		deferred_set = set(deferred_ids)
 
 		# Drain cutoff del ciclo de sueño: anclado en el PRIMER step del job y
 		# persistido en el checkpoint — un pause/resume no desliza la ventana y
@@ -225,7 +330,7 @@ class DagScheduleMixin:
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
 			node_leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
-			if node_leaves and all(lp in completed for lp, _ in node_leaves):
+			if node_leaves and all(lp in completed or lp in deferred_set for lp, _ in node_leaves):
 				completed.append(node_path)
 
 		# Frente: hojas (etapas atómicas) no completadas con deps satisfechas.
@@ -233,6 +338,10 @@ class DagScheduleMixin:
 
 		for leaf_path, leaf in _iter_leaves(stages):
 			if leaf_path in completed:
+				continue
+			if leaf_path in deferred_set:
+				# instancia de fan-out diferida por el techo (F3): no es ejecutable
+				# esta noche — la re-descubre el `discover` de la noche siguiente.
 				continue
 			if leaf.get("_awaiting_fanout_src"):
 				# plantilla de fan-out cuya fuente aún no completa: bloqueada, no
@@ -246,7 +355,7 @@ class DagScheduleMixin:
 				front.append((leaf_path, leaf, prefix))
 
 		if not front:
-			leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in completed)
+			leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in completed or lp in deferred_set)
 			done = leaves_done >= total_leaves
 			if not done:
 				# Sin frente y sin terminar = deps insatisfacibles o checkpoint
@@ -274,13 +383,21 @@ class DagScheduleMixin:
 			}
 			if final_soft:
 				final_ckpt["soft_failures"] = final_soft
+			if deferred_ids:
+				final_ckpt["deferred_stage_ids"] = deferred_ids
+				final_ckpt["deferred_by_budget"] = deferred_budget
+			if deadline_ts:
+				final_ckpt["stage_deadline_ts"] = deadline_ts
+			summary_extra = ""
+			if deferred_ids:
+				summary_extra = f" · {deferred_budget} instancia(s) de fan-out diferida(s) por el techo"
 			return StepOutcome(
 				completed=True,
 				# el árbol ya no incluye las plantillas skipped (lista vacía):
 				# persistir el skip y la lista congelada en el checkpoint final
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint=final_ckpt,
-				summary="dag complete"
+				summary="dag complete" + summary_extra
 				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else ""),
 				progress={
 					"current": leaves_done,
@@ -295,6 +412,58 @@ class DagScheduleMixin:
 					"actually_parallel": False,
 				},
 			)
+
+		# Techo de pared por compuesto (F3, NB-001): SOLO corta fan-out. Si el
+		# deadline de un compuesto con fan-out pendiente se agotó, se cierra el
+		# frente con JobDeferred("budget_exhausted") + contador en el checkpoint
+		# (D-NB-02/07/13). El runner persiste el checkpoint adjunto y devuelve el
+		# job a PENDING: NO reentra para seguir con las instancias diferidas —
+		# distinto de ceder (el presupuesto de step cede y reentra, R1/§6).
+		if deadline_enabled:
+			anchors, cut_owners = self._scan_compound_deadlines(payload, stages, front, deadline_ts)
+			deadline_ts.update(anchors)
+			if cut_owners:
+				terminal = set(completed) | deferred_set
+				new_deferred: List[str] = []
+				closed: List[str] = []
+				for owner in cut_owners:
+					cut_leaves, closed_prefixes = self._fanout_cut(stages, owner, terminal)
+					new_deferred.extend(cut_leaves)
+					closed.extend(closed_prefixes)
+					terminal.update(cut_leaves)
+				# Orden determinista y sin duplicados (resume/control transferible).
+				seen_deferred = set(deferred_ids)
+				fresh = [p for p in new_deferred if p not in seen_deferred]
+				all_deferred = deferred_ids + fresh
+				counter = deferred_budget + len(fresh)
+				new_completed = list(completed)
+				for prefix in closed:
+					if prefix not in new_completed:
+						new_completed.append(prefix)
+				flat_order = _flatten_ids(stages)
+				new_completed = [sid for sid in flat_order if sid in new_completed]
+				deferred_ckpt = {
+					**identity,
+					"completed_stage_ids": new_completed,
+					"results": dict(results),
+					"stage_flags": dict(flags),
+					"sleep_cutoff_ts": self._sleep_cutoff_ts,
+					"fanout_items": fanout_items,
+					"stage_deadline_ts": deadline_ts,
+					"deferred_stage_ids": all_deferred,
+					"deferred_by_budget": counter,
+				}
+				if checkpoint_data.get("soft_failures"):
+					deferred_ckpt["soft_failures"] = dict(checkpoint_data["soft_failures"])
+				if stage_seconds:
+					deferred_ckpt["stage_seconds"] = dict(stage_seconds)
+				if item_seconds:
+					deferred_ckpt["item_seconds"] = dict(item_seconds)
+				logger.info(
+					f"[DagJob] {self.short_id} techo de pared agotado para {', '.join(sorted(cut_owners))}: "
+					f"{len(fresh)} instancia(s) de fan-out diferida(s) (budget_exhausted); la cola no-fanout sigue."
+				)
+				raise JobDeferred("budget_exhausted", checkpoint=deferred_ckpt)
 
 		def _exec_one(path: str, stage: Dict[str, Any], gate: Any = None) -> Tuple[str, str, bool, Optional[str]]:
 			"""Devuelve (path, summary, failed, soft_error).
@@ -454,14 +623,15 @@ class DagScheduleMixin:
 			new_completed.append(path)
 
 		# Propagar completitud de los compuestos: un nodo compuesto se marca done
-		# cuando todas sus hojas descendientes lo están.
+		# cuando todas sus hojas descendientes están terminales (done o diferidas
+		# por el techo — F3, NB-001).
 		for node_path in _flatten_ids(stages):
 			if node_path in new_completed:
 				continue
 			node = _find_node_by_path(stages, node_path)
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
-			if all(leaf_path in new_completed for leaf_path, _ in _iter_leaves(node.get("sub_etapas", []), node_path)):
+			if all(leaf_path in new_completed or leaf_path in deferred_set for leaf_path, _ in _iter_leaves(node.get("sub_etapas", []), node_path)):
 				new_completed.append(node_path)
 
 		# Orden estable y determinista (crítico para resume/control transferible).
@@ -469,8 +639,9 @@ class DagScheduleMixin:
 		new_completed = [sid for sid in flat_order if sid in new_completed]
 
 		# Progreso basado SOLO en hojas (los compuestos marcados done no cuentan):
-		# si no, un árbol con compuestos inflaría el porcentaje.
-		leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in new_completed)
+		# si no, un árbol con compuestos inflaría el porcentaje. Las hojas
+		# diferidas por el techo (F3) cuentan como terminales: no son pendientes.
+		leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in new_completed or lp in deferred_set)
 
 		self._write_status(
 			payload,
@@ -485,6 +656,8 @@ class DagScheduleMixin:
 		)
 
 		done = leaves_done >= total_leaves
+		stage_seconds.update(self._telemetry_stage)
+		item_seconds.update(self._telemetry_item)
 		checkpoint = {
 			**identity,
 			"completed_stage_ids": new_completed,
@@ -497,6 +670,15 @@ class DagScheduleMixin:
 			# Solo cuando hay algo que contar: un checkpoint limpio no engorda
 			# y los consumidores existentes no ven una clave vacía nueva.
 			checkpoint["soft_failures"] = new_soft
+		if stage_seconds:
+			checkpoint["stage_seconds"] = stage_seconds
+		if item_seconds:
+			checkpoint["item_seconds"] = item_seconds
+		if deadline_enabled and deadline_ts:
+			checkpoint["stage_deadline_ts"] = deadline_ts
+		if deferred_ids:
+			checkpoint["deferred_stage_ids"] = deferred_ids
+			checkpoint["deferred_by_budget"] = deferred_budget
 		if paused:
 			logger.info(
 				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
@@ -517,6 +699,7 @@ class DagScheduleMixin:
 			completed=done and not paused,
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}"
+			+ (f" · {deferred_budget} instancia(s) de fan-out diferida(s) por el techo" if deferred_ids and done else "")
 			+ (" (pausado a mitad de step)" if paused else "")
 			+ (f" · {len(new_soft)} etapa(s) degradada(s) (on_fail=warn)" if new_soft else ""),
 			progress={

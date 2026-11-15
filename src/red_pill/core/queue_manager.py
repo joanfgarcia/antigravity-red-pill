@@ -120,6 +120,17 @@ class MemoryQueueManager:
 		if not (prompt or "").strip() and not (response or "").strip() and not affinity:
 			logger.debug("Turno vacío descartado (filtro D2)")
 			return 0
+		# Voz del Operador (2026-11-14): la cola solo alimenta el mood, y el mood
+		# solo debe leer lo que escribe él. Avisos de job/coro, bloques del arnés,
+		# encargos de subagente y despertares headless entran por este mismo
+		# `enqueue_memory`; medidos 148 de 1.430 y etiquetados como si fueran suyos.
+		from red_pill.core.operator_voice import extract as _operator_voice
+
+		voice = _operator_voice(prompt)
+		if voice is None:
+			logger.debug("Turno descartado: no es la voz del Operador (aviso, rol o bloque del arnés)")
+			return 0
+		prompt = voice
 		content_hash = hashlib.sha256(f"{prompt}\x00{response}".encode("utf-8", errors="replace")).hexdigest()
 		try:
 			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
@@ -137,7 +148,19 @@ class MemoryQueueManager:
 				affinity_json = json.dumps(affinity, ensure_ascii=False) if affinity else None
 				cursor.execute(
 					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash, session_id, affinity, global_turn) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
-					(prompt, response, role, time.time(), category, originator, model, content_hash, session_id, affinity_json, int(global_turn or 0)),
+					(
+						prompt,
+						response,
+						role,
+						time.time(),
+						category,
+						originator,
+						model,
+						content_hash,
+						session_id,
+						affinity_json,
+						int(global_turn or 0),
+					),
 				)
 				conn.commit()
 				return cursor.lastrowid or 0

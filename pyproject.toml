@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "8.3.0"
+version = "8.4.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -30,7 +30,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2.0",
     "cryptography>=50.0.0",
     "pyjwt>=2.15.0",
-    "oauthlib>=4.0.0",
+    "oauthlib>=4.0.1",
     "watchfiles>=1.1.1",
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",

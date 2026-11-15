@@ -127,6 +127,30 @@ def is_silence_response(text: str) -> bool:
 	return len(body) < SILENCE_MAX_CHARS and body.lstrip(_SILENCE_LEAD_CHARS).startswith(phrase)
 
 
+def _record_awakening_state(status: str, *, started_at: float, ended_at: Optional[float] = None, response_len: Optional[int] = None) -> None:
+	"""Deja el rastro del último despertar en `state/last_awakening.json` (no fatal).
+
+	Lo lee `autonomous_cron` para atribuir la actividad de la última hora: un
+	despertar que **trabajó** cuenta como actividad (se respeta el intervalo de
+	una hora, pero el log lo dice: no es el Operador) y uno que ejerció el
+	**Derecho al Silencio** no cuenta — sus turnos tocaron
+	`last_user_activity.txt` solo por el handshake y no deben bloquear el
+	siguiente despertar. Sin este registro el gate atribuía esa frescura al
+	Operador (log falso: «Operador sigue activo» a las 04:00 de la mañana).
+	"""
+	try:
+		payload = {
+			"status": status,
+			"started_at": started_at,
+			"ended_at": ended_at if ended_at is not None else started_at,
+		}
+		if response_len is not None:
+			payload["response_len"] = response_len
+		(get_state_dir() / "last_awakening.json").write_text(json.dumps(payload))
+	except Exception as exc:  # nunca romper el despertar por telemetría
+		logger.debug(f"[AWAKENING] no se pudo registrar el estado del despertar: {exc}")
+
+
 def _handshake_step(user_prompt: str, mode: str) -> str:
 	"""Identity-loading step, named by the RedPill-Kernel MCP tool itself (each
 	client may prefix MCP tool names its own way; the core never spells a
@@ -1505,6 +1529,7 @@ class IDEWorker:
 		cursor.execute("INSERT INTO execution_ledger (exec_type, status) VALUES ('awakening', 'started')")
 		ledger_id = cursor.lastrowid
 		start_time = time.time()
+		_record_awakening_state("running", started_at=start_time)
 
 		# ── Build prompt: agent loads identity via the kernel handshake (mode=headless) ──
 		# Provider-agnostic: no client-specific tool names; each bridge adapts the
@@ -1593,6 +1618,7 @@ class IDEWorker:
 
 		if not result.ok:
 			logger.error(f"[{msg_ids}] AWAKENING returned error after {duration:.0f}s: {result.error}")
+			_record_awakening_state("error", started_at=start_time, ended_at=time.time())
 			cursor.execute(
 				"UPDATE execution_ledger SET status = 'error', duration_s = ? WHERE id = ?",
 				(duration, ledger_id),
@@ -1630,6 +1656,12 @@ class IDEWorker:
 
 		# Derecho al Silencio: don't send to Telegram
 		is_silence = is_silence_response(clean_content)
+		_record_awakening_state(
+			"silence" if is_silence else "worked",
+			started_at=start_time,
+			ended_at=time.time(),
+			response_len=len(response),
+		)
 
 		# El silencio no consume el tope diario salvo política explícita. Los
 		# errores sí cuentan (consumieron recursos) — el INSERT ya dejó counted=1.

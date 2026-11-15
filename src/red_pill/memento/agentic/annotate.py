@@ -40,10 +40,13 @@ from .annotation_state import (
 	_PARTIAL,
 	PHASES,
 	_annotations_from_notes,
+	_can_reuse_unit,
 	_contract,
 	_empty_partial,
 	_load_partial,
+	_load_reuse_manifest,
 	_resolve_from,
+	_reuse_unit_annotations,
 	_save_partial,
 	_scrub_idea,
 )
@@ -97,6 +100,24 @@ def _route(work: float, social: float, th_work: float, th_social: float, dead_zo
 	return None
 
 
+def _track_degraded(transport: runtime.Transport) -> Tuple[runtime.Transport, List[bool]]:
+	"""Envuelve el transporte para detectar el marcador DEGRADED (NB-001 F2b, D-NB-03).
+
+	annotate extrae las ideas de UNA unidad con varias llamadas (work + social); si
+	cualquiera truncó el prompt (fallback 500), la unidad se sella `degraded` y
+	nunca se reusa entre noches. Flag OFF → no se envuelve (comportamiento exacto).
+	"""
+	degraded = [False]
+
+	def tracked(system: str, user: str, max_tokens: int) -> str:
+		raw = transport(system, user, max_tokens)
+		if runtime.is_degraded(raw):
+			degraded[0] = True
+		return raw
+
+	return tracked, degraded
+
+
 def annotate_session(
 	root: Path,
 	dir_rel: str,
@@ -132,6 +153,8 @@ def annotate_session(
 	dead_zone = float(getattr(cfg, "MEMENTO_ANNOTATE_DEAD_ZONE", 0.05))
 	if voice_rewrite is None:
 		voice_rewrite = bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_REWRITE", False))
+	# RULE 4: lectura única del flag de reuso por unidad (NB-001 F2b).
+	reuse_enabled = bool(getattr(cfg, "MEMENTO_ANNOTATE_REUSE_ENABLED", False))
 	annotate_dir = root / dir_rel / "annotate"
 	annotate_dir.mkdir(parents=True, exist_ok=True)
 
@@ -158,16 +181,23 @@ def annotate_session(
 	entry, prior = _resolve_from(from_phase, partial, _annotations_from_notes(annotate_dir, contract) if from_phase else None, voice_rewrite)
 
 	units = work_units(root / dir_rel)
+	nnn_to_key = {unit.nnn: unit.key for unit in units}
+	units_manifest: Dict[str, Any] = {}
+	unit_hashes: Dict[str, str] = {}
+	unit_degraded: Dict[str, bool] = {}
 	if entry == "extract":
 		if from_phase == "extract":
 			partial = _empty_partial(contract)  # --from=extract: todo desde cero
 		keys = [unit.key for unit in units]
 		fresh_splits: Dict[str, Any] = {}
-		reused = extracted = 0
+		reused = extracted = manifest_reused = 0
+		# NB-001 F2b: manifest persistente INTER-run (a diferencia del `_partial.json`).
+		reuse_manifest = _load_reuse_manifest(annotate_dir) if reuse_enabled else {}
 		for i_unit, unit in enumerate(units, 1):
 			report_stage_progress(label="extract", current=i_unit, total=len(units), session=session_id)
 			key, nnn, ref, content = unit.key, unit.nnn, unit.ref, unit.content
 			chash = compute_hash(content)
+			unit_hashes[key] = chash
 			saved = partial["splits"].get(key)
 			if saved and saved.get("status") == "extracted" and saved.get("content_hash") == chash:
 				saved["nnn"] = nnn
@@ -175,25 +205,42 @@ def annotate_session(
 				for idea in saved.get("ideas") or []:
 					idea["split_ref"], idea["nnn"] = ref, nnn
 				fresh_splits[key] = saved
+				unit_degraded[key] = bool(saved.get("degraded", False))
 				reused += 1
 				continue
+			if reuse_enabled and _can_reuse_unit(reuse_manifest.get(key), chash, contract["prompt_version"], contract["engine"], annotate_dir):
+				# Reuso entre noches: sin llamar al modelo (solo metadata refrescada).
+				ideas = _reuse_unit_annotations(annotate_dir, reuse_manifest[key]["files"], nnn, ref)
+				fresh_splits[key] = {"nnn": nnn, "split_ref": ref, "content_hash": chash, "status": "extracted", "degraded": False, "ideas": ideas}
+				partial["splits"] = {k: v for k, v in partial["splits"].items() if k in keys}
+				partial["splits"][key] = fresh_splits[key]
+				partial["phases"] = {ph: "pending" for ph in PHASES}
+				_save_partial(annotate_dir, partial)
+				unit_degraded[key] = False
+				manifest_reused += 1
+				continue
 			ideas = []
+			extract_tr: runtime.Transport = transport
+			degraded_flag = [False]
+			if reuse_enabled:
+				extract_tr, degraded_flag = _track_degraded(transport)
 			view_mode, operator_label, agent_label = runtime.fragment_view_settings()
-			for idea in _extract(transport, fragment_view(content, view_mode, operator_label, agent_label)):
+			for idea in _extract(extract_tr, fragment_view(content, view_mode, operator_label, agent_label)):
 				idea = _scrub_idea(idea)
 				idea["split_ref"] = ref
 				idea["nnn"] = nnn
 				idea["flags"] = quality_flags(idea["text"])
 				ideas.append(idea)
-			fresh_splits[key] = {"nnn": nnn, "split_ref": ref, "content_hash": chash, "status": "extracted", "ideas": ideas}
+			fresh_splits[key] = {"nnn": nnn, "split_ref": ref, "content_hash": chash, "status": "extracted", "degraded": degraded_flag[0], "ideas": ideas}
 			# Rangos desaparecidos se descartan: solo sobreviven los de este run.
 			partial["splits"] = {k: v for k, v in partial["splits"].items() if k in keys}
 			partial["splits"][key] = fresh_splits[key]
 			partial["phases"] = {ph: "pending" for ph in PHASES}
 			_save_partial(annotate_dir, partial)
+			unit_degraded[key] = degraded_flag[0]
 			extracted += 1
-		if reused:
-			logger.info("annotate %s: %d splits reanudados del parcial, %d extraídos", dir_rel, reused, extracted)
+		if reused or manifest_reused:
+			logger.info("annotate %s: %d splits reanudados del parcial, %d reusados del manifest, %d extraídos", dir_rel, reused, manifest_reused, extracted)
 		ordered = [idea for key in keys if key in fresh_splits for idea in fresh_splits[key]["ideas"]]
 		if extracted or partial["phases"]["extract"] != "done":
 			annotations = dedup_annotations([dict(i) for i in ordered], threshold=runtime.memento_dedup_threshold())
@@ -250,35 +297,58 @@ def annotate_session(
 		significance = round(max(work, social), 2)
 		max_significance = max(max_significance, significance)
 		slug = slugify_title(a["title"])
-		seal = prev_seals.get(f"{a['nnn']}-{slug}", {})
-		refine_fm = _frontmatter_block(
-			[
-				("session_id", session_id),
-				("source", source),
-				("source_lines", a["split_ref"]),
-				("split_ref", a["split_ref"]),
-				("distill_ref", _distill_ref(root, dir_rel, a["nnn"])),
-				("title", a["title"]),
-				("significance", significance),
-				("emotion", a["emotion"]),
-				("intensity", float(a.get("intensity") or 0.0)),
-				("texture", {"theme": a["theme"], "relics": a["relics"]}),
-				("work_score", round(work, 2)),
-				("social_score", round(social, 2)),
-				("dual_route", route if route else "none"),
-				("quality_flags", flags),
-				("engine", runtime.served_engine()),
-				("trust", runtime.model_trust()),
-				("prompt_version", runtime.annotate_prompt_version()),
-				("ascended", bool(seal.get("ascended", False))),
-				("ascended_at", seal.get("ascended_at")),
-				("ascended_to", seal.get("ascended_to")),
-				("ascended_point_id", seal.get("ascended_point_id")),
-			]
-		)
+		# El sello de ascensión se conserva por stem; al renombrar (nnn cambió) el
+		# stem no coincide y el sello viaja en la idea reusada (`_seal`).
+		seal = prev_seals.get(f"{a['nnn']}-{slug}", {}) or a.get("_seal") or {}
+		fm_fields: List[Tuple[str, Any]] = [
+			("session_id", session_id),
+			("source", source),
+			("source_lines", a["split_ref"]),
+			("split_ref", a["split_ref"]),
+			("distill_ref", _distill_ref(root, dir_rel, a["nnn"])),
+			("title", a["title"]),
+			("significance", significance),
+			("emotion", a["emotion"]),
+			("intensity", float(a.get("intensity") or 0.0)),
+			("texture", {"theme": a["theme"], "relics": a["relics"]}),
+			("work_score", round(work, 2)),
+			("social_score", round(social, 2)),
+			("dual_route", route if route else "none"),
+		]
+		# F4-fusión (NB-001 P7): el `scope` declarado por la extracción combinada se
+		# persiste en el frontmatter (solo existe con el flag ON; OFF no cambia nada).
+		if a.get("scope"):
+			fm_fields.append(("scope", a["scope"]))
+		fm_fields += [
+			("quality_flags", flags),
+			("engine", runtime.served_engine()),
+			("trust", runtime.model_trust()),
+			("prompt_version", runtime.annotate_prompt_version()),
+			("ascended", bool(seal.get("ascended", False))),
+			("ascended_at", seal.get("ascended_at")),
+			("ascended_to", seal.get("ascended_to")),
+			("ascended_point_id", seal.get("ascended_point_id")),
+		]
+		refine_fm = _frontmatter_block(fm_fields)
 		name = f"{a['nnn']}-{slug}.md"
 		(annotate_dir / name).write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
 		written.add(name)
+		if reuse_enabled and entry == "extract":
+			# Manifest F2b: lista de notas por unit_key (rango). Las notas se
+			# agrupan por el `nnn` que escriben (cada nota pertenece a su unidad).
+			unit_key = nnn_to_key.get(a["nnn"])
+			if unit_key is not None:
+				unit_entry = units_manifest.setdefault(
+					unit_key,
+					{
+						"content_hash": unit_hashes.get(unit_key),
+						"annotate_prompt_version": contract["prompt_version"],
+						"engine": contract["engine"],
+						"degraded": unit_degraded.get(unit_key, False),
+						"files": [],
+					},
+				)
+				unit_entry["files"].append(name)
 	input_hash, input_hash_source = session_input_hash(root, dir_rel, units)
 	meta = {
 		"session_id": session_id,
@@ -307,6 +377,10 @@ def annotate_session(
 		"input_hash": input_hash,
 		"input_hash_source": input_hash_source,
 	}
+	# NB-001 F2b: manifest persistente por unit_key, solo con el flag ON y tras
+	# una extracción real (el `--from=rewrite/score` no regenera el manifest).
+	if reuse_enabled and entry == "extract":
+		meta["units"] = units_manifest
 	from red_pill.memento.record import write_json_atomic
 
 	write_json_atomic(annotate_dir / "_meta.json", meta)

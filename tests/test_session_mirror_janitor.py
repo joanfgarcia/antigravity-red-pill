@@ -45,9 +45,7 @@ async def test_purges_dead_soul_and_reports_metrics():
 	mirror = _seed_dead_soul()
 	memory = FakeMemory()
 	janitor = FakeJanitor()
-	result = await SessionMirrorPurgePlugin().execute(
-		janitor, {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=memory
-	)
+	result = await SessionMirrorPurgePlugin().execute(janitor, {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=memory)
 	assert result["session_mirror_rows_purged"] == 1
 	assert result["session_mirror_souls_purged"] == 1
 	assert result["session_mirror_rows_after"] == 0
@@ -125,6 +123,59 @@ async def test_budget_metrics_and_pain_signal():
 async def test_janitor_reports_budget_keys():
 	mirror = SessionMirror()
 	mirror.append_turn(continuity_id="alma-x", mission_id="m", role="user", content="x", ts=time.time())
-	result = await SessionMirrorPurgePlugin().execute(FakeJanitor(), {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=FakeMemory())
+	result = await SessionMirrorPurgePlugin().execute(
+		FakeJanitor(), {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=FakeMemory()
+	)
 	for key in ("session_mirror_budget_bytes", "session_mirror_budget_pct", "session_registry_expired", "session_mirror_stub_rows"):
 		assert key in result
+
+
+async def test_status_signal_lleva_el_denominador_de_las_almas():
+	"""`orphan_rows` sin almas miente por exageración (medido 2026-11-12).
+
+	El registro solo guarda las almas VIVAS, así que «huérfana» es la forma normal
+	de un alma ya cerrada: 99,2 % de las filas del espejo real eran huérfanas sin
+	que eso fuera síntoma de nada. La señal de estado debe traer el recuento de
+	almas y la lista de trabajo real (`expired_candidates`) junto a las filas.
+	"""
+	import json
+
+	mirror = SessionMirror()
+	reg = SessionRegistry()
+	reg.upsert_session(originator="opencode:viva", continuity_id="alma-viva", mission_id="m")
+	mirror.append_turn(
+		continuity_id="alma-viva",
+		mission_id="m",
+		role="user",
+		content="viva",
+		ts=time.time(),
+		originator="opencode:viva",
+		source="opencode",
+		source_ref="1",
+	)
+	# Alma sin registro (cerrada hace tiempo): sus filas son "huérfanas".
+	mirror.append_turn(
+		continuity_id="alma-huerfana",
+		mission_id="m",
+		role="user",
+		content="huerfana",
+		ts=time.time(),
+		originator="opencode:old",
+		source="opencode",
+		source_ref="1",
+	)
+	memory = FakeMemory()
+	result = await SessionMirrorPurgePlugin().execute(
+		FakeJanitor(), {"plugins": {"session_mirror_purge": {"retention_days": 30}}}, memory_manager=memory
+	)
+
+	assert result["session_mirror_active_souls"] == 1
+	assert result["session_mirror_orphan_souls"] == 1
+	assert result["session_mirror_orphan_rows"] == 1
+	assert result["session_mirror_expired_candidates"] == 0
+
+	status = [s for s in memory.signals if s["name"] == "session_mirror_stats"]
+	assert status, "la señal de estado debe emitirse"
+	publicado = json.loads(status[0]["message"])
+	for key in ("session_mirror_active_souls", "session_mirror_orphan_souls", "session_mirror_expired_candidates"):
+		assert key in publicado, f"la señal no explica {key}"

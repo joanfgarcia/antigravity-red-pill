@@ -382,6 +382,15 @@ chars → 9 fragmentos que caben en granite).
 `prompt_version` (hash del prompt de la etapa) en el frontmatter; el registry
 `agentic` guarda ambos + `distill_prompt_version`/`refine_prompt_version`.
 
+> **Alcance (2026-11-08, AD-113)**: este map-reduce nació para el carril Memento
+> (distill/refine). La síntesis de hubs del sueño (`synthesize_hub_v2`) **no lo
+> heredó** en la reescritura single-writer de v8.0.0 y se quedó con el recorte a
+> 8000 chars (`SLEEP_MAX_HUB_INPUT_CHARS`). AD-113 porta el mismo patrón al
+> carril de hubs —lotes → hubs parciales → reducción en árbol— y persiste los
+> parciales en `hub_partitions`. Este documento sigue siendo la referencia del
+> carril Memento; el contrato de hubs vive en `NEURO_SYMBOLIC_MEMORY.md` §2 y
+> en AD-113.
+
 ### 5.4.2 Refine multi-idea (N ideas de M destills)
 
 Refine lee **todos los fragmentos de un work unit** (M ficheros) y extrae

@@ -8,6 +8,14 @@ synthesize_hub_v2:
   temperature: 0.1
   provider_alias: "sip"
   prompt_file: "hub_synthesis_v2.txt"
+  # Tope de generación por llamada del hub. NO es un recorte de texto: es el
+  # presupuesto de salida del modelo. Sin él, un modelo con thinking (Spark)
+  # genera hasta llenar el contexto (16k tokens, 194 s) y trunca la respuesta.
+  # 2048 cubre title+summary+texture+JSON con margen para la traza de 256.
+  max_tokens: 2048
+  # El path con `model` por llamada (híbrido/bake-off) usa la temperatura y
+  # samplers del perfil del modelo (p. ej. Spark hub: temp 1.0, top_k 0).
+  use_model_sampling: true
 
 classify_category:
   temperature: 0.0

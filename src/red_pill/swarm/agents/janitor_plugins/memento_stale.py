@@ -13,7 +13,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin, bury_signal
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,11 @@ class MementoStalePlugin(JanitorPlugin):
 		stale = [(source, session_id) for source, session_id, reason in pending_agentic(registry) if reason == "stale"]
 		if not stale:
 			janitor.log("[Janitor] memento_stale: distill/refine al día.")
+			# Nada stale: se cierra el reporte del buzón (contrato de ciclo de vida).
+			# Su entierro es `resolve_report`, no `evaporate_signals`: la señal es
+			# silenciada y no vive en el tablero. Va ANTES del `return`, no en un
+			# `else` del `try`: enterrar tras emitir borraría el dolor recién alzado.
+			bury_signal("memento_stale_distill", muted=True)
 			return {"stale": 0}
 
 		try:

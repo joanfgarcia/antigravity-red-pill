@@ -190,6 +190,33 @@ class TestRunOpencode:
 		assert "--dir" not in cmd
 		assert not any(str(a) == str(tmp_path) for a in cmd)
 
+	def test_pwd_follows_cwd_so_the_session_lands_there(self, bridge, tmp_path):
+		"""V2 resuelve el workspace de la sesión por `$PWD`, no por el cwd real.
+
+		Regresión 2026-11-10 (misión NB-001): `subprocess.run(cwd=…)` no actualiza
+		PWD; con el worker sin PWD, opencode caía al home y las etapas agénticas
+		nacían en `/home/joan` con acceso a todo (`--auto`).
+		"""
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5, cwd=str(tmp_path))
+		env = run.call_args.kwargs["env"]
+		assert env["PWD"] == str(tmp_path)
+		assert run.call_args.kwargs["cwd"] == str(tmp_path)
+
+	def test_pwd_matches_the_fallback_when_no_cwd(self, bridge):
+		"""Sin cwd explícito el workspace efectivo es el fallback: PWD debe coincidir
+		con él, no con el del proceso llamante (si no, la sesión nace en otro sitio)."""
+		from red_pill.core.paths import get_bunker_root
+
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		env = run.call_args.kwargs["env"]
+		fallback = str(get_bunker_root().parent)
+		assert env["PWD"] == fallback
+		assert run.call_args.kwargs["cwd"] == fallback
+
 	def test_nonzero_returncode_raises(self, bridge):
 		fake = MagicMock(returncode=2, stdout="", stderr="bad")
 		with patch("subprocess.run", return_value=fake):

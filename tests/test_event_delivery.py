@@ -20,6 +20,7 @@ Los tests usan una BD temporal (`db_path`) y un transporte fake: ninguno lanza
 from __future__ import annotations
 
 import time
+import types
 from unittest.mock import patch
 
 import pytest
@@ -511,6 +512,9 @@ class TestLlamanteEfimero:
 		with patch("red_pill.core.paths.get_session_db", return_value=Path(reg.db_path)), patch(
 			"red_pill.core.paths.find_harness_binary", return_value="/usr/bin/true"
 		), patch("red_pill.core.soul_notify.subprocess.Popen", FakeProc), patch(
+			"red_pill.core.soul_notify.subprocess.run",
+			return_value=types.SimpleNamespace(returncode=1, stdout="", stderr="sin api"),
+		), patch(
 			"red_pill.core.soul_notify.opencode_session_exists", return_value=True
 		):
 			handle_session(self._args())

@@ -151,10 +151,19 @@ SKIP_FILES = {
 
 
 def load_docs(root: Path = ROOT) -> list[Doc]:
+	"""Carga los ítems del panel.
+
+	Los **directorios ocultos no son contenido del desk** (`.git`, `.germ.baseline`
+	—la copia sembrada de la plantilla—, `.red-pill` —cajón local—, `.obsidian`…).
+	Antes solo se saltaba `.git`, así que `.germ.baseline/FRONTMATTER_TEMPLATE.md`
+	entraba como ítem y el panel publicaba su fila de ejemplo: `draft  # see status
+	list below` / `Medium  # optional: High`. Regla compartida con
+	`planner_state_audit.py`: descartar cualquier ruta con un segmento oculto.
+	"""
 	docs: list[Doc] = []
 	for p in sorted(root.rglob("*.md")):
 		rel = p.relative_to(root).as_posix()
-		if rel.startswith(".git") or rel in PHASE_README or rel in SKIP_FILES:
+		if any(part.startswith(".") for part in Path(rel).parts) or rel in PHASE_README or rel in SKIP_FILES:
 			continue
 		try:
 			text = p.read_text(encoding="utf-8", errors="replace")

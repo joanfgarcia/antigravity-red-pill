@@ -14,6 +14,14 @@ class SynthesizeHubV2Params(BaseModel):
 	temperature: float = Field(default=0.1, ge=0.0, le=2.0)
 	provider_alias: str = Field(default="sip")
 	prompt_file: str = Field(default="hub_synthesis_v2.txt")
+	# Tope de generación por llamada. No es un recorte de texto: es el
+	# presupuesto de salida del modelo. Sin él, un modelo con thinking (Spark)
+	# genera hasta llenar el contexto (16k tokens) y trunca la respuesta.
+	max_tokens: int = Field(default=2048, ge=64, le=8192)
+	# Si el llamador fija un `model` por llamada (híbrido/bake-off), usar la
+	# temperatura y samplers del PERFIL de ese modelo en vez de los del task.
+	# Sin esto, el path de producción ignoraba la receta oficial del modelo.
+	use_model_sampling: bool = Field(default=False)
 
 
 class ClassifyCategoryParams(BaseModel):
