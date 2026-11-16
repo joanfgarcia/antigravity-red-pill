@@ -6,7 +6,7 @@ por el camino real (`search_and_reinforce`) y comprueba que el contador sube.
 La colección se borra siempre, pase lo que pase.
 
 Uso:
-    .venv/bin/python scripts/olvido_f0_probe.py
+.venv/bin/python scripts/olvido_f0_probe.py
 
 Exit codes: 0 = el contador funciona · 1 = miente (la escalera debe quedar apagada).
 """

@@ -3,14 +3,14 @@
 
 Responde, con números y sin escribir nada en el Búnker:
 
-  1. ¿cuántas ramas hay, y cuántas tienen hojas vivas?
-  2. ¿cuántos marcadores `hubbed` apuntan a un padre que no existe? (ceguera)
-  3. ¿cuántas ramas sin hojas mienten en `hub_members_count`?
-  4. ¿qué distribución de uso hay (`recall_count`)?
-  5. ¿cuántas ramas se llevarían por delante el umbral bayesiano si siguiera vivo?
+1. ¿cuántas ramas hay, y cuántas tienen hojas vivas?
+2. ¿cuántos marcadores `hubbed` apuntan a un padre que no existe? (ceguera)
+3. ¿cuántas ramas sin hojas mienten en `hub_members_count`?
+4. ¿qué distribución de uso hay (`recall_count`)?
+5. ¿cuántas ramas se llevarían por delante el umbral si siguiera vivo?
 
 Uso:
-    .venv/bin/python scripts/olvido_audit.py [--json]
+.venv/bin/python scripts/olvido_audit.py [--json]
 """
 
 from __future__ import annotations

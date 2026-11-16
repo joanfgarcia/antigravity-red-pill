@@ -4,12 +4,12 @@ Una sola ruta decide olvidar, y decide en **días activos**: días en los que hu
 actividad real, nunca días de calendario. La ausencia no cobra.
 
 ```
-0 recuerdos            -> purga a 30 días activos
-1 recuerdo             -> purga a 60 días activos
->=2 espaciados (90 d)  -> circuito largo: work 105 días activos
-                                          social 5 años -> PERMASTORE
-rama con hojas         -> intacta
-rama sin hojas         -> cae (guarda anti-carrera de un ciclo)
+0 recuerdos -> purga a 30 días activos
+1 recuerdo -> purga a 60 días activos
+2 o más espaciados en 90 -> circuito largo: work 105 días activos,
+social 5 años y después permastore
+rama con hojas -> intacta
+rama sin hojas -> cae (guarda anti-carrera de un ciclo)
 ```
 
 Por qué así y no un umbral del motor bayesiano: `deletion_threshold` es un
@@ -57,9 +57,7 @@ class LadderParams:
 
 DEFAULTS = LadderParams()
 
-# ---------------------------------------------------------------------------
 # Reloj de días activos
-# ---------------------------------------------------------------------------
 
 
 def active_days(now: Optional[float] = None) -> List[float]:
@@ -137,9 +135,7 @@ def _window_start(days: List[float], window: int, now: float) -> float:
 	return days[idx] if idx < len(days) else now
 
 
-# ---------------------------------------------------------------------------
 # Clasificación
-# ---------------------------------------------------------------------------
 
 
 def _ts(value: Any) -> Optional[float]:
@@ -233,9 +229,7 @@ def classify(
 	return "delete" if since >= params.sink_days_1_recall else "keep"
 
 
-# ---------------------------------------------------------------------------
 # Ejecución
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -387,9 +381,7 @@ def run_ladder(
 	return {"mode": mode, "collections": reports}
 
 
-# ---------------------------------------------------------------------------
 # Reaper de ramas (D-02): una rama sin hojas cae esa noche
-# ---------------------------------------------------------------------------
 
 
 def reap_leafless_branches(memory_manager, mode: str = "dry_run", params: LadderParams = DEFAULTS) -> Dict[str, Any]:
