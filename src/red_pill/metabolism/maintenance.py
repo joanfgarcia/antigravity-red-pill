@@ -16,14 +16,54 @@ import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 
+def _count_hub_members(client, collection: str) -> dict | None:
+	"""Cuenta las hojas reales de cada rama (RFC-OLV-001, I-03).
+
+	Se cuenta por scroll de los miembros (`hubbed` + `hub_id`) y NUNCA por
+	`hub_members_count`: medido el 2026-11-16, 13 de las 24 ramas sin hojas
+	declaraban un contador > 0. Un fallo de lectura devuelve `None`, que el
+	llamante interpreta como «no se puede decidir» (fail-closed). Un `{}` es un
+	recuento válido: no hay ninguna hoja en la colección.
+	"""
+	from collections import Counter
+
+	counts: Counter = Counter()
+	offset = None
+	while True:
+		try:
+			batch, offset = client.scroll(
+				collection_name=collection,
+				limit=1000,
+				offset=offset,
+				with_payload=["hub_id", "hubbed"],
+				with_vectors=False,
+			)
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] No se pudieron contar hojas de ramas en {collection}: {e}")
+			return None
+		for point in batch:
+			payload = point.payload or {}
+			if payload.get("hubbed") and payload.get("hub_id"):
+				counts[str(payload["hub_id"])] += 1
+		if offset is None:
+			break
+	return counts
+
+
 def erode_work_hubs(memory_manager) -> dict:
 	"""
-	Applies Bayesian erosion to old/unreferenced synthesis hubs in work_memories.
-	Hubs that haven't been recalled/referenced in the last cycle have their
-	utility_beta increased (reducing utility score) and their intensity decayed.
+	Erosion de las ramas de `work_memories` — **la rama sigue a sus hojas**
+	(RFC-OLV-001, D-01).
 
-	Devuelve `{"eroded": N, "decayed": M}` para que la fase reporte producción
-	real (hubs borrados + hubs decaídos) en vez de un contador vacío.
+	Regla dura: una rama con al menos una hoja viva no se toca: ni decae ni se
+	borra. Su olvido es el olvido de sus hojas, y solo cuando no le queda
+	ninguna puede caer. El invariante estaba escrito dos veces en este mismo
+	fichero (el washout excluye hubs «porque la poda genérica los mataría antes
+	que a sus miembros», y `erode_curated` libera a los miembros al borrar);
+	esta era la única ruta que lo incumplía, y por eso dejó 1.962 marcadores
+	apuntando a un padre inexistente.
+
+	Devuelve `{"eroded": N, "decayed": M, "kept_with_leaves": K}`.
 	"""
 	client = memory_manager.client
 	collection = "work_memories"
@@ -49,11 +89,19 @@ def erode_work_hubs(memory_manager) -> dict:
 		return {"eroded": 0, "decayed": 0}
 
 	if not hubs or not isinstance(hubs, list):
-		return {"eroded": 0, "decayed": 0}
+		return {"eroded": 0, "decayed": 0, "kept_with_leaves": 0}
+
+	# RFC-OLV-001 I-01/I-02: antes de decidir nada, contar hojas. Si no se
+	# pueden contar (None), esta pasada no borra: fail-closed.
+	members_by_hub = _count_hub_members(client, collection)
+	if members_by_hub is None:
+		logger.warning("[SLEEP ENGINE] Sin recuento de hojas: no se erosiona ninguna rama en esta pasada (fail-closed).")
+		return {"eroded": 0, "decayed": 0, "kept_with_leaves": 0}
 
 	now = time.time()
 	update_operations = []
 	points_to_delete = []
+	kept_with_leaves = 0
 
 	# Cycle duration threshold: 1 cycle is approx 12 hours.
 	threshold_seconds = 12 * 3600
@@ -61,6 +109,11 @@ def erode_work_hubs(memory_manager) -> dict:
 	for hub in hubs:
 		payload = hub.payload or {}
 		if payload.get("immune"):
+			continue
+
+		# La rama sigue a sus hojas: con ≥1 hoja viva no decae ni se borra.
+		if members_by_hub.get(str(hub.id), 0) > 0:
+			kept_with_leaves += 1
 			continue
 
 		last_recalled = float(payload.get("last_recalled_at", now))
@@ -108,7 +161,10 @@ def erode_work_hubs(memory_manager) -> dict:
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
 
-	return {"eroded": len(points_to_delete), "decayed": len(update_operations)}
+	if kept_with_leaves:
+		logger.info(f"[SLEEP ENGINE] Erode hubs: {kept_with_leaves} ramas conservadas por tener hojas vivas (RFC-OLV-001 §2 regla 1).")
+
+	return {"eroded": len(points_to_delete), "decayed": len(update_operations), "kept_with_leaves": kept_with_leaves}
 
 
 def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:
