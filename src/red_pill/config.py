@@ -340,7 +340,8 @@ class RedPillConfig(BaseSettings):
 	RHIZODB_PRUNE_MIN_ACTIVATION: float = 0.1
 	RHIZODB_PRUNE_MAX_STABILITY_DAYS: float = 5.0
 	# AD-048: el washout genérico no toca curados (memento_engram/origin=memento/
-	# hubbed): su olvido va por erode_curated (5a/10a). OFF = comportamiento previo.
+	# hubbed): su olvido va por la escalera (RFC-OLV-001); este skip ya no cambia nada
+	# desde que el washout no borra (D-22). OFF = comportamiento previo.
 	RHIZODB_WASHOUT_SKIP_CURATED: bool = True
 	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
 	# única: todo writer/merger que componga metadata deriva de aquí con margen
@@ -771,8 +772,10 @@ class RedPillConfig(BaseSettings):
 	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
 	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
 	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
-	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
-	SW_EROSION_DEMOTE_ENABLED: bool = False  # DEPRECATED (RFC-OLV-001 D-03): el demote de curados se retiró; la clave se conserva por compatibilidad de .env
+	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # DEPRECATED (RFC-OLV-001 D-08): el guard se retiró; la ausencia cuesta 0 en días activos
+	SW_EROSION_DEMOTE_ENABLED: bool = (
+		False  # DEPRECATED (RFC-OLV-001 D-03): el demote de curados se retiró; la clave se conserva por compatibilidad de .env
+	)
 	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # DEPRECATED (RFC-OLV-001): sin lector tras retirar erode_curated
 	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # DEPRECATED (RFC-OLV-001): la rama sigue a sus hojas; no hay reloj de rama
 	CURATED_LIFETIME_MULTIPLIER_WORK: float = 1.0  # factor por motor (work=Bayesiano)
@@ -973,6 +976,23 @@ class RedPillConfig(BaseSettings):
 	# RFC-OLV-001 · la escalera del olvido. Una sola política de borrado, en
 	# días ACTIVOS (nunca calendario). off | dry_run (informe) | enforce.
 	SW_FORGETTING_LADDER_MODE: str = "off"
+
+	@field_validator("SW_FORGETTING_LADDER_MODE", mode="before")
+	@classmethod
+	def _validate_ladder_mode(cls, v: Any) -> str:
+		"""Normaliza y rechaza modos inventados.
+
+		Sin esto, `dry-run`, `true` o `ENFORCE` degradaban a `off` en silencio en
+		unos consumidores y a `enforce` en otros: la peor combinación posible en
+		una política que borra.
+		"""
+		norm = str(v or "off").strip().lower().replace("-", "_")
+		aliases = {"true": "enforce", "1": "enforce", "on": "enforce", "false": "off", "0": "off", "": "off", "dryrun": "dry_run"}
+		norm = aliases.get(norm, norm)
+		if norm not in ("off", "dry_run", "enforce"):
+			raise ValueError(f"SW_FORGETTING_LADDER_MODE inválido: {v!r} (usa off | dry_run | enforce)")
+		return norm
+
 	MAX_SINK_TIME: int = 30 * 24 * 3600  # DEPRECATED (RFC-OLV-001 D-07): el sumidero es el escalón 0 de la escalera
 
 	@field_validator("METABOLISM_AUTO_COLLECTIONS", mode="before")

@@ -119,12 +119,17 @@ def test_dry_run_writes_nothing(memory_manager: MemoryManager, monkeypatch):
 		],
 	)
 	monkeypatch.setattr(fog, "active_days", lambda *a, **k: _days(60, now))
-	report = fog.run_ladder(memory_manager, mode="dry_run")
+	# `ladder_start` en el pasado simula que la escalera lleva 60 días activos
+	# contando; en producción el marcador hace que la primera purga espere (D-16).
+	report = fog.run_ladder(memory_manager, mode="dry_run", ladder_start=now - DAY * 60)
 
-	assert report["collections"]["work_memories"]["deleted"] == 1
+	assert report["collections"]["work_memories"]["planned_delete"] == 1
+	# Y el reloj histórico (sin la gracia de D-16) lo veía igual: la cifra es
+	# visible en dry_run sin arriesgar nada.
+	assert report["collections"]["work_memories"]["historical_delete"] >= 1
 	assert memory_manager.client.retrieve(collection_name="work_memories", ids=[pid], with_payload=False), "dry_run no borra"
 
-	fog.run_ladder(memory_manager, mode="enforce")
+	fog.run_ladder(memory_manager, mode="enforce", ladder_start=now - DAY * 60)
 	assert not memory_manager.client.retrieve(collection_name="work_memories", ids=[pid], with_payload=False), "enforce sí borra"
 
 

@@ -68,10 +68,18 @@ def test_update_status_persists_metrics(monkeypatch, tmp_path):
 
 
 def test_erosion_phase_delegates():
+	"""RFC-OLV-001: la fase ya no eroda ramas por umbral; corre la escalera y el reaper."""
+	import red_pill.config as cfg
+
 	ctx = SleepContext(memory_manager=MagicMock())
-	with patch(f"{MAINT}.erode_work_hubs") as fn:
+	with (
+		patch.object(cfg, "SW_FORGETTING_LADDER_MODE", "dry_run"),
+		patch(f"{MAINT}.run_ladder") as ladder,
+		patch(f"{MAINT}.reap_leafless_branches") as reaper,
+	):
 		ErosionPhase().execute(ctx)
-		fn.assert_called_once_with(ctx.memory_manager)
+		ladder.assert_called_once()
+		reaper.assert_called_once()
 
 
 def test_washout_phase_delegates():
@@ -90,7 +98,7 @@ def test_evolution_phase_delegates():
 
 def test_cpu_phases_swallow_exceptions():
 	ctx = SleepContext(memory_manager=MagicMock())
-	with patch(f"{MAINT}.erode_work_hubs", side_effect=Exception("boom")):
+	with patch(f"{MAINT}.run_ladder", side_effect=Exception("boom")):
 		ErosionPhase().execute(ctx)  # must not raise
 	with patch(f"{MAINT}.run_rhizodb_washout_and_pruning", side_effect=Exception("boom")):
 		WashoutPhase().execute(ctx)
@@ -146,7 +154,8 @@ def test_runner_clears_vram_busy_on_real_cycle():
 	with (
 		patch(f"{CONS}._check_llm_available", return_value=True),
 		patch(f"{CONS}._run_hub_and_thread", return_value=({"hubs_written": 0}, {"links": 0})) as hubs,
-		patch(f"{MAINT}.erode_work_hubs"),
+		patch(f"{MAINT}.run_ladder"),
+		patch(f"{MAINT}.reap_leafless_branches"),
 		patch(f"{MAINT}.run_rhizodb_washout_and_pruning"),
 		patch(f"{EVO}.IdentityEvaluator.evaluate_set_point"),
 		patch("red_pill.core.notifier.SovereignNotifier.clear_bunker_signal") as clear,

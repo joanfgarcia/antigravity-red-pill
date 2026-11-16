@@ -8,7 +8,7 @@ import logging
 
 import red_pill.config as cfg
 from red_pill.metabolism.forgetting import reap_leafless_branches, run_ladder
-from red_pill.metabolism.maintenance import erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
+from red_pill.metabolism.maintenance import promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
 logger = logging.getLogger(__name__)
@@ -39,19 +39,37 @@ class ErosionPhase(SleepPhase):
 		return "erosion"
 
 	def execute(self, ctx: SleepContext) -> None:
-		eroded = decayed = 0
-		try:
-			stats = erode_work_hubs(ctx.memory_manager) or {}
-			eroded = int(stats.get("eroded", 0) or 0)
-			decayed = int(stats.get("decayed", 0) or 0)
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
+		"""RFC-OLV-001: una sola política de olvido, en este orden.
 
-		# RFC-OLV-001 F3 — la escalera: una sola ruta decide olvidar, en días
-		# activos. `off` por defecto; `dry_run` informa sin escribir.
-		reaped = ladder_deleted = ladder_frozen = 0
-		mode = str(getattr(cfg, "SW_FORGETTING_LADDER_MODE", "off") or "off")
+		Orden: primero la escalera, después el reaper, para que una rama que
+		acaba de perder su ultima hoja caiga en la MISMA pasada (C-06).
+
+		`erode_work_hubs` (la erosion bayesiana heredada) ya NO se llama aqui: el
+		reaper cubre su caso bueno y su decay borraba ramas auto-contenidas
+		(`promoted_from`) que el reaper excluye por definicion. Queda como funcion
+		manual/legada, con sus tests, sin participar del ciclo automatico.
+		"""
+		reaped = purged = frozen = promoted = 0
+		mode = str(getattr(cfg, "SW_FORGETTING_LADDER_MODE", "off") or "off").strip().lower()
+		if mode not in ("off", "dry_run", "enforce"):
+			logger.warning(f"[OLVIDO] Modo de escalera desconocido {mode!r}: se trata como 'off'.")
+			mode = "off"
+
 		if mode != "off":
+			try:
+				ladder = run_ladder(ctx.memory_manager, mode=mode)
+				for name, col in (ladder.get("collections") or {}).items():
+					purged += int(col.get("applied_delete", 0) or 0)
+					frozen += int(col.get("frozen", 0) or 0)
+					promoted += int(col.get("promoted", 0) or 0)
+					if col.get("planned_delete") or col.get("frozen") or col.get("errors"):
+						logger.info(
+							f"[OLVIDO] Escalera ({mode}) en {name}: planificado={col.get('planned_delete')} "
+							f"aplicado={col.get('applied_delete', 0)} congelado={col.get('frozen')} "
+							f"promovido={col.get('promoted')} errores={col.get('errors')}"
+						)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to run forgetting ladder: {e}")
 			try:
 				rep = reap_leafless_branches(ctx.memory_manager, mode=mode)
 				reaped = int(rep.get("reaped", 0) or 0)
@@ -59,27 +77,17 @@ class ErosionPhase(SleepPhase):
 					logger.info(f"[OLVIDO] Reaper ({mode}): {rep['candidates']} ramas sin hojas candidatas.")
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to run branch reaper: {e}")
-			try:
-				ladder = run_ladder(ctx.memory_manager, mode=mode)
-				for name, col in (ladder.get("collections") or {}).items():
-					ladder_deleted += int(col.get("deleted", 0) or 0)
-					ladder_frozen += int(col.get("frozen", 0) or 0)
-					if col.get("deleted") or col.get("frozen"):
-						logger.info(f"[OLVIDO] Escalera ({mode}) en {name}: purga={col.get('deleted')} congelado={col.get('frozen')}")
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Failed to run forgetting ladder: {e}")
 
 		ctx.record(
 			self.name,
-			eroded + decayed + reaped + ladder_deleted + ladder_frozen,
-			eroded=eroded,
-			decayed=decayed,
+			reaped + purged + frozen + promoted,
 			reaped=reaped,
-			ladder_purga=ladder_deleted,
-			ladder_permastore=ladder_frozen,
+			ladder_purga=purged,
+			ladder_permastore=frozen,
+			ladder_promovidos=promoted,
 		)
 		if mode != "off":
-			logger.info(f"[OLVIDO] Escalera en modo {mode}: purga={ladder_deleted} permastore={ladder_frozen} reaper={reaped}")
+			logger.info(f"[OLVIDO] Pasada ({mode}): purga={purged} permastore={frozen} promovidos={promoted} reaper={reaped}")
 
 
 class WashoutPhase(SleepPhase):

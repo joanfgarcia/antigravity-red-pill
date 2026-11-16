@@ -59,9 +59,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	search_parser.add_argument("--limit", type=int, default=3)
 	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
-	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
+	erode_parser = subparsers.add_parser("erode", help="B760 erosion (MANUAL, ver RFC-OLV-001)")
 	erode_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	erode_parser.add_argument("--rate", type=float)
+	# Desde RFC-OLV-001 `last_recalled_at` mide USO REAL (ya no lo refresca el
+	# olvido), así que este comando pasó de tocar una fracción a tocar casi todo.
+	# Por eso: en seco por defecto, y hay que pedir el borrado explícitamente.
+	erode_parser.add_argument("--dry-run", action="store_true", help="Contar candidatos sin tocar nada (por defecto)")
+	erode_parser.add_argument("--apply", action="store_true", help="Aplicar de verdad (borra lo que el motor pida)")
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
 	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])

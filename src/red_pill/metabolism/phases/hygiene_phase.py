@@ -20,6 +20,12 @@ class HygienePhase(SleepPhase):
 		return "hygiene"
 
 	def execute(self, ctx: SleepContext) -> None:
+		"""Retira engramas VACÍOS (sin contenido), no memoria (RFC-OLV-001 §7).
+
+		No es una ruta de olvido: no decide por uso ni por edad, y un engrama con
+		contenido nunca entra aquí. Se conserva porque borrar registros sin
+		contenido no es olvidar, es higiene; y respeta `immune` y `permastore`.
+		"""
 		if not cfg.SLEEP_PLUGIN_HYGIENE:
 			logger.debug("[HYGIENE] Skipped (SLEEP_PLUGIN_HYGIENE=False)")
 			return

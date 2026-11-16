@@ -100,6 +100,34 @@ def active_days_between(days: List[float], since: float, now: Optional[float] = 
 	return max(0, hi - lo)
 
 
+def ladder_started_at() -> float:
+	"""Instante en que la escalera empezó a contar (D-16).
+
+	Se guarda en un fichero de estado propio. La primera vez que se pregunta, se
+	fija `now`: así ningún engrama legacy nace con 30 días activos de castigo por
+	un histórico que ya venía truncado. Si no se puede escribir, se devuelve
+	`now` en memoria (la pasada no purga, porque el reloj arranca hoy).
+	"""
+	import json
+
+	from red_pill.core.paths import get_state_dir
+
+	path = get_state_dir() / "olvido_ladder_started.json"
+	try:
+		with open(path, encoding="utf-8") as fh:
+			return float(json.load(fh)["started_at"])
+	except Exception:
+		pass
+	now = time.time()
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		with open(path, "w", encoding="utf-8") as fh:
+			json.dump({"started_at": now}, fh)
+	except Exception as exc:
+		logger.warning(f"[OLVIDO] No se pudo fijar el arranque de la escalera: {exc}")
+	return now
+
+
 def _window_start(days: List[float], window: int, now: float) -> float:
 	"""Instante de la ventana de `window` días activos hacia atrás."""
 	if not days:
@@ -114,9 +142,32 @@ def _window_start(days: List[float], window: int, now: float) -> float:
 # ---------------------------------------------------------------------------
 
 
+def _ts(value: Any) -> Optional[float]:
+	"""Timestamp tolerante: float, int o ISO-8601. None si no se puede leer.
+
+	Un payload importado con fecha ISO tumbaba la pasada entera (y con ella el
+	informe) por un `float()` sobre un string. Ahora se degrada a `None`, que
+	significa «no lo sé» y no decide nada.
+	"""
+	if isinstance(value, (int, float)):
+		return float(value)
+	if isinstance(value, str) and value.strip():
+		try:
+			return float(value)
+		except (TypeError, ValueError):
+			pass
+		try:
+			from datetime import datetime
+
+			return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+		except Exception:
+			return None
+	return None
+
+
 def _promotion_stamps(payload: Dict[str, Any], days: List[float], now: float, params: LadderParams) -> int:
 	"""Recuperaciones válidas para la puerta: 2 en días distintos dentro de 90 días activos."""
-	stamps = [float(s) for s in (payload.get("recall_stamps") or []) if isinstance(s, (int, float))]
+	stamps = [t for t in (_ts(s) for s in (payload.get("recall_stamps") or [])) if t is not None]
 	if not stamps:
 		return 0
 	start = _window_start(days, params.promotion_window_days, now)
@@ -125,23 +176,48 @@ def _promotion_stamps(payload: Dict[str, Any], days: List[float], now: float, pa
 	return len(distinct)
 
 
-def classify(payload: Dict[str, Any], collection: str, days: List[float], now: Optional[float] = None, params: LadderParams = DEFAULTS) -> str:
-	"""Devuelve el destino de un engrama: `keep`, `delete` o `freeze`."""
+def classify(
+	payload: Dict[str, Any],
+	collection: str,
+	days: List[float],
+	now: Optional[float] = None,
+	params: LadderParams = DEFAULTS,
+	ladder_start: Optional[float] = None,
+) -> str:
+	"""Devuelve el destino de un engrama: `keep`, `delete`, `freeze` o `promote`.
+
+	Solo decide sobre las colecciones de la escalera: directivas, alma, señales
+	e interacción tienen gobierno propio y salen siempre como `keep` (defensa en
+	profundidad, aunque `run_ladder` no las recorra).
+	"""
+	if collection not in LADDER_COLLECTIONS:
+		return "keep"
 	now = time.time() if now is None else now
 	if payload.get("immune") or payload.get("permastore"):
 		return "keep"
 	if payload.get("lazarus_phase") == HUB_PHASE or payload.get("node_type") == HUB_PHASE:
 		return "keep"  # las ramas las juzga el reaper, no la escalera
 
-	last = float(payload.get("last_recalled_at") or payload.get("created_at") or now)
-	since = active_days_between(days, last, now)
+	last = _ts(payload.get("last_recalled_at")) or _ts(payload.get("created_at"))
+	if last is None:
+		return "keep"  # sin fecha legible no se olvida: fail-closed
 
-	# La promoción es una transición de estado, no un test rodante: una vez que
-	# dos recuperaciones espaciadas la cruzan, el engrama entra al circuito
-	# largo y se queda (`promoted_at`). Si se evaluara «en ventana» cada noche,
-	# el permastore sería inalcanzable: exigiría 5 años de antigüedad y estar
-	# recordado en los últimos 90 días activos a la vez.
-	promoted = bool(payload.get("promoted_at")) or _promotion_stamps(payload, days, now, params) >= 2
+	# Días activos desde el último toque. Con contador (D-16) se usa el índice
+	# guardado en la recuperación; sin contador (legacy) el reloj arranca en el
+	# día de arranque de la escalera, para que la migración no purgue nada.
+	idx = payload.get("active_days_at_recall")
+	if isinstance(idx, int) and idx >= 0:
+		since = max(0, len(days) - idx)
+	else:
+		since = active_days_between(days, max(last, ladder_start or last), now)
+
+	# Puerta: 2 recuperaciones en días activos distintos dentro de 90 días.
+	# Transición (§8.2): un legacy con `recall_count >= 2` y sin historia de
+	# stamps entra al circuito largo sin exigir espaciado, porque el dato no
+	# existe; a partir de ahí manda la regla nueva.
+	stamps = _promotion_stamps(payload, days, now, params)
+	legacy_promoted = int(payload.get("recall_count") or 0) >= 2 and not payload.get("recall_stamps")
+	promoted = bool(payload.get("promoted_at")) or stamps >= 2 or legacy_promoted
 	pending_promotion = promoted and not payload.get("promoted_at")
 
 	if promoted:
@@ -164,19 +240,30 @@ def classify(payload: Dict[str, Any], collection: str, days: List[float], now: O
 
 @dataclass
 class LadderReport:
+	"""Dos cuentas separadas: lo PLANIFICADO y lo EJECUTADO.
+
+	Sumar lo planificado a la producción del sueño fue un hallazgo del
+	adversarial: el parte decía `purga=N` aunque el borrado hubiera fallado o
+	estuviera en `dry_run`.
+	"""
+
 	collection: str
-	deleted: List[str] = field(default_factory=list)
+	planned_delete: List[str] = field(default_factory=list)
 	frozen: List[str] = field(default_factory=list)
 	promoted: List[str] = field(default_factory=list)
 	kept: int = 0
+	errors: int = 0
+	historical_delete: int = 0  # qué se llevaría el reloj histórico (solo dry_run)
 
 	def as_dict(self) -> Dict[str, Any]:
 		return {
 			"collection": self.collection,
-			"deleted": len(self.deleted),
+			"planned_delete": len(self.planned_delete),
 			"frozen": len(self.frozen),
 			"promoted": len(self.promoted),
 			"kept": self.kept,
+			"errors": self.errors,
+			"historical_delete": self.historical_delete,
 		}
 
 
@@ -190,7 +277,13 @@ def _scroll_all(client, collection: str) -> List[Any]:
 			return out
 
 
-def run_ladder(memory_manager, mode: str = "dry_run", params: LadderParams = DEFAULTS, report_path: Optional[str] = None) -> Dict[str, Any]:
+def run_ladder(
+	memory_manager,
+	mode: str = "dry_run",
+	params: LadderParams = DEFAULTS,
+	report_path: Optional[str] = None,
+	ladder_start: Optional[float] = None,
+) -> Dict[str, Any]:
 	"""Recorre las colecciones de la escalera y aplica (o informa) la decisión."""
 	mode = (mode or "off").strip().lower()
 	if mode not in ("off", "dry_run", "enforce"):
@@ -206,6 +299,11 @@ def run_ladder(memory_manager, mode: str = "dry_run", params: LadderParams = DEF
 		logger.info("[OLVIDO] Sin reloj de días activos: no se decide nada en esta pasada.")
 		return {"mode": mode, "collections": {}}
 
+	# D-16: el reloj arranca el día de F3, no en el histórico. En `dry_run` se
+	# informa ADEMÁS qué se llevaría el reloj histórico, para poder verlo sin
+	# arriesgar nada (que es justo lo que pidió el Operador: «ver qué se va a
+	# olvidar»).
+	ladder_start = ladder_start if ladder_start is not None else ladder_started_at()
 	reports: Dict[str, Any] = {}
 	for collection in sorted(LADDER_COLLECTIONS):
 		if not client.collection_exists(collection):
@@ -215,9 +313,20 @@ def run_ladder(memory_manager, mode: str = "dry_run", params: LadderParams = DEF
 		to_freeze: List[Any] = []
 		to_promote: List[Any] = []
 		for point in _scroll_all(client, collection):
-			decision = classify(point.payload or {}, collection, days, now, params)
+			try:
+				decision = classify(point.payload or {}, collection, days, now, params, ladder_start=ladder_start)
+			except Exception as exc:  # un payload raro no puede tumbar la pasada
+				report.errors += 1
+				logger.warning(f"[OLVIDO] {collection}: no se pudo clasificar {point.id}: {exc}")
+				continue
+			if mode == "dry_run":
+				try:
+					if classify(point.payload or {}, collection, days, now, params, ladder_start=0.0) == "delete":
+						report.historical_delete += 1
+				except Exception:
+					pass
 			if decision == "delete":
-				report.deleted.append(str(point.id))
+				report.planned_delete.append(str(point.id))
 				to_delete.append(str(point.id))
 			elif decision == "freeze":
 				report.frozen.append(str(point.id))
@@ -229,29 +338,45 @@ def run_ladder(memory_manager, mode: str = "dry_run", params: LadderParams = DEF
 				report.kept += 1
 			del decision
 
+		report_dict = report.as_dict()
 		if mode == "enforce":
 			from qdrant_client import models as qm
 
 			if to_delete:
 				try:
 					client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=to_delete))
+					report_dict["applied_delete"] = len(to_delete)
 					logger.info(f"[OLVIDO] {collection}: {len(to_delete)} engramas purgados (escalera).")
 				except Exception as exc:
 					logger.error(f"[OLVIDO] Fallo purgando en {collection}: {exc}")
 			if to_freeze:
 				try:
-					client.set_payload(collection_name=collection, payload={"permastore": True, "frozen_at": now}, points=to_freeze)
+					client.set_payload(
+						collection_name=collection,
+						payload={"permastore": True, "frozen_at": now, "updated_at": now},
+						points=to_freeze,
+					)
 					logger.info(f"[OLVIDO] {collection}: {len(to_freeze)} engramas a permastore (congelados).")
 				except Exception as exc:
 					logger.error(f"[OLVIDO] Fallo congelando en {collection}: {exc}")
 			if to_promote:
 				try:
-					client.set_payload(collection_name=collection, payload={"promoted_at": now}, points=to_promote)
+					client.set_payload(
+						collection_name=collection,
+						payload={"promoted_at": now, "updated_at": now},
+						points=to_promote,
+					)
 					logger.info(f"[OLVIDO] {collection}: {len(to_promote)} engramas promovidos al circuito largo.")
 				except Exception as exc:
 					logger.error(f"[OLVIDO] Fallo promoviendo en {collection}: {exc}")
 
-		reports[collection] = report.as_dict()
+		reports[collection] = report_dict
+
+	if mode == "enforce":
+		applied = sum(int(c.get("applied_delete", 0) or 0) for c in reports.values())
+		logger.info(
+			f"[OLVIDO] Escalera enforce: {applied} purgas aplicadas de {sum(int(c.get('planned_delete', 0) or 0) for c in reports.values())} planificadas."
+		)
 
 	if report_path:
 		try:

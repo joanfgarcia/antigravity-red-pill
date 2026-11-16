@@ -464,6 +464,17 @@ class MemoryManager:
 					_stamps.append(p.payload["last_recalled_at"])
 					p.payload["recall_stamps"] = _stamps
 					reinforced_updates["recall_stamps"] = _stamps
+					# D-16: índice de días activos en el momento de la recuperación.
+					# La escalera calcula `desde` como (hoy - este índice), así que un
+					# día sin actividad no cobra olvido y la migración no purga nada.
+					try:
+						from red_pill.metabolism.forgetting import active_days
+
+						_idx = len(active_days())
+						p.payload["active_days_at_recall"] = _idx
+						reinforced_updates["active_days_at_recall"] = _idx
+					except Exception:
+						pass
 					# RFC-OLV-001 D-21: `last_reinforced_at` era una copia literal de
 					# `last_recalled_at` y su único lector era el demote retirado.
 
@@ -1291,6 +1302,10 @@ class MemoryManager:
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		self.metabolism.apply_erosion(collection, rate)
+
+	def count_erosion_candidates(self, collection: str, rate: Optional[float] = None) -> dict:
+		"""Recuento en seco de la erosión manual (RFC-OLV-001)."""
+		return self.metabolism.count_erosion_candidates(collection, rate)
 
 	def sanitize(self, collection: str, dry_run: bool = False, strict: bool = True) -> Dict[str, Any]:
 		"""Sanitizes a collection: removes duplicates, heals schemas, and refracts oversized legacy engrams."""

@@ -28,9 +28,7 @@ class SwObservabilityPlugin(JanitorPlugin):
 	async def execute(self, janitor: Any, config_dict: dict, **kwargs) -> Dict[str, Any]:
 		import red_pill.config as cfg
 
-		active = any(
-			bool(getattr(cfg, k, False)) for k in ("SW_HUBS_ENABLED", "SW_SITUATION_ENABLED", "SW_EROSION_DEMOTE_ENABLED", "SW_THREAD_ENABLED")
-		)
+		active = any(bool(getattr(cfg, k, False)) for k in ("SW_HUBS_ENABLED", "SW_SITUATION_ENABLED", "SW_THREAD_ENABLED"))
 		if not active:
 			return {"skipped": "sw_disabled"}
 
@@ -45,7 +43,8 @@ class SwObservabilityPlugin(JanitorPlugin):
 			if getattr(cfg, "SW_HUBS_ENABLED", False):
 				# Heartbeat de estado (INFO, no WARNING: por defecto criticality
 				# es "WARNING" y el lector lo pintaba como alarma). El dato de salud
-				# es hub_coverage_pct (hubbed/content); hub_ratio_pct es densidad.
+				# es hub_coverage_pct (miembros cuyo hub EXISTE / agrupables, RFC-OLV-001);
+				# orphan_markers cuenta los que apuntan a un padre inexistente.
 				mem.inject_signal(
 					name="sw_hub_coverage",
 					intensity=2.0,

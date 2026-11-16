@@ -438,9 +438,19 @@ def main() -> None:
 					if assocs > 20:
 						logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
 			elif args.command == "erode":
+				# RFC-OLV-001: el olvido automático es la escalera; esto queda como
+				# operación MANUAL. En seco por defecto porque, al medir el campo de uso
+				# real, el filtro pasó de tocar una fracción a tocar casi todo.
 				rate = args.rate if args.rate else None
-				manager.apply_erosion(collection, rate=rate)
-				print(f"Erosion applied to {collection}.")
+				apply = bool(getattr(args, "apply", False))
+				if not apply:
+					candidates = manager.count_erosion_candidates(collection, rate=rate)
+					print(f"--- [EROSION DRY-RUN: {collection.upper()}] ---")
+					print(f"candidatos: {candidates}")
+					print("Nada se ha tocado. Repite con --apply para aplicar (o usa la escalera).")
+				else:
+					manager.apply_erosion(collection, rate=rate)
+					print(f"Erosion applied to {collection}.")
 			elif args.command == "revision":
 				from red_pill.metabolism.revision import backlog_count, drain, revise_classifications
 

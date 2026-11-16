@@ -59,7 +59,7 @@ def erode_work_hubs(memory_manager) -> dict:
 	borra. Su olvido es el olvido de sus hojas, y solo cuando no le queda
 	ninguna puede caer. El invariante estaba escrito dos veces en este mismo
 	fichero (el washout excluye hubs «porque la poda genérica los mataría antes
-	que a sus miembros», y `erode_curated` libera a los miembros al borrar);
+	que a sus miembros», y el washout de hoy ya no borra);
 	esta era la única ruta que lo incumplía, y por eso dejó 1.962 marcadores
 	apuntando a un padre inexistente.
 
@@ -108,7 +108,7 @@ def erode_work_hubs(memory_manager) -> dict:
 
 	for hub in hubs:
 		payload = hub.payload or {}
-		if payload.get("immune"):
+		if payload.get("immune") or payload.get("permastore"):
 			continue
 
 		# La rama sigue a sus hojas: con ≥1 hoja viva no decae ni se borra.
@@ -326,7 +326,6 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 		gamma = gamma_base if elapsed_days is None else gamma_base ** min(max(elapsed_days, 0.0) / reference_days, 1.0)
 
 		update_operations = []
-		points_to_delete = []
 		offset = None
 		scrolled = False
 
@@ -345,28 +344,30 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 
 			for p in points:
 				payload = p.payload or {}
-				if payload.get("immune"):
+				if payload.get("immune") or payload.get("permastore"):
 					continue
 
 				# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
-				# anclan el hilo y tienen erosión hub-específica (erode_curated, con
-				# piso propio). Sin esto, la poda genérica los mataría antes que a sus
-				# miembros y rompería Ariadne.
+				# anclan el hilo y siguen la regla de rama (RFC-OLV-001: sin reloj, y
+				# solo caen cuando no les queda ninguna hoja). La poda genérica los
+				# habría matado antes que a sus miembros y habría roto Ariadne.
 				if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
 					continue
 
 				# AD-048: los MIEMBROS curados (memento_engram/hubbed) tampoco: su
-				# olvido es por eje propio (last_reinforced_at → demote 5a/10a,
-				# M9/AD-034), no por poda genérica (~15-25 noches).
+				# olvido lo decide la escalera en días activos (RFC-OLV-001), no la poda
+				# genérica (~15-25 noches), que ya no borra.
 				if skip_curated and _is_curated(payload):
 					continue
 
 				# 1. Run lazy decay first to get current activation/score
 				decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
 
-				# If lazy decay wants to delete it
+				# Si el decaimiento perezoso pide borrar, NO se borra: la única
+				# ruta que decide olvidar es la escalera (RFC-OLV-001 D-22). El
+				# candidato se registra para poder comparar políticas.
 				if decay_updates.get("_delete"):
-					points_to_delete.append(p.id)
+					logger.debug(f"[OLVIDO] {collection}: {p.id} habría caído por decaimiento perezoso; la escalera decide.")
 					continue
 
 				score = max(_finite(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)), 1.0), 0.0)
@@ -404,13 +405,8 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to update washout payloads in {collection}: {e}")
 
-		if points_to_delete:
-			try:
-				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
-				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
-				totals["pruned"] += len(points_to_delete)
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+		# RFC-OLV-001 D-22: el washout ya no borra. `totals["pruned"]` queda a 0
+		# a propósito: la única ruta que decide olvidar es la escalera.
 
 		if scrolled:
 			washout_state[collection] = now
@@ -455,7 +451,7 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 					if _is_murky_pointer(str(payload.get("content", ""))):
 						murky_pointers += 1
 					continue
-				if payload.get("immune") and not payload.get("_is_fragment"):
+				if (payload.get("immune") or payload.get("permastore")) and not payload.get("_is_fragment"):
 					# A deliberate immune anchor with no content is an anomaly for the
 					# operator. Fragment shrapnel, however, only INHERITED its immunity
 					# (force_immune cascades from the parent verbatim) — it protects

@@ -139,6 +139,33 @@ class MetabolismKernel:
 
 		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
 
+	def count_erosion_candidates(self, collection: str, rate: Optional[float] = None) -> dict:
+		"""Cuenta qué haría `apply_erosion` sin tocar nada (RFC-OLV-001, manual).
+
+		Con `last_recalled_at` midiendo uso real, este recuento es la diferencia
+		entre un vistazo y un borrado masivo: el CLI lo llama en seco por defecto.
+		"""
+		from red_pill.affect import get_memory_engine
+
+		threshold = time.time() - self.cfg.METABOLISM_COOLDOWN
+		flt = models.Filter(
+			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=threshold))],
+			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
+		)
+		engine = get_memory_engine(self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real"))
+		would_delete = would_decay = 0
+		for batch in self.storage.scroll_generator(collection, scroll_filter=flt, limit=100, max_iterations=1000):
+			for hit in batch:
+				payload = hit.payload or {}
+				if payload.get("immune") or payload.get("permastore"):
+					continue
+				updates = engine.calculate_lazy_decay(payload, current_time=time.time())
+				if updates.get("_delete"):
+					would_delete += 1
+				elif updates:
+					would_decay += 1
+		return {"collection": collection, "would_delete": would_delete, "would_decay": would_decay}
+
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		if rate is None:
 			rate = self.cfg.EROSION_RATE

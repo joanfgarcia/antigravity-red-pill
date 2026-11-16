@@ -33,10 +33,24 @@ HUB_FILTER = qm.Filter(
 
 
 def _client() -> QdrantClient:
-	return QdrantClient(
-		url=os.environ.get("QDRANT_URL", "http://localhost:6333"),
-		api_key=os.environ.get("QDRANT_API_KEY") or None,
-	)
+	"""Cliente con la config real del proyecto.
+
+	La clave vive en el `.env` que carga pydantic, no siempre en el entorno del
+	proceso: leer solo `os.environ` devolvía 401 en el puesto del Operador y
+	dejaba la sonda inservible.
+	"""
+	url = os.environ.get("QDRANT_URL")
+	key = os.environ.get("QDRANT_API_KEY")
+	if not url or not key:
+		try:
+			from red_pill.config import _cfg
+
+			cfg = _cfg()
+			url = url or cfg.QDRANT_URL
+			key = key or cfg.QDRANT_API_KEY
+		except Exception:
+			pass
+	return QdrantClient(url=url or "http://localhost:6333", api_key=key or None)
 
 
 def _scroll_all(client: QdrantClient, collection: str, scroll_filter=None) -> list:
