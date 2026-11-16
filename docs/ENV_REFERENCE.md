@@ -304,7 +304,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para llamadas grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
-| `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
+| `SW_EROSION_DEMOTE_ENABLED` | `False` | **DEPRECATED** (RFC-OLV-001 D-03). El demote de curados se retiró: los curados siguen la escalera. |
 | `SW_FORGETTING_LADDER_MODE` | `off` | Escalera del olvido (RFC-OLV-001): `off` · `dry_run` (informe, cero escrituras) · `enforce`. Mide en **días activos**, no de calendario. |
 | `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
 | `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |

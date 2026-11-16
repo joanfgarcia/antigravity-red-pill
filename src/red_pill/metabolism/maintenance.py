@@ -379,15 +379,19 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 				b_sv = (1.0 - gamma) * (stability / s_max)
 				new_score = round(gamma * score + b_sv, 3)
 
-				# 3. Structural Pruning (Poda): delete if below the configured activation/stability floor
+				# 3. Poda: RETIRADA como borrado (RFC-OLV-001 D-22). El washout
+				# sigue renormalizando la puntuación, pero la única ruta que decide
+				# olvidar es la escalera, en días activos. El candidato se registra
+				# para poder comparar políticas sin que ninguna toque datos.
 				if new_score < prune_min_activation and stability < prune_max_stability_days:
-					points_to_delete.append(p.id)
-					logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
-				else:
-					# Otherwise, update score and commit time
-					# RFC-OLV-001 D-09: el washout puntúa; no firma el campo de uso.
-					update_payload = {"reinforcement_score": new_score, "decay_checked_at": now}
-					update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+					logger.debug(
+						f"[OLVIDO] {collection}: {p.id} habría caído por poda genérica (activation={new_score}, stability={stability}); la escalera decide."
+					)
+					continue
+				# Otherwise, update score and commit time
+				# RFC-OLV-001 D-09: el washout puntúa; no firma el campo de uso.
+				update_payload = {"reinforcement_score": new_score, "decay_checked_at": now}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
 
 			if not points or offset is None:
 				break
@@ -845,101 +849,3 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 			logger.info(f"[GARBAGE COLLECTION] Cleaned up {deleted_count} orphan raw_parent(s) in {col}.")
 
 	return report
-
-
-def erode_curated(memory_manager, collections=("work_memories", "social_memories")) -> dict:
-	"""Olvido elegante de los curados (SW_EROSION_DEMOTE_ENABLED, D11/D23).
-
-	Los engramas ascendidos y los hubs decaen por su **eje propio**
-	(`last_reinforced_at`, que solo se refresca al recuperar — no en el pulse). Un
-	curado nunca reforzado se **demota** (se borra de Qdrant; el gist persiste en
-	Memento) tras `CURATED_MIN_LIFETIME_YEARS`. No es `immune`.
-	"""
-	if not bool(getattr(cfg, "SW_EROSION_DEMOTE_ENABLED", False)):
-		return {"demoted": 0, "enabled": False}
-
-	base_years = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0))
-	hub_years = float(getattr(cfg, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0))
-	now = time.time()
-	stats = {"demoted": 0, "scanned": 0, "enabled": True}
-
-	from qdrant_client import models as qm
-
-	for collection in collections:
-		try:
-			if not memory_manager.client.collection_exists(collection):
-				continue
-			# Factor por motor (D17): work=Bayesiano, social=RhizoDB.
-			mult = float(getattr(cfg, f"CURATED_LIFETIME_MULTIPLIER_{collection.split('_')[0].upper()}", 1.0))
-			member_lifetime_s = base_years * mult * 365 * 86400
-			hub_lifetime_s = hub_years * mult * 365 * 86400
-			scroll_filter = qm.Filter(
-				should=[
-					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="memento_engram")),
-					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
-					qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
-				]
-			)
-			to_delete = []
-			hub_ids_to_release: list = []
-			offset = None
-			while True:
-				points, offset = memory_manager.client.scroll(
-					collection, scroll_filter=scroll_filter, limit=500, offset=offset, with_payload=True, with_vectors=False
-				)
-				for p in points:
-					pl = p.payload or {}
-					if pl.get("immune"):
-						continue
-					stats["scanned"] += 1
-					base = pl.get("last_reinforced_at") or pl.get("created_at")
-					if not isinstance(base, (int, float)):
-						continue
-					is_hub = pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub"
-					life = hub_lifetime_s if is_hub else member_lifetime_s
-					if now - float(base) > life:
-						to_delete.append(str(p.id))
-						# Si es un hub, liberar sus miembros (hubbed=False) para que
-						# vuelvan al recall primario (D9): se resuelven por `hub_id`
-						# (AD-116: el hub ya no duplica la lista de miembros).
-						if is_hub:
-							hub_ids_to_release.append(str(p.id))
-				if offset is None:
-					break
-			if to_delete:
-				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)  # type: ignore[arg-type]
-				stats["demoted"] += len(to_delete)
-				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
-			release: set = set()
-			for hid in hub_ids_to_release:
-				try:
-					flt = qm.Filter(must=[qm.FieldCondition(key="hub_id", match=qm.MatchValue(value=hid))])
-					off = None
-					while True:
-						members, off = memory_manager.client.scroll(
-							collection, scroll_filter=flt, limit=1000, offset=off, with_payload=False, with_vectors=False
-						)
-						release.update(str(m.id) for m in members)
-						if off is None:
-							break
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudieron resolver miembros del hub {hid}: {e}")
-			release -= set(to_delete)
-			if release:
-				try:
-					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=list(release))
-					stats["released"] = stats.get("released", 0) + len(release)
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
-			# La erosión puede dejar islas (miembros demotados, hub vivo): se
-			# reconcilia el estado blocked/count para no reintentar a ciegas.
-			if to_delete:
-				try:
-					from red_pill.metabolism.hub_synthesis import reconcile_hub_blocks
-
-					reconcile_hub_blocks(memory_manager, collections=(collection,), apply=True)
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudo reconciliar hubs bloqueados en {collection}: {e}")
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
-	return stats

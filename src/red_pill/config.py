@@ -772,9 +772,9 @@ class RedPillConfig(BaseSettings):
 	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
 	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
 	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
-	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
-	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
-	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # piso MAYOR para hubs (anclan el hilo; no mueren antes que sus miembros)
+	SW_EROSION_DEMOTE_ENABLED: bool = False  # DEPRECATED (RFC-OLV-001 D-03): el demote de curados se retiró; la clave se conserva por compatibilidad de .env
+	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # DEPRECATED (RFC-OLV-001): sin lector tras retirar erode_curated
+	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # DEPRECATED (RFC-OLV-001): la rama sigue a sus hojas; no hay reloj de rama
 	CURATED_LIFETIME_MULTIPLIER_WORK: float = 1.0  # factor por motor (work=Bayesiano)
 	CURATED_LIFETIME_MULTIPLIER_SOCIAL: float = 1.0  # factor por motor (social=RhizoDB)
 	SW_SITUATION_ENABLED: bool = False  # semáforo de situación por afinidad (situation_memories)
@@ -973,7 +973,7 @@ class RedPillConfig(BaseSettings):
 	# RFC-OLV-001 · la escalera del olvido. Una sola política de borrado, en
 	# días ACTIVOS (nunca calendario). off | dry_run (informe) | enforce.
 	SW_FORGETTING_LADDER_MODE: str = "off"
-	MAX_SINK_TIME: int = 30 * 24 * 3600
+	MAX_SINK_TIME: int = 30 * 24 * 3600  # DEPRECATED (RFC-OLV-001 D-07): el sumidero es el escalón 0 de la escalera
 
 	@field_validator("METABOLISM_AUTO_COLLECTIONS", mode="before")
 	@classmethod
@@ -1241,7 +1241,7 @@ class RedPillConfig(BaseSettings):
 	# When False (default), a read (search_and_reinforce) never DELETES eroded
 	# engrams — it only hides them from the result. Forgetting belongs to the
 	# sleep cycle (erode_work_hubs / rhizodb washout), not to a lookup.
-	READ_PATH_PRUNING_ENABLED: bool = False
+	READ_PATH_PRUNING_ENABLED: bool = False  # DEPRECATED (RFC-OLV-001 D-19): la lectura nunca borra
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

@@ -62,14 +62,11 @@ def test_run_rhizodb_washout_and_pruning():
 	# Run the function
 	run_rhizodb_washout_and_pruning(mock_mem_mgr)
 
-	# Assertions:
-	# - delete was called on weak_engram
-	assert mock_client.delete.called
-	args, kwargs = mock_client.delete.call_args
-	points_selector = kwargs["points_selector"]
-	assert "weak_engram" in points_selector.points
-	assert "strong_engram" not in points_selector.points
-	assert "immune_engram" not in points_selector.points
+	# RFC-OLV-001 D-22: el washout ya NO borra; solo renormaliza. El candidato
+	# débil se queda en la colección (la escalera decide, en días activos).
+	assert not mock_client.delete.called, "el washout no puede borrar: la única ruta es la escalera"
+	updated = _updated_ids(mock_client)
+	assert "strong_engram" in updated and "weak_engram" not in updated
 
 	# - batch_update_points was called on strong_engram
 	assert mock_client.batch_update_points.called
@@ -156,8 +153,7 @@ def test_run_rhizodb_washout_skips_curated_members(monkeypatch, tmp_path):
 	run_rhizodb_washout_and_pruning(mock_mem_mgr)
 
 	assert _updated_ids(mock_client) == []
-	deleted = mock_client.delete.call_args[1]["points_selector"].points
-	assert deleted == ["noise"]
+	assert not mock_client.delete.called, "el ruido débil tampoco se borra aquí (D-22)"
 
 
 def test_run_rhizodb_washout_curated_exemption_can_be_disabled(monkeypatch, tmp_path):
@@ -172,5 +168,4 @@ def test_run_rhizodb_washout_curated_exemption_can_be_disabled(monkeypatch, tmp_
 
 	run_rhizodb_washout_and_pruning(mock_mem_mgr)
 
-	deleted = mock_client.delete.call_args[1]["points_selector"].points
-	assert deleted == ["curated"]
+	assert not mock_client.delete.called, "la exención de curados deja de importar: no hay poda genérica"

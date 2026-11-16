@@ -56,6 +56,16 @@ class MetabolismKernel:
 		f.flush()
 
 	def _run_cycle(self) -> None:
+		"""El olvido automático ya no vive aquí (RFC-OLV-001 D-22).
+
+		Este kernel purgaba por TTL y erosionaba por umbral en cada ventana del
+		daemon, y firmaba `last_recalled_at` al decaer. Las dos cosas se retiran:
+		la única ruta que decide **automáticamente** es la escalera, en el ciclo
+		de sueño (Tononi & Cirelli, 2006: la poda es del sueño). Los métodos
+		`purge_dead_memories` / `apply_erosion` / `refresh_ttl_timestamps` quedan
+		como operaciones MANUALES (CLI/MCP) y nunca las llama este ciclo.
+		Se conserva el estado y el cooldown para no repetir el aviso.
+		"""
 		state_file = self.cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
@@ -65,49 +75,16 @@ class MetabolismKernel:
 			lock = FileLock(state_file + ".lock", timeout=0)
 			with lock:
 				with open(state_file, "a+") as f:
-					last_run, skip_next_erosion = self._read_state(f)
-					gap = now - last_run if last_run > 0 else float("inf")
-
-					if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
+					last_run, _ = self._read_state(f)
+					if last_run > 0 and now - last_run < self.cfg.METABOLISM_COOLDOWN:
 						return
-
-					abs_gap = now - last_run if last_run > 0 else 0
-					if abs_gap > self.cfg.ABSENCE_THRESHOLD:
-						logger.warning(
-							f"Absence detected ({round(abs_gap / 86400, 1)} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle and the next."
-						)
-						for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
-							try:
-								self.refresh_ttl_timestamps(coll.strip())
-							except Exception as e:
-								logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
-
-						self._write_state(f, now, skip_next_erosion=True)
-						logger.info("Absence Guard triggered: Bunker refreshed and erosion short-circuited for this cycle.")
-						return
-
-					if skip_next_erosion:
-						logger.info(
-							"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
-						)
-						self._write_state(f, now, skip_next_erosion=False)
-						return
-
 					self._write_state(f, now, skip_next_erosion=False)
-
 		except Timeout:
 			return
 		except OSError:
 			pass
 
-		for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
-			try:
-				if self.cfg.METABOLISM_STRATEGY == "LAZY":
-					self.purge_dead_memories(coll.strip())
-				else:
-					self.apply_erosion(coll.strip())
-			except Exception as e:
-				logger.error(f"Metabolism failed in {coll}: {e}")
+		logger.debug("[METABOLISM] Olvido automático delegado a la escalera (RFC-OLV-001): el kernel ya no borra.")
 
 	def purge_dead_memories(self, collection: str) -> None:
 		timestamp_limite = time.time() - self.cfg.MAX_SINK_TIME

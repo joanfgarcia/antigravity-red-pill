@@ -464,10 +464,8 @@ class MemoryManager:
 					_stamps.append(p.payload["last_recalled_at"])
 					p.payload["recall_stamps"] = _stamps
 					reinforced_updates["recall_stamps"] = _stamps
-					# Eje de activación de los curados (single-writer): solo se
-					# refresca al RECUPERAR, no en el pulse. Gobierna el demote.
-					if p.payload.get("node_type") in ("memento_engram", "synthesis_hub"):
-						reinforced_updates["last_reinforced_at"] = p.payload["last_recalled_at"]
+					# RFC-OLV-001 D-21: `last_reinforced_at` era una copia literal de
+					# `last_recalled_at` y su único lector era el demote retirado.
 
 					updated_points.append(p)
 					update_operations.append(
@@ -754,13 +752,8 @@ class MemoryManager:
 					# cycle's job, not a read's: keep the hit, demote it in ranking,
 					# and let the reinforcement below rehabilitate it organically.
 					# Hiding it here starves it of reinforcement forever (death spiral).
-					if self.cfg.READ_PATH_PRUNING_ENABLED:
-						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
-						try:
-							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-						except Exception:
-							pass
-						continue
+					# RFC-OLV-001 D-19: la lectura tampoco BORRA (única ruta: la
+					# escalera). El borrado opcional se retira; `_eroded` se queda.
 					hit.payload["_eroded"] = True
 					decay_updates = {}
 

@@ -8,7 +8,7 @@ import logging
 
 import red_pill.config as cfg
 from red_pill.metabolism.forgetting import reap_leafless_branches, run_ladder
-from red_pill.metabolism.maintenance import erode_curated, erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
+from red_pill.metabolism.maintenance import erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
 logger = logging.getLogger(__name__)
@@ -39,20 +39,13 @@ class ErosionPhase(SleepPhase):
 		return "erosion"
 
 	def execute(self, ctx: SleepContext) -> None:
-		eroded = decayed = demoted = 0
+		eroded = decayed = 0
 		try:
 			stats = erode_work_hubs(ctx.memory_manager) or {}
 			eroded = int(stats.get("eroded", 0) or 0)
 			decayed = int(stats.get("decayed", 0) or 0)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
-		try:
-			curated = erode_curated(ctx.memory_manager)
-			if curated.get("enabled"):
-				logger.info(f"[SLEEP ENGINE] Curated demote: {curated}")
-			demoted = int(curated.get("demoted", 0) or 0)
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Failed to run curated demote: {e}")
 
 		# RFC-OLV-001 F3 — la escalera: una sola ruta decide olvidar, en días
 		# activos. `off` por defecto; `dry_run` informa sin escribir.
@@ -78,10 +71,9 @@ class ErosionPhase(SleepPhase):
 
 		ctx.record(
 			self.name,
-			eroded + decayed + demoted + reaped + ladder_deleted + ladder_frozen,
+			eroded + decayed + reaped + ladder_deleted + ladder_frozen,
 			eroded=eroded,
 			decayed=decayed,
-			demoted=demoted,
 			reaped=reaped,
 			ladder_purga=ladder_deleted,
 			ladder_permastore=ladder_frozen,

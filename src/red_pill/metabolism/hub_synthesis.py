@@ -309,16 +309,13 @@ def _synthesize_one(
 	if not force and previous_payload:
 		if previous_payload.get("hub_input_hash") == ihash:
 			prev_version = int(previous_payload.get("hub_synth_version") or 0)
-			version_ok = prev_version >= HUB_SYNTH_VERSION or not bool(
-				getattr(cfg, "SW_HUB_VERSION_INVALIDATION_ENABLED", False)
-			)
+			version_ok = prev_version >= HUB_SYNTH_VERSION or not bool(getattr(cfg, "SW_HUB_VERSION_INVALIDATION_ENABLED", False))
 			if version_ok:
 				# Reversible: si el hub estaba bloqueado y ahora tiene >=2
 				# miembros (p.ej. tras una ascensión), se limpia el bloqueo
 				# aunque el input hash no haya cambiado (skip).
 				if len(member_ids) >= 2 and (
-					bool(previous_payload.get("hub_migration_blocked"))
-					or int(previous_payload.get("hub_members_count") or -1) != len(member_ids)
+					bool(previous_payload.get("hub_migration_blocked")) or int(previous_payload.get("hub_members_count") or -1) != len(member_ids)
 				):
 					try:
 						memory_manager.client.set_payload(
@@ -384,8 +381,7 @@ def _synthesize_one(
 		fallback_reason = str(hub.get("_fallback_reason") or "llm_unavailable")
 		if fallback_reason in _BILLABLE_FALLBACK_REASONS:
 			logger.warning(
-				f"[HUBS] síntesis descartada en {collection}:{session_id} ({fallback_reason}); "
-				"se cuenta el intento (misma entrada, mismo veredicto)."
+				f"[HUBS] síntesis descartada en {collection}:{session_id} ({fallback_reason}); se cuenta el intento (misma entrada, mismo veredicto)."
 			)
 			return _fail(f"sintesis_{fallback_reason}", billable=True)
 		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
@@ -404,10 +400,7 @@ def _synthesize_one(
 		)
 		return _fail("summary_over_hard_limit", billable=True)
 	if hub.get("summary_lang_mismatch"):
-		logger.warning(
-			f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; "
-			"no se escribe (se reintenta con reescritura)"
-		)
+		logger.warning(f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; no se escribe (se reintenta con reescritura)")
 		return _fail("summary_lang_mismatch", billable=True)
 	title = str(hub.get("title") or "").strip()
 	# D-12: el hub puede contener credenciales tecleadas en la sesión; se
@@ -436,7 +429,6 @@ def _synthesize_one(
 		"hub_migration_blocked_reason": "",
 		"hub_members_checked_at": time.time(),
 		"hub_snapshot_ts": time.time(),
-		"last_reinforced_at": time.time(),
 	}
 	# Textura: si cabe, campo canónico; si se partió (síntesis o lossless), la
 	# lista `texture_parts` conserva TODO el contenido y `texture` queda vacío.
@@ -598,9 +590,7 @@ def _clear_rebuild_pending(memory_manager: Any, collection: str, session_id: str
 				qm.FieldCondition(key="hub_rebuild_pending", match=qm.MatchValue(value=True)),
 			]
 		)
-		points, _ = memory_manager.client.scroll(
-			collection_name=collection, scroll_filter=flt, limit=64, with_payload=False, with_vectors=False
-		)
+		points, _ = memory_manager.client.scroll(collection_name=collection, scroll_filter=flt, limit=64, with_payload=False, with_vectors=False)
 		ids = [p.id for p in points]
 		if ids:
 			memory_manager.client.set_payload(
@@ -1113,9 +1103,7 @@ def reconcile_hub_blocks(
 		points: List[Tuple[Any, Dict[str, Any]]] = []
 		offset = None
 		while True:
-			batch, offset = memory_manager.client.scroll(
-				collection, limit=1000, offset=offset, with_payload=True, with_vectors=False
-			)
+			batch, offset = memory_manager.client.scroll(collection, limit=1000, offset=offset, with_payload=True, with_vectors=False)
 			points.extend((p.id, p.payload or {}) for p in batch)
 			if offset is None:
 				break
@@ -1359,9 +1347,7 @@ def resynthesize_session(memory_manager: Any, collection: str, session_id: str, 
 	members = _load_session_members(memory_manager, collection, session_id)
 	if len(members) < 2:
 		return "skipped"
-	return _synthesize_one(
-		memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force
-	)
+	return _synthesize_one(memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force)
 
 
 # Alias públicos para scripts/auditorías (mismo contrato, sin guion bajo).
@@ -1407,9 +1393,7 @@ def backup_hub_payload(
 		"point_id": hid,
 		"vector": vector,
 		"payload": rec.payload or {},
-		"members": [
-			{"id": str(pid), "hubbed": bool((pl or {}).get("hubbed")), "hub_id": (pl or {}).get("hub_id")} for pid, pl in members
-		],
+		"members": [{"id": str(pid), "hubbed": bool((pl or {}).get("hubbed")), "hub_id": (pl or {}).get("hub_id")} for pid, pl in members],
 		"backed_up_at": time.time(),
 	}
 	out_dir = Path(backup_dir) if backup_dir else _hub_backup_dir()
