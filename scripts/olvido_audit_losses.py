@@ -6,15 +6,14 @@ cuenta?». Tres capas, de más frágil a más durable:
 
 1. **Qdrant** (memoria viva): 7.500 engramas ascendidos.
 2. **Memento** (notas destiladas): miles de `.md` por mes y fuente — es la fuente
-   de la re-ascensión.
+de la re-ascensión.
 3. **Raw** (`session_mirror`): los turnos originales.
 
 Una sesión de Memento sin ningún engrama en Qdrant **no está perdida**: está
 pendiente de re-ascender. Lo que sí sería pérdida es un raw sin Memento y sin
 engrama; eso es lo que este script busca.
 
-Uso:
-.venv/bin/python scripts/olvido_audit_losses.py [--json PATH]
+Uso: .venv/bin/python scripts/olvido_audit_losses.py [--json PATH]
 """
 
 from __future__ import annotations
@@ -30,8 +29,16 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 
 COLLECTIONS = ("work_memories", "social_memories", "story_memories", "interaction_memories")
-REGISTRY = Path.home() / ".local/share/red-pill/memento_registry.json"
-MEMENTO_DIR = Path.home() / ".local/share/red-pill/memento"
+from red_pill.core.paths import get_data_dir  # noqa: E402  (CONVENTIONS §7)
+
+REGISTRY = get_data_dir() / "memento_registry.json"
+MEMENTO_DIR = get_data_dir() / "memento"
+
+
+def _claude_projects_dir() -> Path:
+	"""Directorio de transcripciones de Claude Code, resuelto por `$HOME`."""
+	home = os.environ.get("HOME") or str(Path("/home"))
+	return Path(home) / ".claude" / "projects"
 
 
 def _client() -> QdrantClient:
@@ -122,12 +129,12 @@ def main() -> int:
 	}
 	raw_sources: dict = {}
 	try:
-		with sqlite3.connect(str(Path.home() / ".local/share/opencode/opencode.db")) as conn:
+		with sqlite3.connect(str(get_data_dir().parent / "opencode" / "opencode.db")) as conn:
 			raw_sources["opencode_db_sessions"] = conn.execute("SELECT count(*) FROM session").fetchone()[0]
 	except Exception as exc:
 		raw_sources["opencode_db_sessions"] = f"n/d ({type(exc).__name__})"
 	try:
-		raw_sources["claude_code_jsonl"] = sum(1 for _ in (Path.home() / ".claude/projects").rglob("*.jsonl"))
+		raw_sources["claude_code_jsonl"] = sum(1 for _ in _claude_projects_dir().rglob("*.jsonl"))
 	except Exception:
 		raw_sources["claude_code_jsonl"] = "n/d"
 	report["raw_sources"] = raw_sources
