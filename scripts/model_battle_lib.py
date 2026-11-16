@@ -20,26 +20,36 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-# Single source of truth for the harness basenames. The profile paths in
-# ~/.config/red-pill/model_profiles.yaml are authoritative for resolution.
-KNOWN_GGUF: dict[str, str] = {
-	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
-	"granite_3b": "granite-4.1-3b-Q4_K_M.gguf",
-	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
-	"llama_32": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-	"phi_mini": "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
-	"gemma_3_4b": "google_gemma-3-4b-it-Q4_K_M.gguf",
-	"mistral_nemo_12b": "Mistral-Nemo-Instruct-2407-Q3_K_M.gguf",
-	"smollm3_3b": "SmolLM3-3B-Q4_K_M.gguf",
-	"samantha": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
-	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
-	"qwen3_8b": "Qwen3-8B-Q4_K_M.gguf",
-	"coder_heavy": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
-	# 2026-09-11 candidates (multilingual / tool-calling / reasoning-distill)
-	"tiny_aya": "tiny-aya-global-q4_k_m.gguf",
+# Candidatos SIN perfil declarado en model_profiles.yaml (retirados o en
+# estudio). Es el ÚNICO sitio donde se escriben nombres de GGUF a mano: todo lo
+# que tenga perfil entra solo, vía `gguf_profiles()`.
+LEGACY_GGUF: dict[str, str] = {
 	"gemma4_e4b": "gemma-4-E4B-it-Q4_0.gguf",
 	"r1_distill": "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+	"beck_8b": "Beck-8B-Q4_K_M.gguf",
+	"piaget_8b": "Piaget-8B-Q4_K_M.gguf",
+	"tiny_aya": "tiny-aya-global-q4_k_m.gguf",
 }
+
+
+def known_gguf() -> dict[str, str]:
+	"""{nombre: fichero} = perfiles `gguf` declarados ⊕ candidatos sin perfil.
+
+	Antes esta tabla estaba copiada en CUATRO scripts y se desincronizaba (un
+	modelo nuevo había que añadirlo a mano cuatro veces). Ahora el perfil es la
+	fuente; esto solo suma los candidatos que aún no lo tienen.
+	"""
+	merged = dict(LEGACY_GGUF)
+	try:
+		from red_pill.core.model_registry import gguf_profiles
+
+		merged.update(gguf_profiles())  # el perfil manda si hay colisión
+	except Exception:  # red_pill no importable: el harness sigue en modo legacy
+		pass
+	return merged
+
+
+KNOWN_GGUF: dict[str, str] = known_gguf()
 
 
 @dataclass

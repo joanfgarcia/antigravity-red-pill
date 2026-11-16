@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from model_battle_lib import BattleResult, write_jsonl  # noqa: E402
+from model_battle_lib import KNOWN_GGUF, BattleResult, write_jsonl  # noqa: E402
 from model_battle_tool import PROBES, TOOLS_PER_PROBE  # noqa: E402
 
 from red_pill.core.paths import get_models_dir
@@ -38,15 +38,8 @@ LLAMA_SERVER = REPO / "3rdparty" / "llama_official" / "build" / "bin" / "llama-s
 MODELS_DIR = Path(os.environ.get("MODELS_DIR") or get_models_dir())
 PORT = int(os.environ.get("TOOL_BAKEOFF_PORT", "8890"))
 
-# name -> (gguf filename)
-MODELS: dict[str, str] = {
-	"gemma4_e4b": "gemma-4-E4B-it-Q4_0.gguf",
-	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
-	"granite_3b": "granite-4.1-3b-Q4_K_M.gguf",
-	"smollm3_3b": "SmolLM3-3B-Q4_K_M.gguf",
-	"qwen3_8b": "Qwen3-8B-Q4_K_M.gguf",
-	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
-}
+# name -> (gguf filename). Derivado de model_profiles.yaml (ver model_battle_lib).
+MODELS: dict[str, str] = dict(KNOWN_GGUF)
 
 BASE_URL = f"http://127.0.0.1:{PORT}"
 
@@ -66,9 +59,7 @@ def _server_supports(flag: str) -> bool:
 		import subprocess
 
 		try:
-			_HELP_CACHE[binario] = subprocess.run(
-				[binario, "--help"], capture_output=True, text=True, timeout=30
-			).stdout
+			_HELP_CACHE[binario] = subprocess.run([binario, "--help"], capture_output=True, text=True, timeout=30).stdout
 		except Exception:
 			_HELP_CACHE[binario] = ""
 	return flag in _HELP_CACHE[binario]

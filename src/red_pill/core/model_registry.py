@@ -279,3 +279,23 @@ class ModelRegistry:
 				max_time = t
 
 		return max_time if max_time > 0 else MODEL_LOAD_GRACE_FALLBACK_S
+
+
+def gguf_profiles() -> Dict[str, str]:
+	"""{perfil: basename del GGUF} de todos los perfiles `gguf` declarados.
+
+	Fuente ÚNICA para los harness (battle / bake-off): un modelo entra al elenco
+	declarándolo en `model_profiles.yaml`, no copiando su nombre de fichero en
+	cuatro scripts distintos — que es exactamente lo que había y se
+	desincronizaba (2026-11-16). Los candidatos SIN perfil (retirados o en
+	estudio) viven en `scripts/model_battle_lib.LEGACY_GGUF`, el único sitio
+	donde quedan nombres a mano.
+	"""
+	out: Dict[str, str] = {}
+	for name, profile in ModelRegistry.get_all_profiles().items():
+		if str(profile.get("binary_type") or "").lower() != "gguf":
+			continue
+		path = str(profile.get("model_path") or "")
+		if path:
+			out[str(name)] = os.path.basename(path)
+	return out

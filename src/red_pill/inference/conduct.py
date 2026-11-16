@@ -85,3 +85,54 @@ def apply_python(llm: Any, resolved: Any, body: Optional[Dict[str, Any]] = None)
 		llm._rp_conduct_registered = True
 	ir.apply_chat_handler(llm, resolved, body or {})
 	return sampling_kwargs(resolved)
+
+
+def resolve_for_task(profile_name: str, task: Optional[str] = None) -> Optional[Any]:
+	"""`ResolvedModel` del perfil con la conducta de la TAREA encima.
+
+	Mismo criterio que el daemon para los modos custom/experimental: el perfil
+	aporta modelo/hardware y la tarea aporta conducta (temperature, max_tokens,
+	thinking, prompt_file). Existe para los runners que montan su propio `Llama`
+	(battles, bake-offs) y deben medir COMO PRODUCCIÓN: sin esto un modelo con
+	thinking declarado razona a pelo, se come el presupuesto de tokens y no llega
+	a formatear la respuesta — se lee como suspenso del modelo cuando es del
+	banco de pruebas.
+
+	`task=None` → solo el perfil. Perfil no resoluble (id desconocido, gate de
+	licencia) → None, y el runner sigue con su comportamiento por defecto.
+	"""
+	from red_pill.core import model_runtime as mr
+
+	try:
+		resolved = mr.resolve({"model": profile_name})
+	except Exception as exc:  # perfil ausente / licencia / id inválido
+		logger.warning(f"conduct: sin conducta para '{profile_name}' ({exc})")
+		return None
+	if not task:
+		return resolved
+	try:
+		cfg = mr.resolve_task_conduct(task) or {}
+	except Exception as exc:
+		logger.warning(f"conduct: tarea '{task}' sin conducta ({exc})")
+		return resolved
+	if cfg.get("temperature") is not None:
+		resolved.temperature = float(cfg["temperature"])
+	if cfg.get("max_tokens"):
+		resolved.max_tokens = int(cfg["max_tokens"])
+	if cfg.get("thinking"):
+		resolved.thinking = str(cfg["thinking"])
+	if cfg.get("prompt_file"):
+		resolved.prompt_file = str(cfg["prompt_file"])
+	return resolved
+
+
+def apply_task_profile(llm: Any, profile_name: str, task: Optional[str] = None, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+	"""`apply_python` resolviendo la conducta por NOMBRE de perfil ⊕ tarea.
+
+	Azúcar para los runners que no pasan por el daemon (que resuelve por body).
+	Sin perfil resoluble → {} y el runner se queda como estaba.
+	"""
+	resolved = resolve_for_task(profile_name, task)
+	if resolved is None:
+		return {}
+	return apply_python(llm, resolved, body)

@@ -26,13 +26,20 @@ import sys
 import time
 from pathlib import Path
 
-from llama_cpp import Llama
-
 DEFAULT_PROMPT = str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3.txt")
-prompt_path = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_PROMPT
-PROMPT = open(prompt_path).read()
-PROMPT = PROMPT.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
-print(f"[prompt] {prompt_path}", flush=True)
+
+
+def _load_prompt(arg: str | None = None) -> str:
+	"""Carga el prompt del battle bajo demanda.
+
+	Antes esto corría al importar (leía `sys.argv` y abría un fichero), así que
+	importar el módulo para reutilizar sus contadores de deixis —lo que hace
+	`texture_probe.py`— explotaba. Medir no debe costar un script roto.
+	"""
+	prompt_path = arg or DEFAULT_PROMPT
+	print(f"[prompt] {prompt_path}", flush=True)
+	text = open(prompt_path).read()
+	return text.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
 
 PROBES = {
 	"entidades": "USER: he abierto una botella de Emilio Moro Reserva para celebrar, el código de la build era rc-2026.08.12 y los tests de MCP pasaron los 42\n\nASSISTANT: brindo contigo, Joan; esa build rc-2026.08.12 con los 42 tests verdes merecía algo mejor que un gin tonic\n\nUSER: jajaja, el gin tonic era ayer, hoy toca Ribera y que el CI no llore",
@@ -45,6 +52,9 @@ BAD_2ND = ("te digo que", "te pregunto", "te dices", "contigo", "te propongo")
 
 
 def main(mname, path):
+	from llama_cpp import Llama
+
+	PROMPT = _load_prompt(sys.argv[3] if len(sys.argv) > 3 else None)
 	print(f"\n##### {mname} #####", flush=True)
 	t0 = time.time()
 	llm = Llama(model_path=path, n_ctx=6144, n_gpu_layers=-1, use_mmap=False, verbose=False)

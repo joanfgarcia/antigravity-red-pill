@@ -149,6 +149,20 @@ def _build_system_prompt(tools: list[dict]) -> str:
 	return SYS_GENERIC
 
 
+def _sys_dated() -> str:
+	"""System prompt CON la fecha de hoy.
+
+	Sin ella `json_args` ("mañana a las 10") era irresoluble: el modelo o se
+	inventa la fecha —y el validador solo miraba que hubiera una 'T', así que
+	inventar salía premiado— o pregunta, que es lo correcto, y contaba FAIL.
+	"""
+	from datetime import date
+
+	dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+	hoy = date.today()
+	return f"{SYS_GENERIC} Hoy es {dias[hoy.weekday()]} {hoy.isoformat()}."
+
+
 PROBES = [
 	Probe(
 		name="simple",
@@ -166,7 +180,7 @@ PROBES = [
 	),
 	Probe(
 		name="json_args",
-		system_prompt=SYS_GENERIC,
+		system_prompt=_sys_dated(),
 		user_message=("USER: apunta una reunión mañana a las 10 con Ana y Beti durante media hora"),
 		validator=lambda out: _validate_schedule_meeting(out),
 	),
@@ -197,81 +211,27 @@ TOOLS_PER_PROBE = [
 # ── Validators ───────────────────────────────────────────────────────────────
 
 
-def _gemma_args(args_str: str) -> dict:
-	"""Args de Gemma → dict JSON.
-
-	Formato: `{city:<|"|>Barcelona<|"|>, attendees:<|"|>["Ana","Beti"]<|"|>, duration_min:30}`
-	- claves bare → "clave"; valores `<|"|>X<|"|>` → string (o array/objeto JSON si X lo es).
-	"""
-	s = re.sub(r"(^|[{,]\s*)([A-Za-z_]\w*)\s*:", r'\1"\2":', args_str.strip())
-
-	def _val(m):
-		inner = m.group(1)
-		return inner if inner[:1] in "[{" else json.dumps(inner)
-
-	s = re.sub(r'<\|"\|\>(.*?)<\|"\|\>', _val, s, flags=re.S)
-	try:
-		return json.loads("{" + s + "}")
-	except Exception:
-		return {"_raw": args_str}
-
-
-def _extract_native_tool_call(raw: str) -> dict | None:
-	"""Extrae un tool call de los formatos NATIVOS de cada modelo (no OpenAI).
-
-	- Qwen/SmolLM3 (xml_tools): `<tool_call>{"name":..,"arguments":..}</tool_call>`
-	- chatml:                    `<function_call>{...}</function_call>`
-	- Gemma:                     `<|tool_call>call:NAME{args}<tool_call|>`
-	"""
-	m = re.search(r"<tool_call>\s*(\{[\s\S]*?\})\s*</tool_call>", raw)
-	if m:
-		try:
-			o = json.loads(m.group(1))
-			if isinstance(o, dict) and o.get("name"):
-				return {"name": o["name"], "arguments": o.get("arguments", {})}
-		except Exception:
-			pass
-	m = re.search(r"<function_call>\s*(\{[\s\S]*?\})\s*</function_call>", raw)
-	if m:
-		try:
-			o = json.loads(m.group(1))
-			if isinstance(o, dict) and o.get("name"):
-				return {"name": o["name"], "arguments": o.get("arguments", {})}
-		except Exception:
-			pass
-	m = re.search(r"<\|tool_call>\s*call:([A-Za-z_]\w*)\s*\{([\s\S]*?)\}\s*<tool_call\|>", raw)
-	if m:
-		return {"name": m.group(1), "arguments": _gemma_args(m.group(2))}
-	return None
-
-
 def _try_parse_tool_call(raw: str) -> dict | None:
-	"""Robustly find a tool_call in the raw output.
+	"""Primera llamada a herramienta del texto, con el parser de PRODUCCIÓN.
 
-	Covers: OpenAI shape {name, arguments} / {tool_calls:[...]}, the models' NATIVE
-	formats (<tool_call>, <function_call>, Gemma <|tool_call>), and free text JSON.
+	Aquí vivían tres parsers propios (`<tool_call>`, `<function_call>`, Gemma
+	`<|tool_call>` + JSON suelto) que no eran los mismos que usa `local_minion`.
+	Es decir: el banco medía su parser, no el nuestro — y con MiMo habría dado
+	FAIL por un dialecto que producción ya entiende (2026-11-16). Ahora se llama
+	a `extract_toolcalls`, la misma función del runtime.
 	"""
-	# Try direct JSON parse first.
+	from red_pill.core.model_runtime import extract_toolcalls
+
+	calls = extract_toolcalls(raw or "", "auto")
+	if calls:
+		fn = calls[0].get("function") or {}
+		return {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}}
+	# JSON suelto: algunos modelos escupen el objeto sin markup.
 	try:
-		obj = json.loads(raw.strip())
-		if isinstance(obj, dict) and ("name" in obj or "tool_calls" in obj):
-			return obj
-	except Exception:
-		pass
-	# Native XML-ish formats (Qwen/SmolLM3/chatml/Gemma).
-	native = _extract_native_tool_call(raw)
-	if native is not None:
-		return native
-	# Try extracting first JSON object/array.
-	m = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", raw)
-	if not m:
-		return None
-	candidate = m.group(1)
-	try:
-		obj = json.loads(candidate)
+		obj = json.loads((raw or "").strip())
 	except Exception:
 		return None
-	if isinstance(obj, dict):
+	if isinstance(obj, dict) and ("name" in obj or "tool_calls" in obj):
 		return obj
 	if isinstance(obj, list) and obj and isinstance(obj[0], dict):
 		return obj[0]
@@ -331,6 +291,11 @@ def _validate_schedule_meeting(raw: str) -> dict:
 			return {"valid": False, "reason": "arguments not JSON"}
 	else:
 		args = args_raw or {}
+	from red_pill.core.model_runtime import coerce_by_schema
+
+	# El dialecto nativo manda los argumentos en TEXTO: se ajustan al esquema
+	# declarado con la MISMA función que usa el runtime, no con una copia local.
+	args = coerce_by_schema(args, (SCHEDULE_TOOL.get("function") or {}).get("parameters"))
 	problems = []
 	if not isinstance(args.get("attendees"), list) or len(args.get("attendees", [])) < 2:
 		problems.append("attendees < 2")
@@ -338,6 +303,13 @@ def _validate_schedule_meeting(raw: str) -> dict:
 		problems.append("duration_min not int")
 	if not isinstance(args.get("when"), str) or "T" not in args.get("when", ""):
 		problems.append("when not ISO8601-ish")
+	else:
+		# El system prompt ya lleva la fecha de hoy: "mañana" es verificable.
+		from datetime import date, timedelta
+
+		manana = (date.today() + timedelta(days=1)).isoformat()
+		if not args["when"].startswith(manana):
+			problems.append(f"when != mañana ({manana})")
 	if problems:
 		return {"valid": False, "reason": "; ".join(problems), "args": args}
 	return {"valid": True, "tool": "schedule_meeting", "args": args}
@@ -354,17 +326,28 @@ def _validate_no_tool(raw: str) -> dict:
 
 
 def _validate_multi_step(raw: str) -> dict:
-	# Look for at least 2 distinct tool calls (listdir + grep typical), en JSON o nativo.
-	calls = re.findall(r'"name"\s*:\s*"(list_dir|grep)"', raw) + re.findall(r"call:(list_dir|grep)", raw)
-	if len(set(calls)) >= 2:
-		return {"valid": True, "tools_called": sorted(set(calls))}
-	# Fallback: single tool_call is acceptable if it's grep (the final step).
-	obj = _try_parse_tool_call(raw)
-	if obj:
-		name = obj.get("name") or (obj.get("function") or {}).get("name")
-		if name == "grep":
-			return {"valid": True, "tools_called": ["grep"], "partial": True}
-	return {"valid": False, "reason": "no multi-tool chain detected"}
+	"""Un solo turno NO puede medir encadenado (corregido 2026-11-16).
+
+	Historia: esta probe exigía `len(set(calls)) >= 2` —dos herramientas en UNA
+	respuesta— y nunca devolvía el resultado al modelo. Eso mide **paralelismo**,
+	no multiturno: un modelo que llama `list_dir`, espera y para está haciendo lo
+	correcto. Ya nos costó un FAIL falso con Spark-X2.6 (2026-10-30, ver
+	docs/MODELS/PREFILL_2026-10-30.md «el multi_step que fallaba era nuestro») y
+	se repitió con MiMo-V2.6 (2026-11-16). La cadena real se mide con
+	`scripts/tool_loop_probe.py` (llamada → `role: tool` → repetir).
+
+	Aquí solo se evalúa el PRIMER paso: ¿elige una herramienta plausible?
+	`chain_measured: False` deja constancia de lo que este arnés no puede ver.
+	"""
+	calls = re.findall(r'"name"\s*:\s*"(list_dir|grep|read_file)"', raw) + re.findall(r"call:(list_dir|grep|read_file)", raw)
+	if calls:
+		return {
+			"valid": True,
+			"first_step": sorted(set(calls)),
+			"chain_measured": False,
+			"note": "cadena real → scripts/tool_loop_probe.py",
+		}
+	return {"valid": False, "reason": "no tool call at all", "chain_measured": False}
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -384,14 +367,19 @@ def main(model_name: str, gguf_path: str, chat_format: str | None = None):
 		for probe, tools in zip(PROBES, TOOLS_PER_PROBE):
 			t0 = _t.time()
 			try:
+				# None = "sin override" (convención de Probe): no pasar la clave a
+				# llama.cpp, que compara contra float y revienta con None.
+				_overrides = {}
+				if probe.temperature is not None:
+					_overrides["temperature"] = probe.temperature
 				out = runner.llm.create_chat_completion(
 					messages=[
 						{"role": "system", "content": probe.system_prompt},
 						{"role": "user", "content": probe.user_message},
 					],
 					tools=tools,
-					temperature=probe.temperature,
-					max_tokens=max(probe.max_tokens, 1024),  # margen para modelos con thinking
+					max_tokens=max(probe.max_tokens or 1024, 1024),  # margen para modelos con thinking
+					**_overrides,
 				)
 				raw = out["choices"][0]["message"].get("content") or ""
 				# If the chat-format wraps tool_calls separately, they take priority:
@@ -403,6 +391,24 @@ def main(model_name: str, gguf_path: str, chat_format: str | None = None):
 						[{"name": (tc.get("function") or {}).get("name"), "arguments": (tc.get("function") or {}).get("arguments")} for tc in tcs],
 						ensure_ascii=False,
 					)
+				else:
+					# Templates nativos cuyo tool-call sale como TEXTO (Granite 4.2,
+					# MiMo-V2.6): el backend no lo estructura. Se parsea con el mismo
+					# extractor que usa producción (`local_minion`), que es lo que mide.
+					from red_pill.core.model_runtime import extract_toolcalls
+
+					native = extract_toolcalls(raw, "auto")
+					if native:
+						raw = json.dumps(
+							[
+								{
+									"name": c["function"]["name"],
+									"arguments": json.dumps(c["function"]["arguments"], ensure_ascii=False),
+								}
+								for c in native
+							],
+							ensure_ascii=False,
+						)
 			except Exception as e:
 				raw = f"<<error: {e}>>"
 			dt = _t.time() - t0
