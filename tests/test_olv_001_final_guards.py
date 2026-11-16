@@ -32,6 +32,10 @@ def _days(n: int, now: float) -> list:
 	return [now - DAY * (n - 1 - i) for i in range(n)]
 
 
+def _clock(n: int, now: float, started_epoch: int | None = None) -> dict:
+	return {"epoch": n, "days": _days(n, now), "started_epoch": n if started_epoch is None else started_epoch}
+
+
 # ---------------------------------------------------------------------------
 # 1. El invariante: una rama con hojas no se borra (ni por el reaper)
 # ---------------------------------------------------------------------------
@@ -109,7 +113,7 @@ def _point(pid: str, payload: dict) -> MagicMock:
 
 
 def test_washout_does_not_delete_and_respects_permastore(monkeypatch, tmp_path):
-	monkeypatch.setattr(fog, "active_days", lambda *a, **k: [time.time()])
+	monkeypatch.setattr(fog, "active_day_clock", lambda *a, **k: _clock(1, time.time()))
 	monkeypatch.setattr("red_pill.metabolism.maintenance._washout_state_path", lambda: tmp_path / "w.json")
 	now = time.time()
 	frozen = _point("congelado", {"reinforcement_score": 0.04, "stability": 1.0, "immune": False, "permastore": True, "last_recalled_at": now})
@@ -132,29 +136,30 @@ def test_washout_does_not_delete_and_respects_permastore(monkeypatch, tmp_path):
 
 def test_legacy_with_two_recalls_promotes_instead_of_dying():
 	now = time.time()
-	days = _days(400, now)
+	clock = _clock(400, now, started_epoch=0)
 	payload = {"recall_count": 3, "last_recalled_at": now - DAY * 70, "created_at": now - DAY * 400}
-	decision = fog.classify(payload, "work_memories", days, now, ladder_start=now - DAY * 400)
+	decision = fog.classify(payload, "work_memories", clock, now)
 	assert decision == "promote", "sin historia de stamps, 2+ recuperaciones entran al circuito largo (§8.2)"
 
 
 def test_idle_days_do_not_advance_the_clock():
 	"""C-07: 30 días de calendario sin actividad no suman un solo día activo."""
 	now = time.time()
-	# Prima: 10 días activos, después un hueco de 30 días naturales, luego hoy.
-	days = _days(10, now - DAY * 30) + [now]
+	# Reloj: 10 días activos antes del hueco y hoy. El epoch solo avanza por días
+	# activos, así que 30 días naturales de vacaciones suman 1, no 31.
+	clock = {"epoch": 11, "days": _days(10, now - DAY * 30) + [now], "started_epoch": 0}
 	payload = {"recall_count": 0, "active_days_at_recall": 1, "last_recalled_at": now - DAY * 30}
-	assert fog.classify(payload, "work_memories", days, now) == "keep", "la ausencia no cobra"
+	assert fog.classify(payload, "work_memories", clock, now) == "keep", "la ausencia no cobra"
 
 
 def test_iso_timestamps_do_not_break_the_pass():
 	now = time.time()
-	assert fog.classify({"recall_count": 1, "last_recalled_at": "2026-11-01T10:00:00Z"}, "work_memories", _days(40, now), now) == "keep"
+	assert fog.classify({"recall_count": 1, "last_recalled_at": "2026-11-01T10:00:00Z"}, "work_memories", _clock(40, now), now) == "keep"
 
 
 def test_unknown_collection_is_never_decided():
 	now = time.time()
-	assert fog.classify({"recall_count": 0, "last_recalled_at": now - DAY * 400}, "directive_memories", _days(40, now), now) == "keep"
+	assert fog.classify({"recall_count": 0, "last_recalled_at": now - DAY * 400}, "directive_memories", _clock(40, now), now) == "keep"
 
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,8 @@ class HygienePhase(SleepPhase):
 			logger.debug("[HYGIENE] Skipped (SLEEP_PLUGIN_HYGIENE=False)")
 			return
 		try:
-			report = purge_empty_engrams(ctx.memory_manager) or {}
+			apply = bool(getattr(cfg, "SW_HYGIENE_PURGE_ENABLED", False))
+			report = purge_empty_engrams(ctx.memory_manager, dry_run=not apply) or {}
 		except Exception as e:
 			logger.error(f"[HYGIENE] Failed to run empty-engram purge: {e}")
 			return

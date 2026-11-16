@@ -303,7 +303,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para llamadas grandes (candidato del perfil `hub`; `thinking: off`). |
 | `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para llamadas grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
-| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
+| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | **DEPRECATED** (RFC-OLV-001 D-08). El guard se retiró: la ausencia cuesta 0 en días activos. |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | **DEPRECATED** (RFC-OLV-001 D-03). El demote de curados se retiró: los curados siguen la escalera. |
 | `SW_FORGETTING_LADDER_MODE` | `off` | Escalera del olvido (RFC-OLV-001): `off` · `dry_run` (informe, cero escrituras) · `enforce`. Mide en **días activos**, no de calendario. |
 | `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
@@ -323,7 +323,7 @@ Plugins 05–10. Each is independently toggleable.
 | `RHIZODB_S_MAX` | `365.0` | Techo de estabilidad (días) del término `b(s_v)` del washout. |
 | `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Candidato de poda: desde RFC-OLV-001 **ya no borra**; se registra y decide la escalera. |
 | `RHIZODB_PRUNE_MAX_STABILITY_DAYS` | `5.0` | Umbral de estabilidad (días) de la poda estructural. |
-| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por `erode_curated` (5a/10a). OFF = comportamiento previo a AD-048. |
+| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por la escalera (RFC-OLV-001). OFF = comportamiento previo a AD-048. |
 
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`

@@ -97,7 +97,8 @@ class MetabolismKernel:
 						must=[
 							models.FieldCondition(key="last_recalled_at", range=models.Range(lt=timestamp_limite)),
 							models.FieldCondition(key="immune", match=models.MatchValue(value=False)),
-						]
+						],
+						must_not=[models.FieldCondition(key="permastore", match=models.MatchValue(value=True))],
 					)
 				),
 			)
@@ -154,17 +155,33 @@ class MetabolismKernel:
 		)
 		engine = get_memory_engine(self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real"))
 		would_delete = would_decay = 0
-		for batch in self.storage.scroll_generator(collection, scroll_filter=flt, limit=100, max_iterations=1000):
-			for hit in batch:
-				payload = hit.payload or {}
-				if payload.get("immune") or payload.get("permastore"):
-					continue
-				updates = engine.calculate_lazy_decay(payload, current_time=time.time())
-				if updates.get("_delete"):
-					would_delete += 1
-				elif updates:
-					would_decay += 1
-		return {"collection": collection, "would_delete": would_delete, "would_decay": would_decay}
+		scanned = 0
+		iterations = 0
+		try:
+			for batch in self.storage.scroll_generator(collection, scroll_filter=flt, limit=100, max_iterations=1000):
+				iterations += 1
+				for hit in batch:
+					payload = hit.payload or {}
+					scanned += 1
+					if payload.get("immune") or payload.get("permastore"):
+						continue
+					updates = engine.calculate_lazy_decay(payload, current_time=time.time())
+					if updates.get("_delete"):
+						would_delete += 1
+					elif updates:
+						would_decay += 1
+		except Exception as exc:
+			# Un fallo de Qdrant no puede presentarse como «0 candidatos» (R3-C-08).
+			return {"collection": collection, "would_delete": None, "would_decay": None, "reliable": False, "error": str(exc)[:200]}
+		# `max_iterations=1000` topa el barrido: si se alcanza, la cifra es un mínimo.
+		reliable = iterations < 1000
+		return {
+			"collection": collection,
+			"would_delete": would_delete,
+			"would_decay": would_decay,
+			"scanned": scanned,
+			"reliable": reliable,
+		}
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		if rate is None:
@@ -194,7 +211,7 @@ class MetabolismKernel:
 			points_to_delete: List[Any] = []
 			update_operations = []
 			for hit in batch:
-				if hit.payload is None or hit.payload.get("immune"):
+				if hit.payload is None or hit.payload.get("immune") or hit.payload.get("permastore"):
 					continue
 
 				hit.payload = _parse_payload(hit.payload)

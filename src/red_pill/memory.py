@@ -433,6 +433,20 @@ class MemoryManager:
 		engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 		engine = get_memory_engine(engine_type)
 
+		# D-16: el reloj se lee UNA vez por recuperación, no una por punto (R3-C-03:
+		# era una conexión SQLite y un SELECT DISTINCT por engrama, bajo el lock).
+		# Si el reloj no es fiable (`None`), no se escribe contador: un 0 falso
+		# marcaría el recuerdo recién usado como el más viejo posible (R3-C-02).
+		_active_epoch = None
+		try:
+			from red_pill.metabolism.forgetting import active_day_clock
+
+			_clock = active_day_clock()
+			if _clock:
+				_active_epoch = int(_clock.get("epoch") or 0)
+		except Exception:
+			_active_epoch = None
+
 		with self._reinforce_lock:
 			for p in points:
 				if p.payload is None or p.payload.get("immune"):
@@ -464,17 +478,11 @@ class MemoryManager:
 					_stamps.append(p.payload["last_recalled_at"])
 					p.payload["recall_stamps"] = _stamps
 					reinforced_updates["recall_stamps"] = _stamps
-					# D-16: índice de días activos en el momento de la recuperación.
-					# La escalera calcula `desde` como (hoy - este índice), así que un
-					# día sin actividad no cobra olvido y la migración no purga nada.
-					try:
-						from red_pill.metabolism.forgetting import active_days
-
-						_idx = len(active_days())
-						p.payload["active_days_at_recall"] = _idx
-						reinforced_updates["active_days_at_recall"] = _idx
-					except Exception:
-						pass
+					# D-16: epoch de días activos en el momento de la recuperación.
+					# Un día sin actividad no cobra olvido, y la migración no purga.
+					if _active_epoch is not None:
+						p.payload["active_days_at_recall"] = _active_epoch
+						reinforced_updates["active_days_at_recall"] = _active_epoch
 					# RFC-OLV-001 D-21: `last_reinforced_at` era una copia literal de
 					# `last_recalled_at` y su único lector era el demote retirado.
 

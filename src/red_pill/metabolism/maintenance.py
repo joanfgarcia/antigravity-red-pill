@@ -108,7 +108,7 @@ def erode_work_hubs(memory_manager) -> dict:
 
 	for hub in hubs:
 		payload = hub.payload or {}
-		if payload.get("immune") or payload.get("permastore"):
+		if payload.get("immune") or payload.get("permastore") or payload.get("promoted_from"):
 			continue
 
 		# La rama sigue a sus hojas: con ≥1 hoja viva no decae ni se borra.
@@ -152,6 +152,7 @@ def erode_work_hubs(memory_manager) -> dict:
 					"reinforcement_score": new_score,
 					"intensity": new_intensity,
 					"decay_checked_at": now,
+					"updated_at": now,
 				}
 				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[hub.id])))
 
@@ -286,12 +287,15 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 	"""
 	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
 	Washout formula: a_v = gamma(t) * a_v + (1 - gamma(t)) * b(s_v)
-	Pruning rule: delete if a_v < RHIZODB_PRUNE_MIN_ACTIVATION and s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS.
+	Poda: RETIRADA como borrado (RFC-OLV-001 D-22). El washout renormaliza la
+	puntuación; los candidatos que la poda habría borrado se registran en debug y
+	la decisión de olvidar es de la escalera, en días activos.
 	gamma(t) attenuates with the days elapsed since this collection's last washout
 	(capped at RHIZODB_WASHOUT_REFERENCE_DAYS): a repeated run never prunes the same
 	time span twice, and a missed sleep never compounds punishment. All coefficients are config-driven.
 
-	Devuelve `{"pruned": N, "washed": M}` para que la fase reporte producción real.
+	Devuelve `{"pruned": 0, "washed": M}`: `pruned` queda siempre a 0 porque esta
+	ruta ya no borra (la producción real es `washed`).
 	"""
 	client = memory_manager.client
 	now = time.time()

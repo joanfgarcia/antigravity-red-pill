@@ -444,9 +444,13 @@ def main() -> None:
 				rate = args.rate if args.rate else None
 				apply = bool(getattr(args, "apply", False))
 				if not apply:
-					candidates = manager.count_erosion_candidates(collection, rate=rate)
+					report = manager.count_erosion_candidates(collection, rate=rate)
 					print(f"--- [EROSION DRY-RUN: {collection.upper()}] ---")
-					print(f"candidatos: {candidates}")
+					if not report.get("reliable", True):
+						print(f"RECUENTO NO FIABLE: {report.get('error') or 'barrido truncado'}")
+						print("No se puede afirmar que no haya nada que borrar. Reintenta o usa la escalera.")
+					else:
+						print(f"candidatos a borrado: {report.get('would_delete')} · a decaer: {report.get('would_decay')}")
 					print("Nada se ha tocado. Repite con --apply para aplicar (o usa la escalera).")
 				else:
 					manager.apply_erosion(collection, rate=rate)

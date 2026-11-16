@@ -23,6 +23,11 @@ def _days(n: int, now: float) -> list:
 	return [now - DAY * (n - 1 - i) for i in range(n)]
 
 
+def _clock(n: int, now: float, started_epoch: int | None = None) -> dict:
+	"""Estado del reloj monótono: `epoch` días activos acumulados."""
+	return {"epoch": n, "days": _days(n, now), "started_epoch": n if started_epoch is None else started_epoch}
+
+
 def _payload(**kw):
 	base = {
 		"content": "x",
@@ -37,48 +42,50 @@ def _payload(**kw):
 
 def test_sink_step0_30_active_days():
 	now = time.time()
-	days = _days(60, now)
-	old = now - DAY * 31
-	assert fog.classify(_payload(last_recalled_at=old), "work_memories", days, now) == "delete"
-	young = now - DAY * 29
-	assert fog.classify(_payload(last_recalled_at=young), "work_memories", days, now) == "keep"
+	clock = _clock(60, now)
+	old = _payload(last_recalled_at=now - DAY * 31, active_days_at_recall=60 - 31)
+	assert fog.classify(old, "work_memories", clock, now) == "delete"
+	young = _payload(last_recalled_at=now - DAY * 29, active_days_at_recall=60 - 29)
+	assert fog.classify(young, "work_memories", clock, now) == "keep"
 
 
 def test_sink_step1_60_active_days():
 	now = time.time()
-	days = _days(90, now)
-	one_recall = _payload(recall_count=1, last_recalled_at=now - DAY * 61)
-	assert fog.classify(one_recall, "work_memories", days, now) == "delete"
-	fresh = _payload(recall_count=1, last_recalled_at=now - DAY * 59)
-	assert fog.classify(fresh, "work_memories", days, now) == "keep"
+	clock = _clock(90, now)
+	one_recall = _payload(recall_count=1, last_recalled_at=now - DAY * 61, active_days_at_recall=90 - 61)
+	assert fog.classify(one_recall, "work_memories", clock, now) == "delete"
+	fresh = _payload(recall_count=1, last_recalled_at=now - DAY * 59, active_days_at_recall=90 - 59)
+	assert fog.classify(fresh, "work_memories", clock, now) == "keep"
 
 
 def test_two_spaced_recalls_promote_and_work_circuit_holds_105():
 	now = time.time()
-	days = _days(400, now)
-	recalls = [now - DAY * 300, now - DAY * 200]  # dos días distintos, dentro de 90? no: fuera
-	assert fog.classify(_payload(recall_count=2, recall_stamps=recalls, last_recalled_at=now - DAY * 200), "work_memories", days, now) == "delete"
+	clock = _clock(400, now)
+	# Dos recuperaciones, pero fuera de la ventana de 90 días activos.
+	recalls = [now - DAY * 300, now - DAY * 200]
+	out = _payload(recall_count=2, recall_stamps=recalls, last_recalled_at=now - DAY * 200, active_days_at_recall=200)
+	assert fog.classify(out, "work_memories", clock, now) == "delete"
 
-	# Dos recuperaciones espaciadas pero recientes (dentro de 90 días activos):
+	# Dos recuperaciones espaciadas y recientes: primera vez, se promueve.
 	spaced = [now - DAY * 80, now - DAY * 40]
-	within = _payload(recall_count=2, recall_stamps=spaced, last_recalled_at=now - DAY * 40)
-	assert fog.classify(within, "work_memories", days, now) == "promote", "primera vez: se promueve"
+	within = _payload(recall_count=2, recall_stamps=spaced, last_recalled_at=now - DAY * 40, active_days_at_recall=360)
+	assert fog.classify(within, "work_memories", clock, now) == "promote", "primera vez: se promueve"
 
 	# Ya promovido, el circuito largo aguanta hasta 105 días activos sin tocarlo.
 	promoted = dict(within, promoted_at=now - DAY * 40)
-	assert fog.classify(promoted, "work_memories", days, now) == "keep"
-	# ...y a los 106 días activos sin volver a tocarlo, el circuito largo lo suelta.
-	stale = _payload(recall_count=2, recall_stamps=[now - DAY * 300, now - DAY * 160], last_recalled_at=now - DAY * 106)
-	stale["recall_stamps"] = [now - DAY * 260, now - DAY * 200]
-	assert fog.classify(stale, "work_memories", days, now) == "delete"
+	assert fog.classify(promoted, "work_memories", clock, now) == "keep"
+
+	# ...y pasados los 105 días activos, el circuito largo lo suelta.
+	stale = _payload(recall_count=2, last_recalled_at=now - DAY * 106, active_days_at_recall=400 - 106, promoted_at=now - DAY * 300)
+	assert fog.classify(stale, "work_memories", clock, now) == "delete"
 
 
 def test_two_recalls_same_day_do_not_promote():
 	now = time.time()
-	days = _days(200, now)
+	clock = _clock(200, now)
 	same_day = [now - DAY * 100, now - DAY * 100 + 3600]
-	payload = _payload(recall_count=2, recall_stamps=same_day, last_recalled_at=now - DAY * 100)
-	assert fog.classify(payload, "work_memories", days, now) == "delete", "dos golpes en el mismo día no son espaciado (Bjork)"
+	payload = _payload(recall_count=2, recall_stamps=same_day, last_recalled_at=now - DAY * 100, active_days_at_recall=200 - 100)
+	assert fog.classify(payload, "work_memories", clock, now) == "delete", "dos golpes en el mismo día no son espaciado (Bjork)"
 
 
 def test_social_freezes_at_five_years_and_never_deletes():
@@ -89,19 +96,19 @@ def test_social_freezes_at_five_years_and_never_deletes():
 	días activos Y tener 5 años a la vez, que es imposible.
 	"""
 	now = time.time()
-	days = _days(400, now)
+	clock = _clock(400, now)
 	payload = _payload(recall_count=2, promoted_at=now - 6 * 365 * DAY, last_recalled_at=now - 5.5 * 365 * DAY)
-	assert fog.classify(payload, "social_memories", days, now) == "freeze"
+	assert fog.classify(payload, "social_memories", clock, now) == "freeze"
 
 	young = _payload(recall_count=2, promoted_at=now - 365 * DAY, last_recalled_at=now - 365 * DAY)
-	assert fog.classify(young, "social_memories", days, now) == "keep"
+	assert fog.classify(young, "social_memories", clock, now) == "keep"
 
 
 def test_branch_is_not_ladder_business():
 	now = time.time()
-	days = _days(400, now)
+	clock = _clock(400, now)
 	hub = _payload(lazarus_phase="synthesis_hub", last_recalled_at=now - DAY * 300)
-	assert fog.classify(hub, "work_memories", days, now) == "keep"
+	assert fog.classify(hub, "work_memories", clock, now) == "keep"
 
 
 def test_dry_run_writes_nothing(memory_manager: MemoryManager, monkeypatch):
@@ -114,22 +121,22 @@ def test_dry_run_writes_nothing(memory_manager: MemoryManager, monkeypatch):
 			models.PointStruct(
 				id=pid,
 				vector=[0.1] * 384,
-				payload=_payload(last_recalled_at=now - DAY * 40, created_at=now - DAY * 40),
+				payload=_payload(last_recalled_at=now - DAY * 40, created_at=now - DAY * 40, active_days_at_recall=60 - 40),
 			)
 		],
 	)
-	monkeypatch.setattr(fog, "active_days", lambda *a, **k: _days(60, now))
+	monkeypatch.setattr(fog, "active_day_clock", lambda *a, **k: _clock(60, now))
 	# `ladder_start` en el pasado simula que la escalera lleva 60 días activos
 	# contando; en producción el marcador hace que la primera purga espere (D-16).
-	report = fog.run_ladder(memory_manager, mode="dry_run", ladder_start=now - DAY * 60)
+	report = fog.run_ladder(memory_manager, mode="dry_run")
 
 	assert report["collections"]["work_memories"]["planned_delete"] == 1
-	# Y el reloj histórico (sin la gracia de D-16) lo veía igual: la cifra es
-	# visible en dry_run sin arriesgar nada.
-	assert report["collections"]["work_memories"]["historical_delete"] >= 1
+	# El punto ya tiene contador (post-F2), así que el «reloj histórico» no aporta
+	# una cifra distinta: solo se calcula para los legacy, sin contador (R3-C-05).
+	assert report["collections"]["work_memories"]["historical_delete"] == 0
 	assert memory_manager.client.retrieve(collection_name="work_memories", ids=[pid], with_payload=False), "dry_run no borra"
 
-	fog.run_ladder(memory_manager, mode="enforce", ladder_start=now - DAY * 60)
+	fog.run_ladder(memory_manager, mode="enforce")
 	assert not memory_manager.client.retrieve(collection_name="work_memories", ids=[pid], with_payload=False), "enforce sí borra"
 
 

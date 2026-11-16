@@ -60,32 +60,114 @@ DEFAULTS = LadderParams()
 # Reloj de días activos
 
 
-def active_days(now: Optional[float] = None) -> List[float]:
-	"""Instantes (medianoche local) de los días con actividad, ascendentes.
+def _state_path():
+	from red_pill.core.paths import get_state_dir
 
-	Fuente: `session_mirror.ts` de `queue/session.db`. El registro
-	`chronicle_daily_registry.json` está retirado desde 2026-09-11 y no sirve.
-	Si la base no está disponible se devuelve lista vacía: con cero días activos
-	ningún fusible avanza, que es el lado seguro (nadie muere por un fallo de
-	lectura).
-	"""
+	return get_state_dir() / "olvido_active_days.json"
+
+
+def _read_state() -> Optional[Dict[str, Any]]:
+	import json
+
+	try:
+		with open(_state_path(), encoding="utf-8") as fh:
+			data = json.load(fh)
+		return data if isinstance(data, dict) else None
+	except FileNotFoundError:
+		return None
+	except Exception as exc:
+		# Un fichero corrupto NO puede reiniciar el reloj en silencio (R3-C-09).
+		logger.error(f"[OLVIDO] Estado del reloj ilegible ({_state_path()}): {exc}")
+		return None
+
+
+def _write_state(data: Dict[str, Any]) -> bool:
+	"""Escritura atómica: un corte a medias no puede mover el reloj."""
+	import json
+	import os
+	import tempfile
+
+	path = _state_path()
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".olvido-", suffix=".json")
+		with os.fdopen(fd, "w", encoding="utf-8") as fh:
+			json.dump(data, fh)
+		os.replace(tmp, path)
+		return True
+	except Exception as exc:
+		logger.error(f"[OLVIDO] No se pudo escribir el estado del reloj: {exc}")
+		return False
+
+
+def _mirror_days(after_date: Optional[str] = None) -> Optional[List[float]]:
+	"""Días con actividad según `session_mirror` (solo los posteriores a `after_date`)."""
 	import sqlite3
 
 	from red_pill.core.paths import get_session_db
 
+	sql = "SELECT DISTINCT date(ts,'unixepoch','localtime') FROM session_mirror"
+	args: tuple = ()
+	if after_date:
+		sql += " WHERE date(ts,'unixepoch','localtime') > ?"
+		args = (after_date,)
 	try:
 		with sqlite3.connect(str(get_session_db())) as conn:
-			rows = conn.execute("SELECT DISTINCT date(ts,'unixepoch','localtime') FROM session_mirror ORDER BY 1").fetchall()
-	except Exception as exc:  # fail-safe: sin reloj, no hay olvido
-		logger.warning(f"[OLVIDO] No se pudo leer el reloj de días activos: {exc}")
-		return []
-	days: List[float] = []
-	for (d,) in rows:
+			rows = conn.execute(sql + " ORDER BY 1", args).fetchall()
+	except Exception as exc:
+		logger.warning(f"[OLVIDO] Reloj de días activos ilegible: {exc}")
+		return None
+	out: List[float] = []
+	for (day,) in rows:
 		try:
-			days.append(time.mktime(time.strptime(str(d), "%Y-%m-%d")))
+			out.append(time.mktime(time.strptime(str(day), "%Y-%m-%d")))
 		except Exception:
 			continue
-	return days
+	return out
+
+
+def active_day_clock(now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+	"""Reloj monótono de días activos: `{"epoch": N, "days": [...], "started_epoch": M}`.
+
+	El contador **solo avanza** y lo lleva el propio olvido, no la tabla: un
+	índice posicional sobre `session_mirror` se rompía con la retención (30 días)
+	o con un backfill, cobrando olvido que nunca ocurrió (R3-C-04). Aquí los días
+	nuevos se suman al epoch y los viejos que reaparezcan se ignoran.
+
+	Devuelve `None` si no se puede leer o escribir: sin reloj no se decide nada
+	(fail-closed), en vez de inventarse un `0` que marcaría todo como viejísimo.
+	"""
+	now = time.time() if now is None else now
+	state = _read_state()
+	if state is None:
+		# Arranque: semilla con el histórico disponible (una vez).
+		seed = _mirror_days()
+		if seed is None:
+			return None
+		days = sorted(seed)[-500:]
+		state = {
+			"epoch": len(days),
+			"days": days,
+			"last_date": time.strftime("%Y-%m-%d", time.localtime(days[-1])) if days else "",
+			"started_epoch": len(days),
+		}
+		if not _write_state(state):
+			return None
+		return state
+
+	new = _mirror_days(state.get("last_date") or None)
+	if new is None:
+		return None
+	days = sorted(list(state.get("days") or []) + list(new))[-500:]
+	if new:
+		state["epoch"] = int(state.get("epoch") or 0) + len(new)
+		state["last_date"] = time.strftime("%Y-%m-%d", time.localtime(max(new)))
+		state["days"] = days
+		state.setdefault("started_epoch", state["epoch"])
+		if not _write_state(state):
+			return None
+	state["days"] = days
+	return state
 
 
 def active_days_between(days: List[float], since: float, now: Optional[float] = None) -> int:
@@ -96,34 +178,6 @@ def active_days_between(days: List[float], since: float, now: Optional[float] = 
 	lo = bisect_left(days, since)
 	hi = bisect_left(days, now)
 	return max(0, hi - lo)
-
-
-def ladder_started_at() -> float:
-	"""Instante en que la escalera empezó a contar (D-16).
-
-	Se guarda en un fichero de estado propio. La primera vez que se pregunta, se
-	fija `now`: así ningún engrama legacy nace con 30 días activos de castigo por
-	un histórico que ya venía truncado. Si no se puede escribir, se devuelve
-	`now` en memoria (la pasada no purga, porque el reloj arranca hoy).
-	"""
-	import json
-
-	from red_pill.core.paths import get_state_dir
-
-	path = get_state_dir() / "olvido_ladder_started.json"
-	try:
-		with open(path, encoding="utf-8") as fh:
-			return float(json.load(fh)["started_at"])
-	except Exception:
-		pass
-	now = time.time()
-	try:
-		path.parent.mkdir(parents=True, exist_ok=True)
-		with open(path, "w", encoding="utf-8") as fh:
-			json.dump({"started_at": now}, fh)
-	except Exception as exc:
-		logger.warning(f"[OLVIDO] No se pudo fijar el arranque de la escalera: {exc}")
-	return now
 
 
 def _window_start(days: List[float], window: int, now: float) -> float:
@@ -175,16 +229,14 @@ def _promotion_stamps(payload: Dict[str, Any], days: List[float], now: float, pa
 def classify(
 	payload: Dict[str, Any],
 	collection: str,
-	days: List[float],
+	clock: Dict[str, Any],
 	now: Optional[float] = None,
 	params: LadderParams = DEFAULTS,
-	ladder_start: Optional[float] = None,
 ) -> str:
 	"""Devuelve el destino de un engrama: `keep`, `delete`, `freeze` o `promote`.
 
-	Solo decide sobre las colecciones de la escalera: directivas, alma, señales
-	e interacción tienen gobierno propio y salen siempre como `keep` (defensa en
-	profundidad, aunque `run_ladder` no las recorra).
+	`clock` es el estado de `active_day_clock()`: `epoch` (días activos
+	acumulados, monótono) y `days` (sus instantes, para las ventanas).
 	"""
 	if collection not in LADDER_COLLECTIONS:
 		return "keep"
@@ -198,19 +250,16 @@ def classify(
 	if last is None:
 		return "keep"  # sin fecha legible no se olvida: fail-closed
 
-	# Días activos desde el último toque. Con contador (D-16) se usa el índice
-	# guardado en la recuperación; sin contador (legacy) el reloj arranca en el
-	# día de arranque de la escalera, para que la migración no purgue nada.
+	epoch = int(clock.get("epoch") or 0)
+	days = list(clock.get("days") or [])
 	idx = payload.get("active_days_at_recall")
-	if isinstance(idx, int) and idx >= 0:
-		since = max(0, len(days) - idx)
+	if isinstance(idx, int) and 0 <= idx <= epoch:
+		since = epoch - idx
 	else:
-		since = active_days_between(days, max(last, ladder_start or last), now)
+		# Legacy sin contador: cuenta desde que la escalera arrancó (D-16), no
+		# desde un histórico que ya venía truncado.
+		since = max(0, epoch - int(clock.get("started_epoch") or epoch))
 
-	# Puerta: 2 recuperaciones en días activos distintos dentro de 90 días.
-	# Transición (§8.2): un legacy con `recall_count >= 2` y sin historia de
-	# stamps entra al circuito largo sin exigir espaciado, porque el dato no
-	# existe; a partir de ahí manda la regla nueva.
 	stamps = _promotion_stamps(payload, days, now, params)
 	legacy_promoted = int(payload.get("recall_count") or 0) >= 2 and not payload.get("recall_stamps")
 	promoted = bool(payload.get("promoted_at")) or stamps >= 2 or legacy_promoted
@@ -219,7 +268,9 @@ def classify(
 	if promoted:
 		if collection in SOCIAL_LIKE:
 			years = (now - last) / (365.25 * 86400.0)
-			return "freeze" if years >= params.social_years else ("promote" if pending_promotion else "keep")
+			if years >= params.social_years:
+				return "freeze"
+			return "promote" if pending_promotion else "keep"
 		if since >= params.work_circuit_days:
 			return "delete"
 		return "promote" if pending_promotion else "keep"
@@ -229,17 +280,23 @@ def classify(
 	return "delete" if since >= params.sink_days_1_recall else "keep"
 
 
-# Ejecución
+def historical_since(payload: Dict[str, Any], clock: Dict[str, Any], now: Optional[float] = None) -> int:
+	"""Días activos «reales» de un legacy, para el informe del dry_run.
+
+	Solo tiene sentido para puntos SIN contador: para el resto, el planificado ya
+	es el histórico y duplicar el cálculo no aportaba nada (R3-C-05).
+	"""
+	if isinstance(payload.get("active_days_at_recall"), int):
+		return -1
+	night = _ts(payload.get("last_recalled_at")) or _ts(payload.get("created_at"))
+	if night is None:
+		return -1
+	return active_days_between(list(clock.get("days") or []), night, time.time() if now is None else now)
 
 
 @dataclass
 class LadderReport:
-	"""Dos cuentas separadas: lo PLANIFICADO y lo EJECUTADO.
-
-	Sumar lo planificado a la producción del sueño fue un hallazgo del
-	adversarial: el parte decía `purga=N` aunque el borrado hubiera fallado o
-	estuviera en `dry_run`.
-	"""
+	"""Dos cuentas separadas: lo PLANIFICADO y lo EJECUTADO (R3-C-06)."""
 
 	collection: str
 	planned_delete: List[str] = field(default_factory=list)
@@ -247,7 +304,7 @@ class LadderReport:
 	promoted: List[str] = field(default_factory=list)
 	kept: int = 0
 	errors: int = 0
-	historical_delete: int = 0  # qué se llevaría el reloj histórico (solo dry_run)
+	historical_delete: int = 0
 
 	def as_dict(self) -> Dict[str, Any]:
 		return {
@@ -288,16 +345,12 @@ def run_ladder(
 
 	client = memory_manager.client
 	now = time.time()
-	days = active_days(now)
-	if not days:
-		logger.info("[OLVIDO] Sin reloj de días activos: no se decide nada en esta pasada.")
+	clock = active_day_clock(now)
+	if not clock or not clock.get("epoch"):
+		logger.warning("[OLVIDO] Sin reloj fiable de días activos: no se decide nada en esta pasada (fail-closed).")
 		return {"mode": mode, "collections": {}}
-
-	# D-16: el reloj arranca el día de F3, no en el histórico. En `dry_run` se
-	# informa ADEMÁS qué se llevaría el reloj histórico, para poder verlo sin
-	# arriesgar nada (que es justo lo que pidió el Operador: «ver qué se va a
-	# olvidar»).
-	ladder_start = ladder_start if ladder_start is not None else ladder_started_at()
+	if ladder_start is not None:
+		clock = dict(clock, started_epoch=int(clock.get("epoch", 0)) - 0)  # compat: simulación explícita
 	reports: Dict[str, Any] = {}
 	for collection in sorted(LADDER_COLLECTIONS):
 		if not client.collection_exists(collection):
@@ -308,17 +361,31 @@ def run_ladder(
 		to_promote: List[Any] = []
 		for point in _scroll_all(client, collection):
 			try:
-				decision = classify(point.payload or {}, collection, days, now, params, ladder_start=ladder_start)
+				decision = classify(point.payload or {}, collection, clock, now, params)
 			except Exception as exc:  # un payload raro no puede tumbar la pasada
 				report.errors += 1
 				logger.warning(f"[OLVIDO] {collection}: no se pudo clasificar {point.id}: {exc}")
 				continue
 			if mode == "dry_run":
 				try:
-					if classify(point.payload or {}, collection, days, now, params, ladder_start=0.0) == "delete":
+					h = historical_since(point.payload or {}, clock, now)
+					if h >= 0 and h >= params.sink_days_0_recalls and decision != "delete":
 						report.historical_delete += 1
 				except Exception:
 					pass
+			if decision != "keep":
+				logger.debug(
+					json.dumps(
+						{
+							"event": "ladder_decision",
+							"collection": collection,
+							"id": str(point.id),
+							"decision": decision,
+							"mode": mode,
+							"recall_count": int((point.payload or {}).get("recall_count") or 0),
+						}
+					)
+				)
 			if decision == "delete":
 				report.planned_delete.append(str(point.id))
 				to_delete.append(str(point.id))

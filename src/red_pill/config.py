@@ -342,7 +342,7 @@ class RedPillConfig(BaseSettings):
 	# AD-048: el washout genérico no toca curados (memento_engram/origin=memento/
 	# hubbed): su olvido va por la escalera (RFC-OLV-001); este skip ya no cambia nada
 	# desde que el washout no borra (D-22). OFF = comportamiento previo.
-	RHIZODB_WASHOUT_SKIP_CURATED: bool = True
+	RHIZODB_WASHOUT_SKIP_CURATED: bool = True  # DEPRECATED (RFC-OLV-001): el washout ya no borra; la clave se conserva por compatibilidad
 	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
 	# única: todo writer/merger que componga metadata deriva de aquí con margen
 	# (p. ej. situation_semaphore usa MAX_METADATA_STR - _META_MARGIN).
@@ -1241,7 +1241,10 @@ class RedPillConfig(BaseSettings):
 
 	# ── Chronicle ingestion hygiene ──
 	CHRONICLE_STRIP_TOOL_PAYLOADS: bool = True  # Compact [TOOL: name target] markers instead of full JSON dumps (anti raw-noise)
-	SLEEP_PLUGIN_HYGIENE: bool = True  # HygienePhase: purge empty engrams re-stitching the raw chain first
+	SLEEP_PLUGIN_HYGIENE: bool = True
+	# RFC-OLV-001: la higiene reporta por defecto. Retirar engramas VACÍOS no es
+	# olvidar, pero tampoco puede ser una ruta automática silenciosa más.
+	SW_HYGIENE_PURGE_ENABLED: bool = False  # HygienePhase: purge empty engrams re-stitching the raw chain first
 
 	# ── Texture space (T5: evocation by resonance) ──
 	TEXTURE_SHADOW_ENABLED: bool = False  # Write texture_shadow points at consolidation (born dark)
