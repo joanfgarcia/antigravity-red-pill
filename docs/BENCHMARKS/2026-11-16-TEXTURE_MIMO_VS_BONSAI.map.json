@@ -1,0 +1,47 @@
+[
+  {
+    "par": 1,
+    "A": "mimo_v26_9b",
+    "B": "bonsai_2_27b"
+  },
+  {
+    "par": 2,
+    "A": "mimo_v26_9b",
+    "B": "bonsai_2_27b"
+  },
+  {
+    "par": 3,
+    "A": "bonsai_2_27b",
+    "B": "mimo_v26_9b"
+  },
+  {
+    "par": 4,
+    "A": "bonsai_2_27b",
+    "B": "mimo_v26_9b"
+  },
+  {
+    "par": 5,
+    "A": "bonsai_2_27b",
+    "B": "mimo_v26_9b"
+  },
+  {
+    "par": 6,
+    "A": "mimo_v26_9b",
+    "B": "bonsai_2_27b"
+  },
+  {
+    "par": 7,
+    "A": "mimo_v26_9b",
+    "B": "bonsai_2_27b"
+  },
+  {
+    "par": 8,
+    "A": "mimo_v26_9b",
+    "B": "bonsai_2_27b"
+  },
+  {
+    "par": 9,
+    "A": "bonsai_2_27b",
+    "B": "mimo_v26_9b"
+  }
+]

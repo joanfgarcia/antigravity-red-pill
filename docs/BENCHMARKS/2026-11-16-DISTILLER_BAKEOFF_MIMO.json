@@ -1,0 +1,266 @@
+{
+  "mimo_v26_9b": [
+    {
+      "probe": "technical",
+      "aptitude": "Technical distillation (work, strict JSON)",
+      "raw": "{\"summary\":\"Confirmación del fix del bug de tree_hash en pure-mls tras 248 tests verdes.\",\"emotion\":\"joy\",\"intensity\":0.8,\"category\":\"work\"}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 76,
+        "latency_s": 0.99
+      }
+    },
+    {
+      "probe": "philosophical",
+      "aptitude": "Narrative/philosophical (social, Spanish fidelity)",
+      "raw": "{\"summary\": \"Debate sobre identidad: los actos definen al yo, pero la memoria aporta continuidad.\", \"emotion\": \"neutral\", \"intensity\": 0.35, \"category\": \"social\"}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 84,
+        "latency_s": 0.97
+      }
+    },
+    {
+      "probe": "noise",
+      "aptitude": "Noise culling (should be neutral, low intensity)",
+      "raw": "{\"summary\":\"El usuario reporta un fallo en la prueba de lint (ruff) y el asistente responde que se reejecuta con --fix.\",\"emotion\":\"neutral\",\"intensity\":0.2,\"category\":\"work\"}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 107,
+        "latency_s": 0.98
+      }
+    },
+    {
+      "probe": "emotional",
+      "aptitude": "Emotional labeling (charged interaction)",
+      "raw": "{\"summary\":\"Joan expresa euforia tras lograr la convergencia del entrenamiento tras tres noches de esfuerzo.\",\"emotion\":\"joy\",\"intensity\":0.85,\"category\":\"work\"}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 96,
+        "latency_s": 0.77
+      }
+    }
+  ],
+  "granite_8b": [
+    {
+      "probe": "technical",
+      "aptitude": "Technical distillation (work, strict JSON)",
+      "raw": "{\n  \"summary\": \"Se ha arreglado el bug de tree_hash en pure-mls; 248 pruebas pasaron correctamente. El problema era el leaf_index omitido en la RFC 9420 §7.8.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.2,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 142,
+        "latency_s": 1.36
+      }
+    },
+    {
+      "probe": "philosophical",
+      "aptitude": "Narrative/philosophical (social, Spanish fidelity)",
+      "raw": "{\n  \"summary\": \"El usuario argumenta que los actos, no los recuerdos, definen la identidad, mientras que el asistente discrepa, enfatizando la importancia de la memoria para la continuidad del yo.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.2,\n  \"category\": \"social\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 180,
+        "latency_s": 1.36
+      }
+    },
+    {
+      "probe": "noise",
+      "aptitude": "Noise culling (should be neutral, low intensity)",
+      "raw": "{\n  \"summary\": \"El linter falló en el test de linting; se recomienda ejecutar con la opción --fix para corregir los errores.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.3,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 108,
+        "latency_s": 1.05
+      }
+    },
+    {
+      "probe": "emotional",
+      "aptitude": "Emotional labeling (charged interaction)",
+      "raw": "{\n  \"summary\": \"Joan se siente eufórico porque después de tres noches sin dormir luchando con el entrenamiento, finalmente ha convergido.\",\n  \"emotion\": \"joy\",\n  \"intensity\": 0.9,\n  \"category\": \"work\"\n}\n",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 121,
+        "latency_s": 1.21
+      }
+    }
+  ],
+  "granite_4_2_8b": [
+    {
+      "probe": "technical",
+      "aptitude": "Technical distillation (work, strict JSON)",
+      "raw": "{\n  \"summary\": \"Se arregló el bug de tree_hash en pure-mls, 248 tests verdes.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.1,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 61,
+        "latency_s": 1.12
+      }
+    },
+    {
+      "probe": "philosophical",
+      "aptitude": "Narrative/philosophical (social, Spanish fidelity)",
+      "raw": "{\n  \"summary\": \"No somos nuestros recuerdos; lo que nos define son nuestros actos, aunque la memoria sea necesaria para la continuidad del yo.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.3,\n  \"category\": \"social\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 126,
+        "latency_s": 1.19
+      }
+    },
+    {
+      "probe": "noise",
+      "aptitude": "Noise culling (should be neutral, low intensity)",
+      "raw": "{\n  \"summary\": \"El linter falló; reejecutar con --fix.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.3,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 38,
+        "latency_s": 0.89
+      }
+    },
+    {
+      "probe": "emotional",
+      "aptitude": "Emotional labeling (charged interaction)",
+      "raw": "{\n  \"summary\": \"El usuario ha pasado tres noches sin dormir luchando con el entrenamiento y hoy ha convergido, sintiéndose eufórico.\",\n  \"emotion\": \"joy\",\n  \"intensity\": 0.9,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 116,
+        "latency_s": 1.22
+      }
+    }
+  ],
+  "qwen35_9b": [
+    {
+      "probe": "technical",
+      "aptitude": "Technical distillation (work, strict JSON)",
+      "raw": "\n\n{\"summary\": \"Se solucionó el bug de tree_hash en pure-mls y se confirmaron 248 pruebas exitosas tras identificar el error en el índice del leaf.\", \"emotion\": \"joy\", \"intensity\": 0.8, \"category\": \"work\"}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 131,
+        "latency_s": 1.13
+      }
+    },
+    {
+      "probe": "philosophical",
+      "aptitude": "Narrative/philosophical (social, Spanish fidelity)",
+      "raw": "\n\n{\n  \"summary\": \"El usuario defiende que los actos definen a las personas, mientras que el asistente argumenta que la memoria es esencial para la identidad y la continuidad del yo.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.6,\n  \"category\": \"social\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 163,
+        "latency_s": 1.33
+      }
+    },
+    {
+      "probe": "noise",
+      "aptitude": "Noise culling (should be neutral, low intensity)",
+      "raw": "\n\n{\n  \"summary\": \"El usuario reporta un fallo en una prueba de linting y el asistente sugiere reejecutar con la opción --fix.\",\n  \"emotion\": \"neutral\",\n  \"intensity\": 0.2,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 107,
+        "latency_s": 1.19
+      }
+    },
+    {
+      "probe": "emotional",
+      "aptitude": "Emotional labeling (charged interaction)",
+      "raw": "\n\n{\n  \"summary\": \"Joan expresa euforia tras lograr finalmente un objetivo de entrenamiento tras tres noches de esfuerzo.\",\n  \"emotion\": \"joy\",\n  \"intensity\": 0.9,\n  \"category\": \"work\"\n}",
+      "score": {
+        "json_ok": true,
+        "has_keys": true,
+        "summary_lang": "es",
+        "has_think_tags": false,
+        "echoes_prompt": false,
+        "emotion_valid": true,
+        "intensity_valid": true,
+        "summary_len": 102,
+        "latency_s": 1.1
+      }
+    }
+  ]
+}
