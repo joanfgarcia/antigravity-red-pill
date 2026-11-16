@@ -32,8 +32,8 @@ def test_compute_sw_health():
 			("c2", {"node_type": "memento_engram", "origin": "memento", "session_id": "s"}),
 			("c3", {"node_type": "memento_engram", "origin": "memento", "session_id": "s"}),
 			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
-			("m1", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True}),
-			("m2", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True}),
+			("m1", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True, "hub_id": "h1"}),
+			("m2", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True, "hub_id": "h1"}),
 		],
 		"situation_memories": [("s1", {"updated_at": now - 3600})],
 		"interaction_memories": [
@@ -58,8 +58,8 @@ def test_coverage_uses_the_synthesis_content_predicate():
 	`hubbed` fuera del contenido no infla el numerador: cobertura <= 100%."""
 	data = {
 		"work_memories": [
-			("l1", {"session_id": "s", "hubbed": True}),  # legacy sin node_type: contenido para la síntesis
-			("l2", {"session_id": "s", "hubbed": True}),
+			("l1", {"session_id": "s", "hubbed": True, "hub_id": "h1"}),  # legacy sin node_type: contenido para la síntesis
+			("l2", {"session_id": "s", "hubbed": True, "hub_id": "h1"}),
 			("x1", {"node_type": "otro", "hubbed": True}),  # no es contenido
 			("h1", {"node_type": "synthesis_hub", "hubbed": True}),  # hub: nunca contenido
 		],
@@ -127,8 +127,9 @@ def test_coverage_ignores_content_the_synthesis_can_never_group():
 	data = {
 		"work_memories": [(f"l{i}", {}) for i in range(10)]
 		+ [
-			("m1", {"node_type": "memento_engram", "session_id": "s", "hubbed": True}),
-			("m2", {"node_type": "memento_engram", "session_id": "s", "hubbed": True}),
+			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
+			("m1", {"node_type": "memento_engram", "session_id": "s", "hubbed": True, "hub_id": "h1"}),
+			("m2", {"node_type": "memento_engram", "session_id": "s", "hubbed": True, "hub_id": "h1"}),
 		],
 	}
 	wm = compute_sw_health(FakeMM(FakeClient(data)))["collections"]["work_memories"]

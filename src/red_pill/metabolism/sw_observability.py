@@ -42,7 +42,8 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 		try:
 			if not client.collection_exists(c):
 				continue
-			payloads = [p.payload or {} for p in _scroll_all(client, c)]
+			points = _scroll_all(client, c)
+			payloads = [p.payload or {} for p in points]
 			content = sum(1 for pl in payloads if is_content_node(pl))
 			groupable_payloads = [pl for pl in payloads if is_groupable(pl)]
 			groupable = len(groupable_payloads)
@@ -51,17 +52,26 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 			# predicado que group_by_session), así la cobertura nunca supera el 100%
 			# ni la hunde un legacy sin sesión que jamás entrará en un hub.
 			hubbed = sum(1 for pl in groupable_payloads if pl.get("hubbed"))
+			# RFC-OLV-001 §1: el flag `hubbed` no prueba que el padre exista. Un
+			# marcador cuyo `hub_id` no resuelve (1.962 en el Búnker el 2026-11-16)
+			# inflaba esta métrica y, peor, era invisible al recall por el filtro
+			# estructural. La cobertura cuenta NODOS que existen.
+			hub_ids = {str(p.id) for p in points if is_hub_node(p.payload or {})}
+			orphans = sum(1 for pl in groupable_payloads if pl.get("hubbed") and str(pl.get("hub_id") or "") not in hub_ids)
+			covered = hubbed - orphans
 			out["collections"][c] = {
 				"total": len(payloads),
 				"content": content,
 				"groupable": groupable,
 				"hubs": hubs,
 				"hubbed_members": hubbed,
+				"orphan_markers": orphans,
+				"hub_integrity_ok": orphans == 0,
 				# Cobertura real: % de engrams agrupables que ya están en un hub.
 				# El nombre dice la verdad (antes medía hubs/content = densidad, no
 				# cobertura; con 1 hub por ~26 miembros daba 3.8% y parecía alarma).
 				# Sin nada agrupable no hay nada que cubrir: None ("n/a"), no 0%.
-				"hub_coverage_pct": _pct(hubbed, groupable),
+				"hub_coverage_pct": _pct(covered, groupable),
 				# Densidad de hubs (hubs por 100 engrams). Contexto, no salud.
 				"hub_ratio_pct": _pct(hubs, content),
 			}

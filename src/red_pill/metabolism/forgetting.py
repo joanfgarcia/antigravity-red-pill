@@ -281,45 +281,50 @@ def reap_leafless_branches(memory_manager, mode: str = "dry_run", params: Ladder
 	if mode not in ("dry_run", "enforce"):
 		return {"mode": mode, "reaped": 0, "candidates": 0}
 
-	client = memory_manager.client
-	collection = "work_memories"
-	if not client.collection_exists(collection):
-		return {"mode": mode, "reaped": 0, "candidates": 0}
-
 	from qdrant_client import models as qm
 
-	hubs = client.scroll(
-		collection_name=collection,
-		scroll_filter=qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value=HUB_PHASE))]),
-		limit=5000,
-		with_payload=True,
-		with_vectors=False,
-	)[0]
-	members = _count_hub_members(client, collection)
-	if members is None:
-		logger.warning("[OLVIDO] Sin recuento de hojas: el reaper no borra nada en esta pasada (fail-closed).")
-		return {"mode": mode, "reaped": 0, "candidates": 0}
-
+	client = memory_manager.client
 	now = time.time()
 	min_age = params.hub_reap_min_age_hours * 3600.0
-	reap: List[Any] = []
-	for hub in hubs:
-		payload = hub.payload or {}
-		if payload.get("immune") or payload.get("promoted_from"):
-			continue
-		if members.get(str(hub.id), 0) > 0:
-			continue
-		last_write = float(payload.get("hub_members_checked_at") or payload.get("created_at") or 0)
-		if now - last_write < min_age:
-			continue
-		reap.append(str(hub.id))
-		logger.info(f"[OLVIDO] Rama sin hojas: {hub.id} (miembros=0, última escritura hace {(now - last_write) / 3600:.1f} h).")
+	total_candidates = total_reaped = 0
 
-	if mode == "enforce" and reap:
-		try:
-			client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=reap))
-			logger.info(f"[OLVIDO] Reaper: {len(reap)} ramas sin hojas retiradas.")
-		except Exception as exc:
-			logger.error(f"[OLVIDO] Reaper: fallo al borrar ramas: {exc}")
-			return {"mode": mode, "reaped": 0, "candidates": len(reap)}
-	return {"mode": mode, "reaped": len(reap) if mode == "enforce" else 0, "candidates": len(reap)}
+	for collection in sorted(LADDER_COLLECTIONS):
+		if not client.collection_exists(collection):
+			continue
+		hubs = client.scroll(
+			collection_name=collection,
+			scroll_filter=qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value=HUB_PHASE))]),
+			limit=5000,
+			with_payload=True,
+			with_vectors=False,
+		)[0]
+		if not hubs:
+			continue
+		members = _count_hub_members(client, collection)
+		if members is None:
+			logger.warning(f"[OLVIDO] Sin recuento de hojas en {collection}: el reaper no borra nada ahí (fail-closed).")
+			continue
+
+		reap: List[Any] = []
+		for hub in hubs:
+			payload = hub.payload or {}
+			if payload.get("immune") or payload.get("promoted_from"):
+				continue
+			if members.get(str(hub.id), 0) > 0:
+				continue
+			last_write = float(payload.get("hub_members_checked_at") or payload.get("created_at") or 0)
+			if now - last_write < min_age:
+				continue
+			reap.append(str(hub.id))
+			logger.info(f"[OLVIDO] Rama sin hojas en {collection}: {hub.id} (0 miembros, última escritura hace {(now - last_write) / 3600:.1f} h).")
+
+		total_candidates += len(reap)
+		if mode == "enforce" and reap:
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=reap))
+				total_reaped += len(reap)
+				logger.info(f"[OLVIDO] Reaper: {len(reap)} ramas sin hojas retiradas de {collection}.")
+			except Exception as exc:
+				logger.error(f"[OLVIDO] Reaper: fallo al borrar ramas en {collection}: {exc}")
+
+	return {"mode": mode, "reaped": total_reaped, "candidates": total_candidates}
