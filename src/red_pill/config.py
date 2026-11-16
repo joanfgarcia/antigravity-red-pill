@@ -970,6 +970,9 @@ class RedPillConfig(BaseSettings):
 	ABSENCE_THRESHOLD: int = 3 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
+	# RFC-OLV-001 · la escalera del olvido. Una sola política de borrado, en
+	# días ACTIVOS (nunca calendario). off | dry_run (informe) | enforce.
+	SW_FORGETTING_LADDER_MODE: str = "off"
 	MAX_SINK_TIME: int = 30 * 24 * 3600
 
 	@field_validator("METABOLISM_AUTO_COLLECTIONS", mode="before")

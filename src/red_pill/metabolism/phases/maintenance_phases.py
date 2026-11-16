@@ -6,6 +6,8 @@ GPU-heavy consolidation phase is deferred (the partial-deferral win of ADR-SLEEP
 
 import logging
 
+import red_pill.config as cfg
+from red_pill.metabolism.forgetting import reap_leafless_branches, run_ladder
 from red_pill.metabolism.maintenance import erode_curated, erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
@@ -51,7 +53,41 @@ class ErosionPhase(SleepPhase):
 			demoted = int(curated.get("demoted", 0) or 0)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run curated demote: {e}")
-		ctx.record(self.name, eroded + decayed + demoted, eroded=eroded, decayed=decayed, demoted=demoted)
+
+		# RFC-OLV-001 F3 — la escalera: una sola ruta decide olvidar, en días
+		# activos. `off` por defecto; `dry_run` informa sin escribir.
+		reaped = ladder_deleted = ladder_frozen = 0
+		mode = str(getattr(cfg, "SW_FORGETTING_LADDER_MODE", "off") or "off")
+		if mode != "off":
+			try:
+				rep = reap_leafless_branches(ctx.memory_manager, mode=mode)
+				reaped = int(rep.get("reaped", 0) or 0)
+				if rep.get("candidates"):
+					logger.info(f"[OLVIDO] Reaper ({mode}): {rep['candidates']} ramas sin hojas candidatas.")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to run branch reaper: {e}")
+			try:
+				ladder = run_ladder(ctx.memory_manager, mode=mode)
+				for name, col in (ladder.get("collections") or {}).items():
+					ladder_deleted += int(col.get("deleted", 0) or 0)
+					ladder_frozen += int(col.get("frozen", 0) or 0)
+					if col.get("deleted") or col.get("frozen"):
+						logger.info(f"[OLVIDO] Escalera ({mode}) en {name}: purga={col.get('deleted')} congelado={col.get('frozen')}")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to run forgetting ladder: {e}")
+
+		ctx.record(
+			self.name,
+			eroded + decayed + demoted + reaped + ladder_deleted + ladder_frozen,
+			eroded=eroded,
+			decayed=decayed,
+			demoted=demoted,
+			reaped=reaped,
+			ladder_purga=ladder_deleted,
+			ladder_permastore=ladder_frozen,
+		)
+		if mode != "off":
+			logger.info(f"[OLVIDO] Escalera en modo {mode}: purga={ladder_deleted} permastore={ladder_frozen} reaper={reaped}")
 
 
 class WashoutPhase(SleepPhase):

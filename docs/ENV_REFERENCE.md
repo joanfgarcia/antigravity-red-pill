@@ -305,6 +305,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
+| `SW_FORGETTING_LADDER_MODE` | `off` | Escalera del olvido (RFC-OLV-001): `off` · `dry_run` (informe, cero escrituras) · `enforce`. Mide en **días activos**, no de calendario. |
 | `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
 | `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |
 | `INTERACTION_MAX_AGE_DAYS` | `30` | Tope duro de edad del buffer: lo no renderizado más viejo se purga (con señal). |
