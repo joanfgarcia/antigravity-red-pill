@@ -646,13 +646,19 @@ def synthesize_session_hubs(
 		except Exception as e:
 			logger.error(f"[HUBS] no se pudo inventariar {collection}: {e}")
 			continue
-		for i, (session_id, members) in enumerate(groups.items()):
-			if limit_sessions is not None and i >= limit_sessions:
+		# El tope cuenta sesiones REALMENTE sintetizadas, no la posición en el
+		# diccionario: con el índice, un prefijo de sesiones de un solo miembro
+		# gastaba el cupo y la cola no se visitaba nunca (RFC-OLV-001, hallazgo
+		# lateral del despertar de las 20:00).
+		processed = 0
+		for session_id, members in groups.items():
+			if limit_sessions is not None and processed >= limit_sessions:
 				break
 			if len(members) < 2:
 				# Hub de una sola idea: el engrama ya es buscable; no se
 				# parafrasea ni se oculta (evita perder precisión).
 				continue
+			processed += 1
 			stats["sessions"] += 1
 			force = bool(force_sessions and session_id in force_sessions)
 			# Fail-soft POR SESIÓN: un hub malo no puede abortar la colección

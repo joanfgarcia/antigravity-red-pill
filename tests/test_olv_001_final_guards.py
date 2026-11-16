@@ -173,7 +173,10 @@ def test_iso_timestamps_do_not_break_the_pass():
 
 def test_unknown_collection_is_never_decided():
 	now = time.time()
-	assert fog.classify({"recall_count": 0, "last_recalled_at": now - DAY * 400}, "directive_memories", _clock(40, now), now) == "keep"
+	# Reloj con gracia agotada: sin la guarda de alcance, este punto saldría `delete`.
+	clock = _clock(200, now, started_epoch=0)
+	assert fog.classify({"recall_count": 0, "last_recalled_at": now - DAY * 400}, "directive_memories", clock, now) == "keep"
+	assert fog.classify({"recall_count": 0, "last_recalled_at": now - DAY * 400}, "work_memories", clock, now) == "delete"
 
 
 # ---------------------------------------------------------------------------

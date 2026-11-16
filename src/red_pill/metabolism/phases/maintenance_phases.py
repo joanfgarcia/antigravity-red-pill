@@ -75,10 +75,14 @@ class ErosionPhase(SleepPhase):
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to run forgetting ladder: {e}")
 			try:
-				rep = reap_leafless_branches(ctx.memory_manager, mode=mode)
+				reaper_mode = str(getattr(cfg, "SW_BRANCH_REAPER_MODE", "dry_run") or "dry_run").strip().lower()
+				if reaper_mode not in ("off", "dry_run", "enforce"):
+					logger.warning(f"[OLVIDO] Modo de reaper desconocido {reaper_mode!r}: se trata como 'dry_run'.")
+					reaper_mode = "dry_run"
+				rep = reap_leafless_branches(ctx.memory_manager, mode=reaper_mode)
 				reaped = int(rep.get("reaped", 0) or 0)
 				if rep.get("candidates"):
-					logger.info(f"[OLVIDO] Reaper ({mode}): {rep['candidates']} ramas sin hojas candidatas.")
+					logger.info(f"[OLVIDO] Reaper ({reaper_mode}): {rep['candidates']} ramas sin hojas candidatas.")
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to run branch reaper: {e}")
 

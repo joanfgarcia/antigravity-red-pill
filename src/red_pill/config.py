@@ -976,6 +976,18 @@ class RedPillConfig(BaseSettings):
 	# RFC-OLV-001 · la escalera del olvido. Una sola política de borrado, en
 	# días ACTIVOS (nunca calendario). off | dry_run (informe) | enforce.
 	SW_FORGETTING_LADDER_MODE: str = "off"
+	# El reaper de ramas tiene su propio interruptor: decide sobre 86 ramas sin
+	# hojas (24 work + 62 social) y no debe ir atado al de las hojas.
+	SW_BRANCH_REAPER_MODE: str = "dry_run"
+
+	@field_validator("SW_BRANCH_REAPER_MODE", mode="before")
+	@classmethod
+	def _validate_reaper_mode(cls, v: Any) -> str:
+		norm = str(v or "dry_run").strip().lower().replace("-", "_")
+		norm = {"true": "enforce", "false": "off", "": "dry_run"}.get(norm, norm)
+		if norm not in ("off", "dry_run", "enforce"):
+			raise ValueError(f"SW_BRANCH_REAPER_MODE inválido: {v!r} (usa off | dry_run | enforce)")
+		return norm
 
 	@field_validator("SW_FORGETTING_LADDER_MODE", mode="before")
 	@classmethod

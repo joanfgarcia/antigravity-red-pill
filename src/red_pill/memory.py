@@ -689,6 +689,47 @@ class MemoryManager:
 		results.sort(key=lambda r: (r.payload or {}).get("_texture_score", 0.0), reverse=True)
 		return results
 
+	def _live_hub_ids(self, collection: str) -> set:
+		"""Ids de los hubs que EXISTEN (caché de 60 s).
+
+		Es la única forma honesta de decidir qué miembros ocultar al recall: el
+		nodo, no el flag. Si el conjunto supera un techo (colecciones enormes), se
+		devuelve vacío y el llamante cae al comportamiento por flag.
+		"""
+		now = time.time()
+		cached = getattr(self, "_hub_ids_cache", None) or {}
+		hit = cached.get(collection)
+		if hit and now - hit[0] < 60:
+			return hit[1]
+		try:
+			from qdrant_client import models as _qm
+
+			flt = _qm.Filter(
+				should=[
+					_qm.FieldCondition(key="lazarus_phase", match=_qm.MatchValue(value="synthesis_hub")),
+					_qm.FieldCondition(key="node_type", match=_qm.MatchValue(value="synthesis_hub")),
+				]
+			)
+			ids: set = set()
+			offset = None
+			while True:
+				batch, offset = self.client.scroll(
+					collection_name=collection, scroll_filter=flt, limit=1000, offset=offset, with_payload=False, with_vectors=False
+				)
+				ids.update(str(p.id) for p in batch)
+				if offset is None:
+					break
+				if len(ids) > 2000:
+					logger.debug("[RECALL] Demasiados hubs para filtrar por id; se usa el flag.")
+					ids = set()
+					break
+		except Exception as exc:
+			logger.debug(f"[RECALL] No se pudieron leer los hubs de {collection}: {exc}")
+			ids = set()
+		cached[collection] = (now, ids)
+		self._hub_ids_cache = cached
+		return ids
+
 	def _search_and_reinforce_impl(
 		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, hybrid: bool = False
 	) -> List[Any]:
@@ -715,8 +756,17 @@ class MemoryManager:
 		# Miembros ya agrupados en un hub de sesión (D14): el recall entra por el
 		# hub, no por cada idea. SOLO cuando los hubs están activos — apagar
 		# SW_HUBS_ENABLED devuelve los miembros al recall (reversibilidad, RULE 4).
+		#
+		# RFC-OLV-001 §1.3.5: se excluye por `hub_id` EXISTENTE, no por el flag.
+		# El flag `hubbed` miente (1.962 marcadores apuntaban a un padre borrado) y
+		# usarlo como filtro convertía el error en ceguera: esos engramas no se
+		# podían recuperar ni reforzar, así que su `recall_count` se quedaba a 0.
 		if getattr(cfg, "SW_HUBS_ENABLED", False):
-			structural_exclusions.append(models.FieldCondition(key="hubbed", match=models.MatchValue(value=True)))
+			_live = self._live_hub_ids(collection)
+			if _live:
+				structural_exclusions.append(models.FieldCondition(key="hub_id", match=models.MatchAny(any=sorted(_live))))
+			else:  # sin hubs legibles, el comportamiento previo (reversible)
+				structural_exclusions.append(models.FieldCondition(key="hubbed", match=models.MatchValue(value=True)))
 
 		if not deep_recall:
 			search_filter = models.Filter(
