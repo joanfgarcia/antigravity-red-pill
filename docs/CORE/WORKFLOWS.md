@@ -193,7 +193,10 @@ The seeder renders **only the active profile** from `seeds/rules/git_workflow.md
 deployed file still says `apply only the section that matches`, it is stale: re-seed.
 
 - `solo → canonical`: finish or park `next` first (merge it via a release PR, or park it as
-  `parked/<slug>` with a verdict in the desk). Do not leave an orphan `next`.
+  `parked/<slug>` with a verdict in the desk). Do not leave an orphan `next`. On the same
+  switch, **new history is written in English** — commit messages, `CHANGELOG.md`, release
+  notes ([`LANGUAGE_POLICY.md`](LANGUAGE_POLICY.md) §2.1). Nothing already written is
+  rewritten.
 - `canonical → solo`: nothing to migrate; `next` is created on the next cycle.
 
 ### 0.5 Branch names

@@ -188,6 +188,8 @@ Project-level rules and standards. These govern how the project itself is built 
 |----------|-----------|
 | [PROTOCOL_OF_SILENCE.md](CORE/PROTOCOL_OF_SILENCE.md) | Universal coding standard for Human-AI co-authored systems (all languages) |
 | [CONVENTIONS.md](CORE/CONVENTIONS.md) | Naming and structure conventions — UPPERCASE docs, lowercase code, decision table |
+| [LANGUAGE_POLICY.md](CORE/LANGUAGE_POLICY.md) | Scaffold in English, interface in the agreed language, personal text never machine-translated |
+| [GLOSSARY.md](CORE/GLOSSARY.md) | The vocabulary bridge — the four mood registers, mood codes, and renames in flight |
 | [IDENTITY_AND_INSTANCE.md](CORE/IDENTITY_AND_INSTANCE.md) | Identity & instance policy — the repo is engine + novel; agent/operator identity is instance config |
 | [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — branching model (solo/canonical), pre-push, pre-PR, release, certification, identity resync |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |

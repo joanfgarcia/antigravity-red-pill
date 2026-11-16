@@ -3821,3 +3821,51 @@ fija 7 → 3,5 → 0). `tests/test_hub_synth_wait_expiry.py`,
 coste es una cláusula más en RULE 4 — estrecha y enumerada: si alguna vez una
 corrección discutible se ampara en ella, el criterio es «¿el OFF deja el defecto
 vivo?». Si ya no lo deja, es feature y vuelve a RULE 4 normal.
+
+## [AD-121] El andamio habla inglés; el alma, no — política de idioma en tres capas
+**Date**: 2026-11-16
+**Status**: ACCEPTED (`feat/asp-001`), documentado en `docs/CORE/LANGUAGE_POLICY.md`.
+
+**Context**: la pieza de ánimo de 8.4.0 aterrizó como `core/affect_fondo.py` — un `affect`
+inglés soldado a un `fondo` español—, con `FondoNoSobrescrito` en un namespace inglés y las
+etiquetas de las letras (`B` = bien) como mnemónicos de un solo idioma. El Operador lo
+señaló: mezclar idiomas suena raro. Pero la corrección no podía ser «traducir al español»:
+el repositorio es un producto que instalará gente cuyo operador no lee español, y el
+andamio es lo único que esa gente va a leer. `CONVENTIONS.md` §9 afirmaba «English: commit
+messages, CHANGELOG» mientras los últimos veinte commits del árbol eran españoles: la
+convención no describía el árbol.
+
+**Decision**:
+- Una sola pregunta decide el idioma: **¿quién lo lee?** Andamio (código, claves, ficheros,
+  CLI, logs, docs de referencia) → **inglés**. Interfaz (handshake, ayuda, etiquetas,
+  avisos, prompts de despertar) → **la lengua acordada en la instalación**
+  (`OPERATOR_LANGUAGE`, sin `auto`; `es` en esta máquina). Texto sobre uno mismo
+  (identidad, `why` del aspecto, lore) → **la de su autor, nunca retrotraducida**: se
+  re-escribe, no se reescribe por otro.
+- **Identificadores mestizos, prohibidos** (§6). `ID_HEDONIC_SET` como id de la directiva
+  del aspecto queda expresamente vetado: hereda el nombre del concepto que sustituye.
+- **Las etiquetas se localizan; los códigos no.** La letra del ánimo deja de ser mnemónico
+  (`B` es clave, no «bien»): en inglés *well* empieza por W y ningún juego de iniciales
+  sobrevive a la traducción.
+- **El historial (commits, `CHANGELOG`, release notes) se queda en la lengua del par**
+  mientras el par sea el único lector. El salto al inglés tiene disparador por defecto
+  (perfil `GIT_WORKFLOW=canonical`, `WORKFLOWS.md` §0.4) pero no es ley: cualquier momento
+  vale si se fecha y se motiva aquí. **Nada ya escrito se reescribe.**
+- La política es enmendable por AD (§8): la única cláusula que exige más que una decisión
+  es la de no-retrotraducción, que es una afirmación sobre autoría, no sobre idioma.
+
+**Alternatives rechazadas**: traducir el árbol al español (el producto deja de ser
+instalable fuera de España); traducir todo al inglés incluida la identidad (le pone palabras
+en la boca al agente: revoca la autoría que `RFC-ASP-001` D-03 protege); mantener los
+mnemónicos y traducir las etiquetas «a ojo» (falso: `B` no es *well*); dejarlo como deuda
+implícita sin norma (el siguiente agente re-inventa el término).
+
+**Rationale / Evidence**: `docs/CORE/GLOSSARY.md` §3 fija la tabla `es`/`en`;
+`data/affect_letters.yaml` ya tiene la forma correcta (`emotion`/`color` en inglés, `label`
+en español) y la migración es `labels: {es, en}` con `label` como fallback. `CONVENTIONS.md`
+§9 corregido para describir el árbol medido.
+
+**Consequences**: la primera migración es `affect_fondo` → `declared_mood` (módulo, estado
+con fallback de lectura, excepción `DeclaredMoodLocked`, CLI `red-pill mood` con `affect`
+como alias deprecado), dentro de `feat/asp-001`. Los contratos byte-exactos del bloque de
+ánimo pasan de literales a renderizado por locale, con `es` idéntico byte a byte (T7).
