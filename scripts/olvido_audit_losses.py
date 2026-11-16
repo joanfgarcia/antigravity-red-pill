@@ -120,6 +120,27 @@ def main() -> int:
 		"md": sum(1 for _ in MEMENTO_DIR.rglob("*.md")) if MEMENTO_DIR.exists() else 0,
 		"months": sorted(p.name for p in MEMENTO_DIR.iterdir() if p.is_dir()) if MEMENTO_DIR.exists() else [],
 	}
+	raw_sources: dict = {}
+	try:
+		with sqlite3.connect(str(Path.home() / ".local/share/opencode/opencode.db")) as conn:
+			raw_sources["opencode_db_sessions"] = conn.execute("SELECT count(*) FROM session").fetchone()[0]
+	except Exception as exc:
+		raw_sources["opencode_db_sessions"] = f"n/d ({type(exc).__name__})"
+	try:
+		raw_sources["claude_code_jsonl"] = sum(1 for _ in (Path.home() / ".claude/projects").rglob("*.jsonl"))
+	except Exception:
+		raw_sources["claude_code_jsonl"] = "n/d"
+	report["raw_sources"] = raw_sources
+	# Capa 2-bis: Memento NO solo guarda la nota, copia el raw de la conversación.
+	mirror = {"files": 0, "mb": 0.0}
+	try:
+		for f in MEMENTO_DIR.rglob("raw/raw.json"):
+			mirror["files"] += 1
+			mirror["mb"] += f.stat().st_size / (1024 * 1024)
+		mirror["mb"] = round(mirror["mb"], 1)
+	except Exception:
+		pass
+	report["memento_raw_mirror"] = mirror
 	report["live_sessions"] = len(live_sessions)
 	report["live_by_month"] = dict(sorted(per_month_live.items()))
 
@@ -131,8 +152,13 @@ def main() -> int:
 	for source, row in report["memento"].items():
 		print(f"{source:<20}{row['registered']:>12}{row['with_engram']:>13}{row['pending']:>12}")
 	print(f"\nficheros .md en Memento: {report['memento_files']['md']} · meses: {', '.join(report['memento_files']['months'])}")
-	print("\n== CAPA 3 · Raw (session_mirror) ==")
-	print(f"sesiones vistas: {report['raw'].get('sessions')} · con engrama: {report['raw'].get('with_engram')}")
+	mirror = report.get("memento_raw_mirror") or {}
+	print(f"raw COPIADO por Memento: {mirror.get('files')} sesiones · {mirror.get('mb')} MB (message_rows + part_rows verbatim)")
+	print("\n== CAPA 3 · Espejo de turnos (session_mirror) — NO es el raw ==")
+	print("Es solo el espejo de turnos desde 2026-09-08; el raw real vive en cada IDE:")
+	print(f"  opencode.db: {report['raw_sources'].get('opencode_db_sessions')} sesiones")
+	print(f"  claude_code: {report['raw_sources'].get('claude_code_jsonl')} ficheros .jsonl")
+	print(f"sesiones en el espejo: {report['raw'].get('sessions')} · con engrama: {report['raw'].get('with_engram')}")
 	print(f"sin engrama NI memento (posible pérdida real): {report['raw'].get('no_engram_no_memento_count')}")
 
 	if args.json:
