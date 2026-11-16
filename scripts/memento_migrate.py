@@ -107,7 +107,8 @@ def backfill_raw(registry: Any, plugins: List[Any], root: Path, now: str, verify
 
 	Con `verify_only` no escribe: devuelve el censo y el llamante decide.
 	"""
-	stats = {"ok": 0, "copied": 0, "upgraded": 0, "reconstructed": 0, "missing": 0}
+	stats = {"ok": 0, "copied": 0, "upgraded": 0, "reconstructed": 0, "missing": 0, "unexpected": 0}
+	allow = _raw_allowlist()
 	by_name = {p.name: p for p in plugins}
 	for source, sessions in registry.state.get("registry", {}).items():
 		plugin = by_name.get(source)
@@ -120,8 +121,14 @@ def backfill_raw(registry: Any, plugins: List[Any], root: Path, now: str, verify
 				stats["ok"] += 1
 				continue
 			if verify_only:
-				stats["missing"] += 1
-				logger.error(f"[RAW-VERIFY] {source}:{session_id} — copia {kind} (no verbatim)")
+				key = f"{source}\t{session_id}"
+				if key in allow:
+					stats["missing"] += 1
+					logger.info(f"[RAW-VERIFY] {source}:{session_id} — sin verbatim, en lista blanca ({allow[key]})")
+				else:
+					stats["missing"] += 1
+					stats["unexpected"] += 1
+					logger.error(f"[RAW-VERIFY] {source}:{session_id} — sin verbatim y SIN justificar (regresión)")
 				continue
 			copied = False
 			if plugin is not None:
@@ -155,6 +162,24 @@ def backfill_raw(registry: Any, plugins: List[Any], root: Path, now: str, verify
 				stats["missing"] += 1
 				logger.error(f"[RAW] {source}:{session_id} — sin fuente, sin copia y sin index")
 	return stats
+
+
+RAW_ALLOWLIST = Path(__file__).resolve().parent.parent / "configs" / "memento_raw_allowlist.tsv"
+
+
+def _raw_allowlist() -> Dict[str, str]:
+	"""Sesiones que NUNCA tendrán raw verbatim (fuente desaparecida), con motivo."""
+	out: Dict[str, str] = {}
+	try:
+		for line in RAW_ALLOWLIST.read_text(encoding="utf-8").splitlines():
+			if not line.strip() or line.startswith("#"):
+				continue
+			parts = line.split("\t")
+			if len(parts) >= 3:
+				out[f"{parts[0]}\t{parts[1]}"] = parts[2]
+	except Exception:
+		pass
+	return out
 
 
 def raw_kind(session_dir: Path) -> str:
@@ -462,8 +487,9 @@ def main() -> None:
 			f"Raw coverage: {raw_stats['ok']} verbatim · {raw_stats['copied'] + raw_stats['upgraded']} recuperadas/ascendidas · "
 			f"{raw_stats['reconstructed']} reconstruidas · {raw_stats['missing']} sin nada"
 		)
-		if args.verify_raw and raw_stats["missing"]:
+		if args.verify_raw and raw_stats["unexpected"]:
 			registry.save()
+			logger.error(f"RAW GATE: {raw_stats['unexpected']} sesión(es) sin raw verbatim y sin justificar")
 			raise SystemExit(1)
 
 	if not pending:
