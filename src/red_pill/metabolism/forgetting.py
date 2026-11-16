@@ -32,6 +32,8 @@ from bisect import bisect_left
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+import red_pill.config as cfg
+
 logger = logging.getLogger(__name__)
 
 # Colecciones con circuito largo y su unidad. El resto no entra: directivas,
@@ -226,6 +228,20 @@ def _promotion_stamps(payload: Dict[str, Any], days: List[float], now: float, pa
 	return len(distinct)
 
 
+def _since_days(payload: Dict[str, Any], clock: Dict[str, Any], now: float) -> int:
+	"""Días activos sin usar (la magnitud que decide). Extraído para ordenar."""
+	epoch = int(clock.get("epoch") or 0)
+	days = list(clock.get("days") or [])
+	idx = payload.get("active_days_at_recall")
+	if isinstance(idx, int) and 0 <= idx <= epoch:
+		return epoch - idx
+	last = _ts(payload.get("last_recalled_at")) or _ts(payload.get("created_at")) or now
+	started = clock.get("started_epoch")
+	grace = max(0, epoch - int(started if started is not None else epoch))
+	real_since = active_days_between(days, last, now) if days else grace
+	return min(real_since, grace)
+
+
 def classify(
 	payload: Dict[str, Any],
 	collection: str,
@@ -250,21 +266,8 @@ def classify(
 	if last is None:
 		return "keep"  # sin fecha legible no se olvida: fail-closed
 
-	epoch = int(clock.get("epoch") or 0)
 	days = list(clock.get("days") or [])
-	idx = payload.get("active_days_at_recall")
-	if isinstance(idx, int) and 0 <= idx <= epoch:
-		since = epoch - idx
-	else:
-		# Legacy sin contador: se cobra lo REAL que lleve sin usarse, pero nunca
-		# más que lo transcurrido desde que la escalera arrancó (D-16). Así un
-		# engrama usado hace poco antes de F3 no nace condenado, y uno parado
-		# hace meses no se salva por el arranque.
-		_started = clock.get("started_epoch")
-		grace = max(0, epoch - int(_started if _started is not None else epoch))
-		real_since = active_days_between(days, last, now) if days else grace
-		since = min(real_since, grace)
-
+	since = _since_days(payload, clock, now)
 	raw_stamps = [s for s in (_ts(s) for s in (payload.get("recall_stamps") or [])) if s is not None]
 	stamps = _promotion_stamps(payload, days, now, params)
 	# Transición de legacy (§8.2). Ojo: NO puede depender de que los stamps estén
@@ -351,7 +354,6 @@ def run_ladder(
 	mode: str = "dry_run",
 	params: LadderParams = DEFAULTS,
 	report_path: Optional[str] = None,
-	ladder_start: Optional[float] = None,
 ) -> Dict[str, Any]:
 	"""Recorre las colecciones de la escalera y aplica (o informa) la decisión."""
 	mode = (mode or "off").strip().lower()
@@ -367,8 +369,6 @@ def run_ladder(
 	if not clock or not clock.get("epoch"):
 		logger.warning("[OLVIDO] Sin reloj fiable de días activos: no se decide nada en esta pasada (fail-closed).")
 		return {"mode": mode, "collections": {}}
-	if ladder_start is not None:
-		clock = dict(clock, started_epoch=int(clock.get("epoch", 0)) - 0)  # compat: simulación explícita
 	reports: Dict[str, Any] = {}
 	for collection in sorted(LADDER_COLLECTIONS):
 		if not client.collection_exists(collection):
@@ -406,7 +406,7 @@ def run_ladder(
 				)
 			if decision == "delete":
 				report.planned_delete.append(str(point.id))
-				to_delete.append(str(point.id))
+				to_delete.append((_since_days(point.payload or {}, clock, now), str(point.id)))
 			elif decision == "freeze":
 				report.frozen.append(str(point.id))
 				to_freeze.append(point.id)
@@ -417,15 +417,27 @@ def run_ladder(
 				report.kept += 1
 			del decision
 
+		# Rampa (R4-02): se purga primero lo MÁS parado, y como máximo N por
+		# pasada. Una escalera se sube; no se salta 92 % del corpus en una noche.
+		cap = int(getattr(cfg, "SW_FORGETTING_MAX_PURGES_PER_CYCLE", 0) or 0)
+		to_delete.sort(key=lambda item: -item[0])
+		deferred = 0
+		if cap > 0 and len(to_delete) > cap:
+			deferred = len(to_delete) - cap
+			to_delete = to_delete[:cap]
+			logger.info(f"[OLVIDO] {collection}: rampa activa, {deferred} purgas diferidas a próximas pasadas.")
+		to_delete_ids = [pid for _, pid in to_delete]
+
 		report_dict = report.as_dict()
+		report_dict["deferred"] = deferred
 		if mode == "enforce":
 			from qdrant_client import models as qm
 
-			if to_delete:
+			if to_delete_ids:
 				try:
-					client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=to_delete))
-					report_dict["applied_delete"] = len(to_delete)
-					logger.info(f"[OLVIDO] {collection}: {len(to_delete)} engramas purgados (escalera).")
+					client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=to_delete_ids))
+					report_dict["applied_delete"] = len(to_delete_ids)
+					logger.info(f"[OLVIDO] {collection}: {len(to_delete_ids)} engramas purgados (escalera).")
 				except Exception as exc:
 					report_dict["write_errors"] = report_dict.get("write_errors", 0) + 1
 					logger.error(f"[OLVIDO] Fallo purgando en {collection}: {exc}")

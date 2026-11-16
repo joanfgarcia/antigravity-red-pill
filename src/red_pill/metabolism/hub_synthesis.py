@@ -651,14 +651,14 @@ def synthesize_session_hubs(
 		# gastaba el cupo y la cola no se visitaba nunca (RFC-OLV-001, hallazgo
 		# lateral del despertar de las 20:00).
 		processed = 0
+		_cap = limit_sessions if limit_sessions and limit_sessions > 0 else None
 		for session_id, members in groups.items():
-			if limit_sessions is not None and processed >= limit_sessions:
+			if _cap is not None and processed >= _cap:
 				break
 			if len(members) < 2:
 				# Hub de una sola idea: el engrama ya es buscable; no se
 				# parafrasea ni se oculta (evita perder precisión).
 				continue
-			processed += 1
 			stats["sessions"] += 1
 			force = bool(force_sessions and session_id in force_sessions)
 			# Fail-soft POR SESIÓN: un hub malo no puede abortar la colección
@@ -682,6 +682,11 @@ def synthesize_session_hubs(
 				failed_sessions.append(f"{collection}:{session_id}")
 				failure_reasons.append((f"{collection}:{session_id}", f"exception:{type(e).__name__}"))
 				continue
+			if result != "skipped":
+				# El cupo cuenta trabajo real (escritura/espera/fallo): un skip por
+				# `hub_input_hash` no gasta la noche, o el mismo prefijo ya sintetizado
+				# se comería el tope siempre (R4-04).
+				processed += 1
 			if result == "written":
 				stats["hubs_written"] += 1
 			elif result == "waiting":

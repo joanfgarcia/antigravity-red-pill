@@ -96,6 +96,7 @@ def test_limit_sessions_counts_synthesised_sessions(monkeypatch):
 		"solo-2": [(2, {"content": "b"})],
 		"par-3": [(3, {"content": "c"}), (4, {"content": "d"})],
 		"par-4": [(5, {"content": "e"}), (6, {"content": "f"})],
+		"par-5": [(7, {"content": "g"}), (8, {"content": "h"})],
 	}
 
 	points = []
@@ -123,3 +124,57 @@ def test_limit_sessions_counts_synthesised_sessions(monkeypatch):
 
 	assert seen == ["par-3", "par-4"], f"el cupo debe gastarse en sesiones válidas, no en las de un miembro: {seen}"
 	assert stats["sessions"] == 2
+
+
+def test_limit_sessions_does_not_spend_on_skips(monkeypatch):
+	"""Un skip por hash no gasta cupo: si no, el mismo prefijo se come la noche."""
+	from types import SimpleNamespace
+
+	groups = {
+		"ya-hecha-1": [(1, {"content": "a"}), (2, {"content": "b"})],
+		"ya-hecha-2": [(3, {"content": "c"}), (4, {"content": "d"})],
+		"nueva-3": [(5, {"content": "e"}), (6, {"content": "f"})],
+	}
+	points = [pt for members in groups.values() for pt in members]
+	mm = SimpleNamespace(
+		client=SimpleNamespace(
+			collection_exists=lambda *a, **k: True,
+			scroll=lambda collection=None, **kw: ([SimpleNamespace(id=p, payload=pl) for p, pl in points], None),
+		)
+	)
+	monkeypatch.setattr(hs, "group_by_session", lambda pts: groups)
+	seen: list[str] = []
+
+	def fake_synth(_mm, _col, session_id, *_a, **_k):
+		seen.append(session_id)
+		return "skipped" if session_id.startswith("ya-hecha") else "written"
+
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "SW_HUBS_ENABLED", True)
+	monkeypatch.setattr(hs, "_synthesize_one", fake_synth)
+	hs.synthesize_session_hubs(mm, collections=("work_memories",), limit_sessions=1)
+
+	assert seen == ["ya-hecha-1", "ya-hecha-2", "nueva-3"], f"dos skips no pueden gastar el cupo: {seen}"
+
+
+def test_limit_sessions_zero_means_unlimited(monkeypatch):
+	"""`0` no puede apagar la síntesis en silencio (el config lo usa como «sin tope»)."""
+	from types import SimpleNamespace
+
+	groups = {"a": [(1, {"content": "a"}), (2, {"content": "b"})], "b": [(3, {"content": "c"}), (4, {"content": "d"})]}
+	points = [pt for members in groups.values() for pt in members]
+	mm = SimpleNamespace(
+		client=SimpleNamespace(
+			collection_exists=lambda *a, **k: True,
+			scroll=lambda collection=None, **kw: ([SimpleNamespace(id=p, payload=pl) for p, pl in points], None),
+		)
+	)
+	monkeypatch.setattr(hs, "group_by_session", lambda pts: groups)
+	seen: list[str] = []
+	monkeypatch.setattr(hs, "_synthesize_one", lambda _mm, _col, sid, *_a, **_k: (seen.append(sid), "written")[1])
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "SW_HUBS_ENABLED", True)
+	hs.synthesize_session_hubs(mm, collections=("work_memories",), limit_sessions=0)
+	assert seen == ["a", "b"], "0 debe significar sin tope, no «ninguna»"

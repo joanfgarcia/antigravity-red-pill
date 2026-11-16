@@ -979,6 +979,10 @@ class RedPillConfig(BaseSettings):
 	# El reaper de ramas tiene su propio interruptor: decide sobre 86 ramas sin
 	# hojas (24 work + 62 social) y no debe ir atado al de las hojas.
 	SW_BRANCH_REAPER_MODE: str = "dry_run"
+	# Rampa del olvido: cuántos engramas puede purgar la escalera por pasada
+	# (0 = sin tope). Sin esto, el día que la gracia D-16 se agota caen 7.657 de
+	# golpe (92 % del corpus): una escalera se sube, no se salta (R4-02).
+	SW_FORGETTING_MAX_PURGES_PER_CYCLE: int = 50
 
 	@field_validator("SW_BRANCH_REAPER_MODE", mode="before")
 	@classmethod

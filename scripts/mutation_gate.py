@@ -63,8 +63,8 @@ MUTATIONS: tuple[Mutation, ...] = (
 	Mutation(
 		name="gracia-d16",
 		file="src/red_pill/metabolism/forgetting.py",
-		original="since = min(real_since, grace)",
-		mutated="since = real_since",
+		original="return min(real_since, grace)",
+		mutated="return real_since",
 		tests=("tests/test_olv_001_final_guards.py::test_active_day_counter_changes_the_verdict",),
 		why="la migración no cobra un histórico truncado (D-16)",
 	),
@@ -103,8 +103,8 @@ MUTATIONS: tuple[Mutation, ...] = (
 	Mutation(
 		name="tope-sesiones",
 		file="src/red_pill/metabolism/hub_synthesis.py",
-		original="if limit_sessions is not None and processed >= limit_sessions:",
-		mutated="if limit_sessions is not None and groups and list(groups).index(session_id) >= limit_sessions:",
+		original="if _cap is not None and processed >= _cap:",
+		mutated="if False:",
 		tests=("tests/test_olv_001_blindness_and_cap.py::test_limit_sessions_counts_synthesised_sessions",),
 		why="el cupo se gasta en sesiones sintetizadas, no en la posición",
 	),

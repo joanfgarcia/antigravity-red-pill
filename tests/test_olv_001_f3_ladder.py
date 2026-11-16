@@ -126,8 +126,8 @@ def test_dry_run_writes_nothing(memory_manager: MemoryManager, monkeypatch):
 		],
 	)
 	monkeypatch.setattr(fog, "active_day_clock", lambda *a, **k: _clock(60, now))
-	# `ladder_start` en el pasado simula que la escalera lleva 60 días activos
-	# contando; en producción el marcador hace que la primera purga espere (D-16).
+	# El reloj inyectado simula que la escalera lleva 60 días activos contando;
+	# en producción el marcador hace que la primera purga espere (D-16).
 	report = fog.run_ladder(memory_manager, mode="dry_run")
 
 	assert report["collections"]["work_memories"]["planned_delete"] == 1
@@ -169,3 +169,40 @@ def test_reaper_respects_race_guard_and_self_content(memory_manager: MemoryManag
 	)
 	assert not memory_manager.client.retrieve(collection_name="work_memories", ids=[old], with_payload=False), "la rama seca y vieja cae"
 	assert memory_manager.client.retrieve(collection_name="work_memories", ids=[selfc], with_payload=False), "una auto-contenida no es rama de nadie"
+
+
+def test_ramp_caps_purges_per_cycle(memory_manager, monkeypatch):
+	"""R4-02: nunca se purga el corpus de golpe; la rampa limita por pasada."""
+	from qdrant_client.http import models
+
+	import red_pill.config as cfg
+
+	now = time.time()
+	clock = _clock(200, now, started_epoch=0)
+	monkeypatch.setattr(fog, "active_day_clock", lambda *a, **k: clock)
+	monkeypatch.setattr(cfg, "SW_FORGETTING_MAX_PURGES_PER_CYCLE", 2)
+	memory_manager._ensure_collection("work_memories")
+	points = []
+	for i in range(5):
+		points.append(
+			models.PointStruct(
+				id=f"00000000-0000-0000-0000-00000000ab0{i}",
+				vector=[0.1] * 384,
+				payload={
+					"content": f"viejo {i}",
+					"node_type": "memento_engram",
+					"recall_count": 0,
+					"last_recalled_at": now - DAY * 100,
+					"created_at": now - DAY * 100,
+				},
+			)
+		)
+	memory_manager.client.upsert(collection_name="work_memories", points=points)
+
+	report = fog.run_ladder(memory_manager, mode="enforce")
+	col = report["collections"]["work_memories"]
+	assert col["planned_delete"] == 5
+	assert col["applied_delete"] == 2, "la rampa no puede llevarse los cinco de golpe"
+	assert col["deferred"] == 3
+	remaining = memory_manager.client.scroll(collection_name="work_memories", limit=100, with_payload=False)[0]
+	assert len(remaining) == 3

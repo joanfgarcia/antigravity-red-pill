@@ -306,6 +306,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | **DEPRECATED** (RFC-OLV-001 D-08). El guard se retiró: la ausencia cuesta 0 en días activos. |
 | `SW_EROSION_DEMOTE_ENABLED` | `False` | **DEPRECATED** (RFC-OLV-001 D-03). El demote de curados se retiró: los curados siguen la escalera. |
 | `SW_FORGETTING_LADDER_MODE` | `off` | Escalera del olvido (RFC-OLV-001): `off` · `dry_run` · `enforce`. Mide en **días activos**. En `enforce`, la primera purga espera a que pasen los días activos desde el arranque (D-16). |
+| `SW_FORGETTING_MAX_PURGES_PER_CYCLE` | `50` | Rampa: máximo de purgas por pasada y colección (0 = sin tope). Se purga primero lo más parado. Sin tope, el día que se agota la gracia D-16 caen 7.657 de golpe. |
 | `SW_BRANCH_REAPER_MODE` | `dry_run` | Reaper de ramas sin hojas (RFC-OLV-001, D-02). Interruptor **independiente**: `off` · `dry_run` · `enforce`. |
 | `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
 | `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |
