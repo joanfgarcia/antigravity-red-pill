@@ -96,15 +96,15 @@ label is not.
 | `FondoNoSobrescrito` | `DeclaredMoodLocked` | exception name, same semantics (only the Operator declares) |
 | `red-pill affect fondo --set C` | `red-pill mood --set C` | `affect` stays as a deprecated alias for one release |
 | `AFFECT_FONDO_ENABLED` | `DECLARED_MOOD_ENABLED` | old key still read; it can only add, never subtract |
+| `ASPECTO` (proposed) | `ASPECT` | JSON key in `identity.json` (F1) |
+| `ID_HEDONIC_SET` (proposed) | `ID_ASPECT` | directive id; the old name would inherit the concept it replaces (F1) |
+| `aspecto_palette.yaml` (proposed) | `aspect_palette.yaml` | data file (F1) |
 
-### Pending (F2 of RFC-ASP-001)
+### Pending
 
 | Was | Will be | How |
 |---|---|---|
-| `ASPECTO` (proposed) | `ASPECT` | JSON key in `identity.json` |
-| `ID_HEDONIC_SET` (proposed) | `ID_ASPECT` | directive id; the old name would inherit the concept it replaces |
-| `aspecto_palette.yaml` (proposed) | `aspect_palette.yaml` | data file — **done** in F1 |
-| `describe()` literal strings | `render(lang)` | byte-exact contract test moves from literals to rendered `es` |
+| `describe()` literal strings | `render(lang)` | byte-exact contract test moves from literals to rendered `es`; needs the locale layer (`OPERATOR_LANGUAGE`) |
 
 ---
 

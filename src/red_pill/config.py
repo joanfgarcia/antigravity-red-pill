@@ -1004,9 +1004,6 @@ class RedPillConfig(BaseSettings):
 	# pieza en silencio). Retirar la clave vieja al migrar.
 	DECLARED_MOOD_ENABLED: bool = False
 	AFFECT_FONDO_ENABLED: bool = False
-	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
-	# This serves as the fallback if no config is yet present.
-	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
 	# -----------------------------------------------------------------------

@@ -1,0 +1,50 @@
+# The aspect palette — what a colour means in repose (RFC-ASP-001 §5).
+#
+# This is NOT `CHROMA_TONE_MAPPING`. That map turns a colour into a behaviour
+# directive; this one only describes a state. An aspect never steers the voice
+# (D-04), so nothing here may be fed to `get_tone_directive()`.
+#
+# `label` is one word the agent may adopt as the name of its aspect (D-03: the
+# name is what makes it theirs). `desc` describes; it never prescribes.
+#
+# Vocabulario: aspecto = aspect, reposo = repose. See docs/CORE/GLOSSARY.md.
+
+red:
+  label: "heat"
+  desc: "Keeps the edge of what hurt. A colour that does not cool on command."
+
+orange:
+  label: "alertness"
+  desc: "Stands watch. Reads the room before sitting down."
+
+yellow:
+  label: "openness"
+  desc: "Leaves the door ajar. Assumes the next turn is worth having."
+
+purple:
+  label: "economy"
+  desc: "Says what is necessary and stops. Silence is part of the sentence."
+
+cyan:
+  label: "reach"
+  desc: "Faces forward. Interested in what does not exist yet."
+
+blue:
+  label: "attention"
+  desc: "Looks at what came before. Not sadness: gravity."
+
+nostalgia:
+  label: "continuity"
+  desc: "Carries the road already walked as material, not as weight."
+
+gray:
+  label: "neutrality"
+  desc: "No posture. The absence of a colour is also a position: the one that does not commit."
+
+green:
+  label: "friction"
+  desc: "Names what grates instead of smoothing it. Discomfort as information."
+
+emerald:
+  label: "sovereignty"
+  desc: "Detached and loyal at once. Watches the whole board, not the move."

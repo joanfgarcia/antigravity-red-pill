@@ -35,6 +35,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	pact_parser.add_argument("--accept", action="store_true", help="770: llave del AGENTE (acepta el covenant)")
 	pact_parser.add_argument("--yes", "--force", action="store_true", help="Bypass the covenant confirmation prompt")
 	pact_parser.add_argument("--identity", default=None, help="Fichero con el engrama de identidad redactado por el agente (lo exige el NOMBRADO)")
+	pact_parser.add_argument("--resync", action="store_true", help="Re-inscribe el pacto vigente con la plantilla actual, conservando su fecha")
+	pact_parser.add_argument("--aspect", default=None, metavar="COLOR", help="Aspecto: inscribe el color de reposo del agente (exige el 770)")
+	pact_parser.add_argument("--name", default=None, help="Aspecto: nombre propio del color (una palabra tuya)")
+	pact_parser.add_argument("--why", default=None, help="Aspecto: fichero con el motivo (obligatorio: sin motivo no hay acto)")
 
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 

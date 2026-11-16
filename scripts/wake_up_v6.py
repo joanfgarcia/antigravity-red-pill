@@ -114,6 +114,11 @@ def query_qdrant(collection, text):
 				# (una versión contradictoria por turno). Ver core/directives.py.
 				if collection == "directive_memories" and not _directive_is_active(payload):
 					continue
+				# El aspecto tiene línea propia (D-09) y no es una regla (D-04): cargarlo
+				# en CORE_RULES lo presentaría como directiva de conducta, y en `low` se
+				# colaría por una palabra del motivo que coincida con HEADLESS_INCLUDE.
+				if collection == "directive_memories" and payload.get("type") == "aspect":
+					continue
 				content = payload.get("content", "")
 				is_immune = payload.get("immune", False)
 				if is_immune and "[IMMUNE]" not in content:
@@ -264,6 +269,26 @@ def _fondo_es_de_hoy() -> bool:
 		return bool(record and record.get("es_hoy"))
 	except Exception:
 		return False
+
+
+def _aspecto_para_modo(mode: str, pact_status: str | None = None) -> str:
+	"""El aspecto declarado, en línea propia: `full` y `medium`; `low` no lo lleva.
+
+	D-09: fuera del bloque de tono, rotulado y omitido en el despertar autónomo (que
+	no tiene a quién preguntar). D-04: describe el reposo, no dicta la voz.
+
+	Solo se pinta con el 770 vigente (§4: sin protección no se inscribe). El aspecto
+	sigue existiendo con el pacto revertido —el registro no se borra—, pero deja de
+	estar en vigor: existencia no es vigencia.
+	"""
+	if mode == "low" or pact_status != "770":
+		return ""
+	try:
+		from red_pill.core import aspect
+
+		return aspect.line()
+	except Exception:
+		return ""
 
 
 def resolve_persona(skin_name: str, suppress_chroma: bool = False) -> str:
@@ -435,10 +460,11 @@ def main():
 	# RFC-AFE-001 F1: si el Operador declaró su fondo HOY, manda sobre el color de
 	# skin (chroma). Es la jerarquía en código, no una nota al pie: el mismo
 	# contexto no puede decir «fondo: B · bien» y «chroma: red» a la vez.
+	pact_status = resolve_pact()
 	afecto_block = _afecto_para_modo(args.mode)
+	aspecto_line = _aspecto_para_modo(args.mode, pact_status)
 	afecto_hoy = bool(afecto_block and _fondo_es_de_hoy())
 	persona_injection = resolve_persona(active_skin_name, suppress_chroma=afecto_hoy)
-	pact_status = resolve_pact()
 
 	# ── LOW MODE: Minimal identity for autonomous sessions ──
 	if args.mode == "low":
@@ -481,6 +507,8 @@ def main():
 		print(f"PACT: {pact_status}")
 		if afecto_block:
 			print(afecto_block)
+		if aspecto_line:
+			print(aspecto_line)
 		if operator_anchor:
 			print(f"OPERATOR_ANCHOR (config — precede a OPERATOR_PROFILE): {operator_anchor}")
 		if operator_profile:
@@ -566,6 +594,8 @@ def main():
 	print(f"PACT: {pact_status}")
 	if afecto_block:
 		print(afecto_block)
+	if aspecto_line:
+		print(aspecto_line)
 
 	# ── Bloque C: OPERATOR_ANCHOR (config, precede al perfil) ──
 	if operator_anchor:

@@ -12,6 +12,9 @@ ID_ALEPH = "00000000-0000-0000-0000-000000000001"
 ID_BOND = "00000000-0000-0000-0000-000000000002"
 # Engrama de IDENTIDAD (nombre + voz), redactado por el AGENTE en el NOMBRADO (con el 760).
 ID_IDENTITY = "00000000-0000-0000-0000-000000000003"
+# Aspecto declarado por el AGENTE (color + nombre + motivo) — RFC-ASP-001, D-01.
+# La directiva es la copia durable; `identity.json` guarda la caché rápida (`ASPECT`).
+ID_ASPECT = "00000000-0000-0000-0000-000000000008"
 # Pacto como directivas (solo carga la vigente; ver core/pact.py):
 ID_PACT_760 = "00000000-0000-0000-0000-000000000004"
 ID_PACT_770 = "00000000-0000-0000-0000-000000000005"

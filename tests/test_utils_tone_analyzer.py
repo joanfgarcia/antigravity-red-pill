@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import red_pill.config as cfg
-from red_pill.identity import get_hedonic_set_point
+from red_pill.identity import get_emergent_set_point
 from red_pill.utils.tone_analyzer import ToneAnalyzer, get_current_sync_state
 
 
@@ -30,7 +30,7 @@ class TestGetDominantMood:
 		"""Line 65: empty scroll → returns DEFAULT_COLOR."""
 		mgr = self._make_manager([])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 	def test_returns_non_neutral_color_immediately(self):
 		"""Line 74: first non-default color found → returned immediately."""
@@ -62,14 +62,14 @@ class TestGetDominantMood:
 		p2.payload = {"color": cfg.DEFAULT_COLOR, "immune": False, "created_at": time.time()}
 		mgr = self._make_manager([p1, p2])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 	def test_outer_exception_returns_default(self):
 		"""Lines 79-81: outer exception → returns DEFAULT_COLOR."""
 		mgr = MagicMock()
 		mgr.client.scroll.side_effect = RuntimeError("Qdrant connection refused")
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 	def test_immune_points_skipped(self):
 		"""Line 71: immune=True → skipped, returns default."""
@@ -79,7 +79,7 @@ class TestGetDominantMood:
 		p1.payload = {"color": "red", "immune": True, "created_at": time.time()}
 		mgr = self._make_manager([p1])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 	def test_returns_default_when_first_point_older_than_threshold(self):
 		import time
@@ -88,7 +88,7 @@ class TestGetDominantMood:
 		p1.payload = {"color": "red", "immune": False, "created_at": time.time() - 5 * 3600}
 		mgr = self._make_manager([p1])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 	def test_break_on_older_points(self):
 		import time
@@ -108,7 +108,7 @@ class TestGetDominantMood:
 		p1.payload = {"color": "red", "immune": True, "created_at": time.time() - 5 * 3600}
 		mgr = self._make_manager([p1])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(get_hedonic_set_point())
+		assert result == str(get_emergent_set_point())
 
 
 class TestMultiCollectionFusion:
@@ -144,7 +144,7 @@ class TestMultiCollectionFusion:
 
 	def test_all_gray_both_collections_returns_setpoint(self):
 		mgr = self._mgr([self._pt(cfg.DEFAULT_COLOR)], [self._pt(cfg.DEFAULT_COLOR)])
-		assert ToneAnalyzer.get_dominant_mood(manager=mgr) == str(get_hedonic_set_point())
+		assert ToneAnalyzer.get_dominant_mood(manager=mgr) == str(get_emergent_set_point())
 
 
 class TestGetToneDirective:

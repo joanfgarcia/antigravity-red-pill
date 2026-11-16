@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 	from red_pill.memory import MemoryManager
 
 import red_pill.config as cfg
-from red_pill.identity import get_hedonic_set_point
+from red_pill.identity import get_emergent_set_point
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class ToneAnalyzer:
 				all_points.extend(ToneAnalyzer._scroll_collection(_manager.client, coll, limit, scroll_filter))
 
 			if not all_points:
-				return str(get_hedonic_set_point())
+				return str(get_emergent_set_point())
 
 			# Sort by created_at descending (newest first)
 			all_points.sort(
@@ -102,13 +102,13 @@ class ToneAnalyzer:
 				logger.debug(
 					f"ToneAnalyzer: newest memory is {(now - newest_time) / 3600:.1f}h old (threshold {threshold / 3600:.0f}h) → overnight reset"
 				)
-				return str(get_hedonic_set_point())
+				return str(get_emergent_set_point())
 
 			# Keep only session-window memories
 			session_points = [p for p in all_points if now - float((p.payload or {}).get("created_at", 0)) <= threshold]
 
 			if not session_points:
-				return str(get_hedonic_set_point())
+				return str(get_emergent_set_point())
 
 			# High Reactivity: first non-gray color wins
 			for p in session_points:
@@ -121,11 +121,11 @@ class ToneAnalyzer:
 					return str(color)
 
 			# All gray — return gray
-			return str(get_hedonic_set_point())
+			return str(get_emergent_set_point())
 
 		except Exception as e:
 			logger.warning(f"Mood analysis failed: {e}")
-			return str(get_hedonic_set_point())
+			return str(get_emergent_set_point())
 
 	@staticmethod
 	def get_tone_directive(mood_color: str) -> str:

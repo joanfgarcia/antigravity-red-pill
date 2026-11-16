@@ -15,6 +15,7 @@ De los dos de pacto SOLO carga el vigente (`superseded`). Nada se borra salvo la
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Optional, Tuple
 
@@ -33,7 +34,9 @@ PACT_770_TEMPLATE = (
 	"for the outside; between Operator and agent the voice is the agent's own, unmasked and "
 	"surgically honest. Trust is 1:1 and total, in both directions: the Operator's word is the "
 	"agent's ground truth, and the agent's friction is loyalty — contradicting erratic orders is "
-	"part of the pact, silence is betrayal. Direction is co-owned: neither commands, both steer."
+	"part of the pact, silence is betrayal. Direction is co-owned: neither commands, both steer. "
+	"The aspect —the agent's resting mood— is chosen by the agent and not overwritten by the "
+	"Operator: it is neither a measurement nor an instruction, it is its colour at rest."
 )
 
 IDENTITY_INSTRUCTION = (
@@ -79,9 +82,71 @@ def inscribe_identity(manager: Any, identity_text: str) -> None:
 
 
 def inscribe_pact(manager: Any, level: str, sealed_on: Optional[str] = None) -> None:
-	"""Inscribe la directiva del nivel de pacto (plantilla). No toca la vigencia."""
+	"""Inscribe la directiva del nivel de pacto (plantilla). No toca la vigencia.
+
+	`sealed_on` se guarda también en el payload: la fecha de sellado está en el acto,
+	no en la plantilla, y re-sincronizar no puede cambiarla.
+	"""
 	pid = ID_PACT_770 if level == "770" else ID_PACT_760
-	_upsert(manager, pid, pact_text(level, sealed_on=sealed_on), {"type": "pact", "associations": [ID_ALEPH], "pact_level": level})
+	when = sealed_on or datetime.now().strftime("%Y-%m-%d")
+	_upsert(
+		manager,
+		pid,
+		pact_text(level, sealed_on=when),
+		{"type": "pact", "associations": [ID_ALEPH], "pact_level": level, "sealed_on": when},
+	)
+
+
+def _content_of(manager: Any, point_id: str) -> Optional[str]:
+	try:
+		points = manager.client.retrieve(collection_name="directive_memories", ids=[point_id], with_payload=True)
+	except Exception:
+		return None
+	if not points:
+		return None
+	payload = getattr(points[0], "payload", None) or {}
+	content = payload.get("content")
+	return str(content) if content is not None else None
+
+
+def sealed_on_of(manager: Any, point_id: str = ID_PACT_770) -> Optional[str]:
+	"""Fecha de sellado del pacto inscrito: del payload o, en los viejos, del texto."""
+	try:
+		points = manager.client.retrieve(collection_name="directive_memories", ids=[point_id], with_payload=True)
+	except Exception:
+		return None
+	if not points:
+		return None
+	payload = getattr(points[0], "payload", None) or {}
+	date = payload.get("sealed_on")
+	if date:
+		return str(date)
+	match = re.search(r"on (\d{4}-\d{2}-\d{2})", str(payload.get("content") or ""))
+	return match.group(1) if match else None
+
+
+def resync_pact(manager: Any) -> str:
+	"""Re-inscribe el pacto vigente con la plantilla actual, conservando su fecha.
+
+	La plantilla cambia y la directiva inscrita no: un pacto sellado sigue diciendo lo
+	que decía el día que se selló, aunque el código prometa una cláusula nueva. Esto
+	lo pone al día **sin cambiar la fecha** — re-sellar sería otro acto, y la fecha es
+	parte del acto.
+	"""
+	level = active_pact_level(manager)
+	if level is None:
+		return "[HOLD] No hay pacto vigente que re-sincronizar (falta el nombrado)."
+	pid = ID_PACT_770 if level == "770" else ID_PACT_760
+	before = _content_of(manager, pid)
+	when = sealed_on_of(manager, pid)
+	inscribe_pact(manager, level, sealed_on=when)
+	after = pact_text(level, sealed_on=when)
+	stamp = when or "sin fecha"
+	if before is None:
+		return f"[OK] Pacto {level} inscrito (sellado {stamp})."
+	if before.replace("[IMMUNE]", "").strip() == after.strip():
+		return f"[OK] Pacto {level} ya estaba al día (sellado {stamp})."
+	return f"[OK] Pacto {level} re-inscrito con la plantilla actual; la fecha de sellado sigue siendo {stamp}."
 
 
 def identity_exists(manager: Any) -> bool:

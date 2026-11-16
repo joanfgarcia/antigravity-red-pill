@@ -517,7 +517,6 @@ Code-default value shown; override by the field name via env.
 | `EMERGENCY_CLOUD_OVERRIDE` | `False` |
 | `FLOW_REGISTRY_PATH` | `os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "flow_registry.yaml")` |
 | `GRAPHIFY_RAG_ENABLED` | `True` |
-| `HEDONIC_SET_POINT_COLOR` | `"emerald"` |
 | `ICE_MODE_ENABLED` | `False` |
 | `IDENTITY_DEPTH_HEADLESS` | `"low"` |
 | `IDENTITY_DEPTH_IDE` | `"full"` |
