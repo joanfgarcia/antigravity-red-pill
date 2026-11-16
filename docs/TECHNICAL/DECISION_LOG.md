@@ -3869,3 +3869,49 @@ en español) y la migración es `labels: {es, en}` con `label` como fallback. `C
 con fallback de lectura, excepción `DeclaredMoodLocked`, CLI `red-pill mood` con `affect`
 como alias deprecado), dentro de `feat/asp-001`. Los contratos byte-exactos del bloque de
 ánimo pasan de literales a renderizado por locale, con `es` idéntico byte a byte (T7).
+
+## [AD-122] El olvido es una escalera: una unidad, una ruta, y la rama sigue a sus hojas
+**Date**: 2026-11-16
+**Status**: IMPLEMENTED en `next` (`5ff333a`, `fabd78f`, `cd393a2`, `abdc98a`, `f6bead1`, `ce30bb5`, `16bfa70`). Diseño en el desk (`RFC-OLV-001`).
+
+**Context**: un despertar autónomo detectó 1.922 engramas con `hubbed=True` y un `hub_id` que no
+existía. La medición de cierre dio 1.962 (1.943 en `work_memories`/96 sesiones, 19 en `social`), el
+24,8 % de los marcados, y reveló tres cosas más graves que el síntoma: (1) `hubbed=true` **excluye del
+recall**, así que esos engramas no solo habían perdido el padre: eran **inrecuperables**; (2)
+`erode_work_hubs` borraba el hub **sin liberar a sus miembros**, y el invariante contrario ya estaba
+escrito dos veces en el mismo fichero (el washout excluye hubs «porque la poda genérica los mataría
+antes que a sus miembros»; y el demote de curados sí liberaba); (3) convivían seis rutas de borrado con
+tres unidades de tiempo distintas, y tres de ellas escribían `last_recalled_at` al decaer —un
+*watermark* de la era del «Time Dilation» (`ARCHITECTURE.md` §69/§91)—, de modo que la «edad» era un
+metrónomo y la prueba de uso, invisible.
+
+**Decision**:
+- **La rama sigue a sus hojas**: un hub con ≥1 miembro no se erosiona nunca; sin hojas cae esa noche
+  (con guarda anti-carrera de un ciclo y excluyendo las auto-contenidas `promoted_from`). Las hojas se
+  cuentan **por scroll**, jamás por `hub_members_count` (13 de 24 ramas secas declaraban un contador > 0).
+- **La escalera es política, no parámetro**: 0 recuperaciones → purga a 30 días activos; 1 → 60; ≥2
+  recuperaciones en días distintos dentro de 90 días activos → circuito largo (work 105 días activos;
+  social 5 años → `permastore` congelado). **No se retuna θ**: `deletion_threshold` es un default único
+  de clase y el motor suma +0,5 α por recuperación, así que el mismo θ daría 105 días para el no usado y
+  ~30.700 para el promovido; además el recall filtra `score >= 0,2` y 0,15 crearía una banda zombi.
+- **Una sola ruta automática**: la escalera decide; el washout puntúa y no borra; la lectura nunca borra;
+  el Absence Guard desaparece (la ausencia cuesta 0 en días activos); `erode_curated` y `last_reinforced_at`
+  se retiran. Purgas de vacíos/ruido quedan como **higiene**, explícitamente fuera del olvido.
+- **Un campo, un significado**: `last_recalled_at` solo lo escriben el nacimiento y la recuperación;
+  `decay_checked_at` es el cursor del erosor; `recall_stamps` (ring de 5) y `active_days_at_recall`
+  sostienen la puerta de espaciado y el reloj.
+- **Base científica citada**: Anderson & Schooler (1991) recencia×frecuencia; Bjork & Bjork (1992)
+  espaciado; Frey & Morris (1997) etiqueta transitoria (ascender ≠ consolidar); Bahrick (1984) permastore
+  de los 5 años; Richards & Frankland (2017), Ryan & Frankland (2022) olvido adaptativo; Tononi & Cirelli
+  (2006) la poda es del sueño. Los números concretos (30/60/90/105/5 años) son **derivados nuestros**.
+
+**Alternatives**: (a) desmarcar los 1.962 y re-sintetizar — cinta de correr: el erosor los mataría otra
+vez en 3 días; (b) retunar θ a 0,15/0,105 — imposible por α y por la banda zombi; (c) degradar a stub en
+vez de borrar — la literatura lo sugiere (inaccesible ≠ borrado) pero añade mecanismo y Memento+raw ya son
+el rastro; queda como candidata.
+
+**Consequences**: la escalera entra en `dry_run` (`SW_FORGETTING_LADDER_MODE`) y no borra nada hasta que
+el Operador lo encienda; el `dry_run` informa además qué se llevaría el reloj histórico. `red-pill erode`
+pasa a seco por defecto (`--apply` explícito) porque el campo de uso ya es real. La cobertura se cuenta
+por nodos: 99,4 % → 73,6 % en `work_memories` (la diferencia eran los 1.943 marcadores ciegos). Queda
+abierto un shard propio: **los 1.962 huérfanos son ceguera de recall**, no un problema de métrica.

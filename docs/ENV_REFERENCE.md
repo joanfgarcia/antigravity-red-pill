@@ -54,7 +54,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `METABOLISM_STRATEGY`| `LAZY` | Calculation mode: `CLASSIC` run as a loop, `LAZY` calculated at query time. |
 | `METABOLISM_COOLDOWN`| `3600` | Minimum seconds between global erosion cycles. |
 | `ABSENCE_THRESHOLD`| `259200` (3 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
-| `MAX_SINK_TIME` | `2592000` (30 days)| Total max time an engram survives before a `Gran Purge` irrevocably destroys it. |
+| `MAX_SINK_TIME` | `2592000` (30 days)| **DEPRECATED** (RFC-OLV-001 D-07): la Gran Purga automática se retiró; el sumidero es el escalón 0 de la escalera. Solo la purga manual de MCP lo usa (con `ALLOW_PURGE`). |
 | `DECAY_STRATEGY` | `linear` | Mathematical model to apply score reduction (`linear` or `exponential`). |
 | `EROSION_RATE` | `0.01` | How much reinforcement score is removed per cycle. At 0.01, standard memories last ~4 days without reinforcement. |
 | `IMMUNITY_THRESHOLD`| `10.0` | Any memory achieving this reinforcement score becomes un-erasable ("immune"). |
@@ -321,7 +321,7 @@ Plugins 05–10. Each is independently toggleable.
 | `RHIZODB_WASHOUT_GAMMA` | `0.85` | Retención del washout (`a_v ← γ·a_v + (1−γ)·b(s_v)`). γ se atenúa por el tiempo transcurrido desde el último washout de la colección. |
 | `RHIZODB_WASHOUT_REFERENCE_DAYS` | `1.0` | Ventana de referencia de la atenuación (cap): una doble corrida el mismo día no poda dos veces la misma franja temporal. |
 | `RHIZODB_S_MAX` | `365.0` | Techo de estabilidad (días) del término `b(s_v)` del washout. |
-| `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Poda estructural: borra si `a_v` cae por debajo de este valor **y** `s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS`. |
+| `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Candidato de poda: desde RFC-OLV-001 **ya no borra**; se registra y decide la escalera. |
 | `RHIZODB_PRUNE_MAX_STABILITY_DAYS` | `5.0` | Umbral de estabilidad (días) de la poda estructural. |
 | `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por `erode_curated` (5a/10a). OFF = comportamiento previo a AD-048. |
 
