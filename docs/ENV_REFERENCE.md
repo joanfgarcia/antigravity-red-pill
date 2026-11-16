@@ -509,6 +509,7 @@ Code-default value shown; override by the field name via env.
 | `CURATED_LIFETIME_MULTIPLIER_WORK` | `1.0  # factor por motor (work=Bayesiano)` |
 | `CURIOSITY_ENGINE_ENABLED` | `True` |
 | `CURIOSITY_PROFILE` | `"balanced"` |
+| `DECLARED_MOOD_ENABLED` | `False` |
 | `DEFAULT_COLOR` | `"gray"` |
 | `DEFAULT_EMOTION` | `"neutral"` |
 | `DUAL_BIND_PROXY_URL` | `"http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)` |

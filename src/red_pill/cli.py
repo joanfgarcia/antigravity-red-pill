@@ -128,30 +128,35 @@ def main() -> None:
 		handle_mcp(args)
 		return
 
-	elif args.command == "affect":
-		# RFC-AFE-001 F1: el fondo se captura, no se infiere. Proceso nuevo, sin
+	elif args.command in ("mood", "affect"):
+		# RFC-AFE-001 F1: el ánimo se captura, no se infiere. Proceso nuevo, sin
 		# reiniciar el MCP (la acción MCP llegará en F2 con su auth_level).
-		from red_pill.core import affect_fondo
+		# `affect fondo` es el alias deprecado de una release (LANGUAGE_POLICY §2).
+		from red_pill.core import declared_mood
 
-		if getattr(args, "aff_cmd", None) == "fondo" and getattr(args, "set", None):
+		deps = getattr(args, "declared_mood_deprecated", False)
+		if deps:
+			print("[mood] aviso: `affect fondo` pasa a `red-pill mood` en la próxima release", file=sys.stderr)
+
+		if getattr(args, "set", None):
 			try:
-				registro = affect_fondo.write(args.set, note=getattr(args, "note", "") or "", by=os.getenv("AGENT_ID", "operator"))
-			except affect_fondo.FondoNoSobrescrito as exc:
-				print(f"[affect] no sobrescrito: {exc}")
+				record = declared_mood.write(args.set, note=getattr(args, "note", "") or "", by=os.getenv("AGENT_ID", "operator"))
+			except declared_mood.DeclaredMoodLocked as exc:
+				print(f"[mood] no sobrescrito: {exc}")
 				sys.exit(3)
 			except ValueError as exc:
-				print(f"[affect] {exc}")
+				print(f"[mood] {exc}")
 				sys.exit(2)
 			if getattr(args, "json", False):
-				print(json.dumps(registro, ensure_ascii=False))
+				print(json.dumps(record, ensure_ascii=False))
 			else:
-				print(f"[affect] fondo guardado: {registro['letra']} ({registro['updated_by']})")
+				print(f"[mood] fondo guardado: {record['code']} ({record['updated_by']})")
 			return
-		actual = affect_fondo.read()
+		current = declared_mood.read()
 		if getattr(args, "json", False):
-			print(json.dumps(actual or {}, ensure_ascii=False))
+			print(json.dumps(current or {}, ensure_ascii=False))
 		else:
-			print(affect_fondo.describe(actual))
+			print(declared_mood.describe(current))
 		return
 
 	elif args.command == "mini":

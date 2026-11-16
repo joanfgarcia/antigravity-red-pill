@@ -84,17 +84,26 @@ label is not.
 
 ---
 
-## 5. Renames in flight (RFC-ASP-001)
+## 5. Renames
 
-| Today | After | Migration |
+### Done
+
+| Was | Is | How |
 |---|---|---|
-| `core/affect_fondo.py` | `core/declared_mood.py` | import update (5 files) |
-| `affect_fondo.json` | `declared_mood.json` | read fallback to the old name; rewrite on next write |
-| `FondoNoSobrescrito` | `DeclaredMoodLocked` | exception name; same semantics (only the Operator declares) |
-| `red-pill affect fondo --set C` | `red-pill mood --set C` | `affect` kept as a deprecated alias for one release |
+| `core/affect_fondo.py` | `core/declared_mood.py` | module import updated in 3 consumers |
+| `affect_fondo.json` | `declared_mood.json` | legacy file is read and unlinked on the next write |
+| payload key `letra` | `code` | old records are read through `code_of()`; history entries are never reworded |
+| `FondoNoSobrescrito` | `DeclaredMoodLocked` | exception name, same semantics (only the Operator declares) |
+| `red-pill affect fondo --set C` | `red-pill mood --set C` | `affect` stays as a deprecated alias for one release |
+| `AFFECT_FONDO_ENABLED` | `DECLARED_MOOD_ENABLED` | old key still read; it can only add, never subtract |
+
+### Pending (F2 of RFC-ASP-001)
+
+| Was | Will be | How |
+|---|---|---|
 | `ASPECTO` (proposed) | `ASPECT` | JSON key in `identity.json` |
 | `ID_HEDONIC_SET` (proposed) | `ID_ASPECT` | directive id; the old name would inherit the concept it replaces |
-| `aspecto_palette.yaml` (proposed) | `aspect_palette.yaml` | data file |
+| `aspecto_palette.yaml` (proposed) | `aspect_palette.yaml` | data file — **done** in F1 |
 | `describe()` literal strings | `render(lang)` | byte-exact contract test moves from literals to rendered `es` |
 
 ---

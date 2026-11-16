@@ -495,11 +495,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
 	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
 
-	# Fondo declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta.
-	affect_parser = subparsers.add_parser("affect", help="Ánimo declarado por el Operador (RFC-AFE-001)")
+	# Ánimo declarado por el Operador (RFC-AFE-001 F1): el que él cuenta.
+	mood_parser = subparsers.add_parser("mood", help="Ánimo declarado por el Operador (RFC-AFE-001)")
+	mood_parser.add_argument("--set", help="Código: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
+	mood_parser.add_argument("--note", help="Nota breve (máx. 280 chars)")
+	mood_parser.add_argument("--json", action="store_true", help="Salida JSON")
+
+	# Alias deprecado por una release: `affect fondo` → `mood` (LANGUAGE_POLICY §2).
+	affect_parser = subparsers.add_parser("affect", help="[deprecado] usa `red-pill mood`")
+	affect_parser.set_defaults(declared_mood_deprecated=True)
 	affect_sub = affect_parser.add_subparsers(dest="aff_cmd")
-	aff_fondo = affect_sub.add_parser("fondo", help="Ver o declarar el fondo del día")
-	aff_fondo.add_argument("--set", help="Letra: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
+	aff_fondo = affect_sub.add_parser("fondo", help="[deprecado] usa `red-pill mood`")
+	aff_fondo.add_argument("--set", help="Código: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
 	aff_fondo.add_argument("--note", help="Nota breve (máx. 280 chars)")
 	aff_fondo.add_argument("--json", action="store_true", help="Salida JSON")
 

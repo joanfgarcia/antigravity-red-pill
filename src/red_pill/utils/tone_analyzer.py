@@ -155,13 +155,13 @@ def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[st
 	# `anger/red` por una frase hipotética sobre un tercero) y no distingue rol;
 	# el fondo lo dijo él. Sin fondo fresco, el camino antiguo queda igual.
 	try:
-		from red_pill.core import affect_fondo
+		from red_pill.core import declared_mood
 
-		registro = affect_fondo.read() if affect_fondo.enabled() else None
-		if registro and registro.get("es_hoy"):
-			color = (affect_fondo.letters().get(str(registro.get("letra")), {}) or {}).get("color")
+		record = declared_mood.read() if declared_mood.enabled() else None
+		if record and record.get("es_hoy"):
+			color = (declared_mood.letters().get(declared_mood.code_of(record), {}) or {}).get("color")
 			if color:
-				logger.debug(f"Fondo declarado hoy ({registro.get('letra')}) → {color}")
+				logger.debug(f"Declared mood today ({declared_mood.code_of(record)}) -> {color}")
 				return {"mood": str(color), "directive": ToneAnalyzer.get_tone_directive(str(color))}
 	except Exception as e:
 		logger.debug(f"Fondo no disponible ({e}); se sigue con el afecto de la cola")

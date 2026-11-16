@@ -247,21 +247,21 @@ def _afecto_para_modo(mode: str) -> str:
 	if mode == "low":
 		return ""
 	try:
-		from red_pill.core import affect_fondo
+		from red_pill.core import declared_mood
 
-		return affect_fondo.block()
+		return declared_mood.block()
 	except Exception:
 		return ""
 
 
 def _fondo_es_de_hoy() -> bool:
 	try:
-		from red_pill.core import affect_fondo
+		from red_pill.core import declared_mood
 
-		if not affect_fondo.enabled():
+		if not declared_mood.enabled():
 			return False
-		registro = affect_fondo.read()
-		return bool(registro and registro.get("es_hoy"))
+		record = declared_mood.read()
+		return bool(record and record.get("es_hoy"))
 	except Exception:
 		return False
 
