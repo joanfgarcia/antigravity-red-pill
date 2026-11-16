@@ -33,7 +33,11 @@ manifest:
     - id: memento
       type: command
       minion: command_runner
-      command: .venv/bin/python scripts/memento_migrate.py
+      # `--backfill-raw`: invariante del Operador (2026-11-16) — toda sesión
+      # registrada debe conservar su raw del IDE para poder re-sintetizarse.
+      # Se repara en cada crónica; si la fuente ya no la sirve, se reconstruye
+      # desde el índice y queda marcada como tal.
+      command: .venv/bin/python scripts/memento_migrate.py --backfill-raw
       on_fail: warn
     # Fan-out por sesión (RFC-JOBDAG-002): `discover` lista el DELTA diario y
     # cada sesión es UN step → el progreso del job avanza por sesión (antes era

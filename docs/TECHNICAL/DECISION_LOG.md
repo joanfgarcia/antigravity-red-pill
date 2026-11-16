@@ -3924,3 +3924,36 @@ real. El recall deja de ocultar por el flag `hubbed` y excluye por `hub_id` que 
 marcadores huérfanos vuelven a ser recuperables y reforzables. La cobertura se cuenta
 por nodos: 99,4 % → 73,6 % en `work_memories` (la diferencia eran los 1.943 marcadores ciegos). Queda
 abierto un shard propio: **los 1.962 huérfanos son ceguera de recall**, no un problema de métrica.
+
+## [AD-123] Toda sesión de Memento conserva su raw — la reconstrucción es el último recurso
+**Date**: 2026-11-16
+**Status**: IMPLEMENTED (`scripts/memento_migrate.py --verify-raw/--backfill-raw`).
+
+**Context**: al auditar qué se había olvidado, el Operador preguntó si Memento guardaba
+un espejo de las conversaciones de los IDEs. Lo guarda: cada sesión materializada tiene
+`raw/` con el fichero nativo del IDE (`raw.json` para opencode/antigravity/memory_queue,
+`raw.jsonl` para claude_code/pi, el JSON de Telegram). Pero había dos agujeros:
+
+1. El *backfill* de raw vivía detrás de `if not pending: return`, así que **no corría**
+   cuando no había nada que renderizar: la copia era un efecto secundario del render.
+2. `_has_raw_file` daba por buena una **reconstrucción** desde `index.md` —que no es el
+   raw— y nunca intentaba recuperar el verbatim, aunque el IDE aún lo tuviera.
+
+**Decision**:
+- El raw es un **invariante**, no un subproducto: `--backfill-raw` corre como pasada
+  propia y `--verify-raw` es un gate que sale con 1 si alguna sesión registrada con
+  directorio no tiene copia.
+- **Jerarquía de fuentes**: raw verbatim del IDE > reconstrucción desde `memento/index.md`.
+  Una reconstrucción se sustituye automáticamente por el verbatim en cuanto la fuente
+  responde (`verbatim: true/false` queda en `raw/meta.json`).
+- La crónica nocturna llama a `memento_migrate.py --backfill-raw`.
+
+**Resultado medido (2026-11-16)**: 1.451 sesiones con copia **verbatim**; 17 con
+reconstrucción marcada — 8 `legacy` (import de `archive_memories`: el raw nunca existió),
+6 de `pi` y 3 de `telegram` (sus IDEs ya purgaron la conversación antes del espejo). De
+`claude_code`, **37/37** verbatim, incluidas las **8 que ya no están en disco**: el espejo
+las salvó. De `opencode`, 926; `antigravity`, 206; `memory_queue`, 186.
+
+**Consequences**: ninguna sesión de Memento queda sin fuente para re-sintetizar. Un IDE
+que purga ya no puede vaciar memoria: su copia vive en Memento. Las 17 reconstruidas son
+públicas y auditables (`grep -rl reconstructed.md memento/`).

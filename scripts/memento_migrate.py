@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import sqlite3
 import sys
@@ -93,6 +94,86 @@ def _write_reconstructed_raw(session_dir: Path, *, source: str, session_id: str,
 	return True
 
 
+def backfill_raw(registry: Any, plugins: List[Any], root: Path, now: str, verify_only: bool = False) -> Dict[str, int]:
+	"""Garantía uniforme: **toda sesión registrada con `dir` debe llevar su `raw/`**.
+
+	No es un efecto secundario del render: se ejecuta como pasada propia (el
+	backfill antiguo vivía detrás de `if not pending: return`, así que no corría
+	nunca cuando no había nada que renderizar). Para cada sesión sin copia:
+
+	1. se pide a su plugin la copia **verbatim** (`export_raw`);
+	2. si la fuente ya no la sirve (IDE que purga), se reconstruye desde
+	`memento/index.md` y se marca `verbatim: false` en `meta.json`.
+
+	Con `verify_only` no escribe: devuelve el censo y el llamante decide.
+	"""
+	stats = {"ok": 0, "copied": 0, "upgraded": 0, "reconstructed": 0, "missing": 0}
+	by_name = {p.name: p for p in plugins}
+	for source, sessions in registry.state.get("registry", {}).items():
+		plugin = by_name.get(source)
+		for session_id, entry in sessions.items():
+			session_dir = root / str(entry.get("dir") or "")
+			if not entry.get("dir") or not session_dir.exists():
+				continue
+			kind = raw_kind(session_dir)
+			if kind == "verbatim":
+				stats["ok"] += 1
+				continue
+			if verify_only:
+				stats["missing"] += 1
+				logger.error(f"[RAW-VERIFY] {source}:{session_id} — copia {kind} (no verbatim)")
+				continue
+			copied = False
+			if plugin is not None:
+				cid = session_id.split(":", 1)[1] if ":" in session_id else session_id
+				try:
+					if plugin.export_raw(cid, session_dir / "raw") is not None:
+						(session_dir / "raw" / "meta.json").write_text(
+							json.dumps(
+								{"session_id": session_id, "source": source, "verbatim": True, "exported_at": now},
+								ensure_ascii=False,
+								indent=2,
+							),
+							encoding="utf-8",
+						)
+						copied = True
+						stats["copied"] += 1
+						logger.info(f"[RAW] {source}:{session_id} — copia verbatim recuperada")
+				except Exception as exc:
+					logger.warning(f"[RAW] {source}:{session_id} — export_raw falló: {exc}")
+			if copied:
+				# Una reconstrucción que se puede sustituir por el raw real: se sustituye.
+				if kind == "reconstructed":
+					(session_dir / "raw" / "reconstructed.md").unlink(missing_ok=True)
+					stats["upgraded"] += 1
+					logger.info(f"[RAW] {source}:{session_id} — reconstrucción sustituida por el raw verbatim")
+				continue
+			if _write_reconstructed_raw(session_dir, source=source, session_id=session_id, now=now):
+				stats["reconstructed"] += 1
+				logger.warning(f"[RAW] {source}:{session_id} — sin fuente: reconstruida desde index (NO verbatim)")
+			else:
+				stats["missing"] += 1
+				logger.error(f"[RAW] {source}:{session_id} — sin fuente, sin copia y sin index")
+	return stats
+
+
+def raw_kind(session_dir: Path) -> str:
+	"""Qué copia tiene la sesión: `verbatim`, `reconstructed` o `missing`.
+
+	`_has_raw_file` basta para "hay algo", pero no distingue una copia del IDE de
+	una reconstrucción desde `index.md`. Para re-sintetizar de verdad hace falta
+	la primera: la reconstrucción es el último recurso, no el estado deseado.
+	"""
+	raw_dir = session_dir / "raw"
+	if not raw_dir.is_dir():
+		return "missing"
+	if (raw_dir / "reconstructed.md").exists():
+		return "reconstructed"
+	if any(f.is_file() and f.name != "meta.json" for f in raw_dir.iterdir()):
+		return "verbatim"
+	return "missing"
+
+
 def _has_raw_file(session_dir: Path) -> bool:
 	"""¿La sesión tiene copia verbatim? (`raw/` con algo que no sea meta.json).
 
@@ -105,7 +186,9 @@ def _has_raw_file(session_dir: Path) -> bool:
 	return any(f.is_file() and f.name != "meta.json" for f in raw_dir.iterdir())
 
 
-def _find_pending(registry: Any, plugins: List[Any], force_all: bool, force_missing_raw: bool = False, root: Optional[Path] = None) -> List[Tuple[Any, str, str, int]]:
+def _find_pending(
+	registry: Any, plugins: List[Any], force_all: bool, force_missing_raw: bool = False, root: Optional[Path] = None
+) -> List[Tuple[Any, str, str, int]]:
 	"""[(plugin, conversation_id, qualified_session_id, step_count)] pendientes de render.
 
 	`force_missing_raw`: re-renderiza las sesiones ya registradas que **no tienen
@@ -307,7 +390,16 @@ def main() -> None:
 	parser = argparse.ArgumentParser(description="Memento Chronicle backfill & delta render (RFC-002)")
 	parser.add_argument("--all", action="store_true", help="Force full reprocess of every session of every enabled source")
 	parser.add_argument("--dry-run", action="store_true", help="Report pending work and memory_queue census without writing")
-	parser.add_argument("--backfill-raw", action="store_true", help="Re-renderiza las sesiones registradas que no tienen `raw/` (copia verbatim)")
+	parser.add_argument(
+		"--backfill-raw",
+		action="store_true",
+		help="Garantía de raw: toda sesión registrada con dir recupera su copia (verbatim si la fuente responde; reconstruida desde index si no)",
+	)
+	parser.add_argument(
+		"--verify-raw",
+		action="store_true",
+		help="Solo comprueba: sale con 1 si alguna sesión registrada con dir no tiene copia de raw",
+	)
 	parser.add_argument("--source", action="append", default=[], help="Limit to a specific source (repeatable)")
 	parser.add_argument("--cata", action="store_true", help="Print the Q8 calibration report (markdown) and exit")
 	parser.add_argument(
@@ -361,6 +453,18 @@ def main() -> None:
 				logger.info(f"  {originator}: {count}{'' if covered else '  ← sin fuente Memento (MUST 10)'}")
 		logger.info("[DRY RUN] No changes made.")
 		return
+
+	# Garantía uniforme (decisión del Operador, 2026-11-16): la copia del raw NO
+	# depende de que haya algo que renderizar. Se comprueba y se repara siempre.
+	if args.verify_raw or args.backfill_raw:
+		raw_stats = backfill_raw(registry, plugins, root, datetime.now(timezone.utc).isoformat(), verify_only=args.verify_raw)
+		logger.info(
+			f"Raw coverage: {raw_stats['ok']} verbatim · {raw_stats['copied'] + raw_stats['upgraded']} recuperadas/ascendidas · "
+			f"{raw_stats['reconstructed']} reconstruidas · {raw_stats['missing']} sin nada"
+		)
+		if args.verify_raw and raw_stats["missing"]:
+			registry.save()
+			raise SystemExit(1)
 
 	if not pending:
 		registry.save()
@@ -438,24 +542,6 @@ def main() -> None:
 		from red_pill.memento.indexes import rebuild_indexes
 
 		logger.info(f"Rebuilt {rebuild_indexes(root, registry)} index file(s).")
-
-	# Garantía "ningún raw perdido": toda sesión registrada con dir debe tener copia.
-	# Si la fuente ya no la sirve, se reconstruye desde el index y se marca como tal.
-	if args.backfill_raw:
-		reconstructed_n = 0
-		still_missing = 0
-		for source, sessions in registry.state.get("registry", {}).items():
-			for session_id, entry in sessions.items():
-				session_dir = root / str(entry.get("dir") or "")
-				if not entry.get("dir") or not session_dir.exists() or _has_raw_file(session_dir):
-					continue
-				if _write_reconstructed_raw(session_dir, source=source, session_id=session_id, now=now):
-					reconstructed_n += 1
-					logger.warning(f"[{source}] {session_id}: sin fuente y sin raw — copia reconstruida (NO verbatim)")
-				else:
-					still_missing += 1
-					logger.error(f"[{source}] {session_id}: sin fuente, sin raw y sin index — nada que copiar")
-		logger.info(f"Raw backfill: {reconstructed_n} reconstruida(s), {still_missing} sin nada.")
 
 	registry.save()
 	logger.info(f"Memento render complete: {rendered_count} session(s) rendered, {skipped} empty/failed.")
