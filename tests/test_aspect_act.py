@@ -50,8 +50,10 @@ class FakeManager:
 		self.client = _Client(points)
 		self.written = []
 
-	def add_memory(self, collection, text, importance=1.0, metadata=None, force_immune=False, point_id=None):
-		self.written.append({"collection": collection, "text": text, "metadata": metadata or {}, "point_id": point_id})
+	def add_memory(self, collection, text, importance=1.0, metadata=None, force_immune=False, point_id=None, color=None):
+		self.written.append(
+			{"collection": collection, "text": text, "metadata": metadata or {}, "point_id": point_id, "color": color}
+		)
 
 
 @pytest.fixture
@@ -81,6 +83,7 @@ def test_770_vigente_inscribe_cache_y_directiva(estado):
 	assert escrito["collection"] == "directive_memories"
 	assert escrito["metadata"]["authored_by"] == "agent"
 	assert escrito["metadata"]["origin"] == "770-aspect"
+	assert escrito["color"] == "blue", "el color va como parámetro: el esquema lo quita del metadata"
 	assert "miro lo que vino antes" in escrito["text"]
 
 

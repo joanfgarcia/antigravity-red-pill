@@ -109,12 +109,27 @@ def seal_pact(level: str, grant: bool = False, accept: bool = False) -> str:
 	return pact_core.seal_pact(MemoryManager(), level, grant=grant, accept=accept)
 
 
+def _strip_frontmatter(text: str) -> str:
+	"""Quita la cabecera YAML de un documento del desk.
+
+	Los textos del agente se escriben como notas (con frontmatter obligatorio en el
+	desk); la inscripción se queda con el cuerpo. La cabecera es metadato del
+	documento, no lo que el agente dice de sí mismo.
+	"""
+	if not text.startswith("---"):
+		return text
+	fin = text.find("\n---", 3)
+	if fin == -1:
+		return text
+	return text[fin + 4 :].lstrip("\n")
+
+
 def _read_identity(path: str | None, flag: str = "--identity") -> str | None:
 	"""Lee el texto que el agente pone por escrito (identidad o motivo del aspecto)."""
 	if not path:
 		return None
 	try:
-		return Path(path).read_text(encoding="utf-8")
+		return _strip_frontmatter(Path(path).read_text(encoding="utf-8"))
 	except OSError as e:
 		print(f"[ERROR] No pude leer {flag}: {e}")
 		return None
@@ -129,7 +144,13 @@ def _print_aspect() -> None:
 		print("ASPECTO: sin declarar (emergente) — se ofrece en el 770, no se exige")
 		return
 	print(aspect.line())
-	print(f"  motivo: {str(declared.get('why') or '').splitlines()[0][:120]}")
+	motivo = [linea.strip() for linea in str(declared.get("why") or "").splitlines() if linea.strip()]
+	# La primera línea del motivo puede ser el título que el agente le puso al
+	# documento; el motivo de verdad empieza donde deja de repetir el rótulo.
+	if motivo and motivo[0].upper().startswith("ASPECTO:"):
+		motivo = motivo[1:]
+	if motivo:
+		print(f"  motivo: {motivo[0][:160]}")
 
 
 def _handle_aspect(manager: Any, args: argparse.Namespace) -> None:

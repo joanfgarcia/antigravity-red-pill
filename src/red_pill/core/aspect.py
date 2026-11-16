@@ -109,19 +109,28 @@ def line() -> str:
 
 
 def _inscribe(manager: Any, record: Dict[str, Any]) -> None:
-	"""Durable copy: the immune directive `ID_ASPECT`, the agent's own words (D-01)."""
+	"""Durable copy: the immune directive `ID_ASPECT`, the agent's own words (D-01).
+
+	The text is the reason **verbatim**: the colour and the name travel in the payload,
+	so a header would only repeat them — and the directive speaks with the author's
+	words or it is not the author's directive.
+	"""
 	from red_pill.seed import ID_ASPECT
 
-	text = f"ASPECTO: {record['color']} · «{record['name']}»\n\n{record['why']}"
+	text = str(record["why"])
+	# `color` es clave reservada: el esquema la quita del metadata y la toma del
+	# parámetro explícito. Sin pasarla aquí, la copia durable diría gris (el default)
+	# mientras la caché dice el color declarado — y restaurar desde la directiva
+	# devolvería un aspecto que nadie eligió.
 	manager.add_memory(
 		collection="directive_memories",
 		text=text,
 		importance=10.0,
+		color=record["color"],
 		metadata={
 			"type": "aspect",
 			"authored_by": "agent",
 			"origin": "770-aspect",
-			"color": record["color"],
 			"declared_at": record["declared_at"],
 			"immune": True,
 		},
