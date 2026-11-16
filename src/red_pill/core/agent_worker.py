@@ -13,7 +13,13 @@ from typing import Any, Callable, Dict, List, Optional
 from dotenv import load_dotenv
 
 from red_pill.core.inbox_adapters import parse_payload
-from red_pill.core.paths import get_config_dir, get_neon_link_config_dir, get_neon_link_db_path, get_state_dir
+from red_pill.core.paths import (
+	get_agent_core_root,
+	get_config_dir,
+	get_neon_link_config_dir,
+	get_neon_link_db_path,
+	get_state_dir,
+)
 
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
 neon_link_config = get_neon_link_config_dir() / ".env"
@@ -162,6 +168,31 @@ def _handshake_step(user_prompt: str, mode: str) -> str:
 	)
 
 
+_DESK_PLACEHOLDER = "${AGENT_CORE_DIR}"
+
+
+def _resolve_desk_paths(text: str) -> str:
+	"""Sustituye `${AGENT_CORE_DIR}` por la ruta real del desk en un texto de prompt.
+
+	Las directivas del despertar se escriben con el placeholder (legible en el
+	código y coherente con los seeds, que sí lo resuelven al sembrar), pero al
+	construir el prompt nadie lo sustituía: el agente recibía un literal de shell
+	en prosa y tenía que adivinar dónde vive el desk. La ruta real la resuelve
+	`get_agent_core_root()` (env → registro → hermano del bunker).
+
+	Nunca lanza: si el desk no se puede resolver, devuelve el texto tal cual — un
+	prompt con placeholder es peor que uno sin él, pero no debe romper el despertar.
+	"""
+	if _DESK_PLACEHOLDER not in (text or ""):
+		return text
+	try:
+		desk = str(get_agent_core_root())
+	except Exception as exc:  # desk no resoluble: se degrada, no se cae
+		logger.warning(f"[AWAKENING] no se pudo resolver AGENT_CORE_DIR para el prompt: {exc}")
+		return text
+	return text.replace(_DESK_PLACEHOLDER, desk)
+
+
 def _awakening_planner_directive(policy: str) -> str:
 	"""Construye el bloque de política de contribución al desk para el despertar.
 
@@ -228,8 +259,10 @@ def _awakening_channel_directive(operator: str | None = None) -> str:
 		pending = ch.count_for_operator(operator=operator)
 		duties = len(ch.duty_notes(operator=operator))
 	except Exception:
-		return pointer
-	return f"{pointer}\nRecuento ahora: {pending} nota(s) para {operator} sin leer; {duties} deber(es) sin marcar."
+		return _resolve_desk_paths(pointer)
+	return _resolve_desk_paths(
+		f"{pointer}\nRecuento ahora: {pending} nota(s) para {operator} sin leer; {duties} deber(es) sin marcar."
+	)
 
 
 def get_connection():
@@ -1586,6 +1619,10 @@ class IDEWorker:
 			f"</user_rules>\n\n"
 			f"{combined_text}\n"
 		)
+		# Choke point: el bloque headless de arriba lleva `${AGENT_CORE_DIR}` inline
+		# en prosa (desk, logs, resume check). Se resuelve aquí, de una vez, para que
+		# el agente lea rutas reales y no un literal de shell.
+		prompt = _resolve_desk_paths(prompt)
 
 		if not self._bridge_awakening:
 			logger.error(f"[{msg_ids}] No bridge available for AWAKENING")
