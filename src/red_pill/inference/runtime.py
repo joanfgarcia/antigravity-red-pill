@@ -80,7 +80,17 @@ def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 					stop_token_ids=[eos_id],
 				)(messages=messages, enable_thinking=et, low_effort=le, **kw)
 
-			lcf.register_chat_format(name)(fmt)
+			# El registro de llama_cpp es GLOBAL y los nombres son fijos
+			# (`granite-nothink`…): al cargar un SEGUNDO modelo en el mismo proceso
+			# el registro anterior sobrevivía con el template del PRIMERO, y el
+			# modelo nuevo renderizaba con la plantilla del viejo (o directamente
+			# fallaba el registro y se usaba la del anterior). `overwrite=True`
+			# deja el handler apuntando al template del modelo realmente cargado
+			# (invariante del daemon: un modelo a la vez). 2026-11-16.
+			try:
+				lcf.register_chat_format(name, overwrite=True)(fmt)
+			except TypeError:  # builds antiguos sin el kwarg
+				lcf.register_chat_format(name)(fmt)
 			logger.debug("chat handler '%s' registrado (enable_thinking=%s, low_effort=%s)", name, et, le)
 
 		_mk(True, False, HANDLER_THINKING)

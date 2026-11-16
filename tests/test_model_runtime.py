@@ -25,6 +25,30 @@ def test_extract_toolcalls_granite_native():
 	assert calls[0]["function"]["arguments"] == {"command": "cat manifest.txt"}
 
 
+def test_extract_toolcalls_mimo_parameters():
+	# Salida nativa real de MiMo-V2.6-Distill-Qwen-9B (2026-11-16, Q4_K_M):
+	# mismo dialecto que Granite 4.2, con la traza de pensamiento delante.
+	text = (
+		"<think>The user asks weather in Barcelona. Use get_weather tool.</think>"
+		"<tool_call><function=get_weather><parameter=city>Barcelona</parameter>"
+		"<parameter=unit>celsius</parameter></function></tool_call>"
+	)
+	calls = extract_toolcalls(text, tool_format="qwen")
+	assert len(calls) == 1
+	assert calls[0]["function"]["name"] == "get_weather"
+	assert calls[0]["function"]["arguments"] == {"city": "Barcelona", "unit": "celsius"}
+
+
+def test_extract_toolcalls_mimo_json_body():
+	# Variante del mismo modelo: el cuerpo de <function=NAME> es el JSON de args
+	# → <tool_call><function=list_dir>{"path": "src"}</function></tool_call>
+	text = '<think>Let me look at the src directory.</think><tool_call><function=list_dir>{"path": "src"}</function></tool_call>'
+	calls = extract_toolcalls(text, tool_format="qwen")
+	assert len(calls) == 1
+	assert calls[0]["function"]["name"] == "list_dir"
+	assert calls[0]["function"]["arguments"] == {"path": "src"}
+
+
 def test_extract_toolcalls_vacio():
 	assert extract_toolcalls("sin tool call", tool_format="qwen") == []
 	assert extract_toolcalls("", tool_format="auto") == []

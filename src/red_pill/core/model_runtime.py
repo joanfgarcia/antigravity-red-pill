@@ -336,9 +336,59 @@ def _parse_qwen_block(inner: str) -> Optional[dict]:
 	# Formato "<function=NAME><parameter=k>v</parameter></function>" (Granite 4.2)
 	fn = re.search(r"<function=([^>]+)>", inner)
 	if fn:
+		name = fn.group(1).strip()
 		params = re.findall(r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL)
-		return {"function": {"name": fn.group(1).strip(), "arguments": {k.strip(): v.strip() for k, v in params}}}
+		if params:
+			return {"function": {"name": name, "arguments": {k.strip(): v.strip() for k, v in params}}}
+		# Variante MiMo-V2.6: el cuerpo de la función ES el JSON de argumentos
+		# → <tool_call><function=list_dir>{"path": "src"}</function></tool_call>
+		body = inner[fn.end() :].split("</function>")[0].strip()
+		return {"function": {"name": name, "arguments": _coerce_arguments(body)}}
 	return None
+
+
+def coerce_by_schema(args: Any, schema: Optional[dict]) -> dict:
+	"""Ajusta argumentos de un tool-call al JSON-Schema `parameters` declarado.
+
+	El dialecto nativo (`<parameter=k>v</parameter>`) es TEXTO: `"30"` y
+	`"[\\"Ana\\"]"` llegan como string aunque el esquema pida `integer` o
+	`array`. Esto convierte **solo cuando el esquema lo dice** — nada de
+	adivinar por heurística (un `"300"` que era un patrón de búsqueda no debe
+	volverse 300).
+
+	Vive aquí, junto a `extract_toolcalls`, para que el banco de pruebas y
+	cualquier consumidor apliquen la misma regla: era el último jirón de lógica
+	de tool-calling duplicada en `scripts/` (2026-11-16).
+	"""
+	out = _coerce_arguments(args)
+	if not isinstance(schema, dict) or not out:
+		return out
+	props = schema.get("properties") or {}
+	coerced: dict = {}
+	for key, value in out.items():
+		kind = str(((props.get(key) or {}).get("type")) or "")
+		coerced[key] = _coerce_to_type(value, kind)
+	return coerced
+
+
+def _coerce_to_type(value: Any, kind: str) -> Any:
+	if not isinstance(value, str) or not kind:
+		return value
+	raw = value.strip()
+	try:
+		if kind == "integer":
+			return int(float(raw)) if re.fullmatch(r"-?\d+(\.\d+)?", raw) else value
+		if kind == "number":
+			return float(raw) if re.fullmatch(r"-?\d+(\.\d+)?", raw) else value
+		if kind == "boolean":
+			low = raw.lower()
+			return True if low == "true" else False if low == "false" else value
+		if kind in ("array", "object"):
+			parsed = json.loads(raw)
+			return parsed if isinstance(parsed, list if kind == "array" else dict) else value
+	except ValueError:
+		return value
+	return value
 
 
 def extract_toolcalls(text: str, tool_format: str = "qwen") -> List[dict]:
