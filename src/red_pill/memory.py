@@ -31,6 +31,9 @@ synaptic_split = synaptic_split
 
 logger = logging.getLogger(__name__)
 
+# RFC-OLV-001 F2: cuántas recuperaciones se conservan por engrama.
+_RECALL_STAMPS_MAX = 5
+
 
 def _mask_pii_exception(e: Exception) -> str:
 	"""Truncates exception strings to prevent payload PII leaks."""
@@ -453,6 +456,14 @@ class MemoryManager:
 					# Ensure updates are included for the batch operation
 					reinforced_updates["last_recalled_at"] = p.payload["last_recalled_at"]
 					reinforced_updates["recall_count"] = p.payload["recall_count"]
+					# RFC-OLV-001 F2: historia de recuperaciones (ring de 5). Es lo
+					# que permite exigir DOS recuperaciones en DÍAS ACTIVOS distintos
+					# (D-06) en vez de dos golpes en el mismo turno: el espaciado es
+					# lo que consolida (Bjork & Bjork, 1992).
+					_stamps = list(p.payload.get("recall_stamps") or [])[-(_RECALL_STAMPS_MAX - 1) :]
+					_stamps.append(p.payload["last_recalled_at"])
+					p.payload["recall_stamps"] = _stamps
+					reinforced_updates["recall_stamps"] = _stamps
 					# Eje de activación de los curados (single-writer): solo se
 					# refresca al RECUPERAR, no en el pulse. Gobierna el demote.
 					if p.payload.get("node_type") in ("memento_engram", "synthesis_hub"):
@@ -700,9 +711,7 @@ class MemoryManager:
 
 		use_hybrid = bool(hybrid and getattr(self.cfg, "MEMORY_HYBRID_RECALL_ENABLED", False) and collection in ("work_memories", "social_memories"))
 		use_mmr = bool(getattr(self.cfg, "MEMORY_RECALL_MMR_ENABLED", False))
-		use_hub_index = bool(
-			getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False)
-		)
+		use_hub_index = bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False))
 		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr or use_hub_index) else limit
 		try:
 			results = self.client.query_points(
@@ -1758,9 +1767,7 @@ class MemoryManager:
 		try:
 			points, _ = self.client.scroll(
 				collection_name="signal_memories",
-				scroll_filter=models.Filter(
-					must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]
-				),
+				scroll_filter=models.Filter(must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]),
 				limit=200,
 				with_payload=True,
 			)

@@ -144,7 +144,15 @@ def erode_work_hubs(memory_manager) -> dict:
 					f"[SLEEP ENGINE] Hub {hub.id} in 'work_memories' eroded below threshold (score={new_score}, intensity={new_intensity}). Deleting."
 				)
 			else:
-				update_payload = {"utility_beta": new_beta, "reinforcement_score": new_score, "intensity": new_intensity, "last_recalled_at": now}
+				# RFC-OLV-001 D-09: el decaimiento firma SU campo, no el de uso.
+				# `last_recalled_at` solo lo escriben el nacimiento y la recuperación;
+				# si lo escribiera el erosor, la edad sería un metrónomo y el uso, invisible.
+				update_payload = {
+					"utility_beta": new_beta,
+					"reinforcement_score": new_score,
+					"intensity": new_intensity,
+					"decay_checked_at": now,
+				}
 				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[hub.id])))
 
 	if update_operations:
@@ -377,7 +385,8 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 					logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
 				else:
 					# Otherwise, update score and commit time
-					update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
+					# RFC-OLV-001 D-09: el washout puntúa; no firma el campo de uso.
+					update_payload = {"reinforcement_score": new_score, "decay_checked_at": now}
 					update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
 
 			if not points or offset is None:

@@ -205,7 +205,8 @@ class MetabolismKernel:
 					deleted_count += 1
 				elif decay_updates:
 					eroded_count += 1
-					decay_updates["last_recalled_at"] = time.time()
+					# RFC-OLV-001 D-09: el erosor no firma el campo de uso.
+					decay_updates["decay_checked_at"] = time.time()
 					update_operations.append(
 						models.SetPayloadOperation(
 							set_payload=models.SetPayload(
