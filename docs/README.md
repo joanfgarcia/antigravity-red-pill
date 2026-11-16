@@ -118,6 +118,9 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (AD-049): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
 | [HUB_BAKEOFF.md](BENCHMARKS/HUB_BAKEOFF.md) | Bake-off de hubs (AD-115/AD-116): Granite/K2/Bonsai, cobertura, latencia y cumplimiento del contrato de salida |
 | [2026-11-09-MOSS_IMAGE_SFT.md](BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md) | Evaluación de MOSS-Image-SFT (media local) |
+| [2026-11-16-DISTILLER_BAKEOFF_MIMO.md](BENCHMARKS/2026-11-16-DISTILLER_BAKEOFF_MIMO.md) | Bake-off del destilador con MiMo-V2.6-Distill (2026-11-16) |
+| [2026-11-16-DISTILLER_FIDELITY_MIMO.md](BENCHMARKS/2026-11-16-DISTILLER_FIDELITY_MIMO.md) | Fidelidad a dos lados con MiMo-V2.6-Distill (2026-11-16) |
+| [2026-11-16-TEXTURE_MIMO_VS_BONSAI.md](BENCHMARKS/2026-11-16-TEXTURE_MIMO_VS_BONSAI.md) | Textura: MiMo contra Bonsai, pares ciegos (2026-11-16) |
 | [ANNOTATE_BENCH.md](BENCHMARKS/ANNOTATE_BENCH.md) | Banco reproducible de annotate (NB-001): baseline 2 llamadas/split vs fusión, con fixture fijo y `--dry-run` |
 
 ### Bünker

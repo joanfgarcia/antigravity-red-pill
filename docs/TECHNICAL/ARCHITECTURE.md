@@ -88,7 +88,9 @@ To ensure the Bünker remains observable and resource-accountable, all backgroun
 - **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
-1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
+1.  **[RESOLVED v4.2.1, SUPERSEDED 2026-11-16] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
+    > **AD-122**: la erosión periódica se retiró y con ella el *watermark* que reescribía `last_recalled_at` al decaer
+    > (borraba la prueba de uso). Hoy el olvido es una escalera en días activos; el cursor, si hace falta, es `decay_checked_at`.
 2.  **[IMPLEMENTED v6.1.0] Graph Pruning (Hub-Aware)**: Implemented "Symmetric Hub-Aware Eviction" in the `dream()` cycle to sever weak associations, evaluated by target hub survivability (`reinforcement * importance`) and logarithmic age decay, preventing topological collapse around critical Hub nodes.
 3.  **Hebb's Law Implementation**: "Neurons that fire together, wire together." Currently, associations are static. They should be dynamic—created automatically when two memories are retrieved in the same session context for a prolonged period.
 4.  **[IMPLEMENTED v5.6.3] FSRS Algorithm Integration**: Replaced heuristic linear/exponential decay with the **Free Spaced Repetition Scheduler** (FSRS) model. Each engram now manages its own `difficulty` and `stability` parameters. The formula $R = e^{\ln(0.9) \cdot t/S}$ produces biologically-accurate decay curves, ensuring high-stability memories (frequently recalled, high importance) survive months of inactivity — solving the "Vacation Problem" (session-relative decay).

@@ -692,6 +692,10 @@ decisión que fijara un marco de semanas para los curados.
 - El washout genérico excluye los curados (`node_type=memento_engram`,
   `origin=memento` o `hubbed=true`), igual que los hubs: su olvido sigue en
   `erode_curated` (5a/10a, `last_reinforced_at`).
+  > **SUPERSEDED (parcial) por AD-122 (2026-11-16)**: `erode_curated` y
+  > `last_reinforced_at` se retiraron. Un curado **nunca recuperado** ya no
+  > espera 5 años: cae en el escalón 0 de la escalera (ascender no consolida,
+  > Frey & Morris 1997). El washout tampoco borra ya (D-22).
 - Flag explícito de reversión `RHIZODB_WASHOUT_SKIP_CURATED` (default ON).
 - Coeficientes del washout a config (`RHIZODB_WASHOUT_GAMMA`, `RHIZODB_S_MAX`,
   `RHIZODB_PRUNE_MIN_ACTIVATION`, `RHIZODB_PRUNE_MAX_STABILITY_DAYS`,
@@ -3910,8 +3914,13 @@ vez en 3 días; (b) retunar θ a 0,15/0,105 — imposible por α y por la banda 
 vez de borrar — la literatura lo sugiere (inaccesible ≠ borrado) pero añade mecanismo y Memento+raw ya son
 el rastro; queda como candidata.
 
-**Consequences**: la escalera entra en `dry_run` (`SW_FORGETTING_LADDER_MODE`) y no borra nada hasta que
-el Operador lo encienda; el `dry_run` informa además qué se llevaría el reloj histórico. `red-pill erode`
-pasa a seco por defecto (`--apply` explícito) porque el campo de uso ya es real. La cobertura se cuenta
+**Consequences**: la escalera entra en `dry_run` y **el Operador la enciende a `enforce`** el 2026-11-16
+(con el reaper de ramas en interruptor aparte, `SW_BRANCH_REAPER_MODE=dry_run`). La gracia D-16 deja la
+primera pasada inerte (0 purgas; 158 promociones), pero la ronda 4 midió que la gracia era un
+**acantilado**: al día activo 30 caerían 7.657 engramas en una sola pasada (92 % del corpus). Por eso la
+purga va **rampada** (`SW_FORGETTING_MAX_PURGES_PER_CYCLE=50`, primero lo más parado, el resto
+`deferred`). `red-pill erode` pasa a seco por defecto (`--apply` explícito) porque el campo de uso ya es
+real. El recall deja de ocultar por el flag `hubbed` y excluye por `hub_id` que existe: los 1.962
+marcadores huérfanos vuelven a ser recuperables y reforzables. La cobertura se cuenta
 por nodos: 99,4 % → 73,6 % en `work_memories` (la diferencia eran los 1.943 marcadores ciegos). Queda
 abierto un shard propio: **los 1.962 huérfanos son ceguera de recall**, no un problema de métrica.

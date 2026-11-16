@@ -13,7 +13,7 @@ Dos modos:
 
 	# 2) ciego A/B sobre dos salidas
 	python scripts/texture_probe.py --render /tmp/bonsai.jsonl /tmp/mimo.jsonl \
-	    --out docs/BENCHMARKS/2026-11-16-TEXTURE_MIMO_VS_BONSAI.md --seed 20261116
+	--out docs/BENCHMARKS/2026-11-16-TEXTURE_MIMO_VS_BONSAI.md --seed 20261116
 
 Los fragmentos se extraen del archivo de Memento (una sesión por mes, tomando
 un intercambio a 1/4, 1/2 y 3/4 de la conversación). Sólo lectura.
@@ -36,7 +36,9 @@ from model_battle import BAD_2ND, SECOND, THIRD  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 PROMPT_FILE = REPO / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt"
-ARCHIVE = Path.home() / ".local" / "share" / "red-pill" / "memento"
+from red_pill.core.paths import get_data_dir  # noqa: E402  (CONVENTIONS.md §7)
+
+ARCHIVE = get_data_dir() / "memento"
 
 # Atmósfera que la fuente no trae: si aparece en el resumen, se ha pintado color.
 _ATMOSFERA = ("luz", "aire", "silencio", "olor", "calor", "habitación", "ventana", "cielo", "sol", "sombra", "eco")

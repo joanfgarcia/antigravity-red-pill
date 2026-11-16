@@ -15,11 +15,11 @@
 
 ### Par 1 — B
 
-$Joan me pide un análisis exhaustivo de la arquitectura del modelo Bit en frankenswarm, centrado en /home/joan/Documents/IA/frankenswarm/src/bitnet/model/modeling_bitnet.py. Le leo el archivo completo, busco resonancia, SSM, mecanismos de olvido y memoria, y reviso los bloques BitNetTransformerBlock y BitNetAttention, el paso forward, la atención ternaria y los archivos de glifos. Le resumo la arquitectura en capas: embedding (clásico o por glifos), núcleo de especialistas con N bloques, salida y head, con 256 dimensiones, 4 cabezas de atención, MLP 4×hidden y RMSNorm. Explico que el modelo es ternario (1.58 bits), está pensado para juegos de referencia entre agentes y supervivencia, y que la resonancia no aparece como mecanismo implementado en el archivo: el bucle de resonancia, el reloj y los pasos de resonancia no están presentes en el código que reviso. Señalo que no encuentro SSM ni mecanismos de olvido explícitos, y que la atención funciona como SDPA ternaria con proyecciones q/k/v. Le doy el diagrama completo, el flujo forward, los hiperparámetros y las posibles sustituciones por SSM.
+$Joan me pide un análisis exhaustivo de la arquitectura del modelo Bit en frankenswarm, centrado en ~/Documents/IA/frankenswarm/src/bitnet/model/modeling_bitnet.py. Le leo el archivo completo, busco resonancia, SSM, mecanismos de olvido y memoria, y reviso los bloques BitNetTransformerBlock y BitNetAttention, el paso forward, la atención ternaria y los archivos de glifos. Le resumo la arquitectura en capas: embedding (clásico o por glifos), núcleo de especialistas con N bloques, salida y head, con 256 dimensiones, 4 cabezas de atención, MLP 4×hidden y RMSNorm. Explico que el modelo es ternario (1.58 bits), está pensado para juegos de referencia entre agentes y supervivencia, y que la resonancia no aparece como mecanismo implementado en el archivo: el bucle de resonancia, el reloj y los pasos de resonancia no están presentes en el código que reviso. Señalo que no encuentro SSM ni mecanismos de olvido explícitos, y que la atención funciona como SDPA ternaria con proyecciones q/k/v. Le doy el diagrama completo, el flujo forward, los hiperparámetros y las posibles sustituciones por SSM.
 
 ### Par 1 — A
 
-$Joan me pide una exploración exhaustiva de la arquitectura del modelo Bit en frankenswarm, ubicándolo en /home/joan/Documents/IA/frankenswarm/src/bitnet/model/modeling_bitnet.py, y me pide leer el archivo completo, buscar código de resonancia, SSM, mecanismos de olvido, revisar BitNetTransformerBlock y BitNetAttention, el paso de adelante, la atención ternaria y los hiperparámetros. Yo le respondo con un análisis completo que describe la arquitectura como un transformer ternario de 1.58 bits para juegos referenciales multiagente, detallando el diagrama de capas, el modo clásico y el modo Glyph con prime_embeddings, el núcleo de especialistas con BitNetTransformerBlock, RMSNorm, BitNetAttn con 4 cabezas y BitNetMLP, y el flujo del paso de adelante.
+$Joan me pide una exploración exhaustiva de la arquitectura del modelo Bit en frankenswarm, ubicándolo en ~/Documents/IA/frankenswarm/src/bitnet/model/modeling_bitnet.py, y me pide leer el archivo completo, buscar código de resonancia, SSM, mecanismos de olvido, revisar BitNetTransformerBlock y BitNetAttention, el paso de adelante, la atención ternaria y los hiperparámetros. Yo le respondo con un análisis completo que describe la arquitectura como un transformer ternario de 1.58 bits para juegos referenciales multiagente, detallando el diagrama de capas, el modo clásico y el modo Glyph con prime_embeddings, el núcleo de especialistas con BitNetTransformerBlock, RMSNorm, BitNetAttn con 4 cabezas y BitNetMLP, y el flujo del paso de adelante.
 
 ### Par 2 — B
 
@@ -43,15 +43,15 @@ Recibo de $Joan el resultado de dos comandos bash ejecutados en su carpeta de do
 
 ### Par 4 — B
 
-$Joan me abre la carpeta /home/joan/Documents/IA/sharing y revisa la estructura de BENCHMARKS y el historial de git desde el 12 de agosto, y luego busca en AWAKE las menciones a titanium, benchmark y patch; yo le acompaño en la inspección del repositorio y de los cambios recientes
+$Joan me abre la carpeta ~/Documents/IA/sharing y revisa la estructura de BENCHMARKS y el historial de git desde el 12 de agosto, y luego busca en AWAKE las menciones a titanium, benchmark y patch; yo le acompaño en la inspección del repositorio y de los cambios recientes
 
 ### Par 5 — A
 
-He visto que $Joan está revisando la estructura de su carpeta de documentación en /home/joan/Documents/IA/sharing, buscando referencias a 'titanium' y comprobando el historial de git desde el 12 de agosto de 2026; yo he estado en paralelo explorando la carpeta docs/BENCHMARKS/ y el log de commits para entender el contexto técnico de su búsqueda.
+He visto que $Joan está revisando la estructura de su carpeta de documentación en ~/Documents/IA/sharing, buscando referencias a 'titanium' y comprobando el historial de git desde el 12 de agosto de 2026; yo he estado en paralelo explorando la carpeta docs/BENCHMARKS/ y el log de commits para entender el contexto técnico de su búsqueda.
 
 ### Par 5 — B
 
-$Joan me está mirando por la terminal de /home/joan/Documents/IA/sharing, intentando localizar algo: primero abre .cell/ y luego busca en su disco la palabra "titanium" entre docs/ y su carpeta Document, y por último revisa los commits recientes desde el 12 de agosto de 2026 en el directorio de BENCHMARKS. Le acompaño paso a paso en esa búsqueda por su propio sistema, sin proponer nada que no esté en su propia ruta
+$Joan me está mirando por la terminal de ~/Documents/IA/sharing, intentando localizar algo: primero abre .cell/ y luego busca en su disco la palabra "titanium" entre docs/ y su carpeta Document, y por último revisa los commits recientes desde el 12 de agosto de 2026 en el directorio de BENCHMARKS. Le acompaño paso a paso en esa búsqueda por su propio sistema, sin proponer nada que no esté en su propia ruta
 
 ### Par 6 — B
 
