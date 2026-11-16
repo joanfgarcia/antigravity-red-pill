@@ -256,12 +256,24 @@ def classify(
 	if isinstance(idx, int) and 0 <= idx <= epoch:
 		since = epoch - idx
 	else:
-		# Legacy sin contador: cuenta desde que la escalera arrancó (D-16), no
-		# desde un histórico que ya venía truncado.
-		since = max(0, epoch - int(clock.get("started_epoch") or epoch))
+		# Legacy sin contador: se cobra lo REAL que lleve sin usarse, pero nunca
+		# más que lo transcurrido desde que la escalera arrancó (D-16). Así un
+		# engrama usado hace poco antes de F3 no nace condenado, y uno parado
+		# hace meses no se salva por el arranque.
+		_started = clock.get("started_epoch")
+		grace = max(0, epoch - int(_started if _started is not None else epoch))
+		real_since = active_days_between(days, last, now) if days else grace
+		since = min(real_since, grace)
 
+	raw_stamps = [s for s in (_ts(s) for s in (payload.get("recall_stamps") or [])) if s is not None]
 	stamps = _promotion_stamps(payload, days, now, params)
-	legacy_promoted = int(payload.get("recall_count") or 0) >= 2 and not payload.get("recall_stamps")
+	# Transición de legacy (§8.2). Ojo: NO puede depender de que los stamps estén
+	# ausentes, porque la propia migración los siembra con `[last_recalled_at]` y
+	# apagaría la guarda (R3-A-02). Y exige que el último recuerdo esté dentro de
+	# la ventana: un engrama parado hace tres años no entra al circuito largo.
+	legacy_promoted = (
+		int(payload.get("recall_count") or 0) >= 2 and len(raw_stamps) < 2 and last >= _window_start(days, params.promotion_window_days, now)
+	)
 	promoted = bool(payload.get("promoted_at")) or stamps >= 2 or legacy_promoted
 	pending_promotion = promoted and not payload.get("promoted_at")
 
@@ -305,6 +317,9 @@ class LadderReport:
 	kept: int = 0
 	errors: int = 0
 	historical_delete: int = 0
+	applied_freeze: int = 0
+	applied_promote: int = 0
+	write_errors: int = 0
 
 	def as_dict(self) -> Dict[str, Any]:
 		return {
@@ -315,6 +330,9 @@ class LadderReport:
 			"kept": self.kept,
 			"errors": self.errors,
 			"historical_delete": self.historical_delete,
+			"applied_freeze": self.applied_freeze,
+			"applied_promote": self.applied_promote,
+			"write_errors": self.write_errors,
 		}
 
 
@@ -409,6 +427,7 @@ def run_ladder(
 					report_dict["applied_delete"] = len(to_delete)
 					logger.info(f"[OLVIDO] {collection}: {len(to_delete)} engramas purgados (escalera).")
 				except Exception as exc:
+					report_dict["write_errors"] = report_dict.get("write_errors", 0) + 1
 					logger.error(f"[OLVIDO] Fallo purgando en {collection}: {exc}")
 			if to_freeze:
 				try:
@@ -417,8 +436,10 @@ def run_ladder(
 						payload={"permastore": True, "frozen_at": now, "updated_at": now},
 						points=to_freeze,
 					)
+					report_dict["applied_freeze"] = len(to_freeze)
 					logger.info(f"[OLVIDO] {collection}: {len(to_freeze)} engramas a permastore (congelados).")
 				except Exception as exc:
+					report_dict["write_errors"] = report_dict.get("write_errors", 0) + 1
 					logger.error(f"[OLVIDO] Fallo congelando en {collection}: {exc}")
 			if to_promote:
 				try:
@@ -427,8 +448,10 @@ def run_ladder(
 						payload={"promoted_at": now, "updated_at": now},
 						points=to_promote,
 					)
+					report_dict["applied_promote"] = len(to_promote)
 					logger.info(f"[OLVIDO] {collection}: {len(to_promote)} engramas promovidos al circuito largo.")
 				except Exception as exc:
+					report_dict["write_errors"] = report_dict.get("write_errors", 0) + 1
 					logger.error(f"[OLVIDO] Fallo promoviendo en {collection}: {exc}")
 
 		reports[collection] = report_dict

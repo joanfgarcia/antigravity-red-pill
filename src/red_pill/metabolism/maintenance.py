@@ -455,7 +455,11 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 					if _is_murky_pointer(str(payload.get("content", ""))):
 						murky_pointers += 1
 					continue
-				if (payload.get("immune") or payload.get("permastore")) and not payload.get("_is_fragment"):
+				if payload.get("permastore"):
+					# Congelado es congelado, también si además es fragmento (R3-A-07).
+					skipped_immune += 1
+					continue
+				if payload.get("immune") and not payload.get("_is_fragment"):
 					# A deliberate immune anchor with no content is an anomaly for the
 					# operator. Fragment shrapnel, however, only INHERITED its immunity
 					# (force_immune cascades from the parent verbatim) — it protects

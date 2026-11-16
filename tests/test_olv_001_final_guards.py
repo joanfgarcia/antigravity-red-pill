@@ -116,8 +116,10 @@ def test_washout_does_not_delete_and_respects_permastore(monkeypatch, tmp_path):
 	monkeypatch.setattr(fog, "active_day_clock", lambda *a, **k: _clock(1, time.time()))
 	monkeypatch.setattr("red_pill.metabolism.maintenance._washout_state_path", lambda: tmp_path / "w.json")
 	now = time.time()
-	frozen = _point("congelado", {"reinforcement_score": 0.04, "stability": 1.0, "immune": False, "permastore": True, "last_recalled_at": now})
-	weak = _point("debil", {"reinforcement_score": 0.04, "stability": 1.0, "immune": False, "last_recalled_at": now})
+	# Score alto a propósito: así el único motivo para no tocarlo es `permastore`
+	# (con 0.04 se saltaría por el umbral de poda y la guarda no se probaría).
+	frozen = _point("congelado", {"reinforcement_score": 0.9, "stability": 50.0, "immune": False, "permastore": True, "last_recalled_at": now})
+	weak = _point("debil", {"reinforcement_score": 0.9, "stability": 50.0, "immune": False, "last_recalled_at": now})
 
 	mm = MagicMock()
 	mm.client.collection_exists.return_value = True
@@ -126,7 +128,12 @@ def test_washout_does_not_delete_and_respects_permastore(monkeypatch, tmp_path):
 	run_rhizodb_washout_and_pruning(mm)
 
 	assert not mm.client.delete.called, "la única ruta que decide borrar es la escalera (D-22)"
-	assert frozen.payload["reinforcement_score"] == 0.04, "un permastore no se toca"
+	updated = []
+	for call in mm.client.batch_update_points.call_args_list:
+		for op in call[1]["update_operations"]:
+			updated.extend(op.set_payload.points)
+	assert "congelado" not in updated, "un permastore no se puntúa ni se toca"
+	assert "debil" in updated, "el gemelo sin permastore sí se renormaliza"
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +145,15 @@ def test_legacy_with_two_recalls_promotes_instead_of_dying():
 	now = time.time()
 	clock = _clock(400, now, started_epoch=0)
 	payload = {"recall_count": 3, "last_recalled_at": now - DAY * 70, "created_at": now - DAY * 400}
-	decision = fog.classify(payload, "work_memories", clock, now)
-	assert decision == "promote", "sin historia de stamps, 2+ recuperaciones entran al circuito largo (§8.2)"
+
+	# Un stamp (el que siembra la migración de §8.2) NO debe apagar la guarda.
+	seeded = dict(payload, recall_stamps=[now - DAY * 70])
+	assert fog.classify(payload, "work_memories", clock, now) == "promote", "sin stamps: promueve"
+	assert fog.classify(seeded, "work_memories", clock, now) == "promote", "con el stamp sembrado: también"
+
+	# Pero si el último recuerdo está FUERA de la ventana de 90 días activos, no:
+	ancient = {"recall_count": 3, "last_recalled_at": now - DAY * 300, "created_at": now - DAY * 400}
+	assert fog.classify(ancient, "work_memories", clock, now) == "delete", "fuera de ventana: no promueve"
 
 
 def test_idle_days_do_not_advance_the_clock():
@@ -177,3 +191,54 @@ def test_ladder_mode_is_normalized_and_validated():
 		pass
 	else:  # pragma: no cover
 		raise AssertionError("un modo inventado debe ser rechazado en config, no degradarse en silencio")
+
+
+def test_active_day_counter_changes_the_verdict():
+	"""D-16 muerde: el legacy se cobra lo real, pero con el techo de la gracia."""
+	now = time.time()
+	old_legacy = {"recall_count": 0, "last_recalled_at": now - DAY * 40}
+	recent = {"recall_count": 0, "last_recalled_at": now - DAY * 2}
+
+	# Recién arrancada (gracia = 0): nadie cae todavía.
+	start = _clock(60, now, started_epoch=60)
+	assert fog.classify(old_legacy, "work_memories", start, now) == "keep"
+	assert fog.classify(recent, "work_memories", start, now) == "keep"
+
+	# 35 días activos después del arranque: el legacy antiguo cae (40 > 30, con
+	# techo 35); el usado hace 2 días activos sigue vivo.
+	later = _clock(95, now, started_epoch=60)
+	assert fog.classify(old_legacy, "work_memories", later, now) == "delete"
+	assert fog.classify(recent, "work_memories", later, now) == "keep"
+
+	# Y con contador, el reciente se mide por su índice, no por la gracia.
+	counted = dict(recent, active_days_at_recall=93)
+	assert fog.classify(counted, "work_memories", later, now) == "keep"
+	assert fog.classify(dict(recent, active_days_at_recall=60), "work_memories", later, now) == "delete"
+
+
+def test_clock_is_monotonic_and_atomic(monkeypatch, tmp_path):
+	"""El epoch solo avanza, ignora días viejos y escribe de forma atómica."""
+	state = tmp_path / "olvido_active_days.json"
+	monkeypatch.setattr(fog, "_state_path", lambda: state)
+
+	now = time.time()
+	first = [now - DAY * 2, now - DAY]
+	monkeypatch.setattr(fog, "_mirror_days", lambda after=None: first if not after else [])
+	clock = fog.active_day_clock(now)
+	assert clock and clock["epoch"] == 2 and state.exists()
+
+	# Backfill de días ANTIGUOS: no inflan el epoch.
+	older = [now - DAY * 30, now - DAY * 20]
+
+	def _only_newer(after=None):
+		# Contrato real: la consulta filtra por `after` en SQL.
+		return [d for d in older if after is None or time.strftime("%Y-%m-%d", time.localtime(d)) > after]
+
+	monkeypatch.setattr(fog, "_mirror_days", _only_newer)
+	clock = fog.active_day_clock(now)
+	assert clock["epoch"] == 2, "un backfill no cobra olvido que no ocurrió"
+
+	# Día nuevo: avanza.
+	monkeypatch.setattr(fog, "_mirror_days", lambda after=None: [now])
+	clock = fog.active_day_clock(now)
+	assert clock["epoch"] == 3

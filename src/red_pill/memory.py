@@ -480,7 +480,7 @@ class MemoryManager:
 					reinforced_updates["recall_stamps"] = _stamps
 					# D-16: epoch de días activos en el momento de la recuperación.
 					# Un día sin actividad no cobra olvido, y la migración no purga.
-					if _active_epoch is not None:
+					if _active_epoch is not None and _active_epoch > 0:
 						p.payload["active_days_at_recall"] = _active_epoch
 						reinforced_updates["active_days_at_recall"] = _active_epoch
 					# RFC-OLV-001 D-21: `last_reinforced_at` era una copia literal de

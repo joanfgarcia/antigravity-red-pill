@@ -49,7 +49,7 @@ class ErosionPhase(SleepPhase):
 		(`promoted_from`) que el reaper excluye por definicion. Queda como funcion
 		manual/legada, con sus tests, sin participar del ciclo automatico.
 		"""
-		reaped = purged = frozen = promoted = planned = 0
+		reaped = purged = frozen = promoted = planned = write_errors = 0
 		mode = str(getattr(cfg, "SW_FORGETTING_LADDER_MODE", "off") or "off").strip().lower()
 		if mode not in ("off", "dry_run", "enforce"):
 			logger.warning(f"[OLVIDO] Modo de escalera desconocido {mode!r}: se trata como 'off'.")
@@ -62,8 +62,9 @@ class ErosionPhase(SleepPhase):
 					# Producción = solo lo APLICADO. Lo planificado va en detalle aparte
 					# (`*_plan`), que es lo que R3-C-06 pedía no mezclar.
 					purged += int(col.get("applied_delete", 0) or 0)
-					frozen += int(col.get("frozen", 0) or 0) if mode == "enforce" else 0
-					promoted += int(col.get("promoted", 0) or 0) if mode == "enforce" else 0
+					frozen += int(col.get("applied_freeze", 0) or 0)
+					promoted += int(col.get("applied_promote", 0) or 0)
+					write_errors += int(col.get("write_errors", 0) or 0)
 					planned += int(col.get("planned_delete", 0) or 0)
 					if col.get("planned_delete") or col.get("frozen") or col.get("errors"):
 						logger.info(
@@ -89,6 +90,7 @@ class ErosionPhase(SleepPhase):
 			ladder_permastore=frozen,
 			ladder_promovidos=promoted,
 			ladder_planificado=planned,
+			ladder_errores=write_errors,
 		)
 		if mode != "off":
 			logger.info(f"[OLVIDO] Pasada ({mode}): purga={purged} permastore={frozen} promovidos={promoted} reaper={reaped}")
