@@ -697,7 +697,7 @@ class MemoryManager:
 		devuelve vacío y el llamante cae al comportamiento por flag.
 		"""
 		now = time.time()
-		cached = getattr(self, "_hub_ids_cache", None) or {}
+		cached: dict[str, "tuple[float, set]"] = getattr(self, "_hub_ids_cache", None) or {}
 		hit = cached.get(collection)
 		if hit and now - hit[0] < 60:
 			return hit[1]

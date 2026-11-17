@@ -87,10 +87,20 @@ def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 			# fallaba el registro y se usaba la del anterior). `overwrite=True`
 			# deja el handler apuntando al template del modelo realmente cargado
 			# (invariante del daemon: un modelo a la vez). 2026-11-16.
+			#
+			# `register_chat_format(name)` —el decorador público— NO acepta el
+			# kwarg en 0.3.31: el overwrite pedido moría en un TypeError mudo y
+			# se registraba por la rama vieja (ValueError al recargar ⇒ se seguía
+			# renderizando con el template del PRIMER modelo). El overwrite vive
+			# en el registry, que es lo que el decorador usa por dentro.
+			handler = lcf.chat_formatter_to_chat_completion_handler(fmt)
+			registry = lcf.LlamaChatCompletionHandlerRegistry()
 			try:
-				lcf.register_chat_format(name, overwrite=True)(fmt)
+				registry.register_chat_completion_handler(name, handler, overwrite=True)
 			except TypeError:  # builds antiguos sin el kwarg
-				lcf.register_chat_format(name)(fmt)
+				if name in getattr(registry, "_chat_handlers", {}):
+					registry.unregister_chat_handler(name)
+				registry.register_chat_completion_handler(name, handler)
 			logger.debug("chat handler '%s' registrado (enable_thinking=%s, low_effort=%s)", name, et, le)
 
 		_mk(True, False, HANDLER_THINKING)

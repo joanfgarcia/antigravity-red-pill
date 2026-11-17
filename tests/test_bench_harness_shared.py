@@ -8,8 +8,6 @@ aplicar). Estas pruebas son la guardia contra la cuarta.
 
 import pathlib
 
-import pytest
-
 REPO = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
 
