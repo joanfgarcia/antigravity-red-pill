@@ -752,6 +752,13 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_WARN_BEFORE_DAYS: int = 7
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# MEM-011 (2026-11-17): partes por polaroid (la sesión se parte en hubs por sus
+	# polaroids renderizadas, con techo = nº de polaroids). Default OFF: apagado, el
+	# comportamiento es el de siempre (un hub por sesión).
+	SW_HUB_POLAROID_ENABLED: bool = False
+	# Enrutado por hoja (2026-11-17): busca en todo el espacio, agrega cada hoja a
+	# su raíz y devuelve la RAÍZ con la mejor evidencia. Default OFF.
+	SW_RECALL_LEAF_ROUTING_ENABLED: bool = False
 	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
 	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
 	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;

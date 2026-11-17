@@ -845,13 +845,54 @@ async def handle_hub_members(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text=f"[HUB MEMBERS] hub no encontrado: {hub_id} en {collection}.")]
 		hub_payload = hub_points[0].payload or {}
 		session_id = hub_payload.get("session_id")
+		hub_role = str(hub_payload.get("hub_role") or "root")
+
+		# MEM-011 F3: la navegación respeta la jerarquía. Una PARTE abre sus hojas
+		# por `hub_id` (no por sesión: escanear la sesión devolvería los 302
+		# miembros de todas las partes). Una RAÍZ con partes lista sus partes y
+		# deja que se abran una a una; sin partes, se comporta como siempre.
+		if hub_role == "root":
+			part_points, _ = client.scroll(
+				collection,
+				scroll_filter=_qm.Filter(
+					must=[
+						_qm.FieldCondition(key="hub_id", match=_qm.MatchValue(value=hub_id)),
+						_qm.FieldCondition(key="hub_role", match=_qm.MatchValue(value="part")),
+					]
+				),
+				limit=min(200, max(limit + offset, 50)),
+				with_payload=True,
+			)
+			if part_points:
+				ordered_parts = sorted(
+					part_points,
+					key=lambda pt: str((pt.payload or {}).get("part_key") or ""),
+				)[offset : offset + limit]
+				lines = [
+					f"[HUB MEMBERS] collection={collection} | session={session_id} | "
+					f"{len(part_points)} partes | ventana {offset}-{offset + len(ordered_parts)} | mode={mode}",
+					"",
+				]
+				for pt in ordered_parts:
+					pp = pt.payload or {}
+					label = str(pp.get("hub_title") or pp.get("part_key") or "")[:80]
+					count = int(pp.get("hub_members_count") or 0)
+					lines.append(f"· parte [{str(pt.id)[:8]}] {count} hojas · {label}")
+				lines.append("")
+				lines.append("(abre una parte con hub_id=<id de la parte> para ver sus hojas)")
+				return [types.TextContent(type="text", text="\n".join(lines))]
+
 		if not session_id:
 			return [types.TextContent(type="text", text="[HUB MEMBERS] el hub no tiene session_id; no hay miembros que abrir.")]
 
 		scan_limit = min(500, max(limit + offset, 100))
+		if hub_role == "part":
+			scan_filter = _qm.Filter(must=[_qm.FieldCondition(key="hub_id", match=_qm.MatchValue(value=hub_id))])
+		else:
+			scan_filter = _qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))])
 		points, _ = client.scroll(
 			collection,
-			scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))]),
+			scroll_filter=scan_filter,
 			limit=scan_limit,
 			with_payload=True,
 		)

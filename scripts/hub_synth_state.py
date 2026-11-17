@@ -33,6 +33,7 @@ import argparse
 import json
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -113,6 +114,10 @@ def collect(memory_manager: Any, collections: Tuple[str, ...], cfg: Any) -> List
 			if offset is None:
 				break
 		groups = {sid: mem for sid, mem in group_by_session(points).items() if len(mem) >= 2}
+		# MEM-011: partes escritas por raíz (se cuentan del mismo inventario ya
+		# cargado: sin coste extra). Sin esto el informe dice "hub" aunque 20 de
+		# 32 partes estén caídas (auditoría AC-11).
+		part_counts: Counter = Counter(str(payload.get("hub_id") or "") for _pid, payload in points if str(payload.get("hub_role") or "") == "part")
 		hubs = _hub_payloads(memory_manager, collection, [hub_point_id(collection, sid) for sid in groups])
 		for session_id, members in groups.items():
 			ihash = hub_input_hash([pid for pid, _ in members])
@@ -131,6 +136,7 @@ def collect(memory_manager: Any, collections: Tuple[str, ...], cfg: Any) -> List
 					"session_id": session_id,
 					"members": len(members),
 					"hub": bool(hub),
+					"parts": part_counts.get(str(hub_point_id(collection, session_id)), 0),
 					"verdict": verdict,
 					"reject_count": rej_count,
 					"reject_same_input": bool(rej_hash) and rej_hash == ihash,

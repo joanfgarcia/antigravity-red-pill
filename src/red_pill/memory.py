@@ -780,18 +780,30 @@ class MemoryManager:
 		use_mmr = bool(getattr(self.cfg, "MEMORY_RECALL_MMR_ENABLED", False))
 		use_hub_index = bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False))
 		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr or use_hub_index) else limit
-		try:
-			results = self.client.query_points(
-				collection_name=collection,
-				query=vector,
-				query_filter=search_filter,
-				limit=fetch,
-				with_payload=True,
-				with_vectors=use_hybrid or use_mmr,
-			).points
-		except Exception as e:
-			logger.error(f"Query failed: {_mask_pii_exception(e)}")
-			return []
+		# Enrutado por hoja (2026-11-17): las hojas son más afiladas que el resumen
+		# del hub (medido: 0,737 contra 0,491 para la misma consulta). Se busca en
+		# TODO el espacio, se agrega cada hoja a su raíz y se devuelve la RAÍZ con
+		# la mejor evidencia. El llamante sigue viendo hubs; la hoja solo enruta.
+		leaf_routed: List[Any] = []
+		if bool(getattr(self.cfg, "SW_RECALL_LEAF_ROUTING_ENABLED", False)):
+			leaf_routed = self._route_by_leaf(collection, vector, limit=max(fetch, limit * 6))
+			if leaf_routed:
+				use_hybrid = use_mmr = use_hub_index = False
+		if leaf_routed:
+			results = leaf_routed
+		else:
+			try:
+				results = self.client.query_points(
+					collection_name=collection,
+					query=vector,
+					query_filter=search_filter,
+					limit=fetch,
+					with_payload=True,
+					with_vectors=use_hybrid or use_mmr,
+				).points
+			except Exception as e:
+				logger.error(f"Query failed: {_mask_pii_exception(e)}")
+				return []
 		if use_hybrid or use_mmr or use_hub_index:
 			results = self._rerank_hybrid_mmr(
 				collection, query, vector, results, limit, use_hybrid, use_mmr, deep_recall, structural_exclusions, use_hub_index=use_hub_index
@@ -1201,15 +1213,85 @@ class MemoryManager:
 			logger.warning(f"[HUB-BOOST] no aplicado: {e}")
 			return fused
 
+	def _route_by_leaf(self, collection: str, vector: List[float], limit: int = 60) -> List[Any]:
+		"""Enruta por hoja: busca en todo el espacio y agrega cada hoja a su raíz.
+
+		Devuelve los **hubs** (raíces) con `score` = mejor similitud de sus hojas,
+		y un campo efímero `_entry_leaf` (id + `source_lines`) para que el llamante
+		pueda abrir la evidencia. Las hojas no se devuelven: solo enrutan.
+
+		Sin hubs vivos (o sin `hub_id` en las hojas) devuelve `[]` y el llamante
+		cae al camino de siempre (reversible).
+		"""
+		try:
+			points = self.client.query_points(collection_name=collection, query=vector, limit=limit, with_payload=True, with_vectors=False).points
+		except Exception as e:
+			logger.warning(f"[LEAF-ROUTING] consulta fallida: {e}")
+			return []
+		live = self._live_hub_ids(collection)
+		if not live:
+			return []
+		live_set = set(live)
+		best: Dict[str, Dict[str, Any]] = {}
+		for point in points:
+			payload = point.payload or {}
+			if payload.get("node_type") == "synthesis_hub" or payload.get("lazarus_phase") == "synthesis_hub":
+				root = str(point.id)
+				if root not in live_set:
+					continue
+				if root not in best or point.score > best[root]["score"]:
+					best[root] = {"score": float(point.score), "payload": payload, "leaf": None}
+				continue
+			root = str(payload.get("hub_id") or "")
+			if not root or root not in live_set:
+				continue
+			if root not in best or point.score > best[root]["score"]:
+				best[root] = {
+					"score": float(point.score),
+					"payload": None,
+					"leaf": {"id": str(point.id), "source_lines": payload.get("source_lines")},
+				}
+		if not best:
+			return []
+		ordered = sorted(best.items(), key=lambda kv: -kv[1]["score"])[:limit]
+		try:
+			hub_points = self.client.retrieve(collection_name=collection, ids=[rid for rid, _ in ordered], with_payload=True, with_vectors=False)
+		except Exception as e:
+			logger.warning(f"[LEAF-ROUTING] no se pudieron leer las raíces: {e}")
+			return []
+		by_id = {str(p.id): p for p in hub_points}
+		out: List[Any] = []
+		for rid, info in ordered:
+			hub = by_id.get(rid)
+			if hub is None:
+				continue
+			payload = dict(hub.payload or {})
+			if info.get("leaf"):
+				payload["_entry_leaf"] = info["leaf"]
+			out.append(models.ScoredPoint(id=hub.id, version=0, score=info["score"], payload=payload, vector=None))
+		return out
+
 	@staticmethod
 	def _excluded_by(payload: Dict[str, Any], exclusions: List[Any]) -> bool:
-		"""¿El payload cae en alguna exclusión estructural (FieldCondition MatchValue)?"""
+		"""¿El payload cae en alguna exclusión estructural?
+
+		Soporta `MatchValue` y `MatchAny`. Antes solo miraba `cond.match.value`, así
+		que una exclusión `MatchAny` (la de miembros por `hub_id`, la más caliente)
+		lanzaba `AttributeError`, se saltaba en silencio y NO excluía nada: el rescate
+		por palabras clave podía devolver miembros ya agrupados (auditoría MEM-011,
+		DG-06/AC-04).
+		"""
 		for cond in exclusions:
-			try:
-				if payload.get(cond.key) == cond.match.value:
-					return True
-			except AttributeError:
+			match = getattr(cond, "match", None)
+			if match is None:
 				continue
+			values = getattr(match, "any", None)
+			if values is not None:
+				if payload.get(cond.key) in values:
+					return True
+				continue
+			if payload.get(cond.key) == getattr(match, "value", None):
+				return True
 		return False
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:

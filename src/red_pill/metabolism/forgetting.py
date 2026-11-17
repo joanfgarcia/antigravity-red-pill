@@ -486,6 +486,14 @@ def run_ladder(
 # Reaper de ramas (D-02): una rama sin hojas cae esa noche
 
 
+def _hub_level(payload: Dict[str, Any]) -> int:
+	"""Nivel del nodo para la cascada: partes (1) antes que raíces (2).
+
+	Un hub sin `hub_role` (los de hoy) es una raíz: se comporta como siempre.
+	"""
+	return 1 if str(payload.get("hub_role") or "") == "part" else 2
+
+
 def reap_leafless_branches(memory_manager, mode: str = "dry_run", params: LadderParams = DEFAULTS) -> Dict[str, Any]:
 	"""Borra las ramas sin hojas, con guarda anti-carrera y sin tocar lo auto-contenido.
 
@@ -519,31 +527,53 @@ def reap_leafless_branches(memory_manager, mode: str = "dry_run", params: Ladder
 		)[0]
 		if not hubs:
 			continue
-		members = _count_hub_members(client, collection)
-		if members is None:
-			logger.warning(f"[OLVIDO] Sin recuento de hojas en {collection}: el reaper no borra nada ahí (fail-closed).")
-			continue
 
-		reap: List[Any] = []
-		for hub in hubs:
-			payload = hub.payload or {}
-			if payload.get("immune") or payload.get("promoted_from"):
-				continue
-			if members.get(str(hub.id), 0) > 0:
-				continue
-			last_write = float(payload.get("hub_members_checked_at") or payload.get("created_at") or 0)
-			if now - last_write < min_age:
-				continue
-			reap.append(str(hub.id))
-			logger.info(f"[OLVIDO] Rama sin hojas en {collection}: {hub.id} (0 miembros, última escritura hace {(now - last_write) / 3600:.1f} h).")
+		# Cascada (MEM-011 D-SH-04): de abajo arriba y **re-contando entre
+		# niveles**. Una sola foto no propaga: si el sub-hub cae en esta pasada,
+		# su raíz seguiría viéndolo vivo hasta la noche siguiente.
+		members = None
+		for index, level in enumerate(sorted({_hub_level(h.payload or {}) for h in hubs})):
+			# En `enforce` se re-cuenta contra Qdrant (las ramas del nivel anterior ya
+			# no están). En `dry_run` no se borra nada, así que se arrastra el recuento
+			# restándole las que *caerían*: si no, el informe mentiría a la baja y
+			# diría que la raíz sobrevive cuando en `enforce` cae.
+			if members is None or (mode == "enforce" and index > 0):
+				members = _count_hub_members(client, collection)
+			if members is None:
+				logger.warning(f"[OLVIDO] Sin recuento de hojas en {collection}: el reaper no borra nada ahí (fail-closed).")
+				break
+			reap: List[Any] = []
+			for hub in hubs:
+				payload = hub.payload or {}
+				if _hub_level(payload) != level:
+					continue
+				if payload.get("immune") or payload.get("promoted_from"):
+					continue
+				if members.get(str(hub.id), 0) > 0:
+					continue
+				last_write = float(payload.get("hub_members_checked_at") or payload.get("created_at") or 0)
+				if now - last_write < min_age:
+					continue
+				reap.append(str(hub.id))
+				logger.info(
+					f"[OLVIDO] Rama sin hojas en {collection} (nivel {level}): {hub.id} "
+					f"(0 hijos, última escritura hace {(now - last_write) / 3600:.1f} h)."
+				)
+				# Si cae, deja de ser hijo de su padre en este mismo pase: se
+				# descuenta del recuento para que el nivel superior (y el informe
+				# de `dry_run`) vean lo que verá Qdrant tras el borrado.
+				parent = str(payload.get("hub_id") or "")
+				if parent and members.get(parent, 0) > 0:
+					members[parent] -= 1
+				members.pop(str(hub.id), None)
 
-		total_candidates += len(reap)
-		if mode == "enforce" and reap:
-			try:
-				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=reap))
-				total_reaped += len(reap)
-				logger.info(f"[OLVIDO] Reaper: {len(reap)} ramas sin hojas retiradas de {collection}.")
-			except Exception as exc:
-				logger.error(f"[OLVIDO] Reaper: fallo al borrar ramas en {collection}: {exc}")
+			total_candidates += len(reap)
+			if mode == "enforce" and reap:
+				try:
+					client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=reap))
+					total_reaped += len(reap)
+					logger.info(f"[OLVIDO] Reaper (nivel {level}): {len(reap)} ramas sin hojas retiradas de {collection}.")
+				except Exception as exc:
+					logger.error(f"[OLVIDO] Reaper: fallo al borrar ramas en {collection}: {exc}")
 
 	return {"mode": mode, "reaped": total_reaped, "candidates": total_candidates}

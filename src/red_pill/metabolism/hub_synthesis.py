@@ -262,6 +262,9 @@ def _synthesize_one(
 	force: bool = False,
 	failure_reasons: Optional[List[Tuple[str, str]]] = None,
 	waiting_notes: Optional[List[Tuple[str, Optional[float]]]] = None,
+	point_id: Optional[str] = None,
+	hub_role: str = "root",
+	part_key: Optional[str] = None,
 ) -> str:
 	"""Escribe (upsert) el hub de un grupo de sesión y marca sus miembros.
 
@@ -292,7 +295,9 @@ def _synthesize_one(
 
 	members = sort_members_chronologically(members)
 	member_ids = [pid for pid, _ in members]
-	hid = hub_point_id(collection, session_id)
+	# MEM-011: una PARTE se escribe con su propio id (derivado de su primera
+	# polaroid) y se marca como hija de la raíz; la raíz conserva el id de sesión.
+	hid = point_id or hub_point_id(collection, session_id)
 	ihash = hub_input_hash(member_ids)
 
 	# Idempotencia: si el hub ya existe con el mismo input, no se re-sintetiza.
@@ -417,9 +422,10 @@ def _synthesize_one(
 	metadata: Dict[str, Any] = {
 		"node_type": HUB_NODE_TYPE,
 		"lazarus_phase": HUB_NODE_TYPE,
-		"hub_key": f"{collection}:{session_id}",
+		"hub_key": f"{collection}:{session_id}:{part_key}" if part_key else f"{collection}:{session_id}",
 		"hub_input_hash": ihash,
-		"hub_depth": 2,
+		"hub_role": hub_role,
+		"hub_depth": 1 if hub_role == "part" else 2,
 		"session_id": session_id,
 		"origin": "memento_hub",
 		"hub_members_count": len(member_ids),
@@ -430,6 +436,10 @@ def _synthesize_one(
 		"hub_members_checked_at": time.time(),
 		"hub_snapshot_ts": time.time(),
 	}
+	if part_key:
+		# MEM-011: identidad de la parte (primera polaroid que agrupa). Estable
+		# cuando la sesión crece, y el orden de navegación (rango de mensajes).
+		metadata["part_key"] = part_key
 	# Textura: si cabe, campo canónico; si se partió (síntesis o lossless), la
 	# lista `texture_parts` conserva TODO el contenido y `texture` queda vacío.
 	texture = str(hub.get("texture") or "").strip()
@@ -665,6 +675,32 @@ def synthesize_session_hubs(
 			# (incidente 2026-11-09: una textura fuera de esquema se llevó por
 			# delante 7 grupos pendientes).
 			try:
+				if bool(getattr(cfg, "SW_HUB_POLAROID_ENABLED", False)):
+					from red_pill.metabolism.distiller import hub_budget
+					from red_pill.metabolism.hub_parts import synthesize_parts
+
+					parts_result = synthesize_parts(
+						memory_manager,
+						collection,
+						session_id,
+						members,
+						synthesizer,
+						affect_fn,
+						budget=hub_budget(),
+						force=force,
+						failure_reasons=failure_reasons,
+					)
+					if parts_result != "no_parts":
+						result = parts_result
+						if result == "written":
+							stats["hubs_written"] += 1
+						elif result == "failed":
+							stats["hubs_failed"] += 1
+							failed_sessions.append(f"{collection}:{session_id}")
+						elif result == "skipped":
+							stats["hubs_skipped"] += 1
+						processed += 1
+						continue
 				result = _synthesize_one(
 					memory_manager,
 					collection,
