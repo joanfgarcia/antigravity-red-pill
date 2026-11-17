@@ -133,9 +133,7 @@ TOOLS: List[Dict[str, Any]] = [
 		"type": "function",
 		"function": {
 			"name": "swarm_orchestrator_api",
-			"description": (
-				"RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports)."
-			),
+			"description": ("RedPill swarm status (read-only). Actions: check_minion_inbox (unread background reports)."),
 			"parameters": {
 				"type": "object",
 				"properties": {
@@ -491,7 +489,9 @@ async def _dispatch(name: str, args: Dict[str, Any], cwd: Optional[str]) -> str:
 		return f"ERROR: {name} failed: {e!r}"
 
 
-def _canonical_turns(messages: List[Dict[str, Any]], model: Optional[str], run_ref: Optional[str] = None, request_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def _canonical_turns(
+	messages: List[Dict[str, Any]], model: Optional[str], run_ref: Optional[str] = None, request_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
 	"""Turnos del loop local para el espejo, con parejas tool-call/resultado coherentes.
 
 	Si un chat-format no usa `role=tool` (resultado como `user`), el assistant
@@ -555,7 +555,9 @@ def _resolve_context_tokens(model: object) -> int:
 		return 8192
 
 
-def _resolve_minion_identity(*, originator: str, continuity_id: Optional[str], mission_id: Optional[str]) -> "tuple[str, Optional[str], Optional[str]]":
+def _resolve_minion_identity(
+	*, originator: str, continuity_id: Optional[str], mission_id: Optional[str]
+) -> "tuple[str, Optional[str], Optional[str]]":
 	"""Parámetros → env del job → registro. Sin cuerpo compuesto no hay alma."""
 	origin = originator or os.getenv("REDPILL_ORIGINATOR") or ""
 	cid = continuity_id

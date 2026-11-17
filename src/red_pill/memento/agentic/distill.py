@@ -375,9 +375,7 @@ def _distill_reusing(
 				"files": filenames,
 			}
 		else:
-			unit_sections, filenames, degraded = _distill_unit(
-				distill_dir, unit, session_id, source, transport, max_chars, overlap, reuse_mode=True
-			)
+			unit_sections, filenames, degraded = _distill_unit(distill_dir, unit, session_id, source, transport, max_chars, overlap, reuse_mode=True)
 			sections.extend(unit_sections)
 			new_units[unit_key] = {
 				"content_hash": content_hash,

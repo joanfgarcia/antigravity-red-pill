@@ -260,9 +260,7 @@ def _awakening_channel_directive(operator: str | None = None) -> str:
 		duties = len(ch.duty_notes(operator=operator))
 	except Exception:
 		return _resolve_desk_paths(pointer)
-	return _resolve_desk_paths(
-		f"{pointer}\nRecuento ahora: {pending} nota(s) para {operator} sin leer; {duties} deber(es) sin marcar."
-	)
+	return _resolve_desk_paths(f"{pointer}\nRecuento ahora: {pending} nota(s) para {operator} sin leer; {duties} deber(es) sin marcar.")
 
 
 def get_connection():

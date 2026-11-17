@@ -163,11 +163,7 @@ def handle_job(args: argparse.Namespace) -> None:
 			_kick_queue()
 
 	elif args.job_cmd == "list":
-		statuses = (
-			["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW", "CANCELLED", "COMPLETED"]
-			if args.all
-			else None
-		)
+		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "REVIEW", "CANCELLED", "COMPLETED"] if args.all else None
 		tasks = queue.list_tasks(
 			statuses=statuses,
 			mission_id=getattr(args, "mission", None),
@@ -559,10 +555,7 @@ def _release_mission(task: Dict[str, Any]) -> None:
 			continuity_id=owner,
 			limit=200,
 		)
-		if any(
-			str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "")
-			for r in siblings
-		):
+		if any(str(r.get("parent_mission_id") or "") == mission and str(r.get("id") or "") != str(task.get("id") or "") for r in siblings):
 			return
 		leases.finish(f"mission:{mission}", state="aborted", reason="operator_kill", continuity_id=owner)
 	except LeaseError:

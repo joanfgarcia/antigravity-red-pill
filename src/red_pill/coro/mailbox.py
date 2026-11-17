@@ -219,10 +219,7 @@ def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False, s
 	out["dead_letters_checked"] = revive["checked"]
 	try:
 		with connect_session_db(str(get_session_db())) as conn:
-			conn.execute(
-				"CREATE TABLE IF NOT EXISTS mailbox_reconcile_state ("
-				"id TEXT PRIMARY KEY, last_seq INTEGER NOT NULL)"
-			)
+			conn.execute("CREATE TABLE IF NOT EXISTS mailbox_reconcile_state (id TEXT PRIMARY KEY, last_seq INTEGER NOT NULL)")
 			row = conn.execute("SELECT last_seq FROM mailbox_reconcile_state WHERE id = 'outbox'").fetchone()
 			last = int(row[0]) if row else None
 			if last is None and since_seq is None:
@@ -259,7 +256,9 @@ def reconcile(*, limit: int = 200, hours: float = 24.0, dry_run: bool = False, s
 			out["scanned"] = len(rows)
 			last_ok = last
 			for ev in rows:
-				out["events"].append({"event_id": ev.get("event_id"), "seq": ev.get("event_seq"), "to": ev.get("to_continuity"), "verb": ev.get("verb")})
+				out["events"].append(
+					{"event_id": ev.get("event_id"), "seq": ev.get("event_seq"), "to": ev.get("to_continuity"), "verb": ev.get("verb")}
+				)
 				if dry_run:
 					continue
 				if publish_message(ev):

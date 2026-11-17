@@ -65,9 +65,7 @@ INJECTION_POINTS: Dict[str, str] = {"opencode": "cli", "claude_code": "claude_so
 # Acuse por hook: el hook del arnés ve `msg=<event_id>` y escribe `read` para el
 # alma del cuerpo que abrió el turno. Los hooks copian esta sentencia literal.
 ACK_MARKER_RE = re.compile(r"\bmsg=([0-9a-f]{32})\b")
-ACK_SQL = (
-	"INSERT INTO message_receipts (event_id, continuity_id, state, reason, updated_at) SELECT ?, r.continuity_id, 'read', ?, ? FROM session_registry r WHERE r.originator = ? AND r.ttl_state != 'expired' AND EXISTS (SELECT 1 FROM mission_events e WHERE e.event_id = ? AND e.to_continuity = r.continuity_id) ON CONFLICT(event_id, continuity_id) DO UPDATE SET state = 'read', reason = excluded.reason, updated_at = excluded.updated_at WHERE message_receipts.state NOT IN ('read', 'pulled')"
-)
+ACK_SQL = "INSERT INTO message_receipts (event_id, continuity_id, state, reason, updated_at) SELECT ?, r.continuity_id, 'read', ?, ? FROM session_registry r WHERE r.originator = ? AND r.ttl_state != 'expired' AND EXISTS (SELECT 1 FROM mission_events e WHERE e.event_id = ? AND e.to_continuity = r.continuity_id) ON CONFLICT(event_id, continuity_id) DO UPDATE SET state = 'read', reason = excluded.reason, updated_at = excluded.updated_at WHERE message_receipts.state NOT IN ('read', 'pulled')"
 
 _RECEIPT_DDL = """
 CREATE TABLE IF NOT EXISTS message_receipts (
@@ -109,9 +107,7 @@ def _migrate_legacy_receipts(conn) -> None:
 	(la entrega la gobierna el outbox de neon-link). La tabla se elimina para que
 	no vuelva a haber dos fuentes de verdad.
 	"""
-	exists = conn.execute(
-		"SELECT 1 FROM sqlite_master WHERE type='table' AND name='event_deliveries'"
-	).fetchone()
+	exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='event_deliveries'").fetchone()
 	if not exists:
 		return
 	conn.execute(
@@ -302,11 +298,13 @@ def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[st
 		with _connect(db_path) as conn:
 			conn.execute(_RECEIPT_DDL)
 			before = int(
-				(conn.execute(
-					"SELECT COUNT(*) AS n FROM message_receipts WHERE continuity_id = ?"
-					" AND state = 'pulled' AND reason = 'cursor_del_digest'",
-					(soul,),
-				).fetchone() or {"n": 0})["n"]
+				(
+					conn.execute(
+						"SELECT COUNT(*) AS n FROM message_receipts WHERE continuity_id = ? AND state = 'pulled' AND reason = 'cursor_del_digest'",
+						(soul,),
+					).fetchone()
+					or {"n": 0}
+				)["n"]
 			)
 			conn.execute(
 				"INSERT OR IGNORE INTO message_receipts (event_id, continuity_id, state, reason, updated_at)"
@@ -322,11 +320,13 @@ def reconcile_pulled(continuity_id: str, *, until_seq: int, db_path: Optional[st
 			)
 			conn.commit()
 			after = int(
-				(conn.execute(
-					"SELECT COUNT(*) AS n FROM message_receipts WHERE continuity_id = ?"
-					" AND state = 'pulled' AND reason = 'cursor_del_digest'",
-					(soul,),
-				).fetchone() or {"n": 0})["n"]
+				(
+					conn.execute(
+						"SELECT COUNT(*) AS n FROM message_receipts WHERE continuity_id = ? AND state = 'pulled' AND reason = 'cursor_del_digest'",
+						(soul,),
+					).fetchone()
+					or {"n": 0}
+				)["n"]
 			)
 		return max(0, after - before)
 	except Exception as e:

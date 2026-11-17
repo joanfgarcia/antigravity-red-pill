@@ -19,7 +19,9 @@ class ProviderError(RuntimeError):
 	"""Provider transport or protocol failure (no `choices`, HTTP error, timeout)."""
 
 
-def _payload(messages: List[Dict[str, Any]], tools: Optional[List[dict]], tool_choice: Any, temperature: float, max_tokens: int, model: Optional[str]) -> dict:
+def _payload(
+	messages: List[Dict[str, Any]], tools: Optional[List[dict]], tool_choice: Any, temperature: float, max_tokens: int, model: Optional[str]
+) -> dict:
 	payload: Dict[str, Any] = {
 		"messages": messages,
 		"temperature": temperature,

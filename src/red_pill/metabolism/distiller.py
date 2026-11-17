@@ -485,9 +485,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 	# acababa en HTTP 500 (45k tokens) desde aquí. Si no cabe, agregado mecánico.
 	_budget = max(1000, int(getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000) or 8000))
 	if len(combined) > _budget:
-		logger.warning(
-			f"[SLEEP ENGINE] legacy hub prompt {len(combined)} chars > {_budget}; mechanical aggregate (no LLM)."
-		)
+		logger.warning(f"[SLEEP ENGINE] legacy hub prompt {len(combined)} chars > {_budget}; mechanical aggregate (no LLM).")
 		return _aggregate_summaries(summaries)
 	system_prompt = load_prompt_text("hub_synthesis_legacy_system.txt")
 	user_prompt = _render_metabolism("hub_synthesis_legacy_user", chunks=combined)
@@ -626,8 +624,68 @@ def _metadata_str_limit() -> int:
 	return max(256, int(getattr(cfg, "MAX_METADATA_STR", 1024) or 1024) - 64)
 
 
-_EN_STOP = {"the", "and", "with", "for", "from", "this", "that", "was", "were", "has", "have", "by", "to", "of", "in", "on", "as", "is", "are", "it", "its", "not", "but", "or", "an", "at", "be"}
-_ES_STOP = {"el", "la", "los", "las", "de", "que", "y", "en", "con", "para", "por", "una", "un", "del", "se", "su", "al", "es", "como", "más", "pero", "o", "sin", "lo", "le", "les", "ser", "ha", "han", "esta", "este"}
+_EN_STOP = {
+	"the",
+	"and",
+	"with",
+	"for",
+	"from",
+	"this",
+	"that",
+	"was",
+	"were",
+	"has",
+	"have",
+	"by",
+	"to",
+	"of",
+	"in",
+	"on",
+	"as",
+	"is",
+	"are",
+	"it",
+	"its",
+	"not",
+	"but",
+	"or",
+	"an",
+	"at",
+	"be",
+}
+_ES_STOP = {
+	"el",
+	"la",
+	"los",
+	"las",
+	"de",
+	"que",
+	"y",
+	"en",
+	"con",
+	"para",
+	"por",
+	"una",
+	"un",
+	"del",
+	"se",
+	"su",
+	"al",
+	"es",
+	"como",
+	"más",
+	"pero",
+	"o",
+	"sin",
+	"lo",
+	"le",
+	"les",
+	"ser",
+	"ha",
+	"han",
+	"esta",
+	"este",
+}
 
 
 def _looks_english(text: str) -> bool:
@@ -1014,10 +1072,7 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 			if parsed is None:
 				logger.warning(f"[HUB-V2] invalid JSON ({e}): {match.group(0)[:240]!r}")
 				return None
-			logger.warning(
-				f"[HUB-V2] JSON rescatado campo a campo ({e}); summary "
-				f"{len(str(parsed.get('summary') or ''))} chars"
-			)
+			logger.warning(f"[HUB-V2] JSON rescatado campo a campo ({e}); summary {len(str(parsed.get('summary') or ''))} chars")
 	summary = str(parsed.get("summary") or "").strip()
 	if not summary:
 		logger.warning(f"[HUB-V2] JSON without summary: {match.group(0)[:240]!r}")
@@ -1135,9 +1190,7 @@ def synthesize_hub_v2(
 	large_threshold = max(0, int(getattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 0) or 0))
 	large_model = str(getattr(cfg, "SLEEP_HUB_LARGE_MODEL", "") or "").strip()
 	large_prompt_file = str(getattr(cfg, "SLEEP_HUB_LARGE_PROMPT", "") or "").strip()
-	large_enabled = bool(
-		large_threshold and large_model and str(params.get("provider_alias") or "") == "sip"
-	)
+	large_enabled = bool(large_threshold and large_model and str(params.get("provider_alias") or "") == "sip")
 	large_system_prompt = ""
 	if large_enabled and large_prompt_file and not override_prompt and prompt_file == "hub_synthesis_v2.txt":
 		large_system_prompt = load_prompt_text(large_prompt_file)
@@ -1346,16 +1399,13 @@ def synthesize_hub_v2(
 		if not parts:
 			if not bool(getattr(cfg, "SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK", True)):
 				raise HubBudgetError(
-					f"texture {len(texture)} chars no cabe y la partición por síntesis falló; "
-					"no se recorta: la sesión se reintenta en otro ciclo"
+					f"texture {len(texture)} chars no cabe y la partición por síntesis falló; no se recorta: la sesión se reintenta en otro ciclo"
 				)
 			# Último recurso: segmentación lossless (no se pierde un carácter).
 			parts = split_text_lossless(texture, hard)
 			fallback = True
 		if not parts or len(parts) > _hub_texture_parts_max():
-			raise HubBudgetError(
-				f"texture {len(texture)} chars no cabe en {_hub_texture_parts_max()} partes de {hard}"
-			)
+			raise HubBudgetError(f"texture {len(texture)} chars no cabe en {_hub_texture_parts_max()} partes de {hard}")
 		result.update(
 			{
 				"texture": "",
@@ -1433,8 +1483,7 @@ def synthesize_hub_v2(
 		body_len = len(title) + (1 if title else 0) + len(current)
 		if body_len > HUB_CONTENT_MAX_CHARS:
 			raise HubBudgetError(
-				f"hub body {body_len} chars > {HUB_CONTENT_MAX_CHARS} (summary {len(current)}); "
-				"no se recorta: la sesión se reintenta en otro ciclo"
+				f"hub body {body_len} chars > {HUB_CONTENT_MAX_CHARS} (summary {len(current)}); no se recorta: la sesión se reintenta en otro ciclo"
 			)
 
 		texture = str(hub.get("texture") or "").strip()

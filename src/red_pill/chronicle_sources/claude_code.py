@@ -97,9 +97,7 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 		if isinstance(value, str):
 			return value
 		if isinstance(value, list):
-			return "\n".join(
-				b.get("text", "") for b in value if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
-			)
+			return "\n".join(b.get("text", "") for b in value if isinstance(b, dict) and b.get("type") == "text" and b.get("text"))
 		return ""
 
 	def _parse_transcript_canonical(self, path: Path) -> List[Dict[str, Any]]:

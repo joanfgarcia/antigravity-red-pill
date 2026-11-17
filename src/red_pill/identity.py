@@ -87,11 +87,7 @@ def get_emergent_set_point() -> str:
 	never declared anything reads exactly what it read before (T7).
 	"""
 	identity = _load_identity()
-	return str(
-		identity.get("EMERGENT_SET_POINT_COLOR")
-		or identity.get("HEDONIC_SET_POINT_COLOR")
-		or getattr(cfg, "DEFAULT_COLOR", "gray")
-	)
+	return str(identity.get("EMERGENT_SET_POINT_COLOR") or identity.get("HEDONIC_SET_POINT_COLOR") or getattr(cfg, "DEFAULT_COLOR", "gray"))
 
 
 def get_default_emotion() -> str:

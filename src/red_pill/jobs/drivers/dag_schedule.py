@@ -400,10 +400,7 @@ class DagScheduleMixin:
 			# degradados no puede sellarse como si nada hubiera pasado.
 			final_soft = dict(checkpoint_data.get("soft_failures") or {})
 			if final_soft:
-				logger.error(
-					f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): "
-					f"{', '.join(sorted(final_soft))}"
-				)
+				logger.error(f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}")
 			final_ckpt = {
 				**checkpoint_data,
 				**identity,
@@ -426,7 +423,8 @@ class DagScheduleMixin:
 				# persistir el skip y la lista congelada en el checkpoint final
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint=final_ckpt,
-				summary="dag complete" + summary_extra
+				summary="dag complete"
+				+ summary_extra
 				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else ""),
 				progress={
 					"current": leaves_done,
@@ -476,9 +474,7 @@ class DagScheduleMixin:
 						units = _fanout_units(stages, fresh)
 						nightly_deferred.record(units, stage=",".join(sorted(set(cut_owners))))
 						libro = nightly_deferred.load()
-						deferred_units = {
-							u: nightly_deferred.nights(libro, u) for u in units if nightly_deferred.nights(libro, u) > 0
-						}
+						deferred_units = {u: nightly_deferred.nights(libro, u) for u in units if nightly_deferred.nights(libro, u) > 0}
 					except Exception as e:  # noqa: BLE001 — el libro no tumbla la noche
 						logger.debug(f"[DagJob] libro de diferidos no escrito: {e}")
 				new_completed = list(completed)

@@ -35,10 +35,7 @@ def _covered_by_provider(conversation_id: str) -> bool:
 			read_origins,
 		)
 
-		return any(
-			conversation_id in read_origins(provider)
-			for provider in (PROVIDER_OPENCODE, PROVIDER_CLAUDE, PROVIDER_PI, PROVIDER_ANTIGRAVITY)
-		)
+		return any(conversation_id in read_origins(provider) for provider in (PROVIDER_OPENCODE, PROVIDER_CLAUDE, PROVIDER_PI, PROVIDER_ANTIGRAVITY))
 	except Exception:
 		return False
 

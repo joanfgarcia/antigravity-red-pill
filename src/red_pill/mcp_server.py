@@ -720,11 +720,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 				limit=scan_limit,
 				with_payload=True,
 			)
-			members = [
-				(str(p.id), p.payload or {})
-				for p in pts
-				if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")
-			]
+			members = [(str(p.id), p.payload or {}) for p in pts if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")]
 			ordered = sort_members_chronologically(members)
 			window = ordered[offset : offset + limit]
 			start_id = str(start.id)
@@ -918,7 +914,6 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		import mcp.types as types
 
 		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
-
 
 
 @registry.register_action(
@@ -2002,9 +1997,7 @@ def _current_git_branch(workdir: Optional[str] = None) -> Optional[str]:
 	return _git_mirror(workdir).get("branch")
 
 
-def _resolve_workspace(
-	candidates: "list[str]", cwd: Optional[str] = None
-) -> "tuple[str, Optional[str], Dict[str, Optional[str]]]":
+def _resolve_workspace(candidates: "list[str]", cwd: Optional[str] = None) -> "tuple[str, Optional[str], Dict[str, Optional[str]]]":
 	"""Workspace del agente → `(workspace, branch, mirror)`.
 
 	Los candidatos son lo que el arnés DECLARA (proxy → puente → env), en orden de
@@ -2431,9 +2424,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				if row:
 					declared_leg, declared_row, identity_source = candidate, row, "activity"
 		if declared_leg and shared_originator and declared_leg != shared_originator:
-			logger.warning(
-				f"[identity] cuerpo declarado {declared_leg[:40]} != proxy {shared_originator[:40]}; se usa el declarado (verificado)"
-			)
+			logger.warning(f"[identity] cuerpo declarado {declared_leg[:40]} != proxy {shared_originator[:40]}; se usa el declarado (verificado)")
 	originator: Optional[str] = None
 	if shared is not None:
 		# Canal proxy (AD-018): NUNCA se cae al bridge global. Con VARIAS almas en
@@ -2967,9 +2958,7 @@ async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 		row = None
 		originator = None
 	elif row and row_mission and trusted_mission and str(row_mission) != str(trusted_mission):
-		logger.warning(
-			f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}"
-		)
+		logger.warning(f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}")
 	return {
 		"originator": originator,
 		"continuity_id": (row or {}).get("continuity_id"),
@@ -3203,7 +3192,6 @@ async def handle_moderate_note(arguments: Dict[str, Any]):
 		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[MODERATE] error: {e}")]
-
 
 
 @registry.register(
@@ -4408,11 +4396,7 @@ async def handle_job_review(arguments: Dict[str, Any]):
 		undo = bool(arguments.get("undo"))
 		if qm.mark_review(task["id"], undo=undo):
 			if undo:
-				return [
-					types.TextContent(
-						type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga."
-					)
-				]
+				return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga.")]
 			return [
 				types.TextContent(
 					type="text",
@@ -4423,7 +4407,9 @@ async def handle_job_review(arguments: Dict[str, Any]):
 				)
 			]
 		esperado = "REVIEW" if undo else "FRUSTRATED"
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")]
+		return [
+			types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_review falló: {e}")]
 
@@ -4460,7 +4446,9 @@ async def handle_job_discard(arguments: Dict[str, Any]):
 					type="text", text=f"[OK] Job {task['id'][:8]} cerrado definitivamente (CANCELLED). No se ejecutará ni contará como dolor."
 				)
 			]
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")]
+		return [
+			types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_discard falló: {e}")]
 

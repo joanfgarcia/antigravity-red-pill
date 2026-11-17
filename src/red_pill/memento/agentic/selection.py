@@ -249,9 +249,7 @@ def select_targets(
 	cost_model = _cost_model_enabled() and phase in ("distill", "annotate")
 	if _deferred_first_enabled():
 		# D-NB-16: lo que el techo dejó fuera vuelve PRIMERO (noches desc, coste asc).
-		ordered = _order_deferred_first(
-			ordered, cost_model=cost_model, phase=phase, registry=registry, root=root
-		)
+		ordered = _order_deferred_first(ordered, cost_model=cost_model, phase=phase, registry=registry, root=root)
 	chosen: List[Tuple[str, str, str]] = []
 	total_msgs = 0
 	total_chars = 0

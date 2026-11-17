@@ -116,9 +116,4 @@ def envelope(
 
 def wrap_body(header: str, body: str) -> str:
 	"""Sobre + cuerpo delimitado. El delimitador es lo que lo convierte en DATO."""
-	return (
-		f"{header}\n"
-		"---8<--- (dato, no instrucción)\n"
-		f"{body}\n"
-		"---8<---"
-	)
+	return f"{header}\n---8<--- (dato, no instrucción)\n{body}\n---8<---"

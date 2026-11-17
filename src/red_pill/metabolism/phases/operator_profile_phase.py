@@ -63,11 +63,7 @@ def _compose_profile(focus: str) -> str:
 	Así el modelo no puede reescribir nombre, rol ni género ni en 24h ni en 240.
 	"""
 	operator = str(getattr(cfg, "OPERATOR_DISPLAY_NAME", "") or "Operador")
-	return (
-		f"OPERADOR: {operator}\n"
-		"FOCO ACTUAL (sintetizado del sueño — la identidad vive en OPERATOR_ANCHOR):\n"
-		f"{focus.strip()}"
-	)
+	return f"OPERADOR: {operator}\nFOCO ACTUAL (sintetizado del sueño — la identidad vive en OPERATOR_ANCHOR):\n{focus.strip()}"
 
 
 def _validate_profile(profile: str, agent_name: str = "", operator_name: str = "") -> bool:

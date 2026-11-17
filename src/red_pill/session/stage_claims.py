@@ -248,7 +248,18 @@ def try_claim_stage(
 						"INSERT INTO stage_claims (claim_key, stage_path, affinity_json, branch, worktree, "
 						"owner_continuity_id, owner_originator, claimed_at, ttl_seconds, intent) "
 						"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-						(key, stage_path, canon_json, str(branch or ""), str(worktree or ""), continuity_id, str(originator or ""), stamp, ttl, intent),
+						(
+							key,
+							stage_path,
+							canon_json,
+							str(branch or ""),
+							str(worktree or ""),
+							continuity_id,
+							str(originator or ""),
+							stamp,
+							ttl,
+							intent,
+						),
 					)
 					conn.commit()
 					return ClaimResult(claimed=True, owner=continuity_id, reason="acquired", expires_at=expires)

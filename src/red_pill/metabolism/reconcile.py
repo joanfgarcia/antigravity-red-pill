@@ -194,9 +194,7 @@ def reconcile(
 
 	if due and not cfg["report_only"]:
 		for name in due:
-			payload: Dict[str, Any] = next(
-				(s for s in memory.signals_by_source(AUDITOR_SOURCE) if s.get("name") == name), {}
-			)
+			payload: Dict[str, Any] = next((s for s in memory.signals_by_source(AUDITOR_SOURCE) if s.get("name") == name), {})
 			deleted = memory.evaporate_signals(name)
 			if deleted:
 				report["evaporated"].append(
@@ -208,8 +206,7 @@ def reconcile(
 					}
 				)
 				logger.warning(
-					f"[RECONCILE] evaporada {name} ({payload.get('intensity')}, edad {payload.get('age_hours')} h)"
-					f" — {absences.get(name, 0)} rondas"
+					f"[RECONCILE] evaporada {name} ({payload.get('intensity')}, edad {payload.get('age_hours')} h) — {absences.get(name, 0)} rondas"
 				)
 				absences.pop(name, None)
 			else:

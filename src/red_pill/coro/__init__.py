@@ -56,8 +56,7 @@ _DESCRIPTIONS: Dict[str, str] = {
 		"(cuerpos vivos, alma, misión, rol, delta) o `scope=misiones` (agrupado por misión)."
 	),
 	"object": (
-		"[OFFICIAL] Objeción D23 sobre una nota de tu misión (`target_event_id`): abre una "
-		"D-obj con severidad y acción propuesta. Requiere motivo."
+		"[OFFICIAL] Objeción D23 sobre una nota de tu misión (`target_event_id`): abre una D-obj con severidad y acción propuesta. Requiere motivo."
 	),
 }
 
@@ -108,7 +107,10 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 		},
 	},
 	"send": {
-		"to": {"type": "string", "description": "continuity_id del alma destinataria (mírala en `board`), o `panel` para dejar una nota en el tablón (no viaja por el outbox)."},
+		"to": {
+			"type": "string",
+			"description": "continuity_id del alma destinataria (mírala en `board`), o `panel` para dejar una nota en el tablón (no viaja por el outbox).",
+		},
 		"deliver_after": {
 			"type": "number",
 			"description": "epoch en el que el sobre debe entregarse (entrega diferida, RFC-OBS-006 F2).",

@@ -7,6 +7,7 @@ identity (env/bridge, never the model) as a trusted header on every request.
 It deliberately does NOT import `red_pill.mcp_server`: the heavy kernel loads
 once in the backend, not in each tab.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -194,15 +195,11 @@ async def _run(socket_path: str, harness: str | None) -> None:
 
 	@proxy.list_tools()
 	async def list_tools():
-		return (
-			await _call_backend(socket_path, harness, client_info, lambda session: session.list_tools())
-		).tools
+		return (await _call_backend(socket_path, harness, client_info, lambda session: session.list_tools())).tools
 
 	@proxy.call_tool()
 	async def call_tool(name: str, arguments: dict):
-		result = await _call_backend(
-			socket_path, harness, client_info, lambda session: session.call_tool(name, arguments or {})
-		)
+		result = await _call_backend(socket_path, harness, client_info, lambda session: session.call_tool(name, arguments or {}))
 		if result.isError:
 			text = "\n".join(getattr(c, "text", "") for c in result.content)
 			raise ValueError(text or "tool error")

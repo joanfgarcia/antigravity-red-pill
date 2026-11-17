@@ -363,11 +363,7 @@ def _push(target: str) -> tuple[str, str]:
 	if handed:
 		trace = str(handed[0].get("trace") or "")
 		return "handed_off", f"rastro={trace}" if trace else ""
-	reasons = [
-		str(item.get("reason") or "")
-		for bucket in ("deferred", "skipped", "given_up")
-		for item in (report.get(bucket) or [])
-	]
+	reasons = [str(item.get("reason") or "") for bucket in ("deferred", "skipped", "given_up") for item in (report.get(bucket) or [])]
 	reason = ", ".join(r for r in reasons if r) or "sin_cuerpo"
 	return "queued", f"park ({reason})"
 
@@ -530,10 +526,7 @@ def _board_sessions(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 	include_git = bool(payload.get("include_git_status"))
 	ttl = _registry_ttl_s()
 	now = time.time()
-	lines = [
-		f"--- CORO: global_turn={global_turn} · tú={sanitize_inline(session.get('mission_id'), 120)} · "
-		f"last_seen={my_last} · delta={delta} ---"
-	]
+	lines = [f"--- CORO: global_turn={global_turn} · tú={sanitize_inline(session.get('mission_id'), 120)} · last_seen={my_last} · delta={delta} ---"]
 	shown = 0
 	for row in rows:
 		if row.get("ttl_state") == "expired":
@@ -601,10 +594,7 @@ async def objection(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 		proposed_action=str(payload.get("proposed_action") or "flag"),
 	)
 	if not decision.get("created"):
-		return (
-			f"[CORO object] ya existe D-obj {decision['decision_id'][:12]} "
-			f"state={decision['state']} note={target[:12]}"
-		)
+		return f"[CORO object] ya existe D-obj {decision['decision_id'][:12]} state={decision['state']} note={target[:12]}"
 	event = registry.add_event(
 		event_type="objection",
 		mission_id=mission,

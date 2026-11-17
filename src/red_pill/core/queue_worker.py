@@ -100,12 +100,7 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 
 				notice = build_job_notice(title, str(task.get("source") or "job"), status, content, result_path)
 				payload = task.get("payload") or {}
-				mission = str(
-					task.get("mission_id")
-					or payload.get("parent_mission_id")
-					or payload.get("mission_id")
-					or ""
-				)
+				mission = str(task.get("mission_id") or payload.get("parent_mission_id") or payload.get("mission_id") or "")
 				published = False
 				try:
 					from red_pill.coro.notify import publish_notice
@@ -447,16 +442,16 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			current = cog_queue.get_task(job_id)
 			try:
 				if isinstance(driver, ResumableJobDriver):
-					reason = (
-						"operator_kill"
-						if current and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED")
-						else str(e)
-					)
+					reason = "operator_kill" if current and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED") else str(e)
 					checkpoint = driver.abort_step(task["payload"], checkpoint, reason)
 					cog_queue.save_checkpoint(job_id, checkpoint, progress)
 			except Exception as abort_err:
 				logger.warning(f"Job {job_id} abort_step failed: {abort_err}")
-			if current and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
+			if (
+				current
+				and current.get("status") in ("PAUSED", "FRUSTRATED", "CANCELLED")
+				and (current.get("checkpoint_data") or {}).get("dirty_kill")
+			):
 				try:
 					driver.on_terminal(task["payload"], checkpoint, "killed", "operator_kill")
 				except Exception as term_err:

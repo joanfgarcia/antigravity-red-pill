@@ -6,6 +6,7 @@ One heavy process serves N stdio proxies over a Unix-domain socket using MCP
 for the duration of each request. The kernel is imported once, here — the proxy
 stays light.
 """
+
 from __future__ import annotations
 
 import base64

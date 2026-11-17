@@ -25,9 +25,7 @@ def _identity(task: Dict[str, Any]) -> Dict[str, str]:
 	payload = task.get("payload") or {}
 	return {
 		"continuity_id": str(task.get("continuity_id") or checkpoint.get("continuity_id") or payload.get("continuity_id") or ""),
-		"parent_mission_id": str(
-			task.get("parent_mission_id") or checkpoint.get("parent_mission_id") or payload.get("parent_mission_id") or ""
-		),
+		"parent_mission_id": str(task.get("parent_mission_id") or checkpoint.get("parent_mission_id") or payload.get("parent_mission_id") or ""),
 		"originator": str(checkpoint.get("originator") or payload.get("originator") or ""),
 		"role": str(checkpoint.get("role") or payload.get("role") or ("job" if task.get("continuity_id") else "")),
 		# Auditoría de procedencia: el cuerpo/tool que envió el job. No sustituye

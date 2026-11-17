@@ -231,7 +231,14 @@ def annotate_session(
 				idea["nnn"] = nnn
 				idea["flags"] = quality_flags(idea["text"])
 				ideas.append(idea)
-			fresh_splits[key] = {"nnn": nnn, "split_ref": ref, "content_hash": chash, "status": "extracted", "degraded": degraded_flag[0], "ideas": ideas}
+			fresh_splits[key] = {
+				"nnn": nnn,
+				"split_ref": ref,
+				"content_hash": chash,
+				"status": "extracted",
+				"degraded": degraded_flag[0],
+				"ideas": ideas,
+			}
 			# Rangos desaparecidos se descartan: solo sobreviven los de este run.
 			partial["splits"] = {k: v for k, v in partial["splits"].items() if k in keys}
 			partial["splits"][key] = fresh_splits[key]
@@ -240,7 +247,9 @@ def annotate_session(
 			unit_degraded[key] = degraded_flag[0]
 			extracted += 1
 		if reused or manifest_reused:
-			logger.info("annotate %s: %d splits reanudados del parcial, %d reusados del manifest, %d extraídos", dir_rel, reused, manifest_reused, extracted)
+			logger.info(
+				"annotate %s: %d splits reanudados del parcial, %d reusados del manifest, %d extraídos", dir_rel, reused, manifest_reused, extracted
+			)
 		ordered = [idea for key in keys if key in fresh_splits for idea in fresh_splits[key]["ideas"]]
 		if extracted or partial["phases"]["extract"] != "done":
 			annotations = dedup_annotations([dict(i) for i in ordered], threshold=runtime.memento_dedup_threshold())

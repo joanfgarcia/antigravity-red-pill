@@ -269,9 +269,7 @@ def run_agentic(
 				candidates = cross_ref_candidates(registry, source, session_id)
 				# En la rama de notas `sections` es None (no se destiló en esta corrida);
 				# refine sólo corre en el camino histórico (`phase=None`), donde sí existe.
-				max_significance = refine_session(
-					root, entry["dir"], session_id, source, sections or [], candidates, transport, min_significance
-				)
+				max_significance = refine_session(root, entry["dir"], session_id, source, sections or [], candidates, transport, min_significance)
 		except Exception as e:
 			logger.warning(f"Agentic pass failed for {session_id}: {e}")
 			stats["failed"] += 1

@@ -393,10 +393,7 @@ class SessionMirror:
 		request = str(request_id or "").strip()
 		if not continuity or not request:
 			return 0
-		sql = (
-			"UPDATE session_mirror SET status='completed', status_reason=NULL "
-			"WHERE continuity_id=? AND request_id=? AND status!='aborted'"
-		)
+		sql = "UPDATE session_mirror SET status='completed', status_reason=NULL WHERE continuity_id=? AND request_id=? AND status!='aborted'"
 		params: tuple = (continuity, request)
 		if turn_id:
 			sql += " AND turn_id=?"
@@ -436,8 +433,7 @@ class SessionMirror:
 			)
 		with connect_session_db(self.db_path) as conn:
 			cur = conn.execute(
-				"UPDATE session_mirror SET status='aborted', status_reason=? "
-				"WHERE continuity_id=? AND request_id=?",
+				"UPDATE session_mirror SET status='aborted', status_reason=? WHERE continuity_id=? AND request_id=?",
 				(str(reason or "aborted")[:500], continuity, request),
 			)
 			conn.commit()
@@ -566,8 +562,7 @@ class SessionMirror:
 		"""Cuerpo del último turno completado (para el alcance del compactor)."""
 		with connect_session_db(self.db_path) as conn:
 			row = conn.execute(
-				"SELECT originator FROM session_mirror WHERE continuity_id = ? AND status = 'completed' "
-				"ORDER BY seq DESC LIMIT 1",
+				"SELECT originator FROM session_mirror WHERE continuity_id = ? AND status = 'completed' ORDER BY seq DESC LIMIT 1",
 				(str(continuity_id or "").strip(),),
 			).fetchone()
 		return str(row["originator"] or "") if row else ""
@@ -624,14 +619,10 @@ class SessionMirror:
 			).fetchone()
 			if previous is not None and start != 0 and start != int(previous["range_end_seq"]) + 1:
 				conn.rollback()
-				raise ValueError(
-					f"rango no contiguo: empieza en {start}, la compactación previa termina en {previous['range_end_seq']}"
-				)
+				raise ValueError(f"rango no contiguo: empieza en {start}, la compactación previa termina en {previous['range_end_seq']}")
 			if previous is None and start not in (0, 1):
 				conn.rollback()
-				raise ValueError(
-					f"el primer rango debe empezar en 0 o 1 (recibido {start})"
-				)
+				raise ValueError(f"el primer rango debe empezar en 0 o 1 (recibido {start})")
 			conn.execute(
 				"""
 				INSERT OR IGNORE INTO session_compactions (
@@ -653,9 +644,7 @@ class SessionMirror:
 				),
 			)
 			conn.commit()
-			row = conn.execute(
-				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
-			).fetchone()
+			row = conn.execute("SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)).fetchone()
 		if row is None:
 			raise RuntimeError("start_compaction: no se pudo leer la compactación")
 		return dict(row)
@@ -682,9 +671,7 @@ class SessionMirror:
 		now = time.time()
 		with connect_session_db(self.db_path) as conn:
 			conn.execute("BEGIN IMMEDIATE")
-			row = conn.execute(
-				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
-			).fetchone()
+			row = conn.execute("SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)).fetchone()
 			if row is None:
 				conn.rollback()
 				raise KeyError(f"compactación desconocida: {compact_id}")
@@ -725,9 +712,7 @@ class SessionMirror:
 				(text, model, tokens_after, now, compact_id),
 			)
 			conn.commit()
-			done = conn.execute(
-				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
-			).fetchone()
+			done = conn.execute("SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)).fetchone()
 		if done is None:
 			raise RuntimeError("complete_compaction: no se pudo leer la compactación")
 		return dict(done)
@@ -739,14 +724,11 @@ class SessionMirror:
 			raise ValueError("compaction_id requerido")
 		with connect_session_db(self.db_path) as conn:
 			conn.execute(
-				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? "
-				"WHERE compaction_id=? AND status != 'completed'",
+				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? WHERE compaction_id=? AND status != 'completed'",
 				(str(reason or "aborted")[:500], time.time(), compact_id),
 			)
 			conn.commit()
-			row = conn.execute(
-				"SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)
-			).fetchone()
+			row = conn.execute("SELECT * FROM session_compactions WHERE compaction_id = ?", (compact_id,)).fetchone()
 		if row is None:
 			raise KeyError(f"compactación desconocida: {compact_id}")
 		return dict(row)
@@ -762,8 +744,7 @@ class SessionMirror:
 			return 0
 		with connect_session_db(self.db_path) as conn:
 			cur = conn.execute(
-				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? "
-				"WHERE continuity_id=? AND status != 'aborted'",
+				"UPDATE session_compactions SET status='aborted', reason=?, completed_at=? WHERE continuity_id=? AND status != 'aborted'",
 				(str(reason or "superseded")[:500], time.time(), continuity),
 			)
 			conn.commit()
@@ -776,8 +757,7 @@ class SessionMirror:
 			return None
 		with connect_session_db(self.db_path) as conn:
 			row = conn.execute(
-				"SELECT * FROM session_compactions WHERE continuity_id=? AND status='completed' "
-				"ORDER BY range_end_seq DESC, created_at DESC LIMIT 1",
+				"SELECT * FROM session_compactions WHERE continuity_id=? AND status='completed' ORDER BY range_end_seq DESC, created_at DESC LIMIT 1",
 				(continuity,),
 			).fetchone()
 		return dict(row) if row else None
@@ -789,8 +769,7 @@ class SessionMirror:
 			return []
 		with connect_session_db(self.db_path) as conn:
 			rows = conn.execute(
-				"SELECT * FROM session_compactions WHERE continuity_id=? "
-				"ORDER BY range_end_seq ASC, created_at ASC",
+				"SELECT * FROM session_compactions WHERE continuity_id=? ORDER BY range_end_seq ASC, created_at ASC",
 				(continuity,),
 			).fetchall()
 		return [dict(row) for row in rows]
@@ -846,22 +825,14 @@ class SessionMirror:
 		# turnos que aún no han entrado en ningún resumen (hueco silencioso).
 		floor = int(latest["range_end_seq"])
 		while floor > 0:
-			turns = [
-				t
-				for t in self.read_turns(continuity, since_seq=floor)
-				if not _is_compaction_summary(t)
-			]
+			turns = [t for t in self.read_turns(continuity, since_seq=floor) if not _is_compaction_summary(t)]
 			if not turns or str(turns[0].get("role") or "") != "tool":
 				break
 			# El corte cayó entre un assistant(tool_calls) y su resultado: se
 			# retrocede hasta incluir la llamada, nunca un `tool` huérfano.
 			floor -= 1
 		else:
-			turns = [
-				t
-				for t in self.read_turns(continuity, since_seq=floor)
-				if not _is_compaction_summary(t)
-			]
+			turns = [t for t in self.read_turns(continuity, since_seq=floor) if not _is_compaction_summary(t)]
 		return summaries + turns
 
 	def context_messages(
@@ -981,9 +952,7 @@ class SessionMirror:
 		active = set(reg.active_continuities())
 		purged_rows = purged_souls = 0
 		with connect_session_db(self.db_path) as conn:
-			souls = conn.execute(
-				"SELECT continuity_id, COUNT(*) AS turns, MAX(ts) AS last_ts FROM session_mirror GROUP BY continuity_id"
-			).fetchall()
+			souls = conn.execute("SELECT continuity_id, COUNT(*) AS turns, MAX(ts) AS last_ts FROM session_mirror GROUP BY continuity_id").fetchall()
 			for soul in souls:
 				cid = str(soul["continuity_id"])
 				if cid in active:
@@ -1115,8 +1084,7 @@ class SessionMirror:
 						if excess <= 0:
 							continue
 						cur = conn.execute(
-							"DELETE FROM session_mirror WHERE id IN "
-							"(SELECT id FROM session_mirror WHERE continuity_id = ? ORDER BY seq ASC LIMIT ?)",
+							"DELETE FROM session_mirror WHERE id IN (SELECT id FROM session_mirror WHERE continuity_id = ? ORDER BY seq ASC LIMIT ?)",
 							(cid, excess),
 						)
 					else:
