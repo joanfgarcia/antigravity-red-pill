@@ -99,7 +99,70 @@ def test_compute_cuenta_y_da_la_edad_del_mas_antiguo(monkeypatch):
 	out = mod.compute(reg, REPO)
 
 	assert out["pending"] == 2
+	assert out["distill_pending"] == 2 and out["annotate_pending"] == 0
 	assert 2.9 <= out["oldest_days"] <= 3.1
+
+
+def test_compute_parte_por_motivo_y_las_notas_no_cuentan(monkeypatch):
+	"""2026-11-18: una sesión destilada con notas pendientes NO está "sin destilar"."""
+	mod = _load_script()
+	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 5 * 86400))
+	reg = _FakeRegistry(
+		{
+			"opencode": {
+				"opencode:ses_missing": {"created_at": viejo},
+				"opencode:ses_notas": {"created_at": viejo},
+				"opencode:ses_notas2": {"created_at": viejo},
+			}
+		}
+	)
+	monkeypatch.setattr(
+		"red_pill.memento.agentic.pending_agentic",
+		lambda *a, **kw: [
+			("opencode", "opencode:ses_missing", "missing"),
+			("opencode", "opencode:ses_notas", "annotate"),
+			("opencode", "opencode:ses_notas2", "annotate"),
+		],
+	)
+
+	out = mod.compute(reg, REPO)
+
+	assert out["pending"] == 3
+	assert out["distill_pending"] == 1 and out["annotate_pending"] == 2
+	assert out["by_reason"] == {"missing": 1, "annotate": 2}
+	assert 4.9 <= out["oldest_days"] <= 5.1
+
+
+def test_solo_notas_pendientes_no_encienden_la_senal():
+	"""La señal habla del tope (destilado); las notas se auto-curan en la pasada siguiente."""
+	mod = _load_script()
+	mem = _FakeMemory()
+
+	out = mod.report({"pending": 3, "distill_pending": 0, "annotate_pending": 3}, cap=30, memory=mem)
+
+	assert out["signal"] == "evaporated"
+	assert mem.evaporated == ["memento_backlog"]
+	assert mem.injected == []
+	assert out["annotate_pending"] == 3
+
+
+def test_la_senal_separa_notas_de_destilado_en_el_mensaje():
+	mod = _load_script()
+	mem = _FakeMemory()
+
+	out = mod.report(
+		{"pending": 9, "distill_pending": 6, "annotate_pending": 3, "oldest_days": 1.5},
+		cap=30,
+		msg_cap=3000,
+		memory=mem,
+	)
+
+	assert out["signal"] == "injected"
+	(call,) = mem.injected
+	assert "6 sesión" in call["message"]
+	assert "3 sesión(es) solo esperan notas" in call["message"]
+	assert "1.5 d" in call["message"]
+	assert call["originator"] == "memento_backlog (6 pendientes)"
 
 
 def test_la_senal_tiene_clase_sed_y_acantilado_de_30_dias():
