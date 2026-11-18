@@ -136,3 +136,36 @@ def test_coverage_ignores_content_the_synthesis_can_never_group():
 	assert wm["content"] == 12
 	assert wm["groupable"] == 2
 	assert wm["hub_coverage_pct"] == 100.0
+
+
+def test_orphan_marker_in_single_member_session_is_stale_not_a_leak():
+	"""Una sesión de UN miembro nunca tendrá hub (`len(members) < 2`): su marcador
+	huérfano es residuo de una poda, no una fuga. Contarlo dejaba la lámpara en
+	rojo para siempre (40 marcadores así, medidos en el Búnker el 2026-11-18)."""
+	data = {
+		"work_memories": [
+			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
+			("c1", {"node_type": "memento_engram", "session_id": "solo", "hubbed": True, "hub_id": "ghost"}),
+		],
+	}
+	col = compute_sw_health(FakeMM(FakeClient(data)))["collections"]["work_memories"]
+	assert col["orphan_markers"] == 1, "el crudo no se maquilla"
+	assert col["orphan_markers_stale"] == 1
+	assert col["hub_integrity_ok"] is True
+	assert col["hub_coverage_pct"] == 0.0
+
+
+def test_orphan_marker_in_groupable_session_still_rings_the_alarm():
+	"""La misma huérfana, con un hermano en la sesión, sí es una fuga."""
+	data = {
+		"work_memories": [
+			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
+			("c1", {"node_type": "memento_engram", "session_id": "s", "hubbed": True, "hub_id": "h1"}),
+			("c2", {"node_type": "memento_engram", "session_id": "s", "hubbed": True, "hub_id": "ghost"}),
+		],
+	}
+	col = compute_sw_health(FakeMM(FakeClient(data)))["collections"]["work_memories"]
+	assert col["orphan_markers"] == 1
+	assert col["orphan_markers_stale"] == 0
+	assert col["hub_integrity_ok"] is False
+	assert col["hub_coverage_pct"] == 50.0

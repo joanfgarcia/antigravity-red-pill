@@ -15,6 +15,11 @@ from red_pill.metabolism.hub_synthesis import is_content_node, is_groupable, is_
 
 logger = logging.getLogger(__name__)
 
+# Mínimo de miembros por sesión para que la síntesis escriba hub. Espejo de
+# `hub_synthesis._synthesize_one` (`if len(members) < 2: continue`): si cambia
+# allí, cambia aquí, o esta señal vuelve a mentir.
+HUB_MIN_SESSION_MEMBERS = 2
+
 
 def _pct(num: int, den: int) -> Optional[float]:
 	"""Porcentaje redondeado; None ("n/a") si no hay denominador."""
@@ -58,6 +63,23 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 			# estructural. La cobertura cuenta NODOS que existen.
 			hub_ids = {str(p.id) for p in points if is_hub_node(p.payload or {})}
 			orphans = sum(1 for pl in groupable_payloads if pl.get("hubbed") and str(pl.get("hub_id") or "") not in hub_ids)
+			# Un marcador huérfano en una sesión de UN solo miembro no es una fuga:
+			# la síntesis exige `len(members) >= 2` (hub_synthesis `_synthesize_one`),
+			# así que esa sesión jamás tendrá hub y el marcador es residuo de una
+			# poda/olvido anterior. Contarlo dejaba la lámpara en rojo para siempre
+			# (40 marcadores, 40 sesiones de 1 miembro, medido el 2026-11-18) y
+			# enmascaraba las fugas de verdad. Verdad en dos capas: crudo y accionable.
+			sessions_size: Dict[str, int] = {}
+			for pl in groupable_payloads:
+				key = str(pl.get("session_id") or "")
+				sessions_size[key] = sessions_size.get(key, 0) + 1
+			orphans_stale = sum(
+				1
+				for pl in groupable_payloads
+				if pl.get("hubbed")
+				and str(pl.get("hub_id") or "") not in hub_ids
+				and sessions_size.get(str(pl.get("session_id") or ""), 0) < HUB_MIN_SESSION_MEMBERS
+			)
 			covered = hubbed - orphans
 			out["collections"][c] = {
 				"total": len(payloads),
@@ -66,7 +88,8 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 				"hubs": hubs,
 				"hubbed_members": hubbed,
 				"orphan_markers": orphans,
-				"hub_integrity_ok": orphans == 0,
+				"orphan_markers_stale": orphans_stale,
+				"hub_integrity_ok": orphans_stale == orphans,
 				# Cobertura real: % de engrams agrupables que ya están en un hub.
 				# El nombre dice la verdad (antes medía hubs/content = densidad, no
 				# cobertura; con 1 hub por ~26 miembros daba 3.8% y parecía alarma).
