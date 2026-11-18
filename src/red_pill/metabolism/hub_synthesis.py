@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 _NS = uuid.NAMESPACE_OID
 HUB_NODE_TYPE = "synthesis_hub"
 
+# Mínimo de miembros por sesión para que la síntesis escriba hub. Es la ÚNICA
+# fuente del umbral: `synthesize_session_hubs` lo aplica al agrupar y
+# `sw_observability` lo importa para no volver a mentir con una copia.
+HUB_MIN_SESSION_MEMBERS = 2
+
 # Nodo de contenido: ascendido de Memento (o legacy sin node_type). Nunca un hub.
 _CONTENT_NODE_TYPES = (None, "memento_engram")
 
@@ -611,6 +616,68 @@ def _clear_rebuild_pending(memory_manager: Any, collection: str, session_id: str
 		logger.debug(f"[HUBS] no se pudo consumir hub_rebuild_pending en {collection}:{session_id}: {e}")
 
 
+def repair_stale_orphan_markers(
+	memory_manager: Any,
+	collections: Tuple[str, ...] = ("work_memories", "social_memories"),
+	dry_run: bool = False,
+) -> Dict[str, Any]:
+	"""Borra los marcadores huérfanos que ninguna síntesis podrá resolver (MET-001).
+
+	Una sesión por debajo de `HUB_MIN_SESSION_MEMBERS` nunca tendrá hub, así que
+	su `hubbed=True` con un `hub_id` inexistente es residuo de una poda: el
+	olvido se llevó a los hermanos (y con ellos el hub) y el flag quedó escrito.
+	Dejarlo ahí mantiene el crudo de integridad en rojo para siempre (40 el
+	2026-11-18) y enseña a ignorar la lámpara justo cuando llegue una fuga real.
+
+	Idempotente y conservador: solo borra `hubbed`/`hub_id` de marcadores en
+	sesiones sin hub posible. NO toca contenido, y un marcador huérfano en una
+	sesión agrupable sigue intacto: ese sí es una fuga y debe ringar.
+	"""
+	stats: Dict[str, Any] = {"enabled": True, "dry_run": bool(dry_run), "cleared": 0, "sessions": 0, "collections": {}}
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+			points: List[Tuple[Any, Dict[str, Any]]] = []
+			offset = None
+			while True:
+				batch, offset = memory_manager.client.scroll(collection, limit=1000, offset=offset, with_payload=True, with_vectors=False)
+				points.extend((p.id, p.payload or {}) for p in batch)
+				if offset is None:
+					break
+		except Exception as e:
+			logger.warning(f"[HUBS] repair: no se pudo inventariar {collection}: {e}")
+			continue
+		hub_ids = {str(pid) for pid, pl in points if is_hub_node(pl or {})}
+		stale_ids: List[Any] = []
+		stale_sessions: Set[str] = set()
+		for session_id, members in group_by_session(points).items():
+			if len(members) >= HUB_MIN_SESSION_MEMBERS:
+				continue
+			for pid, pl in members:
+				if bool(pl.get("hubbed")) and str(pl.get("hub_id") or "") not in hub_ids:
+					stale_ids.append(pid)
+					stale_sessions.add(session_id)
+		stats["collections"][collection] = len(stale_ids)
+		if not stale_ids:
+			continue
+		if not dry_run:
+			try:
+				# Misma forma de desmarcar que `restore_hub_payload`: el flag se
+				# borra, no se pone a False (un `hubbed` ausente es el estado real).
+				memory_manager.client.delete_payload(collection_name=collection, keys=["hubbed", "hub_id"], points=stale_ids)
+			except Exception as e:
+				logger.warning(f"[HUBS] repair: no se pudieron limpiar {len(stale_ids)} marcador(es) en {collection}: {e}")
+				stats["collections"][collection] = 0
+				continue
+		stats["cleared"] += len(stale_ids)
+		stats["sessions"] += len(stale_sessions)
+		logger.info(
+			f"[HUBS] repair: {len(stale_ids)} marcador(es) residuo limpiados en {collection} ({len(stale_sessions)} sesión(es) sin hub posible)"
+		)
+	return stats
+
+
 def synthesize_session_hubs(
 	memory_manager: Any,
 	collections: Tuple[str, ...] = ("work_memories", "social_memories"),
@@ -665,7 +732,7 @@ def synthesize_session_hubs(
 		for session_id, members in groups.items():
 			if _cap is not None and processed >= _cap:
 				break
-			if len(members) < 2:
+			if len(members) < HUB_MIN_SESSION_MEMBERS:
 				# Hub de una sola idea: el engrama ya es buscable; no se
 				# parafrasea ni se oculta (evita perder precisión).
 				continue
@@ -955,7 +1022,7 @@ def find_oversized_sessions(
 			if offset is None:
 				break
 		for session_id, members in group_by_session(points).items():
-			if len(members) < 2:
+			if len(members) < HUB_MIN_SESSION_MEMBERS:
 				continue
 			chars = len(render_hub_items(_members_to_chunks(members)))
 			if chars <= limit:
@@ -1392,7 +1459,7 @@ def resynthesize_session(memory_manager: Any, collection: str, session_id: str, 
 	from red_pill.metabolism.distiller import derive_hub_affect, synthesize_hub_v2
 
 	members = _load_session_members(memory_manager, collection, session_id)
-	if len(members) < 2:
+	if len(members) < HUB_MIN_SESSION_MEMBERS:
 		return "skipped"
 	return _synthesize_one(memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force)
 

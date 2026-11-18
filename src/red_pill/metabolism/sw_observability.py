@@ -11,14 +11,9 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.metabolism.hub_synthesis import is_content_node, is_groupable, is_hub_node
+from red_pill.metabolism.hub_synthesis import HUB_MIN_SESSION_MEMBERS, is_content_node, is_groupable, is_hub_node
 
 logger = logging.getLogger(__name__)
-
-# Mínimo de miembros por sesión para que la síntesis escriba hub. Espejo de
-# `hub_synthesis._synthesize_one` (`if len(members) < 2: continue`): si cambia
-# allí, cambia aquí, o esta señal vuelve a mentir.
-HUB_MIN_SESSION_MEMBERS = 2
 
 
 def _pct(num: int, den: int) -> Optional[float]:

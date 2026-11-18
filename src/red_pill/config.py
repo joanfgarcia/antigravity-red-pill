@@ -1268,6 +1268,13 @@ class RedPillConfig(BaseSettings):
 	# RFC-OLV-001: la higiene reporta por defecto. Retirar engramas VACÍOS no es
 	# olvidar, pero tampoco puede ser una ruta automática silenciosa más.
 	SW_HYGIENE_PURGE_ENABLED: bool = False  # HygienePhase: purge empty engrams re-stitching the raw chain first
+	# MET-001 (2026-11-18): un marcador huérfano en una sesión que la síntesis
+	# nunca tocará (< HUB_MIN_SESSION_MEMBERS) es residuo, no fuga. Limpiarlo es
+	# idempotente y no borra memoria (solo `hubbed`/`hub_id`), así que va ON: con
+	# él OFF el crudo de integridad queda rojo para siempre y la próxima fuga
+	# real nace con la lámpara ya encendida. Los huérfanos en sesiones agrupables
+	# NO se tocan: esos son la fuga que la señal debe seguir gritando.
+	SW_HUB_MARKER_REPAIR_ENABLED: bool = True
 
 	# ── Texture space (T5: evocation by resonance) ──
 	TEXTURE_SHADOW_ENABLED: bool = False  # Write texture_shadow points at consolidation (born dark)
