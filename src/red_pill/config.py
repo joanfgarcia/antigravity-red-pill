@@ -770,6 +770,12 @@ class RedPillConfig(BaseSettings):
 	SW_HUB_VERSION_INVALIDATION_ENABLED: bool = False  # re-sintetiza si cambia HUB_SYNTH_VERSION
 	SW_HUB_SCRUB_ENABLED: bool = True  # D-12: redacta secretos del body antes del upsert
 	MEMORY_HUB_KEYWORD_MAX_HUBS: int = 500  # hubs escaneados por la pata keyword
+	# Techo de ids de hubs vivos que el recall materializa para excluir miembros
+	# por `hub_id` existente (no por el flag `hubbed`, que miente). Por encima,
+	# `_live_hub_ids` devuelve vacío y el recall cae al flag: una válvula de
+	# seguridad, no una decisión de producto. Subirlo si el árbol legítimo crece
+	# (MEM-011: 458 raíces medidas el 2026-11-18).
+	MEMORY_LIVE_HUB_IDS_MAX: int = 2000
 	MEMORY_HUB_KEYWORD_MAX_CHARS: int = 500  # presupuesto BLANDO de la lista de keywords (keywords enteras)
 	MEMORY_HUB_KEYWORD_MIN_SCORE: float = 0.0  # corta la cola de términos poco relevantes
 	MEMORY_HUB_MEMBERS_MAX_TITLES: int = 20  # títulos devueltos por hub_members

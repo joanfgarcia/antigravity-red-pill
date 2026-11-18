@@ -100,6 +100,18 @@ def test_la_pata_keyword_no_devuelve_partes():
 	assert set(ids) == {"root-1", "legacy-sin-rol"}, "la raíz y el hub legado sin `hub_role` sí compiten"
 
 
+def test_el_techo_de_hubs_vivos_avisa_y_se_puede_subir():
+	"""El techo de `_live_hub_ids` es una válvula, no una decisión: al superarlo
+	el recall cae al flag (y lo dice), y el operador puede subirlo sin tocar código."""
+	docs = [(f"r{i}", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}) for i in range(3)]
+
+	stuck = _manager(_FakeQdrant(docs), MEMORY_LIVE_HUB_IDS_MAX=2)
+	assert stuck._live_hub_ids("work_memories") == set(), "por encima del techo se degrada al flag"
+
+	raised = _manager(_FakeQdrant(docs), MEMORY_LIVE_HUB_IDS_MAX=10)
+	assert raised._live_hub_ids("work_memories") == {"r0", "r1", "r2"}
+
+
 def test_la_densidad_de_hubs_cuenta_raices_no_el_arbol():
 	data = {
 		"work_memories": [

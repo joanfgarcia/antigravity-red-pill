@@ -693,8 +693,10 @@ class MemoryManager:
 		"""Ids de los hubs que EXISTEN (caché de 60 s).
 
 		Es la única forma honesta de decidir qué miembros ocultar al recall: el
-		nodo, no el flag. Si el conjunto supera un techo (colecciones enormes), se
-		devuelve vacío y el llamante cae al comportamiento por flag.
+		nodo, no el flag. Si el conjunto supera `MEMORY_LIVE_HUB_IDS_MAX`
+		(colecciones enormes), se devuelve vacío y el llamante cae al
+		comportamiento por flag — pero se avisa: el silencio convertía un techo de
+		seguridad en una ceguera invisible (el flag es justo lo que miente).
 		"""
 		now = time.time()
 		cached: dict[str, "tuple[float, set]"] = getattr(self, "_hub_ids_cache", None) or {}
@@ -711,17 +713,24 @@ class MemoryManager:
 				]
 			)
 			ids: set = set()
+			cap = int(getattr(self.cfg, "MEMORY_LIVE_HUB_IDS_MAX", 2000) or 2000)
 			offset = None
 			while True:
 				batch, offset = self.client.scroll(
 					collection_name=collection, scroll_filter=flt, limit=1000, offset=offset, with_payload=False, with_vectors=False
 				)
 				ids.update(str(p.id) for p in batch)
-				if offset is None:
-					break
-				if len(ids) > 2000:
-					logger.debug("[RECALL] Demasiados hubs para filtrar por id; se usa el flag.")
+				# El techo se mira en CADA página: comprobarlo tras el corte de
+				# `offset is None` lo hacía inalcanzable en colecciones de una sola
+				# página (el techo nunca mordía donde se suponía que protegía).
+				if len(ids) > cap:
+					logger.warning(
+						f"[RECALL] {collection}: más de {cap} hubs vivos (MEMORY_LIVE_HUB_IDS_MAX); "
+						"se cae al flag `hubbed` y el enrutado por hoja queda inerte"
+					)
 					ids = set()
+					break
+				if offset is None:
 					break
 		except Exception as exc:
 			logger.debug(f"[RECALL] No se pudieron leer los hubs de {collection}: {exc}")
