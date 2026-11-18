@@ -48,6 +48,11 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 			groupable_payloads = [pl for pl in payloads if is_groupable(pl)]
 			groupable = len(groupable_payloads)
 			hubs = sum(1 for pl in payloads if is_hub_node(pl))
+			# MEM-011 D-SH-02: las partes comparten `node_type=synthesis_hub`; el
+			# papel vive en `hub_role`. Los instrumentos se leen POR ROL: contar el
+			# árbol entero como "hubs" infla la densidad ~1:3 por diseño (D-SH-06).
+			hubs_part = sum(1 for pl in payloads if is_hub_node(pl) and str(pl.get("hub_role") or "") == "part")
+			hubs_root = hubs - hubs_part
 			# Numerador ⊆ denominador: solo lo que la síntesis puede agrupar (mismo
 			# predicado que group_by_session), así la cobertura nunca supera el 100%
 			# ni la hunde un legacy sin sesión que jamás entrará en un hub.
@@ -81,6 +86,11 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 				"content": content,
 				"groupable": groupable,
 				"hubs": hubs,
+				# Rol del árbol (MEM-011): raíces frente a partes. `hubs` es el total
+				# de nodos; la densidad se mide sobre raíces para que encender el
+				# empaquetado por polaroids no parezca que triplica los hubs.
+				"hubs_root": hubs_root,
+				"hubs_part": hubs_part,
 				"hubbed_members": hubbed,
 				"orphan_markers": orphans,
 				"orphan_markers_stale": orphans_stale,
@@ -90,8 +100,9 @@ def compute_sw_health(memory_manager: Any, collections: Tuple[str, ...] = ("work
 				# cobertura; con 1 hub por ~26 miembros daba 3.8% y parecía alarma).
 				# Sin nada agrupable no hay nada que cubrir: None ("n/a"), no 0%.
 				"hub_coverage_pct": _pct(covered, groupable),
-				# Densidad de hubs (hubs por 100 engrams). Contexto, no salud.
-				"hub_ratio_pct": _pct(hubs, content),
+				# Densidad de hubs (raíces por 100 engrams). Contexto, no salud. Las
+				# partes no cuentan: son el techo del árbol, no otra unidad de sesión.
+				"hub_ratio_pct": _pct(hubs_root, content),
 			}
 		except Exception as e:
 			logger.warning(f"[SW-OBS] {c}: {e}")

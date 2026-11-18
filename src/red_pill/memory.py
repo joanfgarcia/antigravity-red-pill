@@ -1105,6 +1105,10 @@ class MemoryManager:
 		Read-only y acotado a `MEMORY_HUB_KEYWORD_MAX_HUBS`. Los hubs viejos sin
 		`hub_terms` caen a su `content`, así que siguen siendo recuperables sin
 		migrarlos (D-11). Cualquier fallo devuelve [] y no rompe el recall.
+
+		MEM-011: las PARTES (`hub_role=part`) quedan fuera del corpus. Solo la raíz
+		entra en el primario (D-SH-01/I-08); además, contarlas inflaba el IDF de la
+		pata keyword al triplicar los documentos con los mismos términos.
 		"""
 		if not bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False)):
 			return []
@@ -1137,7 +1141,9 @@ class MemoryManager:
 						should=[
 							qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
 							qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
-						]
+						],
+						# MEM-011: una parte no es una raíz y no compite en el primario.
+						must_not=[qm.FieldCondition(key="hub_role", match=qm.MatchValue(value="part"))],
 					),
 					limit=min(256, max_hubs - len(docs)),
 					offset=offset,
