@@ -32,6 +32,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -39,6 +40,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 SIGNAL = "memento_backlog"
+
+
+def _epoch(iso: Any) -> Optional[float]:
+	"""Epoch UTC de un `created_at` ISO del registry.
+
+	El registry guarda `...Z`. Parsearlo con `strptime` + `mktime` lo leía como
+	hora LOCAL, así que la edad salía inflada por el desfase del huso (medido:
+	+3.600–7.201 s en las 1.486 entradas vivas con `created_at`), justo contra el
+	acantilado de 30 d de la clase `sed`. Misma lectura que
+	`ascension._session_created_at`.
+	"""
+	try:
+		return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp()
+	except Exception:
+		return None
 
 
 def compute(registry: Any, root: Path) -> Dict[str, Any]:
@@ -57,14 +73,10 @@ def compute(registry: Any, root: Path) -> Dict[str, Any]:
 		if reason == "annotate":
 			continue
 		entry = (registry.state.get("registry", {}).get(source, {}) or {}).get(session_id) or {}
-		try:
-			created = entry.get("created_at")
-			if not created:
-				continue
-			ts = time.mktime(time.strptime(str(created)[:19], "%Y-%m-%dT%H:%M:%S"))
-			más_vieja = ts if más_vieja is None else min(más_vieja, ts)
-		except Exception:
+		ts = _epoch(entry.get("created_at"))
+		if ts is None:
 			continue
+		más_vieja = ts if más_vieja is None else min(más_vieja, ts)
 	age_days = round((time.time() - más_vieja) / 86400, 1) if más_vieja else None
 	notas = by_reason.get("annotate", 0)
 	return {

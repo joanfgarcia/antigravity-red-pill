@@ -81,8 +81,8 @@ def test_dry_run_no_toca_qdrant():
 
 def test_compute_cuenta_y_da_la_edad_del_mas_antiguo(monkeypatch):
 	mod = _load_script()
-	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 3 * 86400))
-	nuevo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 3600))
+	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3 * 86400)) + "Z"
+	nuevo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3600)) + "Z"
 	reg = _FakeRegistry(
 		{
 			"opencode": {
@@ -103,10 +103,22 @@ def test_compute_cuenta_y_da_la_edad_del_mas_antiguo(monkeypatch):
 	assert 2.9 <= out["oldest_days"] <= 3.1
 
 
+def test_la_edad_se_mide_en_utc_no_en_la_hora_local():
+	"""El registry guarda `...Z`; `mktime` lo leía como hora local (+1–2 h de edad)."""
+	from datetime import datetime, timezone
+
+	mod = _load_script()
+
+	esperado = datetime(2026, 11, 17, 8, 16, tzinfo=timezone.utc).timestamp()
+	assert mod._epoch("2026-11-17T08:16:00.000000Z") == esperado
+	assert mod._epoch("") is None
+	assert mod._epoch(None) is None
+
+
 def test_compute_parte_por_motivo_y_las_notas_no_cuentan(monkeypatch):
 	"""2026-11-18: una sesión destilada con notas pendientes NO está "sin destilar"."""
 	mod = _load_script()
-	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 5 * 86400))
+	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 5 * 86400)) + "Z"
 	reg = _FakeRegistry(
 		{
 			"opencode": {
