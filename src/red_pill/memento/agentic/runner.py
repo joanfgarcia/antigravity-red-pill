@@ -90,7 +90,14 @@ def pending_agentic(
 					continue  # ya anotada desde raw (rebuild/nocturno) — no re-procesar
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
-				pending.append((source, session_id, "stale"))
+				if agentic.get("distill_hash") == entry.get("memento_hash"):
+					# 2026-11-18: la fase de polaroids ya atestiguó ESTE hash; lo que
+					# falta son las notas, no el destilado. Marcarlo `stale` compraba
+					# un re-destilado completo y, peor, hacía que el janitor
+					# `memento_stale` disparase `--heal-stale` sobre material al día.
+					pending.append((source, session_id, "annotate"))
+				else:
+					pending.append((source, session_id, "stale"))
 			elif force:
 				# Re-procesado explícito: incluir las ya destiladas válidas
 				# (p.ej. --only-long para re-distillar las truncadas).

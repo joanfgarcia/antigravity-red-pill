@@ -960,6 +960,36 @@ def test_pase_por_fases_polaroids_y_notas(tmp_path, monkeypatch):
 	assert list((root2 / rendered2.dir_rel / "annotate").glob("*.md")) == []
 
 
+def test_pending_agentic_polaroids_al_dia_sin_sello_no_son_stale(tmp_path, monkeypatch):
+	"""Fase distill hecha y notas pendientes: NO es `stale` (2026-11-18).
+
+	El marcador honesto de "estas polaroids son de este hash" es `distill_hash`
+	(el sello `hash` solo lo escribe la fase de notas). Al comparar únicamente
+	`hash`, una sesión destilada hace un minuto salía `stale`: el janitor
+	`memento_stale` pedía `--heal-stale` (regeneración completa) y el pase
+	gastaba otro destilado sobre material al día."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	root, registry, rendered = _tree_with_session(tmp_path)
+
+	registry.upsert(
+		"opencode",
+		"opencode:s1",
+		{"agentic": {"distill_hash": rendered.memento_hash, "annotate_pending": True}},
+	)
+	pending = pending_agentic(registry, root=root)
+	assert [(r) for _s, _i, r in pending] == ["annotate"]
+
+	# Un hash de verdad viejo sí es stale: sus source_lines apuntan a rangos muertos.
+	registry.upsert(
+		"opencode",
+		"opencode:s1",
+		{"agentic": {"distill_hash": "0" * 64, "annotate_pending": True}},
+	)
+	assert [r for _s, _i, r in pending_agentic(registry, root=root)] == ["stale"]
+
+
 def test_pending_agentic_fase_annotate_solo_pide_notas(tmp_path, monkeypatch):
 	"""La fase annotate selecciona destiladas sin notas frescas — nunca despide
 	una fase de distill sobre material ya al día."""
