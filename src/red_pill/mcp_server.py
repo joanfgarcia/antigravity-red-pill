@@ -1202,6 +1202,39 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="Engram updated." if succ else "Failed to update engram.")]
 
 
+def _workspace_registry_names() -> str:
+	"""Nombres registrados, para que el error diga DÓNDE mirar.
+
+	Medido el 2026-11-18 sobre el log del daemon: tres llamadas a
+	`read/list_workspace_memory` sin argumento murieron con KeyError('workspace')
+	(el registro solo logueaba `execution failed: 'workspace'`), y el despertar de
+	las 14:00 se comió un «Workspace 'sharing' not found» cuando el registro lo
+	llama `red-pill-sharing`. Un error que no distingue «falta» de «no existe» y
+	no dice qué nombres existen es un callejón sin salida: el paso obligatorio de
+	hidratación del banco falla sin dejar salida.
+	"""
+	try:
+		from red_pill.core.workspaces import list_workspaces
+
+		return ", ".join(sorted(w.name for w in list_workspaces()))
+	except Exception:
+		return ""
+
+
+def _workspace_lookup_error(workspace: Optional[str]) -> str:
+	"""Error accionable para una búsqueda de workspace: falta, o no existe."""
+	names = _workspace_registry_names()
+	hint = f" Registered: {names}." if names else " No workspaces are registered."
+	if not workspace:
+		return "[ERROR] Missing 'workspace' argument: pass a registered name or its root path." + hint
+	return f"[ERROR] Workspace '{workspace}' not found in registry." + hint
+
+
+def _missing_arg_error(arg: str) -> str:
+	"""El mismo defecto un nivel más abajo: `arguments['x']` sobre una clave ausente."""
+	return f"[ERROR] Missing '{arg}' argument."
+
+
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="read_workspace_memory",
@@ -1216,8 +1249,12 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_read_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
-	filename = arguments["filename"]
+	workspace = arguments.get("workspace")
+	filename = arguments.get("filename")
+	if not filename:
+		return [types.TextContent(type="text", text=_missing_arg_error("filename"))]
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1225,7 +1262,7 @@ async def handle_read_workspace_memory(arguments: Dict[str, Any]):
 	def _read():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
@@ -1259,9 +1296,15 @@ async def handle_read_workspace_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_write_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
-	filename = arguments["filename"]
-	content = arguments["content"]
+	workspace = arguments.get("workspace")
+	filename = arguments.get("filename")
+	content = arguments.get("content")
+	if not filename:
+		return [types.TextContent(type="text", text=_missing_arg_error("filename"))]
+	if content is None:
+		return [types.TextContent(type="text", text=_missing_arg_error("content"))]
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1269,7 +1312,7 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 	def _write():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
@@ -1301,7 +1344,9 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_list_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
+	workspace = arguments.get("workspace")
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1309,7 +1354,7 @@ async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 	def _list():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
