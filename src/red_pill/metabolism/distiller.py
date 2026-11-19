@@ -604,7 +604,7 @@ class HubBudgetError(RuntimeError):
 
 
 def _hub_summary_target() -> int:
-	return max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+	return max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800))
 
 
 def _hub_texture_max() -> int:
@@ -1181,7 +1181,7 @@ def synthesize_hub_v2(
 	reduce_budget = min(budget, max(500, int(getattr(cfg, "SLEEP_HUB_MASTER_INPUT_CHARS", 3000) or 3000)))
 	reduce_pack = max(500, reduce_budget - 96)
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
-	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
 	texture_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS", compact_attempts) or compact_attempts))
 	# Híbrido de modelos (AD-115): la decisión es POR LLAMADA y depende del

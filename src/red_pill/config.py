@@ -1225,7 +1225,12 @@ class RedPillConfig(BaseSettings):
 	# síntesis (reescritura); si el modelo no obedece, el texto se conserva
 	# ENTERO y se marca `*_over_budget`. Nunca se corta. Si un campo de metadata
 	# supera `MAX_METADATA_STR`, se parte en `texture_parts` sin perder contenido.
-	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
+	# Objetivo de longitud que se le PIDE al modelo (el tope duro que se valida
+	# es 1000). Medido 2026-11-19 (canario MEM-011): Granite-4.1-8B se pasa
+	# 16-22 % del objetivo; con 900 escribió 1048/1097 y chocó con el tope.
+	# 800 deja 200 chars de margen incluso en el peor desvío observado.
+	# Ver observaciones en model_profiles.yaml (granite_8b).
+	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 800
 	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle, 8k).
 	# 6k permite agrupar 3-4 parciales y que el árbol REDUZCA; con 3k cada
 	# grupo tenía un solo parcial, el número de nodos no bajaba y se agotaban

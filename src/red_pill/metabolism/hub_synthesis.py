@@ -1376,7 +1376,7 @@ def compact_legacy_hub(
 	body = content[len(title) + 1 :] if title and content.startswith(title + "\n") else content
 	if len(body) <= hard:
 		return "already"  # cabe: el camino es promote_compact_hub (mecánico)
-	target_chars = int(target or getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900)
+	target_chars = int(target or getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800)
 	target_chars = min(target_chars, hard)
 
 	if compactor is None:
