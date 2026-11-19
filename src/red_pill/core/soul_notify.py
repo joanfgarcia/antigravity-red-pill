@@ -664,7 +664,10 @@ def notify_soul(
 	if not session_id:
 		return False
 	transport = _resolve_transport(provider)
-	fn = _TRANSPORTS.get(transport)
+	# `Any` a propósito: el modo `delivery` solo lo aceptan algunos adaptadores y
+	# se pregunta a la firma (`_accepts_delivery`); sin esto mypy cree que todos
+	# comparten la firma de dos argumentos (error real en `soul_notify.py:676`).
+	fn: Any = _TRANSPORTS.get(transport)
 	if fn is None:
 		return False
 	try:
