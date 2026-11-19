@@ -92,3 +92,20 @@ def test_un_caso_muerto_no_entra_en_la_calibracion():
 
 	assert cal["positives_total"] == 1, "el caso muerto no cuenta ni como positivo ni como fallo"
 	assert cal["min_positive_max_sim"] == 0.50
+
+
+def test_la_tasa_por_tipo_es_la_de_c05():
+	"""C-05: el negativo se abstiene siempre; los obligatorios, nunca."""
+	fp = _floor_module()
+	cases = [
+		{"name": "pos-1", "kind": "must", "no_recall": False, "dead": False},
+		{"name": "pos-2", "kind": "must", "no_recall": False, "dead": False},
+		{"name": "neg-1", "kind": "negative", "no_recall": True, "dead": False},
+		{"name": "neg-2", "kind": "negative", "no_recall": True, "dead": False},
+		{"name": "muerto", "kind": "must", "no_recall": True, "dead": True},
+	]
+
+	rates = fp.no_recall_rates(cases)
+
+	assert rates["must"] == {"n": 2, "no_recall": 0, "rate": 0.0}
+	assert rates["negative"] == {"n": 2, "no_recall": 2, "rate": 1.0}

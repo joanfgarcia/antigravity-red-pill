@@ -168,9 +168,18 @@ def calibrate(cases: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 	}
 
 
-def run(manager: Any, cases: Sequence[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+def run(
+	manager: Any,
+	cases: Sequence[Dict[str, Any]],
+	limit: int,
+	floor: float = 0.38,
+	media: float = 0.4551,
+	alta: float = 0.592,
+) -> List[Dict[str, Any]]:
 	# Sonda read-only: el camino real puntúa y escribiría refuerzos; se neutraliza.
 	manager._reinforce_points = lambda *a, **k: []
+	from red_pill.recall_abstention import build_abstention
+
 	texts: Dict[str, str] = {}
 	out: List[Dict[str, Any]] = []
 	for case in cases:
@@ -183,6 +192,15 @@ def run(manager: Any, cases: Sequence[Dict[str, Any]], limit: int) -> List[Dict[
 		)
 		rows = case_rows(hits, limit)
 		max_sim = max((row["score"] for row in rows), default=None)
+		# MEM-012 F3/C-05: la misma decisión que toma el handler, sobre la ventana.
+		abstention = build_abstention(
+			list(hits)[:limit],
+			collection=case["collection"],
+			floor=floor,
+			media=media,
+			alta=alta,
+			exempt=case["collection"] == "directive_memories",
+		)
 		enriched = dict(case)
 		enriched.update(
 			{
@@ -190,6 +208,9 @@ def run(manager: Any, cases: Sequence[Dict[str, Any]], limit: int) -> List[Dict[
 				"top1": rows[0]["score"] if rows else None,
 				"max_sim": max_sim,
 				"detail_rank": detail_rank(rows, case["expect"]),
+				"no_recall": abstention["no_recall"],
+				"band": abstention["confidence"],
+				"below_floor_count": abstention["below_floor_count"],
 				"missing_needles": missing,
 				"dead": bool(missing) or (case["kind"] != "negative" and not rows),
 			}
@@ -204,20 +225,48 @@ def run(manager: Any, cases: Sequence[Dict[str, Any]], limit: int) -> List[Dict[
 	return out
 
 
+def no_recall_rates(cases: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+	"""Tasa de abstención por tipo de caso (C-05: negativo 1,0 · must 0,0)."""
+	by_kind: Dict[str, Dict[str, Any]] = {}
+	for case in cases:
+		if case.get("dead"):
+			continue
+		bucket = by_kind.setdefault(case["kind"], {"n": 0, "no_recall": 0})
+		bucket["n"] += 1
+		bucket["no_recall"] += 1 if case.get("no_recall") else 0
+	# C-05 habla de los SEIS obligatorios, no de todos los positivos nuevos.
+	obligatory = [c for c in cases if c.get("obligatory") and not c.get("dead")]
+	if obligatory:
+		by_kind["obligatory"] = {
+			"n": len(obligatory),
+			"no_recall": sum(1 for c in obligatory if c.get("no_recall")),
+		}
+	for bucket in by_kind.values():
+		bucket["rate"] = round(bucket["no_recall"] / bucket["n"], 3) if bucket["n"] else None
+	return by_kind
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-	parser = argparse.ArgumentParser(description="MEM-012 F0 — calibración del suelo de abstención")
+	parser = argparse.ArgumentParser(description="MEM-012 F0/F3 — calibración del suelo y tasa de abstención")
 	parser.add_argument("--cases", type=Path, default=CASES_DEFAULT)
 	parser.add_argument("--limit", type=int, default=3)
 	parser.add_argument("--json", type=Path, default=None)
 	args = parser.parse_args(argv)
 
 	cases = load_cases(args.cases)
+	from red_pill.config import get_config_cached
 	from red_pill.memory import MemoryManager
+
+	settings = get_config_cached()
+	floor = float(getattr(settings, "SW_RECALL_ABSTENTION_FLOOR", 0.38))
+	media = float(getattr(settings, "SW_RECALL_CONFIDENCE_MEDIA", 0.4551))
+	alta = float(getattr(settings, "SW_RECALL_CONFIDENCE_ALTA", 0.592))
 
 	manager = MemoryManager()
 	print(f"[floor] {len(cases)} casos · limit={args.limit} · camino real (hybrid=True), read-only", file=sys.stderr)
-	measured = run(manager, cases, args.limit)
-	report = {"cases": measured, "calibration": calibrate(measured), "limit": args.limit}
+	measured = run(manager, cases, args.limit, floor=floor, media=media, alta=alta)
+	rates = no_recall_rates(measured)
+	report = {"cases": measured, "calibration": calibrate(measured), "no_recall": rates, "limit": args.limit, "floor": floor}
 
 	cal = report["calibration"]
 	print("\n[floor] separación")
@@ -227,6 +276,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 	print(f"  min(positivo)={cal['min_positive_max_sim']} · max(negativo)={cal['max_negative_max_sim']} · hueco={cal['gap']}")
 	print(f"  suelo que bloquea todos los negativos: {cal['floor_full_block']}")
 	print(f"  mejor trueque: {cal['floor_best_trade']}")
+	print(f"[floor] abstención (suelo {floor}):")
+	for kind, bucket in sorted(rates.items()):
+		print(f"  {kind:<10} {bucket['no_recall']}/{bucket['n']} (tasa {bucket['rate']})")
 
 	by_collection: Dict[str, Dict[str, Any]] = {}
 	for case in measured:

@@ -640,6 +640,23 @@ async def handle_recall(arguments: Dict[str, Any]):
 		},
 	)
 
+	# MEM-012 F3: tasa + demanda. Se registra aquí (consulta explícita), no en el
+	# interceptor: el prompt automático del turno no es una pregunta del agente.
+	try:
+		from red_pill.recall_demand import record_recall
+
+		record_recall(
+			query=query,
+			collection=collection,
+			confidence=abstention["confidence"],
+			no_recall=abstention["no_recall"],
+			max_similarity=abstention["max_similarity"],
+			below_floor_count=abstention["below_floor_count"],
+			caller="mcp_recall",
+		)
+	except Exception as exc:
+		logger.debug(f"[RECALL] no se pudo registrar la demanda: {exc}")
+
 	header = f"--- [RESULTS: {collection.upper()} · confianza {abstention['confidence'].upper()} · max sim {abstention['max_similarity']:.2f}"
 	if abstention["no_recall"]:
 		header += f" · no_recall · suelo {floor:.2f}"

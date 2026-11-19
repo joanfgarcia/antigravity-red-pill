@@ -769,6 +769,11 @@ class RedPillConfig(BaseSettings):
 	SW_RECALL_ABSTENTION_FLOOR: float = 0.38
 	SW_RECALL_CONFIDENCE_MEDIA: float = 0.4551  # p10 de los positivos (F0)
 	SW_RECALL_CONFIDENCE_ALTA: float = 0.592  # p25 de los positivos (F0)
+	# MEM-012 F3: registro de demanda. Guarda la TASA (contadores) y la lista de
+	# lo que se preguntó y no estaba (solo consultas con no_recall, con secretos
+	# redactados y recortadas). Apagarlo no cambia el recall.
+	SW_RECALL_DEMAND_LOG_ENABLED: bool = True
+	SW_RECALL_DEMAND_MAX_CHARS: int = 240
 	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
 	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
 	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;

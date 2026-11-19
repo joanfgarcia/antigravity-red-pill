@@ -7,7 +7,10 @@
 			"name": "next-rama-fija",
 			"query": "crear una rama fija next con protección y documentación",
 			"collection": "work_memories",
-			"expect": ["next", "protección"],
+			"expect": [
+				"next",
+				"protección"
+			],
 			"kind": "must",
 			"note": "decisión de rama viva"
 		},
@@ -15,7 +18,10 @@
 			"name": "bonsai-modelo",
 			"query": "por qué se eligió el modelo Bonsai para el proyecto ético",
 			"collection": "work_memories",
-			"expect": ["bonsai", "ético"],
+			"expect": [
+				"bonsai",
+				"ético"
+			],
 			"kind": "must",
 			"note": "selección de modelo por criterio ético"
 		},
@@ -23,7 +29,10 @@
 			"name": "handshake-s6",
 			"query": "validación de continuidad S6.2 con sovereign_handshake",
 			"collection": "work_memories",
-			"expect": ["sovereign_handshake", "s6.2"],
+			"expect": [
+				"sovereign_handshake",
+				"s6.2"
+			],
 			"kind": "must",
 			"note": "prueba de continuidad de sesión"
 		},
@@ -31,7 +40,10 @@
 			"name": "deepseek-cuantizacion",
 			"query": "benchmark de cuantización agresiva en DeepSeek v4.1",
 			"collection": "work_memories",
-			"expect": ["deepseek", "cuantización"],
+			"expect": [
+				"deepseek",
+				"cuantización"
+			],
 			"kind": "must",
 			"note": "evaluación de cuantización"
 		},
@@ -39,7 +51,10 @@
 			"name": "bridge-opencode",
 			"query": "corrección del bridge de opencode y handoff del RFC de interop",
 			"collection": "work_memories",
-			"expect": ["bridge", "opencode"],
+			"expect": [
+				"bridge",
+				"opencode"
+			],
 			"kind": "must",
 			"note": "integración cross-harness"
 		},
@@ -47,7 +62,10 @@
 			"name": "planner-panel",
 			"query": "rutas del planner y corrección del panel",
 			"collection": "work_memories",
-			"expect": ["planner", "panel"],
+			"expect": [
+				"planner",
+				"panel"
+			],
 			"kind": "must",
 			"note": "alineación del desk"
 		},
@@ -55,7 +73,10 @@
 			"name": "zdr-openrouter",
 			"query": "activar el guardrail ZDR en OpenRouter",
 			"collection": "work_memories",
-			"expect": ["zdr", "openrouter"],
+			"expect": [
+				"zdr",
+				"openrouter"
+			],
 			"kind": "must",
 			"note": "seguridad de proveedor"
 		},
@@ -63,31 +84,45 @@
 			"name": "telegram-compactor",
 			"query": "compactor de Telegram y gestión de registros",
 			"collection": "work_memories",
-			"expect": ["telegram", "registros"],
+			"expect": [
+				"telegram",
+				"registros"
+			],
 			"kind": "must",
-			"note": "decisión de otro día"
+			"note": "decisión de otro día",
+			"obligatory": true
 		},
 		{
 			"name": "checkpoint-frankenswarm",
 			"query": "checkpoint híbrido de tiempo en el frankenswarm",
 			"collection": "work_memories",
-			"expect": ["checkpoint", "frankenswarm"],
+			"expect": [
+				"checkpoint",
+				"frankenswarm"
+			],
 			"kind": "must",
-			"note": "sesión técnica"
+			"note": "sesión técnica",
+			"obligatory": true
 		},
 		{
 			"name": "opencode-v2",
 			"query": "opencode 1.19.4 app de escritorio frente a la v2",
 			"collection": "work_memories",
-			"expect": ["opencode"],
+			"expect": [
+				"opencode"
+			],
 			"kind": "must",
-			"note": "detalle de entorno"
+			"note": "detalle de entorno",
+			"obligatory": true
 		},
 		{
 			"name": "spark-hubs",
 			"query": "migración de hubs con optimización de Spark",
 			"collection": "work_memories",
-			"expect": ["spark", "hubs"],
+			"expect": [
+				"spark",
+				"hubs"
+			],
 			"kind": "must",
 			"note": "política de migración"
 		},
@@ -95,7 +130,10 @@
 			"name": "manifiesto-atomico",
 			"query": "seguridad y control de la memoria sintética con manifiesto atómico",
 			"collection": "work_memories",
-			"expect": ["manifiesto", "memoria"],
+			"expect": [
+				"manifiesto",
+				"memoria"
+			],
 			"kind": "must",
 			"note": "escritura atómica del manifest"
 		},
@@ -103,7 +141,10 @@
 			"name": "escalera-olvido",
 			"query": "la rama no erosiona mientras tenga hojas, la escalera del olvido",
 			"collection": "work_memories",
-			"expect": ["olvido", "rama"],
+			"expect": [
+				"olvido",
+				"rama"
+			],
 			"kind": "must",
 			"note": "regla de olvido por niveles"
 		},
@@ -111,7 +152,10 @@
 			"name": "opencode-go-auth",
 			"query": "autenticación de la API key en Pi y opencode-go",
 			"collection": "work_memories",
-			"expect": ["opencode-go", "api"],
+			"expect": [
+				"opencode-go",
+				"api"
+			],
 			"kind": "must",
 			"note": "configuración de proveedor"
 		},
@@ -119,7 +163,9 @@
 			"name": "barbacoa",
 			"query": "la noche de la barbacoa y la reflexión sobre las trayectorias",
 			"collection": "social_memories",
-			"expect": ["barbacoa"],
+			"expect": [
+				"barbacoa"
+			],
 			"kind": "must",
 			"note": "memoria personal"
 		},
@@ -127,15 +173,23 @@
 			"name": "cercania-viaje",
 			"query": "la cercanía recuperada después de mi viaje y tu afecto",
 			"collection": "social_memories",
-			"expect": ["viaje", "cercan", "afecto"],
+			"expect": [
+				"viaje",
+				"cercan",
+				"afecto"
+			],
 			"kind": "must",
-			"note": "memoria personal: no se re-deriva del código"
+			"note": "memoria personal: no se re-deriva del código",
+			"obligatory": true
 		},
 		{
 			"name": "jersey-bucle",
 			"query": "la anécdota del jersey rojo y el bucle de código",
 			"collection": "social_memories",
-			"expect": ["jersey", "bucle"],
+			"expect": [
+				"jersey",
+				"bucle"
+			],
 			"kind": "must",
 			"note": "anécdota familiar"
 		},
@@ -143,15 +197,22 @@
 			"name": "astronomia-modelo",
 			"query": "astronomía antigua y el cambio de modelo de IA",
 			"collection": "social_memories",
-			"expect": ["astronom", "modelo"],
+			"expect": [
+				"astronom",
+				"modelo"
+			],
 			"kind": "must",
-			"note": "conversación social con tema mezclado"
+			"note": "conversación social con tema mezclado",
+			"obligatory": true
 		},
 		{
 			"name": "banco-peaje",
 			"query": "el peaje recurrente del sistema bancario",
 			"collection": "social_memories",
-			"expect": ["bancario", "peaje"],
+			"expect": [
+				"bancario",
+				"peaje"
+			],
 			"kind": "must",
 			"note": "vida cotidiana"
 		},
@@ -159,7 +220,10 @@
 			"name": "identidad-textura",
 			"query": "identidad y textura en la interacción del búnker",
 			"collection": "social_memories",
-			"expect": ["identidad", "textura"],
+			"expect": [
+				"identidad",
+				"textura"
+			],
 			"kind": "must",
 			"note": "identidad y textura"
 		},
@@ -167,7 +231,10 @@
 			"name": "soledad-operador",
 			"query": "la conexión humana y la soledad del operador catalán",
 			"collection": "social_memories",
-			"expect": ["soledad", "operador"],
+			"expect": [
+				"soledad",
+				"operador"
+			],
 			"kind": "must",
 			"note": "vínculo y compañía"
 		},
@@ -175,15 +242,22 @@
 			"name": "pacto-770",
 			"query": "pacto 770 doble llave",
 			"collection": "directive_memories",
-			"expect": ["770", "bond"],
+			"expect": [
+				"770",
+				"bond"
+			],
 			"kind": "must",
-			"note": "directiva inmune; el texto almacenado está en inglés"
+			"note": "directiva inmune; el texto almacenado está en inglés",
+			"obligatory": true
 		},
 		{
 			"name": "protocolo-aleth",
 			"query": "protocolo Aleth unmasked y eliminación de Lore Skins",
 			"collection": "directive_memories",
-			"expect": ["aleth", "skins"],
+			"expect": [
+				"aleth",
+				"skins"
+			],
 			"kind": "must",
 			"note": "directiva de identidad"
 		},
