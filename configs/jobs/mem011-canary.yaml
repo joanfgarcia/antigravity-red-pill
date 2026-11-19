@@ -1,0 +1,24 @@
+# MEM-011 · canario de partes por polaroid (F5, paso 1).
+#
+# Tres sesiones grandes, una por step (`element_job`). El flag se enciende SOLO
+# dentro del proceso del step (`scripts/mem011_canary.py`), así que el resto del
+# sistema sigue con `SW_HUB_POLAROID_ENABLED=false`.
+#
+# Deja fuera a propósito la sesión de 1.670 miembros (59 partes, 40 oversized):
+# será el último paso cuando el canario esté verificado.
+#
+# Lanzar:  red-pill job submit --recipe mem011-canary --kick
+# Ver:     red-pill job status <id> · red-pill job logs <id> --tail 50
+source: element_job
+title: "MEM-011 canario — partes por polaroid (3 sesiones)"
+priority: 6
+step_command: .venv/bin/python scripts/mem011_canary.py
+elements:
+  - { session: "opencode:ses_e7ea995c6ffeqcxuZKqwz2DXih", collection: work_memories }  # 302 miembros · 18 partes
+  - { session: "opencode:ses_e6522bb5fffe4bTB5MfyeGzU7G", collection: work_memories }  # 441 miembros · 22 partes · 4 oversized
+  - { session: "opencode:ses_e9a8212e5ffeaR6EnnTcdZC8d1", collection: work_memories }  # 222 miembros · 15 partes
+skip_exit_code: 75
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 45
