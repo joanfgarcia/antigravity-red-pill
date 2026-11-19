@@ -25,7 +25,11 @@ tasks:
     # refine/distill era un apaño de AD-030). Requerida por las
     # recetas memento_annotate_rebuild / memento_probe.
     temperature: 0.1
-    max_tokens: 1024
+    # 2048, no 1024 (2026-11-19, E-97e9d2): con 1024 el array de notas de K2 v3
+    # se corta a medias (finish_reason=length) y la sesión sale con 0 notas. La
+    # curación viva ya subió a 2048 el 2026-10-30; este seed se quedó atrás y un
+    # install nuevo reproducía el truncado.
+    max_tokens: 2048
     thinking: 'off'
     models:
     - profile: granite_8b
