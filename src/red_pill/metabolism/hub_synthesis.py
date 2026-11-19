@@ -1455,12 +1455,32 @@ def _hub_compactor(target_chars: int) -> Optional[Callable[[str], str]]:
 
 
 def resynthesize_session(memory_manager: Any, collection: str, session_id: str, force: bool = True) -> str:
-	"""Re-sintetiza el hub de UNA sesión (map-reduce). Devuelve written|skipped|failed."""
-	from red_pill.metabolism.distiller import derive_hub_affect, synthesize_hub_v2
+	"""Re-sintetiza el hub de UNA sesión (map-reduce). Devuelve written|skipped|failed.
+
+	MEM-011: con `SW_HUB_POLAROID_ENABLED` encendido delega en `synthesize_parts`
+	(el mismo camino que el sueño). Sin esto, la re-síntesis escribía una raíz
+	monolítica e ignoraba las partes; peor: si ya existían, `_synthesize_one`
+	re-parentaba todas las hojas a la raíz y **aplanaba el árbol** (auditoría
+	MEM-011 F-2). El flag OFF mantiene el comportamiento de siempre.
+	"""
+	from red_pill.metabolism.distiller import derive_hub_affect, hub_budget, synthesize_hub_v2
 
 	members = _load_session_members(memory_manager, collection, session_id)
 	if len(members) < HUB_MIN_SESSION_MEMBERS:
 		return "skipped"
+	if bool(getattr(cfg, "SW_HUB_POLAROID_ENABLED", False)):
+		from red_pill.metabolism.hub_parts import synthesize_parts
+
+		return synthesize_parts(
+			memory_manager,
+			collection,
+			session_id,
+			members,
+			synthesize_hub_v2,
+			derive_hub_affect,
+			budget=hub_budget(),
+			force=force,
+		)
 	return _synthesize_one(memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force)
 
 

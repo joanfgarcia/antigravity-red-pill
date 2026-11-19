@@ -110,3 +110,47 @@ def test_parte_con_varias_hojas_sintetiza_una_vez(polaroids):
 	hub_parts.synthesize_parts(memory, "work_memories", "work:ses_mem011", members, synth, lambda c: ("neutral", 0.5), budget=500)
 	# 2 partes (la 1 junta dos hojas) + raíz = 3 llamadas
 	assert synth.call_count == 3
+
+
+def test_la_resintesis_honra_el_flag_de_polaroids(monkeypatch):
+	"""`resynthesize_session` debe usar `synthesize_parts` con el flag ON.
+
+	Sin esto escribía una raíz monolítica e ignoraba las partes; y si ya existían,
+	re-parentaba todas las hojas a la raíz (aplanado, auditoría F-2).
+	"""
+	from red_pill.config import get_config
+	from red_pill.metabolism import hub_synthesis
+
+	cfg = get_config()
+	monkeypatch.setattr(cfg, "SW_HUB_POLAROID_ENABLED", True, raising=False)
+	monkeypatch.setattr(hub_synthesis, "_load_session_members", lambda *_a, **_k: [("m1", {"content": "a"}), ("m2", {"content": "b"})])
+	calls = {"parts": 0, "mono": 0}
+
+	def fake_parts(*_a, **_k):
+		calls["parts"] += 1
+		return "written"
+
+	def fake_mono(*_a, **_k):
+		calls["mono"] += 1
+		return "written"
+
+	monkeypatch.setattr(hub_parts, "synthesize_parts", fake_parts)
+	monkeypatch.setattr(hub_synthesis, "_synthesize_one", fake_mono)
+
+	assert hub_synthesis.resynthesize_session(MagicMock(), "work_memories", "work:ses_mem011") == "written"
+	assert calls == {"parts": 1, "mono": 0}
+
+
+def test_la_resintesis_con_el_flag_apagado_sigue_siendo_monolitica(monkeypatch):
+	from red_pill.config import get_config
+	from red_pill.metabolism import hub_synthesis
+
+	cfg = get_config()
+	monkeypatch.setattr(cfg, "SW_HUB_POLAROID_ENABLED", False, raising=False)
+	monkeypatch.setattr(hub_synthesis, "_load_session_members", lambda *_a, **_k: [("m1", {"content": "a"}), ("m2", {"content": "b"})])
+	calls = {"parts": 0, "mono": 0}
+	monkeypatch.setattr(hub_parts, "synthesize_parts", lambda *_a, **_k: calls.__setitem__("parts", calls["parts"] + 1) or "written")
+	monkeypatch.setattr(hub_synthesis, "_synthesize_one", lambda *_a, **_k: calls.__setitem__("mono", calls["mono"] + 1) or "written")
+
+	assert hub_synthesis.resynthesize_session(MagicMock(), "work_memories", "work:ses_mem011") == "written"
+	assert calls == {"parts": 0, "mono": 1}
