@@ -658,6 +658,32 @@ def _strip_code_fence(text: str) -> str:
 	return m.group(1) if m else text
 
 
+class TruncatedResponseError(RuntimeError):
+	"""JSON abierto: el modelo se cortó a mitad de generar el array.
+
+	`finish_reason=length` deja la respuesta sin cierre; el parser no puede
+	distinguir "el modelo no encontró ideas" de "se quedó sin presupuesto". Antes
+	se degradaba a lista vacía y el pase de annotate podaba las notas previas y
+	sellaba la sesión con 0 notas (E-e03edb, 2026-11-19). Un corte es un fallo
+	del pase, no un resultado.
+	"""
+
+
+def unclosed_json_array(text: str) -> bool:
+	"""True si el texto abre un array JSON que no cierra (respuesta truncada).
+
+	Un `[]` válido cierra y no dispara: la lista vacía legítima sigue siendo un
+	resultado. Solo cuenta el desbalance de corchetes desde el primer `[`.
+	"""
+	stripped = _strip_code_fence(text or "")
+	start = stripped.find("[")
+	if start < 0:
+		return False
+	body = stripped[start:]
+	return body.count("]") < body.count("[")
+
+
+
 def _extract_json_array(text: str) -> Optional[List[Dict[str, Any]]]:
 	"""Refine multi-idea (§5.4.2): extrae el primer array JSON del texto (puede ser vacío).
 

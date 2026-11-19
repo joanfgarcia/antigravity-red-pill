@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 _SCORE_BATCH = 20
 
 
+def _ideas_or_raise(raw: str, prompt_id: str) -> List[Dict[str, Any]]:
+	"""Parsea el array de ideas; un JSON abierto es un CORTE, no una lista vacía.
+
+	E-e03edb (2026-11-19): con `finish_reason=length` el array llega sin cerrar,
+	`_extract_json_array` devolvía None y el pase seguía con 0 ideas: podaba las
+	notas previas de la sesión y la sellaba. Levantar aquí corta el pase antes de
+	tocar disco (annotate escribe poda y `_meta` al final) y el runner lo cuenta
+	como fallo, no como sesión anotada.
+	"""
+	ideas = runtime._extract_json_array(raw)
+	if ideas is None and runtime.unclosed_json_array(raw):
+		raise runtime.TruncatedResponseError(
+			f"respuesta truncada en {prompt_id}: array JSON sin cerrar (finish_reason=length) — se aborta el pase sin podar notas."
+			f" Revisar presupuesto/razonamiento de la task annotate (max_tokens y thinking: el modelo puede gastarlo pensando)."
+		)
+	return ideas or []
+
+
 def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]:
 	ideas: List[Dict[str, Any]] = []
 	# 2026-10-30: la variante la dicta el modelo juez (perfil → annotate_prompt_set).
@@ -33,7 +51,7 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 		static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
 		prompt = prompts.render(combined, static=static, fragment=content)
 		raw = transport(prompts.system(combined) or "", prompt, runtime.annotate_max_tokens())
-		for idea in runtime._extract_json_array(raw) or []:
+		for idea in _ideas_or_raise(raw, combined):
 			materialized = _idea_from_row(idea)
 			if materialized is None:
 				continue
@@ -50,7 +68,7 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	for prompt_id in prompt_ids:
 		prompt = prompts.render(prompt_id, static=static, fragment=content)
 		raw = transport(prompts.system(prompt_id) or "", prompt, runtime.annotate_max_tokens())
-		for idea in runtime._extract_json_array(raw) or []:
+		for idea in _ideas_or_raise(raw, prompt_id):
 			materialized = _idea_from_row(idea)
 			if materialized is None:
 				continue
