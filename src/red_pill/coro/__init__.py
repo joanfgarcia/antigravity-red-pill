@@ -128,6 +128,14 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 			"description": "Naturaleza del valor: now caduca en días, seed aguanta semanas.",
 		},
 		"expects_reply": {"type": "boolean", "description": "Si esperas respuesta (default: true solo en ask)."},
+		"interrupt": {
+			"type": "boolean",
+			"description": (
+				"Solo rol orquestador: `steer` en vez de `queue` — entra en el turno vivo del destino "
+				"para corregirlo o pararlo. Por defecto el mensaje se ENCOLA y se lee al abrir turno. "
+				"Si no hay cuerpo o no se puede interrumpir, cae al buzón normal (no se pierde)."
+			),
+		},
 		"thread_id": {"type": "string", "description": "Hilo existente (opcional; se hereda de reply_to)."},
 	},
 	"inbox": {

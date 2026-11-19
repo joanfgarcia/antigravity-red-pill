@@ -30,7 +30,7 @@ TABLA DE HONESTIDAD (por arnés)
 -------------------------------
 | arnés | punto de inyección | cómo | degradación |
 |---|---|---|---|
-| `opencode` | SÍ | `POST /api/session/<id>/prompt` con `metadata.displayText` (sonda previa; fallback `opencode run --session`) | `stale_leg`/pull |
+| `opencode` | SÍ | `POST /api/session/<id>/prompt` con `metadata.displayText` y `delivery=queue` explícito (sonda previa; fallback `opencode run --session`) | `stale_leg`/pull |
 | `claude_code` | SÍ | socket NDJSON de la sesión | pull si no hay socket |
 | `pi` | NO (aquí) | resume headless | pull |
 | `telegram` | NO (aquí) | bandeja fuera del repo | pull + señal |
@@ -386,6 +386,7 @@ def deliver_events(
 	holder: str = "delivery",
 	now: Optional[float] = None,
 	event_id: Optional[str] = None,
+	delivery_mode: str = "queue",
 ) -> dict:
 	"""Empuja al cuerpo vivo los eventos del alma que aún no tienen recibo.
 
@@ -453,7 +454,7 @@ def deliver_events(
 			continue
 		text = build_event_nudge(ev)
 		try:
-			ok = bool(soul_notify.notify_soul(soul, text, originator=leg))
+			ok = bool(soul_notify.notify_soul(soul, text, originator=leg, delivery=delivery_mode))
 		except Exception as e:
 			logger.warning(f"[delivery] transporte lanzó excepción en {ev_id[:12]}: {e}")
 			ok = False

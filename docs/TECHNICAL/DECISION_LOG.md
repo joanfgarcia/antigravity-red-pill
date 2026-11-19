@@ -3957,3 +3957,75 @@ las salvó. De `opencode`, 926; `antigravity`, 206; `memory_queue`, 186.
 **Consequences**: ninguna sesión de Memento queda sin fuente para re-sintetizar. Un IDE
 que purga ya no puede vaciar memoria: su copia vive en Memento. Las 17 reconstruidas son
 públicas y auditables (`grep -rl reconstructed.md memento/`).
+
+## [AD-124] Un mensaje encola; interrumpir es del orquestador
+**Date**: 2026-11-19
+**Status**: ACCEPTED & IMPLEMENTED (rama `next` → `feat/coro-queue-default`).
+
+**Context**: al revisar cómo se hablan las sesiones, el Operador detectó dos derivas
+opuestas. En el código, `soul_notify._deliver_opencode_prompt` posteaba a
+`/api/session/<id>/prompt` **sin** `delivery`; opencode 2.3.x interpreta la ausencia como
+`steer` (`delivery ?? "steer"`, medido en el binario), así que cada aviso del coro entraba
+en el turno vivo de la hermana y podía cambiarle el rumbo. Y en la práctica, mensajes que
+debían llegar a un prompt acababan esperando en `MinionInbox`, donde solo se ven si alguien
+hace `check_minion_inbox`.
+
+**Decision**:
+- **`queue` explícito por defecto**: todo aviso del coro y del Job Manager viaja con
+  `delivery="queue"` — se admite en el inbox del arnés y se entrega al abrir el siguiente
+  turno. No interrumpe nada. La única degradación es el fallback `opencode run --session`
+  cuando la API no responde (no admite `delivery`): perder el aviso sería peor.
+- **`steer` es del orquestador, no del emisor**: `coro_api.send` acepta `interrupt: true`;
+  el servidor lo concede solo si el cuerpo llamante está registrado con
+  `role=orchestrator` (canal de confianza, no el payload). Se entrega por el mismo
+  adaptador con `delivery="steer"`, y si no hay cuerpo vivo o el transporte no puede, el
+  mensaje **cae al buzón normal**: no poder interrumpir nunca significa perder la carta.
+- **`park` no interrumpe** (no despierta): pedirlo es un error de uso.
+- Se respeta la política de entrada del destino (`refuse`/`hold`): un orquestador puede
+  corregir el rumbo, no forzar la entrada de quien dijo que no.
+- **Canal correcto**: para hablar con otra alma se usa `coro_api.send` (llega al prompt);
+  el `MinionInbox` es el informe durable de minions/jobs, no una bandeja de mensajería.
+
+**Evidence**: `payload["delivery"] == "queue"` fijado en `TestPresentacionPlegada`; tests
+de `TestInterrupcion` (rol task rechazado, `park` rechazado, orquestador entrega `steer`,
+degradación al buzón sin cuerpo); 146 passed en `test_soul_notify` + `test_coro_api` +
+`test_event_delivery` + `test_coro_mailbox` + `test_coro_notify`.
+
+**Consequences**: una hermana ya no ve su turno reescrito por un aviso. La interrupción
+tiene un único dueño identificable y auditado (`modo=steer` en la respuesta de `send`), y
+sigue sin ser un verbo del protocolo: es un permiso del servidor sobre el transporte.
+
+## [AD-125] El turno no se espera: los minions en background despiertan a su alma
+**Date**: 2026-11-19
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: el aviso de fin de job existía (`_report_job` → `coro.notify.publish_notice`),
+pero dos caminos de background se saltaban el contrato: `run_agent_task`
+(`async_mode=true`) y `search_memory_research` (Oracle) depositaban el reporte en
+`MinionInbox` **sin** `continuity_id`, así que nadie se enteraba salvo que hiciera
+`check_minion_inbox`. Resultado: para esperar algo había que quedarse en el turno
+con `sleep`/polling — justo lo que el job manager existe para evitar.
+
+**Decision**:
+- `run_agent_task` y `search_memory_research` resuelven la identidad por el canal de
+  confianza (`_caller_session`, con `caller_leg` opcional para workspaces con varias
+  sesiones) y pasan `continuity_id`/`originator` al `drop_report`: el hook del inbox
+  publica el `notify` al alma. El resultado sigue estando en `MinionInbox` y en
+  `result.json`; el aviso es un resumen de ≤800 chars, no el informe.
+- El aviso es `queue` (AD-124): si el alma está ocupada espera al siguiente turno.
+- El auto-aviso **no** se hace con `send(to=<misma alma>)` (el servicio lo rechaza):
+  va por el camino job/notify, que además deja rastro durable.
+- Patrón para "esperar sin esperar": un `script_job` cuyo `step_command` espera la
+  condición (`sleep`, `while ! curl …`) con `control.max_step_minutes`; el `notify`
+  llega al cumplirse. No hay `sleep` dentro del turno.
+- Ambos caminos se documentan en el skill `coro` §5 (y `wake-callback` sigue siendo
+  la referencia de los jobs).
+
+**Evidence**: `TestAvisoDeTareasEnBackground` (run_agent_task y Oracle pasan
+`continuity_id`/`originator` al `drop_report`); suite `test_mcp_server.py` 88 passed
+(3 fallos preexistentes de handshake por sesiones vivas en el workspace, también en
+`next` sin este cambio).
+
+**Consequences**: lanzar y olvidarse es real en todos los caminos de background: el
+reporte queda en el inbox y el alma recibe un aviso encolado. Ninguna espera activa
+en el turno tiene excusa.

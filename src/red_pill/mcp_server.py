@@ -339,6 +339,10 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 				"type": "string",
 				"description": "Optional. Restrict search to a specific collection (e.g. 'work_memories', 'social_memories', 'directive_memories'). Default: searches work_memories + social_memories.",
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": "Solo si hay varias sesiones en el workspace: el `leg=` de tu tag `<session …/>`, para que el aviso de fin de research llegue a tu alma.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -351,6 +355,9 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	query = arguments["query"]
 	collection = arguments.get("collection")
 	collections = [collection] if collection else None  # None → OracleMinion default
+	ident = await _caller_session({"caller_leg": arguments.get("caller_leg")})
+	owner = str(ident.get("continuity_id") or "").strip() or None
+	owner_leg = str(ident.get("originator") or "").strip() or None
 
 	async def _run_bg():
 		try:
@@ -365,7 +372,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
 			def _deliver_report():
-				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="OracleMinion",
+					status=res.status,
+					content=content,
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 				if res.status != "success":
 					SovereignNotifier.notify_os("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 
@@ -377,7 +391,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
-				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {err_msg}")
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="OracleMinion",
+					status="crashed",
+					content=f"Exception: {err_msg}",
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 				SovereignNotifier.notify_os("Oracle Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
@@ -392,7 +413,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	description=(
 		"Run a single agentic task through an agent backend (claude/agy/opencode/local/local-tools/pi) and return the result. "
 		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
-		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox AND notifies the caller's soul (queue: read at the next turn, no interrupt); "
 		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
 	),
 	schema={
@@ -412,6 +433,10 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 				"description": "True (default): result to Minion Inbox. False: wait and return inline.",
 				"default": True,
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": "Solo si hay varias sesiones en el workspace: el `leg=` de tu tag `<session …/>`, para que el aviso de fin de tarea llegue a tu alma.",
+			},
 		},
 		"required": ["prompt"],
 	},
@@ -430,6 +455,12 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 		"timeout": int(arguments.get("timeout", 600)),
 	}
 	async_mode = arguments.get("async_mode", True)
+	# El aviso de fin de tarea es parte del contrato: sin alma, el reporte queda
+	# en el MinionInbox y solo se ve si alguien hace `check_minion_inbox` (el
+	# patrón "nadie lo abre"). La identidad sale del canal de confianza.
+	ident = await _caller_session({"caller_leg": arguments.get("caller_leg")})
+	owner = str(ident.get("continuity_id") or "").strip() or None
+	owner_leg = str(ident.get("originator") or "").strip() or None
 
 	def _summarize(res) -> str:
 		if res.status == "success":
@@ -451,7 +482,14 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 			content = _summarize(res)
 
 			def _deliver():
-				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status=res.status, content=content)
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="AgentRunner",
+					status=res.status,
+					content=content,
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 
 			await asyncio.to_thread(_deliver)
 		except Exception as e:
@@ -460,7 +498,14 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 
 			def _deliver_err():
-				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status="crashed", content=f"Exception: {err_msg}")
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="AgentRunner",
+					status="crashed",
+					content=f"Exception: {err_msg}",
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 
 			await asyncio.to_thread(_deliver_err)
 

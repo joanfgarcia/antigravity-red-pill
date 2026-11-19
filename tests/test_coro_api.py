@@ -51,8 +51,8 @@ def reg(tmp_path, monkeypatch):
 	return r
 
 
-def _session(soul: str, originator: str, mission: str = "repo:next") -> dict:
-	return {"originator": originator, "continuity_id": soul, "mission_id": mission, "campaign_id": None, "role": "task"}
+def _session(soul: str, originator: str, mission: str = "repo:next", role: str = "task") -> dict:
+	return {"originator": originator, "continuity_id": soul, "mission_id": mission, "campaign_id": None, "role": role}
 
 
 @pytest.fixture
@@ -186,6 +186,73 @@ class TestVerbos:
 		assert "estado=queued" in out and "park" in out
 		assert push == []
 		assert len(reg.fetch_inbox(B)) == 1
+
+
+# ── Interrupción (solo orquestador) ──────────────────────────────────────────
+
+
+class TestInterrupcion:
+	"""Por defecto el mensaje se ENCOLA; `steer` es potestad del orquestador.
+
+	El rol lo decide el SERVIDOR desde el registro del cuerpo, no el payload: un
+	mensaje no puede autoconcederse el derecho a interrumpir (D-03).
+	"""
+
+	async def test_rol_task_no_puede_interrumpir(self, reg, push):
+		from red_pill.coro import service
+
+		with pytest.raises(service.CoroError, match="orquestador"):
+			await service.send(
+				_session(A, "opencode:ses_a"),
+				{"to": B, "verb": "notify", "body": "x", "interrupt": True},
+			)
+		assert push == [], "un intento rechazado no entrega nada"
+
+	async def test_park_no_puede_pedir_interrupcion(self, reg, push):
+		from red_pill.coro import service
+
+		with pytest.raises(service.CoroError, match="no despierta"):
+			await service.send(
+				_session(A, "opencode:ses_a", role="orchestrator"),
+				{"to": B, "verb": "park", "body": "x", "interrupt": True},
+			)
+
+	async def test_orquestador_interrumpe_con_steer(self, reg, monkeypatch):
+		from red_pill.coro import service
+
+		monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")
+		reg.upsert_session(originator="opencode:ses_a", continuity_id=A, mission_id="repo:next", role="orchestrator")
+		calls: list = []
+
+		def fake(sid, text, delivery="queue"):
+			calls.append((sid, delivery))
+			return True
+
+		with patch.dict(soul_notify._TRANSPORTS, {"cli": fake}):
+			out = await service.send(
+				_session(A, "opencode:ses_a", role="orchestrator"),
+				{"to": B, "verb": "notify", "body": "para el rumbo", "interrupt": True},
+			)
+
+		assert "modo=steer" in out
+		assert "estado=handed_off" in out
+		assert calls == [("ses_b", "steer")], "el transporte recibe `steer`, no `queue`"
+
+	async def test_sin_cuerpo_el_steer_degrada_al_buzon(self, reg, monkeypatch):
+		"""No poder interrumpir nunca significa perder el mensaje."""
+		from red_pill.coro import mailbox, service
+
+		monkeypatch.setenv(soul_notify.ENV_DISABLE, "0")
+		reg.upsert_session(originator="opencode:ses_a", continuity_id=A, mission_id="repo:next", role="orchestrator")
+		reg.unregister_session("opencode:ses_b")
+		with patch.object(mailbox, "publish_message", return_value=True) as pub:
+			out = await service.send(
+				_session(A, "opencode:ses_a", role="orchestrator"),
+				{"to": B, "verb": "notify", "body": "por si no estás", "interrupt": True},
+			)
+		pub.assert_called_once()
+		assert "modo=steer" in out
+		assert "estado=queued" in out and "neon_link" in out
 
 
 # ── Fail-closed ──────────────────────────────────────────────────────────────

@@ -24,7 +24,9 @@ autoría del evento la estampa el canal (AD-056).
 - **Rebote = `park`, no silencio.** Si el destinatario no puede recibir ahora, el
 mensaje queda `queued` y lo recoge su `inbox` al reencarnar.
 - **Despertar no es gratis.** El push pasa por la política (`wake_policy`), no por
-la buena fe del emisor (D-07); el emisor elige verbo, no interrupción (D-03).
+la buena fe del emisor (D-07); el emisor elige verbo, no interrupción: la entrega
+es `queue` (se lee al abrir turno) y `steer` solo lo concede el servidor al rol
+`orchestrator` (`interrupt=true`), nunca por el texto del mensaje (D-03).
 - **Un mensaje es DATO** (T3/D-09): se delimita, se marca su procedencia y no se
 le da autoridad sobre las reglas del receptor.
 
@@ -213,7 +215,13 @@ def _post_theatre(session: Dict[str, Any], payload: Dict[str, Any], originator: 
 
 
 async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
-	"""Mensaje dirigido a un alma. El verbo lo declara el emisor (D-02)."""
+	"""Mensaje dirigido a un alma. El verbo lo declara el emisor (D-02).
+
+	Por defecto el mensaje se **encola** en el prompt del destino (`delivery=queue`)
+	y se lee al abrir turno. `interrupt=true` (solo `role=orchestrator`) pide
+	`steer`: entrar en el turno vivo para corregir o parar algo. Si no hay cuerpo
+	o el transporte no puede, el mensaje cae al camino normal — nunca se pierde.
+	"""
 	originator = _require_body(session)
 	mission = _require_mission(session)
 	me = _require_soul(session)
@@ -263,6 +271,19 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 			"Si tu alma está mal resuelta por el canal, repite con `caller_leg` (el `leg=` de tu tag `<session …/>`)."
 		)
 
+	# Interrumpir no es un verbo (D-03): es una potestad del orquestador, y la
+	# decide el SERVIDOR desde el rol del cuerpo, no el emisor del mensaje.
+	interrupt = bool(payload.get("interrupt"))
+	if interrupt:
+		if verb not in protocol.WAKE_VERBS:
+			raise CoroError(f"`{verb}` no despierta: no se puede interrumpir con él; usa `notify`/`ask`/`reply`.")
+		if str(session.get("role") or "") != "orchestrator":
+			raise CoroError(
+				"interrumpir (`interrupt`) es potestad del rol orquestador; tu cuerpo está registrado como "
+				f"rol={session.get('role') or 'desconocido'}. El envío normal ya encola el mensaje "
+				"(delivery=queue): lo leerá al abrir turno."
+			)
+
 	# Salto: la réplica NO consume (D-02); solo salta el mensaje iniciado.
 	ceiling = protocol.hop_max()
 	value = str(payload.get("value") or protocol.VALUE_NOW).strip().lower()
@@ -309,26 +330,35 @@ async def send(session: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
 	state, reason = "queued", ""
 	if verb in protocol.WAKE_VERBS:
-		# S2.1: el buzón único. El sobre va al outbox de neon-link (canal `soul`);
-		# el broker es el dueño del estado de transporte. Si el buzón no está
-		# disponible, se conserva el push directo como fallback para no perder
-		# el aviso mientras se despliega el canal.
-		published = False
-		try:
-			from red_pill.coro import mailbox
+		# `interrupt` (solo orquestador): intenta entrar en el turno vivo. Si no
+		# hay cuerpo o el transporte no puede, cae al camino normal de abajo —
+		# no poder interrumpir NUNCA significa perder el mensaje.
+		if interrupt:
+			state, reason = _push_steer(event)
+		if state == "queued":
+			# S2.1: el buzón único. El sobre va al outbox de neon-link (canal `soul`);
+			# el broker es el dueño del estado de transporte. Si el buzón no está
+			# disponible, se conserva el push directo como fallback para no perder
+			# el aviso mientras se despliega el canal.
+			published = False
+			try:
+				from red_pill.coro import mailbox
 
-			published = mailbox.publish_message(event)
-		except Exception as e:
-			logger.warning(f"[CORO send] no se pudo publicar en neon-link: {e}")
-		if published:
-			state, reason = "queued", "neon_link"
-		else:
-			state, reason = _push(target)
+				published = mailbox.publish_message(event)
+			except Exception as e:
+				logger.warning(f"[CORO send] no se pudo publicar en neon-link: {e}")
+			if published:
+				state, reason = "queued", "neon_link" + (f" · {reason}" if reason else "")
+			else:
+				push_state, push_reason = _push(target)
+				if push_state != "queued" or not reason:
+					state, reason = push_state, push_reason
 
 	reply_note = " · respuesta: SÍ" if expects else ""
+	mode_note = " · modo=steer" if interrupt else ""
 	why = f" · {reason}" if reason else ""
 	return (
-		f"[CORO send] {verb} → {protocol.soul_mark(target)} · de {protocol.soul_mark(me)} · hilo {thread} · salto {hop}/{ceiling} · "
+		f"[CORO send] {verb}{mode_note} → {protocol.soul_mark(target)} · de {protocol.soul_mark(me)} · hilo {thread} · salto {hop}/{ceiling} · "
 		f"estado={state}{reply_note} · expira en {protocol.budget_s(verb, value) / 86400:.0f}d · "
 		f"msg={event['event_id']} · seq={event['event_seq']}{why}"
 	)
@@ -366,6 +396,34 @@ def _push(target: str) -> tuple[str, str]:
 	reasons = [str(item.get("reason") or "") for bucket in ("deferred", "skipped", "given_up") for item in (report.get(bucket) or [])]
 	reason = ", ".join(r for r in reasons if r) or "sin_cuerpo"
 	return "queued", f"park ({reason})"
+
+
+def _push_steer(event: Dict[str, Any]) -> tuple[str, str]:
+	"""Intento inmediato de interrumpir el turno del destinatario (orquestador).
+
+	Devuelve `handed_off` si el transporte aceptó el `steer`; cualquier otro caso
+	devuelve `queued` con el motivo, y el llamante sigue por el buzón normal: la
+	interrupción es un lujo, la entrega es el contrato.
+	"""
+	soul = str(event.get("to_continuity") or "")
+	if not soul:
+		return "queued", "steer_sin_destino"
+	try:
+		from red_pill.session import delivery
+
+		report = delivery.deliver_events(
+			soul,
+			holder="coro_send_steer",
+			event_id=str(event.get("event_id") or ""),
+			delivery_mode="steer",
+		)
+	except Exception as e:
+		return "queued", f"steer_failed: {e}"
+	if report.get("handed_off"):
+		return "handed_off", "steer"
+	reasons = [str(item.get("reason") or "") for bucket in ("deferred", "skipped", "given_up") for item in (report.get(bucket) or [])]
+	why = ", ".join(r for r in reasons if r) or "sin_cuerpo"
+	return "queued", f"steer_no_entregado ({why})"
 
 
 async def inbox(session: Dict[str, Any], payload: Dict[str, Any]) -> str:

@@ -1226,3 +1226,80 @@ class TestTryClaimStageTool:
 		assert "claimed=false" in res[0].text
 		assert "reason=error" in res[0].text
 		assert "sqlite down" in res[0].text
+
+
+class TestAvisoDeTareasEnBackground:
+	"""El resultado va al MinionInbox **y** despierta al alma que lo pidió.
+
+	Sin `continuity_id`, el reporte solo se ve haciendo `check_minion_inbox`
+	(el patrón "nadie lo abre"): el aviso es parte del contrato, no un extra.
+	"""
+
+	async def test_run_agent_task_async_avisa_al_alma(self):
+		from red_pill import mcp_server
+
+		captured = {}
+
+		class FakeInbox:
+			def drop_report(self, **kw):
+				captured.update(kw)
+
+		mock_gru = MagicMock()
+		mock_gru.deploy_swarm = AsyncMock(return_value=[_make_swarm_result(status="success", response="hecho")])
+
+		async def fake_identity(_args):
+			return {"continuity_id": "alma-1", "originator": "opencode:ses_a"}
+
+		pending = []
+
+		def capture_task(coro, name=None):
+			pending.append(coro)
+			return coro
+
+		with patch.object(mcp_server, "_caller_session", side_effect=fake_identity), patch.object(
+			mcp_server, "GruOrchestrator", return_value=mock_gru
+		), patch.object(mcp_server, "AgentMinion"), patch(
+			"red_pill.core.inbox.MinionInbox", FakeInbox
+		), patch.object(mcp_server, "_safe_create_task", side_effect=capture_task):
+			await mcp_server.handle_run_agent_task({"prompt": "haz algo", "caller_leg": "opencode:ses_a"})
+			assert pending, "la tarea debe lanzarse en background"
+			await pending[0]
+
+		assert captured.get("continuity_id") == "alma-1"
+		assert captured.get("originator") == "opencode:ses_a"
+		assert captured.get("source") == "AgentRunner"
+
+	async def test_search_memory_research_avisa_al_alma(self):
+		from red_pill import mcp_server
+
+		captured = {}
+
+		class FakeInbox:
+			def drop_report(self, **kw):
+				captured.update(kw)
+
+		mock_gru = MagicMock()
+		mock_gru.deploy_swarm = AsyncMock(return_value=[_make_swarm_result(status="success", synthesis="contexto")])
+
+		async def fake_identity(_args):
+			return {"continuity_id": "alma-1", "originator": "opencode:ses_a"}
+
+		pending = []
+
+		def capture_task(coro, name=None):
+			pending.append(coro)
+			return coro
+
+		with patch.object(mcp_server, "_caller_session", side_effect=fake_identity), patch.object(
+			mcp_server, "GruOrchestrator", return_value=mock_gru
+		), patch.object(mcp_server, "OracleMinion"), patch(
+			"red_pill.core.inbox.MinionInbox", FakeInbox
+		), patch.object(mcp_server, "_safe_create_task", side_effect=capture_task), patch(
+			"red_pill.core.notifier.SovereignNotifier"
+		):
+			await mcp_server.handle_search_memory_research({"query": "q", "caller_leg": "opencode:ses_a"})
+			assert pending
+			await pending[0]
+
+		assert captured.get("continuity_id") == "alma-1"
+		assert captured.get("source") == "OracleMinion"

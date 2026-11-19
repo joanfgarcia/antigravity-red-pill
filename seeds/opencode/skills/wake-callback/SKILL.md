@@ -17,6 +17,9 @@ description: >-
 > **Regla de oro:** un trabajo que dura más que tu turno va al **Job Manager**,
 > nunca a un `nohup`/`&`. El Job Manager ya sabe avisar al alma; este skill es
 > el contrato para hacerlo en una sola llamada.
+>
+> Para el **canal** de los avisos y el presupuesto (cola por defecto, hop 2) y
+> para despertarte a ti misma sin `sleep`/polling, skill hermano `coro`.
 
 ## 1. Comando o CI (un paso)
 
