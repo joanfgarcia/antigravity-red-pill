@@ -88,3 +88,33 @@ async def test_recall_action_dispatches():
 	mock_manager.search_and_reinforce.assert_called_once()
 	_, kwargs = mock_manager.search_and_reinforce.call_args
 	assert kwargs.get("hybrid") is True  # hot-path policy = scored hybrid recall (RFC-002 §4.7.1)
+
+
+async def test_recall_marca_no_recall_y_solo_materializa_la_banda_si_se_pide():
+	"""MEM-012 F2: D-AB-03 (no oculta) + D-AB-04 (la puerta es explícita)."""
+	low = MagicMock()
+	low.id = "low-1"
+	low.score = 0.21
+	low.payload = {"content": "recuerdo flojo", "reinforcement_score": 1.2, "color": "gray", "intensity": 1.0}
+	mock_manager = MagicMock()
+	mock_manager.search_and_reinforce.return_value = [low]
+
+	with patch("red_pill.memory.MemoryManager", return_value=mock_manager):
+		abstained = await registry.execute(
+			"bunker_memory_api",
+			{"action": "recall", "payload": {"query": "receta de paella", "collection": "work", "limit": 2}},
+		)
+		inspected = await registry.execute(
+			"bunker_memory_api",
+			{"action": "recall", "payload": {"query": "receta de paella", "collection": "work", "limit": 2, "include_below_floor": True}},
+		)
+
+	text = abstained[0].text
+	assert "no_recall" in text
+	assert "INSUFICIENTE" in text
+	assert "candidato(s) por debajo" in text
+	assert "recuerdo flojo" not in text, "por defecto la banda no se materializa"
+
+	text_below = inspected[0].text
+	assert "recuerdo flojo" in text_below
+	assert "insuficiente" in text_below, "la banda baja viaja marcada (inspección)"

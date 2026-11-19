@@ -570,6 +570,14 @@ def _hub_pointer(payload: Dict[str, Any]) -> str:
 				"type": "boolean",
 				"description": "Deep recall (bypass the reinforcement floor). Default: false; DEEP_RECALL_TRIGGERS auto-enable it.",
 			},
+			"include_below_floor": {
+				"type": "boolean",
+				"description": (
+					"Inspección (MEM-012, D-AB-04): materializa la banda por debajo del suelo, "
+					"marcada `insuficiente`. Por defecto solo viaja `below_floor_count`. "
+					"El suelo decide qué se inyecta, nunca qué existe."
+				),
+			},
 		},
 		"required": ["query"],
 	},
@@ -579,12 +587,13 @@ async def handle_recall(arguments: Dict[str, Any]):
 
 	from red_pill.cli import get_collection
 	from red_pill.memory import MemoryManager
-	from red_pill.recall_abstention import confidence, is_below_floor, max_similarity
+	from red_pill.recall_abstention import build_abstention
 
 	query = arguments["query"]
 	collection = get_collection(arguments.get("collection", "work"))
 	limit = int(arguments.get("limit", 3))
 	deep = bool(arguments.get("deep", False))
+	include_below = bool(arguments.get("include_below_floor", False))
 
 	def _run() -> List[Any]:
 		return MemoryManager().search_and_reinforce(collection, query, limit=limit, deep_recall=deep, caller="mcp_recall", hybrid=True)
@@ -594,42 +603,83 @@ async def handle_recall(arguments: Dict[str, Any]):
 		results = await asyncio.to_thread(_run)
 	except Exception as e:
 		logger.error(f"recall failed: {e}", exc_info=True)
-		return [types.TextContent(type="text", text=f"[RED PILL ERROR] recall failed: {e}")]
+		# I-05: la ausencia de dato no es un «no lo sé» positivo.
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[RED PILL ERROR] recall failed: {e}\n"
+					"[no_recall] confianza insuficiente (el motor no respondió). "
+					"Alternativas: memento_fulltext, replantear, ampliar."
+				),
+			)
+		]
 
-	header = f"--- [RESULTS: {collection.upper()}] ---"
-	if not results:
-		return [types.TextContent(type="text", text=f"{header}\n(no results in the Búnker)")]
-
-	# MEM-012 F1: la consulta viaja con su SIMILITUD y una confianza categórica.
-	# Antes solo se veía `reinforcement_score`, que es utilidad, no relevancia.
 	floor = float(getattr(cfg, "SW_RECALL_ABSTENTION_FLOOR", 0.38))
-	max_sim = max_similarity(results)
-	conf = confidence(
-		max_sim,
+	anchors: List[str] = []
+	try:
+		from red_pill.memento.hybrid import salient_terms
+
+		anchors = [str(term) for term in salient_terms(query, max_terms=8)]
+	except Exception:
+		anchors = []
+	# MEM-012 F2: el objeto `no_recall` se construye sobre la SIMILITUD (F1) y se
+	# aplica al PRESENTAR, nunca al recuperar (I-06): la recuperación no trunca.
+	abstention = build_abstention(
+		results,
+		collection=collection,
 		floor=floor,
 		media=float(getattr(cfg, "SW_RECALL_CONFIDENCE_MEDIA", 0.4551)),
 		alta=float(getattr(cfg, "SW_RECALL_CONFIDENCE_ALTA", 0.592)),
+		include_below_floor=include_below,
+		exempt=collection == "directive_memories",
+		searched={
+			"collection": collection,
+			"strategy": "hybrid+deep" if deep else "hybrid",
+			"anchors": anchors,
+		},
 	)
-	header = f"--- [RESULTS: {collection.upper()} · confianza {conf.upper()} · max sim {max_sim:.2f}"
-	if is_below_floor(max_sim, floor):
-		header += f" · bajo el suelo {floor:.2f}"
+
+	header = f"--- [RESULTS: {collection.upper()} · confianza {abstention['confidence'].upper()} · max sim {abstention['max_similarity']:.2f}"
+	if abstention["no_recall"]:
+		header += f" · no_recall · suelo {floor:.2f}"
 	header += "] ---"
 
 	lines = [header]
+	if abstention["no_recall"]:
+		alternatives = ", ".join(abstention["alternatives"]) or "-"
+		lines.append(
+			f"[no_recall] ninguna memoria alcanza el suelo {floor:.2f}; "
+			f"{abstention['below_floor_count']} candidato(s) por debajo. "
+			f"Alternativas: {alternatives}. "
+			"Pide include_below_floor=true para inspeccionarlos."
+		)
+	elif abstention["alternatives"]:
+		lines.append(f"[confianza {abstention['confidence']}] si no es esto: {', '.join(abstention['alternatives'])}")
+
+	above_ids = {row["id"] for row in abstention["hits"]}
+	below_ids = {row["id"] for row in abstention.get("below_floor", [])}
 	for hit in results:
+		hit_id = str(getattr(hit, "id", ""))
+		if hit_id not in above_ids and hit_id not in below_ids:
+			continue
 		payload = getattr(hit, "payload", {}) or {}
 		score = payload.get("reinforcement_score", 0.0)
 		sim = float(getattr(hit, "score", 0.0) or 0.0)
 		color = str(payload.get("color", "gray")).upper()
 		intensity = payload.get("intensity", 1.0)
-		if payload.get("immune"):
+		if payload.get("immune") or collection == "directive_memories":
 			status = f" [IMMUNE · sim {sim:.2f}]"
 		else:
 			status = f" (sim {sim:.2f} · util {float(score):.2f})"
+		if hit_id in below_ids:
+			status += " · insuficiente"
 		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
-		pointer = _hub_pointer({**payload, "_point_id": str(getattr(hit, "id", ""))})
+		pointer = _hub_pointer({**payload, "_point_id": hit_id})
 		if pointer:
 			lines.append(pointer)
+	if not results:
+		lines.append("(sin resultados en el Búnker)")
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
