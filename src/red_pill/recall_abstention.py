@@ -92,16 +92,29 @@ def alternatives_for(confidence_level: str) -> list:
 
 
 def search_memento_hint(query: str, anchors: Sequence[str] = (), max_chars: int = 120) -> str:
-	"""La oferta accionable de F4: `search_memento` con un literal, sin ejecutarla.
+	"""La oferta accionable de F4: `search_memento` con UN término, sin ejecutarla.
 
-	Memento busca texto literal, así que se prefieren las anclas de la consulta
-	(los términos salientes) al enunciado completo; si no hay anclas, se usa la
-	consulta. Se recorta para que la oferta no inunde la respuesta.
+	`search_memento` trata la consulta como regex (rg) o como literal (fallback
+	python). Una alternación (`a|b`) funcionaría en rg y se rompería en el
+	fallback; una frase de anclas unidas por espacios solo acertaría si aparece
+	verbatim. Por eso se ofrece **el término más distintivo** (el más largo), que
+	se comporta igual en los dos motores. Sin anclas, se elige el término más
+	largo de la consulta.
+
+	El hint es una sugerencia de una línea: el llamante puede cambiarla.
 	"""
 	terms = [str(term).strip() for term in anchors if str(term).strip()]
-	literal = " ".join(terms) if terms else " ".join(str(query or "").split())
+	if not terms:
+		terms = [word.strip(".,;:!?()[]{}\"'") for word in str(query or "").split()]
+	terms = [term for term in terms if len(term) >= 3]
+	if terms:
+		literal = max(terms, key=lambda term: (len(term), term))
+	else:
+		literal = " ".join(str(query or "").split())
 	literal = " ".join(literal.split())[: max(1, max_chars)]
-	return f'search_memento(query="{literal}")'
+	import re
+
+	return f'search_memento(query="{re.escape(literal)}")'
 
 
 def passes_injection(

@@ -121,8 +121,11 @@ def test_la_inyeccion_nunca_es_mas_laxa_que_el_suelo():
 
 
 def test_la_oferta_de_memento_es_accionable_y_no_se_ejecuta_sola():
-	assert search_memento_hint("la receta de paella", ["paella", "marisco"]) == 'search_memento(query="paella marisco")'
-	assert search_memento_hint("  Rocky   la  cobaya ") == 'search_memento(query="Rocky la cobaya")'
+	# Un solo término distintivo: se comporta igual en rg y en el fallback literal.
+	assert search_memento_hint("la receta de paella", ["paella", "marisco"]) == 'search_memento(query="marisco")'
+	assert search_memento_hint("  Rocky   la  cobaya ") == 'search_memento(query="cobaya")'
+	# Si el término lleva metacaracteres, se escapa: la búsqueda es literal.
+	assert search_memento_hint("", ["c++"]) == 'search_memento(query="c\\+\\+")'
 	hint = search_memento_hint("x" * 500, max_chars=50)
 	assert hint.startswith("search_memento(query=")
 	assert len(hint) <= len('search_memento(query="")') + 50
