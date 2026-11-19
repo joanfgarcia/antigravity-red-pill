@@ -1,0 +1,18 @@
+# MEM-011 · reintento de UNA sesión que falló el canario (objetivo de resumen 800).
+#
+# Historial: la 222 falló en la parte 8 con `summary 1097 > hard limit 1000` y
+# PASÓ con objetivo 800 (job 39a14b1e, 15/15 partes). Esta receta reintenta la
+# 441 (22 partes, 4 oversized), la última que queda del canario.
+#
+# El flag de polaroids se enciende solo dentro del step (`scripts/mem011_canary.py`).
+source: element_job
+title: "MEM-011 reintento — 441 miembros con objetivo 800"
+priority: 6
+step_command: .venv/bin/python scripts/mem011_canary.py
+elements:
+  - { session: "opencode:ses_e6522bb5fffe4bTB5MfyeGzU7G", collection: work_memories }
+skip_exit_code: 75
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 90
