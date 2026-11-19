@@ -50,6 +50,12 @@ def pending_agentic(
 	gate_pipeline: Optional[Dict[str, Any]] = None
 	if root is not None and bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)):
 		annotate_version = runtime.annotate_prompt_version()
+	# E-97e9d2: con el flag OFF no existe la fase de notas (refine legacy necesita
+	# las secciones de la corrida, no material previo). Devolver targets aquí solo
+	# servía para que el pase los "procesara" sin escribir una nota.
+	if phase == "annotate" and not bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)):
+		logger.warning("[phase annotate] MEMENTO_ANNOTATE_FROM_RAW=false: sin sesiones que anotar.")
+		return []
 	if root is not None and bool(getattr(cfg, "MEMENTO_ANNOTATE_GATE", False)):
 		from red_pill.memento import gating
 
@@ -208,6 +214,10 @@ def run_agentic(
 	polaroids ya están al día. Si faltan, la sesión se salta y se cuenta en
 	`stats["skipped_distill"]` (en producción el DAG ya encadena annotate
 	detrás de distill, así que es una red de seguridad, no el camino).
+	EXIGE `MEMENTO_ANNOTATE_FROM_RAW` ON: la fase no tiene sustituto legacy
+	(refine necesita las secciones destiladas en la MISMA corrida, o sea
+	`phase=None`). Con el flag OFF se saltan las sesiones y se cuentan en
+	`stats["skipped_annotate_disabled"]` sin tocar disco (E-97e9d2, 2026-11-19).
 	- `phase=None`: comportamiento histórico, por sesión. Se conserva para el
 	fan-out por sesión (`--target`) y para los tests existentes.
 
@@ -224,11 +234,33 @@ def run_agentic(
 
 	min_significance = float(getattr(cfg, "MEMENTO_REFINE_MIN_SIGNIFICANCE", 0.3))
 	gate_threshold = float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE", 0.5))
-	# RULE 4: lectura única del flag annotate (MEM-006). OFF → refine legacy.
+	# RULE 4: lectura única del flag annotate (MEM-006). OFF → refine legacy
+	# (solo válido en `phase=None`; ver guarda de la fase de notas abajo).
 	use_annotate = bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False))
 	if use_annotate:
 		from .annotate import annotate_session
 	stats = {"processed": 0, "failed": 0, "would_ingest": 0, "static_ascended": 0}
+	# E-97e9d2 (2026-11-19): la fase de notas con el flag OFF no tenía material.
+	# `sections` solo existe si ESTA corrida destiló (`phase in (None, "distill")`),
+	# así que el camino legacy acababa en `refine_session(sections=[])`: refine
+	# vacía `refine/*.md` antes de iterar las secciones y después no escribe nada
+	# → el pase borraba notas previas, sellaba `significance: 0.0` y marcaba la
+	# sesión como anotada (`annotate_pending: False`), sin log de descarte. Se
+	# salta en bloque, sin tocar el disco, y se declara en las stats.
+	if phase == "annotate" and not use_annotate:
+		stats["skipped_annotate_disabled"] = len(targets)
+		stats["aborted_annotate_disabled"] = True
+		logger.error(
+			f"[phase annotate] MEMENTO_ANNOTATE_FROM_RAW=false: la fase de notas no tiene "
+			f"sustituto legacy (refine exige las secciones de esta misma corrida) — "
+			f"{len(targets)} sesión(es) saltadas sin escribir ni sellar nada. Encender el flag "
+			f"o correr el pase histórico (sin --phase)."
+		)
+		# Una línea por sesión: el error de arriba explica el porqué UNA vez; esto deja
+		# en el log qué sesiones concretas quedaron sin notas.
+		for _source, session_id in targets:
+			logger.info(f"[phase annotate] {session_id}: saltada (MEMENTO_ANNOTATE_FROM_RAW=false) — disco intacto")
+		return stats
 	# Umbral de deferral por LLM caído (2026-09-08): si N sesiones consecutivas
 	# fallan por conexión al LLM local, el recurso no está disponible y esto NO
 	# es un error del trabajo — abortar para que el runner lo difiera y lo

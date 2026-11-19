@@ -109,7 +109,7 @@ def main() -> None:
 		"--phase",
 		choices=("distill", "annotate"),
 		default=None,
-		help="Ejecutar SOLO una fase del pase (2026-10-30). Cada fase puede servirse de un modelo distinto (task distill / annotate): intercaladas por sesión cuestan DOS cambios de modelo por sesión; por fases, dos por corrida. Sin este flag, el pase hace las dos por sesión (comportamiento histórico).",
+		help="Ejecutar SOLO una fase del pase (2026-10-30). Cada fase puede servirse de un modelo distinto (task distill / annotate): intercaladas por sesión cuestan DOS cambios de modelo por sesión; por fases, dos por corrida. Sin este flag, el pase hace las dos por sesión (comportamiento histórico). `annotate` exige MEMENTO_ANNOTATE_FROM_RAW=true (con OFF no hay fase de notas; se rechaza en arranque).",
 	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	parser.add_argument(
@@ -123,6 +123,17 @@ def main() -> None:
 	from red_pill.memento import get_memento_root
 	from red_pill.memento.agentic import http_transport, llm_available, pending_agentic, run_agentic
 	from red_pill.memento.registry import MementoRegistry
+
+	# E-97e9d2 (2026-11-19): la fase de notas ES la rama annotate; con el flag OFF
+	# no hay nada que correr (refine legacy exige destilar en la misma corrida).
+	# Antes el proceso arrancaba, "procesaba" cada sesión sin escribir nota y sin
+	# fallar — un nocturno podía completar el ciclo entero sin producir memoria.
+	if args.phase == "annotate" and not bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)):
+		parser.error(
+			"--phase annotate requiere MEMENTO_ANNOTATE_FROM_RAW=true: con OFF no hay fase de "
+			"notas (refine legacy solo corre sin --phase, con las secciones destiladas en la "
+			"misma corrida)."
+		)
 
 	registry = MementoRegistry()
 	if args.shadow_report:
@@ -186,6 +197,7 @@ def main() -> None:
 	logger.info(
 		f"Agentic pass complete [{args.phase or 'both'}]: {stats['processed']} session(s) processed, "
 		f"{stats.get('skipped_distill', 0)} skipped (sin polaroids), "
+		f"{stats.get('skipped_annotate_disabled', 0)} skipped (annotate con flag OFF), "
 		f"{stats['failed']} failed, shadow would-ingest {stats['would_ingest']}/{stats['processed']}, "
 		f"static ascensions {stats.get('static_ascended', 0)}."
 	)
