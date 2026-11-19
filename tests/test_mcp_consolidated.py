@@ -81,7 +81,10 @@ async def test_recall_action_dispatches():
 	text = result[0].text
 	assert "WORK_MEMORIES" in text  # alias 'work' resolved to the collection
 	assert "engrama de prueba" in text
-	assert "Score: 0.87" in text
+	# MEM-012 F1: la línea separa similitud (relevancia) de utilidad (score bayesiano).
+	assert "util 0.87" in text
+	assert "sim " in text
+	assert "confianza ALTA" in text
 	mock_manager.search_and_reinforce.assert_called_once()
 	_, kwargs = mock_manager.search_and_reinforce.call_args
 	assert kwargs.get("hybrid") is True  # hot-path policy = scored hybrid recall (RFC-002 §4.7.1)

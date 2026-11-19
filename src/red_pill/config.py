@@ -759,6 +759,16 @@ class RedPillConfig(BaseSettings):
 	# Enrutado por hoja (2026-11-17): busca en todo el espacio, agrega cada hoja a
 	# su raíz y devuelve la RAÍZ con la mejor evidencia. Default OFF.
 	SW_RECALL_LEAF_ROUTING_ENABLED: bool = False
+	# ── MEM-012 · abstención (D-AB-01/D-AB-05) ──────────────────────────────
+	# La señal es la SIMILITUD del hit (`hit.score`), nunca `reinforcement_score`
+	# (utilidad). D-AB-05 (Operador, 2026-11-18): suelo 0,38 medido sobre la
+	# ventana de inyección top-3 (banda válida 0,3453-0,4073; bloquea 12/12
+	# negativos sin suprimir positivos). Las bandas de confianza salen de la
+	# muestra de F0: p10 y p25 de los positivos. Cambiar un corte es
+	# configuración, no lógica.
+	SW_RECALL_ABSTENTION_FLOOR: float = 0.38
+	SW_RECALL_CONFIDENCE_MEDIA: float = 0.4551  # p10 de los positivos (F0)
+	SW_RECALL_CONFIDENCE_ALTA: float = 0.592  # p25 de los positivos (F0)
 	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
 	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
 	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;

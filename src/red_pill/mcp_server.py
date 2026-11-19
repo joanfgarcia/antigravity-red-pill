@@ -579,6 +579,7 @@ async def handle_recall(arguments: Dict[str, Any]):
 
 	from red_pill.cli import get_collection
 	from red_pill.memory import MemoryManager
+	from red_pill.recall_abstention import confidence, is_below_floor, max_similarity
 
 	query = arguments["query"]
 	collection = get_collection(arguments.get("collection", "work"))
@@ -598,13 +599,33 @@ async def handle_recall(arguments: Dict[str, Any]):
 	header = f"--- [RESULTS: {collection.upper()}] ---"
 	if not results:
 		return [types.TextContent(type="text", text=f"{header}\n(no results in the Búnker)")]
+
+	# MEM-012 F1: la consulta viaja con su SIMILITUD y una confianza categórica.
+	# Antes solo se veía `reinforcement_score`, que es utilidad, no relevancia.
+	floor = float(getattr(cfg, "SW_RECALL_ABSTENTION_FLOOR", 0.38))
+	max_sim = max_similarity(results)
+	conf = confidence(
+		max_sim,
+		floor=floor,
+		media=float(getattr(cfg, "SW_RECALL_CONFIDENCE_MEDIA", 0.4551)),
+		alta=float(getattr(cfg, "SW_RECALL_CONFIDENCE_ALTA", 0.592)),
+	)
+	header = f"--- [RESULTS: {collection.upper()} · confianza {conf.upper()} · max sim {max_sim:.2f}"
+	if is_below_floor(max_sim, floor):
+		header += f" · bajo el suelo {floor:.2f}"
+	header += "] ---"
+
 	lines = [header]
 	for hit in results:
 		payload = getattr(hit, "payload", {}) or {}
 		score = payload.get("reinforcement_score", 0.0)
+		sim = float(getattr(hit, "score", 0.0) or 0.0)
 		color = str(payload.get("color", "gray")).upper()
 		intensity = payload.get("intensity", 1.0)
-		status = " [IMMUNE]" if payload.get("immune") else f" (Score: {float(score):.2f})"
+		if payload.get("immune"):
+			status = f" [IMMUNE · sim {sim:.2f}]"
+		else:
+			status = f" (sim {sim:.2f} · util {float(score):.2f})"
 		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
 		pointer = _hub_pointer({**payload, "_point_id": str(getattr(hit, "id", ""))})
 		if pointer:
