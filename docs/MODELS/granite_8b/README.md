@@ -104,6 +104,23 @@ Pendiente de mayor retorno para auditar bake-offs: registrar el modelo **por fas
 (map/reduce/master) en vez de un único nombre — hoy el campo solo existe para el
 camino grande, y un nombre único mentiría por simplificación.
 
+## Observaciones (comportamiento, no specs)
+
+> Medidas, no intuiciones. Sirven para **parametrizar prompts**; no son knobs.
+
+- **No respeta estrictamente el límite de longitud que se le pide.** Medido el
+  2026-11-19 en el canario MEM-011 (Q4_K_M, carril CPU, muestreo no greedy): con
+  objetivo 900 y tope duro 1000 escribió resúmenes de **1048 y 1097 chars**
+  (16-22 % sobre el objetivo, 5-10 % sobre el tope) y el hub se rechazó.
+  **Fix**: objetivo **800** (`SLEEP_HUB_SUMMARY_TARGET_CHARS`, `790fbb7`),
+  confirmado el 2026-11-20 en una sesión de 222 miembros: **15/15 partes**, raíz
+  con 15 miembros, sin saltos (job `39a14b1e`, 55 min en CPU). El tope duro no
+  cambió.
+  **Para prompts futuros**: pedir con margen (~20 %), nunca al filo; validar o
+  reintentar en vez de asumir que cumple.
+- **No confundir con truncación** (`finish_reason=length`): este fallo es por
+  **exceso** de longitud, no por corte del proveedor.
+
 ## Licencia
 
 | Campo | Valor |
