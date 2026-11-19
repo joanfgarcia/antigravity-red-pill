@@ -632,7 +632,7 @@ async def handle_recall(arguments: Dict[str, Any]):
 
 	from red_pill.cli import get_collection
 	from red_pill.memory import MemoryManager
-	from red_pill.recall_abstention import build_abstention
+	from red_pill.recall_abstention import build_abstention, search_memento_hint
 
 	query = arguments["query"]
 	collection = get_collection(arguments.get("collection", "work"))
@@ -708,16 +708,23 @@ async def handle_recall(arguments: Dict[str, Any]):
 	header += "] ---"
 
 	lines = [header]
+
+	def _render_alternative(name: str) -> str:
+		# F4: la oferta de Memento es accionable (acción + literal), nunca automática.
+		if name == "memento_fulltext":
+			return f"memento_fulltext → {search_memento_hint(query, anchors)}"
+		return name
+
+	rendered = ", ".join(_render_alternative(name) for name in abstention["alternatives"]) or "-"
 	if abstention["no_recall"]:
-		alternatives = ", ".join(abstention["alternatives"]) or "-"
 		lines.append(
 			f"[no_recall] ninguna memoria alcanza el suelo {floor:.2f}; "
 			f"{abstention['below_floor_count']} candidato(s) por debajo. "
-			f"Alternativas: {alternatives}. "
+			f"Alternativas (no se ejecutan solas): {rendered}. "
 			"Pide include_below_floor=true para inspeccionarlos."
 		)
 	elif abstention["alternatives"]:
-		lines.append(f"[confianza {abstention['confidence']}] si no es esto: {', '.join(abstention['alternatives'])}")
+		lines.append(f"[confianza {abstention['confidence']}] si no es esto: {rendered}")
 
 	above_ids = {row["id"] for row in abstention["hits"]}
 	below_ids = {row["id"] for row in abstention.get("below_floor", [])}

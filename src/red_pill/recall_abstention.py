@@ -21,7 +21,7 @@ para etiquetar la consulta; F2 lo usará para construir `no_recall`.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Sequence
 
 INSUFFICIENT = "insuficiente"
 LOW = "baja"
@@ -89,6 +89,19 @@ def alternatives_for(confidence_level: str) -> list:
 	if confidence_level == LOW:
 		return ["memento_fulltext", "ampliar"]
 	return []
+
+
+def search_memento_hint(query: str, anchors: Sequence[str] = (), max_chars: int = 120) -> str:
+	"""La oferta accionable de F4: `search_memento` con un literal, sin ejecutarla.
+
+	Memento busca texto literal, así que se prefieren las anclas de la consulta
+	(los términos salientes) al enunciado completo; si no hay anclas, se usa la
+	consulta. Se recorta para que la oferta no inunde la respuesta.
+	"""
+	terms = [str(term).strip() for term in anchors if str(term).strip()]
+	literal = " ".join(terms) if terms else " ".join(str(query or "").split())
+	literal = " ".join(literal.split())[: max(1, max_chars)]
+	return f'search_memento(query="{literal}")'
 
 
 def passes_injection(

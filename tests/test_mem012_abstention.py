@@ -19,6 +19,7 @@ from red_pill.recall_abstention import (
 	alternatives_for,
 	build_abstention,
 	passes_injection,
+	search_memento_hint,
 )
 
 
@@ -117,3 +118,11 @@ def test_la_inyeccion_nunca_es_mas_laxa_que_el_suelo():
 	assert passes_injection(0.10, floor=0.38, intent_threshold=0.0, immune=True) is True
 	# C-07: apagado el suelo y la intención, puerta abierta (incluso con similitud negativa).
 	assert passes_injection(-0.02, floor=0.0, intent_threshold=0.0) is True
+
+
+def test_la_oferta_de_memento_es_accionable_y_no_se_ejecuta_sola():
+	assert search_memento_hint("la receta de paella", ["paella", "marisco"]) == 'search_memento(query="paella marisco")'
+	assert search_memento_hint("  Rocky   la  cobaya ") == 'search_memento(query="Rocky la cobaya")'
+	hint = search_memento_hint("x" * 500, max_chars=50)
+	assert hint.startswith("search_memento(query=")
+	assert len(hint) <= len('search_memento(query="")') + 50

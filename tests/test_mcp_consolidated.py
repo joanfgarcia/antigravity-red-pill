@@ -71,7 +71,10 @@ async def test_recall_action_dispatches():
 	mock_manager = MagicMock()
 	mock_manager.search_and_reinforce.return_value = [hit]
 
-	with patch("red_pill.memory.MemoryManager", return_value=mock_manager):
+	with (
+		patch("red_pill.memory.MemoryManager", return_value=mock_manager),
+		patch("red_pill.recall_demand.record_recall", return_value=False),
+	):
 		result = await registry.execute(
 			"bunker_memory_api",
 			{"action": "recall", "payload": {"query": "prueba", "collection": "work", "limit": 2}},
@@ -99,7 +102,10 @@ async def test_recall_marca_no_recall_y_solo_materializa_la_banda_si_se_pide():
 	mock_manager = MagicMock()
 	mock_manager.search_and_reinforce.return_value = [low]
 
-	with patch("red_pill.memory.MemoryManager", return_value=mock_manager):
+	with (
+		patch("red_pill.memory.MemoryManager", return_value=mock_manager),
+		patch("red_pill.recall_demand.record_recall", return_value=False),
+	):
 		abstained = await registry.execute(
 			"bunker_memory_api",
 			{"action": "recall", "payload": {"query": "receta de paella", "collection": "work", "limit": 2}},
@@ -113,8 +119,34 @@ async def test_recall_marca_no_recall_y_solo_materializa_la_banda_si_se_pide():
 	assert "no_recall" in text
 	assert "INSUFICIENTE" in text
 	assert "candidato(s) por debajo" in text
+	assert "search_memento(query=" in text, "F4: la oferta de Memento es accionable"
+	assert "no se ejecutan solas" in text
 	assert "recuerdo flojo" not in text, "por defecto la banda no se materializa"
 
 	text_below = inspected[0].text
 	assert "recuerdo flojo" in text_below
 	assert "insuficiente" in text_below, "la banda baja viaja marcada (inspección)"
+
+
+async def test_recall_de_confianza_baja_ofrece_memento_sin_ejecutarlo():
+	"""F4: también en `baja` la oferta es accionable, y el hit sigue saliendo."""
+	hit = MagicMock()
+	hit.id = "rocky-1"
+	hit.score = 0.3971
+	hit.payload = {"content": "la escena de Rocky", "reinforcement_score": 3.0, "color": "gray", "intensity": 1.0}
+	mock_manager = MagicMock()
+	mock_manager.search_and_reinforce.return_value = [hit]
+
+	with (
+		patch("red_pill.memory.MemoryManager", return_value=mock_manager),
+		patch("red_pill.recall_demand.record_recall", return_value=False),
+	):
+		result = await registry.execute(
+			"bunker_memory_api",
+			{"action": "recall", "payload": {"query": "Rocky la cobaya rescatada", "collection": "social", "limit": 2}},
+		)
+
+	text = result[0].text
+	assert "confianza BAJA" in text
+	assert "la escena de Rocky" in text
+	assert "search_memento(query=" in text
