@@ -28,7 +28,9 @@ USO
 	uv run python scripts/memento_ascend.py                              # asciende
 	uv run python scripts/memento_ascend.py --replace-legacy --dry-run   # informe de sustitución
 	uv run python scripts/memento_ascend.py --replace-legacy             # sustituye + asciende
-	Job: configs/jobs/memento_ascend_post_rebuild.yaml
+	uv run python scripts/memento_ascend.py --reconcile                  # asciende + limpia huérfanos
+	uv run python scripts/memento_ascend.py --reconcile-only             # solo limpia huérfanos (etapa nocturna)
+	Job: configs/jobs/memento_ascend_post_rebuild.yaml · etapa `memento-reconcile` del chronicle
 """
 
 from __future__ import annotations
@@ -181,9 +183,21 @@ def main() -> None:
 		action="store_true",
 		help="Tras ascender, borra de Qdrant los engramas cuya nota ya no existe (re-anotación). Respeta --dry-run.",
 	)
+	parser.add_argument(
+		"--reconcile-only",
+		action="store_true",
+		help="Solo la reconciliación de huérfanos: no asciende ni sustituye. Es la etapa nocturna tras annotate.",
+	)
 	parser.add_argument("--root", default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = get_memento_root() if not args.root else args.root
+	if args.reconcile_only:
+		# Solo limpieza de versiones muertas (E-97e9d2): el ascenso ya lo hace otra
+		# etapa y volver a recorrer el árbol aquí duplicaría coste sin cambiar nada.
+		from red_pill.memento.ascension import reconcile_orphans
+
+		print(json.dumps({"reconcile": reconcile_orphans(root, dry_run=args.dry_run)}, ensure_ascii=False, indent=2))
+		return
 	if args.replace_legacy:
 		stats = replace_legacy(root, dry_run=args.dry_run)
 	else:
