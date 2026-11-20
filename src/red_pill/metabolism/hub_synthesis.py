@@ -228,6 +228,7 @@ def _record_rejection(
 	members: List[Tuple[Any, Dict[str, Any]]],
 	ihash: str,
 	reason: str,
+	detail: Optional[Dict[str, Any]] = None,
 ) -> None:
 	"""Anota en los miembros que ESTA entrada ya fue rechazada.
 
@@ -235,6 +236,12 @@ def _record_rejection(
 	pagar la síntesis — el lado seguro (no se pierde nada, solo se gasta).
 	El contador se reinicia cuando cambia el `hub_input_hash`: un miembro nuevo
 	es una entrada nueva y merece su intento.
+
+	`detail` (opcional) viaja CON el marcador: sin él, el rechazo solo dice
+	«summary_over_hard_limit» y la noche siguiente repite el mismo veredicto
+	sin poder distinguir «la compactación no llegó a correr» de «corrió N veces
+	y el maestro no bajó». El marcador es el único sitio donde ese dato
+	sobrevive: el hub no se escribe, así que no hay payload que lo guarde.
 	"""
 	prev_hash, prev_count = _rejection_marker(members)
 	count = prev_count + 1 if prev_hash == ihash else 1
@@ -242,17 +249,23 @@ def _record_rejection(
 	if not ids:
 		return
 	try:
+		payload: Dict[str, Any] = {
+			"hub_synth_reject_hash": ihash,
+			"hub_synth_reject_count": count,
+			"hub_synth_reject_reason": reason,
+			"hub_synth_reject_at": time.time(),
+		}
+		if detail:
+			payload["hub_synth_reject_detail"] = dict(detail)
 		memory_manager.client.set_payload(
 			collection_name=collection,
-			payload={
-				"hub_synth_reject_hash": ihash,
-				"hub_synth_reject_count": count,
-				"hub_synth_reject_reason": reason,
-				"hub_synth_reject_at": time.time(),
-			},
+			payload=payload,
 			points=ids,
 		)
-		logger.info(f"[HUBS] rechazo #{count} anotado en {collection}:{session_id} ({reason}).")
+		suffix = ""
+		if detail:
+			suffix = " · " + " ".join(f"{k}={v}" for k, v in detail.items())
+		logger.info(f"[HUBS] rechazo #{count} anotado en {collection}:{session_id} ({reason}){suffix}.")
 	except Exception as e:
 		logger.debug(f"[HUBS] no se pudo anotar el rechazo en {collection}:{session_id}: {e}")
 
@@ -286,16 +299,17 @@ def _synthesize_one(
 	acordada no es una herida, y su canal es INFO (con la fecha de la cita).
 	"""
 
-	def _fail(reason: str, billable: bool = False) -> str:
+	def _fail(reason: str, billable: bool = False, detail: Optional[Dict[str, Any]] = None) -> str:
 		"""Registra el fallo y, si costó una síntesis real, lo cuenta en el miembro.
 
 		`billable=True` solo para rechazos del hub YA sintetizado: el LLM corrió
-		y su veredicto no cambia si la entrada no cambia.
+		y su veredicto no cambia si la entrada no cambia. `detail` se guarda en
+		el marcador para que el reintento sepa POR QUÉ falló, no solo que falló.
 		"""
 		if failure_reasons is not None:
 			failure_reasons.append((f"{collection}:{session_id}", reason))
 		if billable:
-			_record_rejection(memory_manager, collection, session_id, members, ihash, reason)
+			_record_rejection(memory_manager, collection, session_id, members, ihash, reason, detail)
 		return "failed"
 
 	members = sort_members_chronologically(members)
@@ -403,12 +417,24 @@ def _synthesize_one(
 	# por síntesis, NO se escribe el hub: se reintenta, no se inyectan 3k chars.
 	hard_limit = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000))
 	if len(body) > hard_limit:
+		# El veredicto necesita su traza: `compaction_calls=0` significa que la
+		# compactación por síntesis no llegó a correr (nada que reintentar igual);
+		# `>0` significa que el maestro la ignoró N veces (medido 2026-11-20:
+		# 1.441 chars contra tope 1.000 tras dos intentos). Sin este dato, el
+		# marcador de rechazo solo dice «no cupo» y la noche siguiente repite.
+		detail = {
+			"chars": len(body),
+			"hard": hard_limit,
+			"compaction_calls": int(hub.get("compaction_calls") or 0),
+			"compacted": bool(hub.get("summary_compacted")),
+		}
 		logger.warning(
 			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id} "
-			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope); "
+			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope; "
+			f"compaction_calls={detail['compaction_calls']}, compacted={detail['compacted']}); "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
-		return _fail("summary_over_hard_limit", billable=True)
+		return _fail("summary_over_hard_limit", billable=True, detail=detail)
 	if hub.get("summary_lang_mismatch"):
 		logger.warning(f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; no se escribe (se reintenta con reescritura)")
 		return _fail("summary_lang_mismatch", billable=True)
