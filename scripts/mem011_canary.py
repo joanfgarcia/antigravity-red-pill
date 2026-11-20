@@ -5,11 +5,11 @@ El job lo lanza el driver `element_job` con el elemento en `RP_ELEMENT` (JSON) y
 su índice en `RP_ELEMENT_INDEX`. Este proceso:
 
 1. Enciende `SW_HUB_POLAROID_ENABLED` **solo para sí mismo** (variable de entorno
-   antes de importar red-pill). El resto del sistema sigue con el flag OFF: el
-   canario no cambia la configuración viva.
+	antes de importar red-pill). El resto del sistema sigue con el flag OFF: el
+	canario no cambia la configuración viva.
 2. Re-sintetiza la sesión con el camino real (`resynthesize_session`, force=True):
-   escribe las partes y después la raíz, con el mismo código que usará el
-   apagado nocturno.
+	escribe las partes y después la raíz, con el mismo código que usará el
+	apagado nocturno.
 3. Cuenta las partes escritas de esa sesión y devuelve veredicto.
 
 Salida: 0 si escribió; 75 (skip_exit_code del recipe) si `failed` — el driver lo

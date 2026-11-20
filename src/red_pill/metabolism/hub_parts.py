@@ -7,11 +7,11 @@ apuntando a un padre inexistente (invariante I-01).
 
 Regla (contrato MEM-011):
 - La unidad es la **polaroid** (unidad renderizada de Memento; la sesión entera si
-  no se partió).
+	no se partió).
 - Se fusionan polaroids adyacentes hasta el presupuesto; ninguna se reparte.
 - `partes = 1` ⇒ no hay partes: la raíz es el único nodo.
 - `engrama → polaroid` por el rango de líneas de `source_lines`; `→ parte` por el
-  plan. Sin LLM y sin heurística.
+	plan. Sin LLM y sin heurística.
 """
 
 from __future__ import annotations

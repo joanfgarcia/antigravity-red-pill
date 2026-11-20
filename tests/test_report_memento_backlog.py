@@ -192,5 +192,10 @@ def test_el_chronicle_cierra_con_el_contador():
 	stages = recipe["manifest"]["stages"]
 	backlog = next(s for s in stages if s["id"] == "memento-backlog")
 	assert backlog["command"].endswith("scripts/report_memento_backlog.py")
-	assert backlog["depends_on"] == ["memento-annotate"]
+	# 2026-11-20 (E-97e9d2): la reconciliación de huérfanos se inserta tras
+	# annotate y el contador pasa a depender de ella (cierra el ciclo de las
+	# notas reescritas antes de contar lo que queda).
+	reconcile = next(s for s in stages if s["id"] == "memento-reconcile")
+	assert reconcile["depends_on"] == ["memento-annotate"]
+	assert backlog["depends_on"] == ["memento-reconcile"]
 	assert backlog["on_fail"] == "warn"

@@ -9,20 +9,20 @@ mismo ranking). Este script reconstruye el experimento de forma reproducible y
 **sin escribir en el Búnker**:
 
 1. **Corpus real, árbol sintético**: copia en un Qdrant local (`:memory:`) los
-   puntos vivos con sus vectores y payloads. La única variable es la jerarquía.
+	puntos vivos con sus vectores y payloads. La única variable es la jerarquía.
 2. **Árbol**: cada sesión con ≥2 miembros se empaqueta con el plan de F1
-   (`plan_session_parts`: polaroids enteras fusionadas hasta el presupuesto) y sus
-   hojas se re-parentan a su parte (`hub_id=<parte>, hubbed=True`). La raíz
-   conserva su resumen REAL; las partes llevan un resumen **stand-in**
-   determinista (concatenación recortada por miembro). No se sintetiza con LLM a
-   propósito: 18 llamadas convertirían la medida del enrutado en una medida del
-   sintetizador. Lo que se mide aquí es el ranking, no la calidad del resumen.
+	(`plan_session_parts`: polaroids enteras fusionadas hasta el presupuesto) y sus
+	hojas se re-parentan a su parte (`hub_id=<parte>, hubbed=True`). La raíz
+	conserva su resumen REAL; las partes llevan un resumen **stand-in**
+	determinista (concatenación recortada por miembro). No se sintetiza con LLM a
+	propósito: 18 llamadas convertirían la medida del enrutado en una medida del
+	sintetizador. Lo que se mide aquí es el ranking, no la calidad del resumen.
 3. **Matriz**: `SW_RECALL_LEAF_ROUTING` ∈ {off, replace, rescue} ×
-   `SW_RECALL_LEAF_AGG` ∈ {max, mean_top3}, reconstruyendo el cliente en cada
-   pasada: el recall refuerza lo que recupera, así que sin reconstruir cada modo
-   mediría el corpus que dejó el anterior. **En `next` solo existe `off`**: el
-   enrutado por hoja se midió con este fixture y se rechazó; los modos viven en
-   la rama histórica `feat/mem011-f0`.
+	`SW_RECALL_LEAF_AGG` ∈ {max, mean_top3}, reconstruyendo el cliente en cada
+	pasada: el recall refuerza lo que recupera, así que sin reconstruir cada modo
+	mediría el corpus que dejó el anterior. **En `next` solo existe `off`**: el
+	enrutado por hoja se midió con este fixture y se rechazó; los modos viven en
+	la rama histórica `feat/mem011-f0`.
 
 Lo que el fixture SÍ prueba: que una hoja rinde a su raíz (dos saltos), que una
 parte no vuelve nunca como nodo primario (D-SH-01/I-08) y cómo cambia el puesto

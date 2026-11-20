@@ -4,10 +4,10 @@
 Lee los dos artefactos que escribe el recall al presentar:
 
 - `recall_abstention_stats.json` — recalls totales, cuántos se abstuvieron y el
-  reparto por colección y por banda de confianza. La tasa sale de aquí.
+	reparto por colección y por banda de confianza. La tasa sale de aquí.
 - `recall_demand.jsonl` — lo que se preguntó y no estaba (solo consultas con
-  `no_recall`, con secretos redactados y recortadas). Es la lista de lo que falta
-  por recordar.
+	`no_recall`, con secretos redactados y recortadas). Es la lista de lo que falta
+	por recordar.
 
 Uso:
 	python3 scripts/recall_demand.py

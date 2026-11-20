@@ -10,14 +10,14 @@ F1/F2) y no escribe nada.
 Tres decisiones que el instrumento toma y que conviene leer antes de mirar cifras:
 
 - **Se mide `max(similarity)` de los hits devueltos**, no `hits[0].score`: con
-  hybrid + MMR + boost el top-1 fusionado no es el de mayor similitud (auditoría
-  MEM-011 F-5). La diferencia entre `top1` y `max_sim` se reporta.
+	hybrid + MMR + boost el top-1 fusionado no es el de mayor similitud (auditoría
+	MEM-011 F-5). La diferencia entre `top1` y `max_sim` se reporta.
 - **Camino real**: `_search_and_reinforce_impl` con `hybrid=True`, las mismas flags
-  de producción. La escritura de refuerzo se neutraliza (`_reinforce_points`), así
-  que la pasada es read-only de verdad.
+	de producción. La escritura de refuerzo se neutraliza (`_reinforce_points`), así
+	que la pasada es read-only de verdad.
 - **Casos muertos**: si las agujas de un positivo no existen en su colección, el
-  caso se marca `dead` y queda fuera de la calibración. Es el defecto que tenía
-  `directiva-770` (pedía «770» y «pacto» y hoy no hay ningún punto con ambos).
+	caso se marca `dead` y queda fuera de la calibración. Es el defecto que tenía
+	`directiva-770` (pedía «770» y «pacto» y hoy no hay ningún punto con ambos).
 
 La salida no decide: mide. El suelo se elige con la tabla de separación y con las
 dos posturas de D-AB-04 (inyección estricta, inspección con banda marcada).

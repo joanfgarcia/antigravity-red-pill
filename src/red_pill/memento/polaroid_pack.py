@@ -4,12 +4,12 @@ Regla del contrato (determinista, sin interpretación):
 
 1. La **unidad** es la polaroid (una unidad renderizada de Memento).
 2. Se **fusionan polaroids adyacentes** mientras la suma del cuerpo de sus hojas
-   quepa en el presupuesto.
+	quepa en el presupuesto.
 3. Una polaroid **nunca se reparte** entre dos partes: si sola excede el
-   presupuesto, forma su propia parte (`oversized`) y se sintetiza con el
-   map-reduce existente.
+	presupuesto, forma su propia parte (`oversized`) y se sintetiza con el
+	map-reduce existente.
 4. `k <= N` por construcción (cada parte consume >=1 polaroid), así que no hace
-   falta ninguna fusión correctiva posterior.
+	falta ninguna fusión correctiva posterior.
 5. Si sale una sola parte, no hay partes: la raíz es el único nodo.
 
 Este módulo es puro (sin Qdrant, sin LLM): lo usa el censo de F0 y, en F1, la

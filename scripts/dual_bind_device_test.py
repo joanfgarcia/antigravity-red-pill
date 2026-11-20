@@ -3,14 +3,14 @@
 
 Ejercita `POST /control/device` contra el proxy real:
 
-  cpu (inicial) → gpu (pre-heat) → cpu (pre-heat) → auto
+	cpu (inicial) → gpu (pre-heat) → cpu (pre-heat) → auto
 
 En cada salto comprueba el `mode` de `/status` y lanza un ping al modelo, para
 probar que la **siguiente petición** va al destino nuevo. Al final restaura el
 modo inicial (o `auto`). No toca el `.env` ni reinicia nada.
 
 Uso:
-    python3 scripts/dual_bind_device_test.py [--base http://localhost:8760]
+	python3 scripts/dual_bind_device_test.py [--base http://localhost:8760]
 """
 
 from __future__ import annotations

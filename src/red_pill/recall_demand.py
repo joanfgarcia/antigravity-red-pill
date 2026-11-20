@@ -3,10 +3,10 @@
 Dos artefactos en el state dir, ambos locales y sin contenido sensible:
 
 - `recall_abstention_stats.json` — contadores: recalls totales, cuántos se
-  abstuvieron, por colección y por banda. La **tasa** sale de aquí.
+	abstuvieron, por colección y por banda. La **tasa** sale de aquí.
 - `recall_demand.jsonl` — una línea por consulta que **no encontró** lo que
-  pedía: la lista de lo que falta por recordar. Solo se escribe cuando
-  `no_recall` es cierto (el resto ya está en memoria).
+	pedía: la lista de lo que falta por recordar. Solo se escribe cuando
+	`no_recall` es cierto (el resto ya está en memoria).
 
 La consulta se pasa por `scrub_secrets` y se recorta: el registro sirve para
 saber **qué falta**, no para coleccionar texto del Operador. Se puede apagar con

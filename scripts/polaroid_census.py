@@ -11,7 +11,7 @@ la sesión no se partió) y Qdrant da las hojas (engramas con `session_id` +
 por rango de líneas; la fusión, `polaroid_pack.pack_polaroids`.
 
 Uso:
-    .venv/bin/python scripts/polaroid_census.py [--budget 8000] [--json PATH]
+	.venv/bin/python scripts/polaroid_census.py [--budget 8000] [--json PATH]
 """
 
 from __future__ import annotations
