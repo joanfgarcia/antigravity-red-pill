@@ -45,10 +45,13 @@ def main() -> int:
 	from red_pill.metabolism.hub_synthesis import resynthesize_session
 
 	cfg = get_config_cached()
-	print(f"[canary] idx={index} collection={collection} session={session} flag={cfg.SW_HUB_POLAROID_ENABLED}")
+	# `--reuse`: no re-sintetiza una parte cuyo input no ha cambiado (hash); sirve
+	# para retomar un elemento a medias sin pagar otra vez lo ya escrito.
+	force = "--reuse" not in sys.argv
+	print(f"[canary] idx={index} collection={collection} session={session} flag={cfg.SW_HUB_POLAROID_ENABLED} reuse={not force}")
 
 	manager = MemoryManager()
-	verdict = resynthesize_session(manager, collection, session, force=True)
+	verdict = resynthesize_session(manager, collection, session, force=force)
 	print(f"[canary] veredicto: {verdict}")
 
 	from qdrant_client import models as qm

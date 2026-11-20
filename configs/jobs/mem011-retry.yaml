@@ -8,7 +8,7 @@
 source: element_job
 title: "MEM-011 reintento — 441 miembros con objetivo 800"
 priority: 6
-step_command: .venv/bin/python scripts/mem011_canary.py
+step_command: .venv/bin/python scripts/mem011_canary.py --reuse
 elements:
   - { session: "opencode:ses_e6522bb5fffe4bTB5MfyeGzU7G", collection: work_memories }
 skip_exit_code: 75
