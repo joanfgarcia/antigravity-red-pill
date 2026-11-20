@@ -37,11 +37,14 @@ def test_load_rows_normaliza(tmp_path):
 	_write(tmp_path, "s2", 0.7, 0.2, False)
 	rows = mod.load_rows(tmp_path)
 	assert len(rows) == 2
-	r1 = next(r for r in rows if "s1" in str(r["path"]))
+	# El sid vive en el nombre del directorio, no en la ruta entera: buscar "s2" en
+	# el path completo hace match con el tmpdir del runner (p.ej. /tmp/rpt6rbrs2le/
+	# contiene "s2") y el test se cae sólo en CI. Comparar el directorio exacto.
+	r1 = next(r for r in rows if r["path"].parent.parent.name == "s1")
 	assert r1["cat"] == "work"
 	assert r1["asc"] is True
 	assert r1["sig"] == 0.9
-	r2 = next(r for r in rows if "s2" in str(r["path"]))
+	r2 = next(r for r in rows if r["path"].parent.parent.name == "s2")
 	assert r2["cat"] == "social"
 	assert r2["asc"] is False
 
