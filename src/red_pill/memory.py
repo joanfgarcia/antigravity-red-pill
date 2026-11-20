@@ -617,8 +617,9 @@ class MemoryManager:
 				continue
 			uid = str(uuid.uuid4())
 			prefijo = "USER" if author == "operator" else autor_role.upper()
+			contenido = f"{prefijo}: {text}"
 			payload = {
-				"content": f"{prefijo}: {text}",
+				"content": contenido,
 				"importance": 5.0,
 				"timestamp": timestamp,
 				"last_recalled_at": timestamp,
@@ -639,7 +640,7 @@ class MemoryManager:
 					"affinity": affinity or [],
 				},
 			}
-			points.append(models.PointStruct(id=uid, payload=payload, vector=self._get_vector(payload["content"])))
+			points.append(models.PointStruct(id=uid, payload=payload, vector=self._get_vector(contenido)))
 			uids.append(uid)
 		if not points:
 			return ("", "")

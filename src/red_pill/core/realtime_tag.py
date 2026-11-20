@@ -275,8 +275,9 @@ def aggregate_tags(tags: list[dict]) -> dict:
 	emo_w: dict[str, float] = {}
 	thm_w: dict[str, float] = {}
 	for t in ok:
+		raw = t.get("tag_confidence")
 		try:
-			w = float(t.get("tag_confidence")) if t.get("tag_confidence") is not None else 0.5
+			w = float(raw) if raw is not None else 0.5
 		except (TypeError, ValueError):
 			w = 0.5
 		emo = str(t.get("tag_emotion") or "?")
@@ -291,8 +292,9 @@ def aggregate_tags(tags: list[dict]) -> dict:
 	for t in ok:
 		if str(t.get("tag_emotion") or "") != best_emo[0]:
 			continue
+		raw_c = t.get("tag_confidence")
 		try:
-			confs.append(float(t.get("tag_confidence")) if t.get("tag_confidence") is not None else 0.5)
+			confs.append(float(raw_c) if raw_c is not None else 0.5)
 		except (TypeError, ValueError):
 			confs.append(0.5)
 	conf_ganadora = max(confs) if confs else round(best_emo[1] / max(1, len(ok)), 3)
