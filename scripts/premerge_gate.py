@@ -80,6 +80,49 @@ def gate_capabilities(allow_no_sandbox: bool, sandbox: str = SANDBOX) -> Dict[st
 	}
 
 
+def gate_hook_vivo() -> Dict[str, Any]:
+	"""El backend EN MARCHA, no sólo el árbol: ¿responde /hook/context?
+
+	2026-11-20: el arnés se aterrizó y el hook 404 durante una hora porque
+	`redpill-mcp.service` seguía con el código anterior. El árbol estaba verde y
+	el arnés no funcionaba. Esta puerta mira al proceso, no al fichero.
+	"""
+	sock = Path.home() / ".local/share/red-pill/state/mcp.sock"
+	if not sock.exists():
+		return {"gate": "hook vivo", "ok": True, "skipped": True, "detail": "sin socket (kernel no levantado)"}
+	proc = subprocess.run(
+		[
+			"curl",
+			"-s",
+			"-o",
+			"/dev/null",
+			"-w",
+			"%{http_code}",
+			"-m",
+			"8",
+			"--unix-socket",
+			str(sock),
+			"-X",
+			"POST",
+			"http://localhost/hook/context",
+			"-H",
+			"content-type: application/json",
+			"-d",
+			'{"harness":"premerge","session_id":"gate","need":"light","turn":1}',
+		],
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	code = (proc.stdout or "").strip()
+	ok = code == "200"
+	return {
+		"gate": "hook vivo",
+		"ok": ok,
+		"detail": f"POST /hook/context → {code}" if ok else f"POST /hook/context → {code}: reinicia redpill-mcp.service (corre el código viejo)",
+	}
+
+
 def gate_budget() -> Dict[str, Any]:
 	env = [sys.executable, "scripts/harness_cost.py", "--harness", "pi"]
 
@@ -118,6 +161,7 @@ def main() -> int:
 		results.append({"gate": "capacidades", "ok": True, "skipped": True, "detail": "--skip-bench"})
 	else:
 		results.append(gate_capabilities(args.allow_no_sandbox, args.sandbox))
+	results.append(gate_hook_vivo())
 	results.append(gate_budget())
 
 	print("\n── puerta previa al merge ──")

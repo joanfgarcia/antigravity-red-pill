@@ -222,6 +222,13 @@ def up(args: argparse.Namespace) -> int:
 		cache = _embed_cache()
 		if os.path.isdir(cache):
 			mounts = ["-v", f"{cache}:/models:ro"]
+		# Volúmenes extra por caja (DOKIME_EXTRA_MOUNTS="origen:destino[:ro],…").
+		# Sirven para que un alma vea el árbol del proyecto (sin esconder que es
+		# un worktree) y para un directorio compartido entre dos despachos.
+		for spec in (os.getenv("DOKIME_EXTRA_MOUNTS") or "").split(","):
+			spec = spec.strip()
+			if spec:
+				mounts += ["-v", spec]
 		else:
 			print(f"[dokime] aviso: no hay cache de embeddings en {cache}; el seed fallará (rc=3)", file=sys.stderr)
 		run(
