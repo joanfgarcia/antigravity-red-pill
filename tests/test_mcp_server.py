@@ -672,9 +672,13 @@ class TestSovereignHandshakeIdentity:
 	async def test_emite_alma_y_tag_session(self):
 		from unittest.mock import patch as _patch
 
+		# Sin repo NI rama: AD-101 decide "¿es repo?" por `_git_mirror`, así que
+		# parchear sólo `_current_git_branch` dejaba la misión en `repo:<repo>`.
+		no_git = {"repo": None, "branch": None, "worktree": None}
 		with _patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
-			with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
-				result = await self._handshake({"user_prompt": "hola"})
+			with _patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+				with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
+					result = await self._handshake({"user_prompt": "hola"})
 		text = result[0].text
 		assert "<session " in text
 		assert 'continuity_id="' in text
@@ -736,8 +740,11 @@ class TestSovereignHandshakeIdentity:
 	async def test_mision_por_defecto_repo_rama(self):
 		from unittest.mock import patch as _patch
 
-		with _patch("red_pill.mcp_server._current_git_branch", return_value="feat/x"):
-			result = await self._handshake({"user_prompt": "hola"})
+		# Compatibilidad: sin repo conocido, la rama sigue sirviendo de misión.
+		no_git = {"repo": None, "branch": None, "worktree": None}
+		with _patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+			with _patch("red_pill.mcp_server._current_git_branch", return_value="feat/x"):
+				result = await self._handshake({"user_prompt": "hola"})
 		assert 'mission="repo:feat/x"' in result[0].text
 
 	async def test_recupera_el_alma_por_originator(self):
@@ -767,8 +774,10 @@ class TestSovereignHandshakeIdentity:
 	async def test_llamante_legacy_role_task(self):
 		from red_pill.mcp_server import _resolve_session_identity
 
-		with patch("red_pill.mcp_server._current_git_branch", return_value=None):
-			ident = await _resolve_session_identity({"user_prompt": "legacy"})
+		no_git = {"repo": None, "branch": None, "worktree": None}
+		with patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+			with patch("red_pill.mcp_server._current_git_branch", return_value=None):
+				ident = await _resolve_session_identity({"user_prompt": "legacy"})
 		assert ident["role"] == "task"
 		assert ident["mission_id"].startswith("mission:adhoc-")
 
@@ -1256,11 +1265,13 @@ class TestAvisoDeTareasEnBackground:
 			pending.append(coro)
 			return coro
 
-		with patch.object(mcp_server, "_caller_session", side_effect=fake_identity), patch.object(
-			mcp_server, "GruOrchestrator", return_value=mock_gru
-		), patch.object(mcp_server, "AgentMinion"), patch(
-			"red_pill.core.inbox.MinionInbox", FakeInbox
-		), patch.object(mcp_server, "_safe_create_task", side_effect=capture_task):
+		with (
+			patch.object(mcp_server, "_caller_session", side_effect=fake_identity),
+			patch.object(mcp_server, "GruOrchestrator", return_value=mock_gru),
+			patch.object(mcp_server, "AgentMinion"),
+			patch("red_pill.core.inbox.MinionInbox", FakeInbox),
+			patch.object(mcp_server, "_safe_create_task", side_effect=capture_task),
+		):
 			await mcp_server.handle_run_agent_task({"prompt": "haz algo", "caller_leg": "opencode:ses_a"})
 			assert pending, "la tarea debe lanzarse en background"
 			await pending[0]
@@ -1290,12 +1301,13 @@ class TestAvisoDeTareasEnBackground:
 			pending.append(coro)
 			return coro
 
-		with patch.object(mcp_server, "_caller_session", side_effect=fake_identity), patch.object(
-			mcp_server, "GruOrchestrator", return_value=mock_gru
-		), patch.object(mcp_server, "OracleMinion"), patch(
-			"red_pill.core.inbox.MinionInbox", FakeInbox
-		), patch.object(mcp_server, "_safe_create_task", side_effect=capture_task), patch(
-			"red_pill.core.notifier.SovereignNotifier"
+		with (
+			patch.object(mcp_server, "_caller_session", side_effect=fake_identity),
+			patch.object(mcp_server, "GruOrchestrator", return_value=mock_gru),
+			patch.object(mcp_server, "OracleMinion"),
+			patch("red_pill.core.inbox.MinionInbox", FakeInbox),
+			patch.object(mcp_server, "_safe_create_task", side_effect=capture_task),
+			patch("red_pill.core.notifier.SovereignNotifier"),
 		):
 			await mcp_server.handle_search_memory_research({"query": "q", "caller_leg": "opencode:ses_a"})
 			assert pending
