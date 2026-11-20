@@ -1,3 +1,76 @@
+## [8.5.0] - 2026-11-20 (El arnés deja de pedir permiso; la memoria aprende a contar)
+
+### 🧵 Arnés — la identidad llega por el hook, no por el turno
+
+El arnés pedía la identidad **en cada turno**, a través de una tool que el modelo
+tenía que recordar llamar. Si el modelo se despistaba, la sesión seguía sin
+identidad y nadie lo notaba. Ahora la identidad la **inyecta el arnés** en la
+petición (contexto de sistema, no persistido) y el turno se sella al responder.
+
+- **[NEW] `/hook/context` y `/hook/ack`** sobre el socket del backend: bloques
+	`identity`, `coro`, `telemetry`; `hint: retry_full` en frío con identidad fija
+	mientras se calcula la completa en segundo plano. Fail-open por contrato: sin
+	kernel el turno sigue, sin identidad rancia.
+- **[NEW] plugin de opencode** (`seeds/opencode/plugins/redpill-harness.js`) y
+	**extensión de pi**: mismo contrato, un solo escritor (el resolver Python).
+- **[NEW] anclajes en modo `hook`** (`inject_anchor.py --mode hook`): el modelo deja
+	de llamar a `sovereign_handshake` para "despertar"; la tool queda como red de
+	seguridad si una tool responde `HANDSHAKE REQUIRED`.
+
+### 🚪 Superficie declarada — el gateway pasa de modelo de coste a hecho
+
+- **[NEW] `REDPILL_SURFACE=full|gateway|lista`** en el proxy MCP: en `gateway` se
+	declaran **4** tools (`bunker_memory_api`, `sovereign_handshake`, `redpill_search`,
+	`redpill_call`) y las otras once siguen **alcanzables** por `redpill_call`.
+	Medido en opencode: **16.385 → ~7.800 tok** de arranque; 15/15 alcanzables
+	(verificado E2E con `coro_api` no declarada).
+- **[FIX] `sovereign_handshake` entra en el set caliente**: los anclajes lo exigen
+	por nombre y con 3 tools el ritual fallaba en cada arranque.
+
+### 🏛️ El banco — Dokimé como instrumento, no como demo
+
+- **[NEW] cajas por alma** (`DOKIME_BOX`): contenedores, volúmenes y red propios
+	por instancia; `DOKIME_EXTRA_MOUNTS`, `DOKIME_EMBEDDING_MODEL` (el espacio
+	vectorial es del alma), `DOKIME_KV_TYPE`.
+- **[NEW] instrumentos**: `capability_bench.py` (15 tools por el transporte real y
+	por la puerta única), `drift_probe.py` (identidad en 20 turnos),
+	`window_probe.py` (horizonte de memoria con dato aleatorio que no existe en
+	disco), `kv_ceiling.py` (techo de ventana por cuantización, verificado).
+- **[NEW] [BENCH_RECIPE.md](docs/TECHNICAL/BENCH_RECIPE.md)**: la receta completa
+	para replicarlo en otra máquina.
+- **[FIX] `dokime.py up` comprueba que los contenedores están ARRANCADOS**, no sólo
+	que existan (decía "Dokimé arriba" con dos en `Exited`), y confirma el socket
+	del backend antes de cantar victoria.
+
+### ✅ Puerta previa al merge
+
+- **[NEW] `scripts/premerge_gate.py`**: estilo → suite → capacidades (dentro del
+	sandbox) → **hook vivo** → presupuesto, con veredicto único. Una puerta saltada
+	deja el merge **no certificado**, y se dice.
+- **[NEW] puerta `hook vivo`**: pregunta **al proceso** (`POST /hook/context`), no
+	al árbol. El día del aterrizaje, el árbol estaba verde y el arnés no existía en
+	memoria del proceso: `redpill-mcp.service` seguía con el código anterior y
+	devolvía 404.
+- **[FIX] el reseed retira plugins `redpill*.js` obsoletos**: dos plugins de
+	identidad conviviendo inyectan dos veces por turno, y una con el criterio viejo.
+
+### 🧠 Memoria
+
+- **[NEW] `memento_from_archive.py`**: reconstruye `memento/index.md` + `raw.json`
+	desde `archive_memories` cuando no hay verbatim, marcado `reconstructed: true`.
+- **[FIX] el destilado usaba 512 tokens clavados**: una sesión larga se destilaba
+	truncada y el annotate trabajaba sobre material pobre. Ahora sale de la task
+	`distill`.
+- **[FIX] `RP_NO_THINK=1` apaga el razonamiento por petición** (no reiniciando el
+	servidor, que también sirve al chat): medido, con thinking las notas salen como
+	extractos literales; sin thinking, sintetizadas.
+- **[FIX] los avisos de `wake_up_v6` van a `stderr`**: stdout **es** la identidad.
+
+### 📚 Lore
+
+- **[NEW] Capítulo 34 — El Cuaderno y el Índice**: el primero a dos manos (Aleth y
+	Titanium), con una coda para Dokimé.
+
 ## [8.4.0] - 2026-11-14 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
 
 ### 🫀 Afecto — el fondo del Operador entra en el contexto (RFC-AFE-001 F1)
