@@ -24,6 +24,14 @@ INFERENCE_TEST_TIMEOUT_S = 5
 INFERENCE_PROBE_BUDGET_S = 65.0
 CPU_STUCK_THRESHOLD = 200.0
 
+# Señales que emite ESTE plugin (fórmula de auditor.signal_name_for:
+# `signal_<tipo>_failure`). Su heal debe enterrar estas, y solo estas.
+SIP_SIGNAL_NAMES = (
+	"signal_sip_unhealthy_failure",
+	"signal_sip_loading_failure",
+	"signal_sip_stuck_failure",
+)
+
 
 class SipCheck(ServiceSentinelPlugin):
 	@property
@@ -122,14 +130,22 @@ class SipCheck(ServiceSentinelPlugin):
 		return findings
 
 	def heal_specific(self, cfg: Any, finding: AuditFinding) -> bool:
-		"""Restart the LLM service and evaporate any stale pain signals."""
+		"""Restart the LLM service and evaporate its OWN stale pain signals.
+
+		Antes evaporaba `hypervisor_unreachable`, que no es una señal del SIP: es
+		de `drive_evaluator` (drive_evaluator.py:249-277). El reinicio del
+		inference enterraba el dolor de OTRO componente y dejaba viva la señal
+		del propio SIP — la que este heal acaba de curar (2026-11-19: 9 h de
+		`sip_unhealthy` sobre un servicio sano).
+		"""
 		healed = self._restart_service()
 		if healed:
 			try:
 				from red_pill.memory import MemoryManager
 
 				mm = MemoryManager()
-				mm.evaporate_signals("hypervisor_unreachable")
+				for name in SIP_SIGNAL_NAMES:
+					mm.evaporate_signals(name)
 			except Exception:
 				pass
 		return healed
@@ -137,9 +153,22 @@ class SipCheck(ServiceSentinelPlugin):
 	# ── Specific helpers ──
 
 	def _find_llama_port(self) -> int | None:
+		"""Puerto del SIP, no el de cualquier `llama-server` del host.
+
+		El orden importa. Antes se escaneaba `pgrep -a llama-server` primero y se
+		aceptaba el PRIMER `--port` del host: el 2026-11-19 el centinela encontró
+		`dokime-llama` en :8080 (otro producto, unit aparte), lo tomó por el SIP y
+		cantó `sip_unhealthy` durante 9 h mientras el proxy real servía en :8760.
+		Ahora manda el proceso del servicio; el barrido del host queda como
+		último recurso (workers dedicados que viven fuera del árbol del unit).
+		"""
 		import subprocess
 
 		try:
+			unit_port = self._port_from_unit_process()
+			if unit_port:
+				return unit_port
+
 			result = subprocess.run(["pgrep", "-a", "llama-server"], capture_output=True, text=True, timeout=5)
 			for line in result.stdout.splitlines():
 				parts = line.split()
@@ -154,6 +183,55 @@ class SipCheck(ServiceSentinelPlugin):
 		except Exception:
 			pass
 		return None
+
+	def _port_from_unit_process(self) -> int | None:
+		"""Puerto que declara el proceso principal del servicio (o None).
+
+		Dos formas conocidas: `run_dual_bind.py` (proxy dual-bind, :8760) y
+		`llama-server` arrancado directamente por el unit (`--port N`).
+		"""
+		main_pid = self._unit_main_pid()
+		if not main_pid:
+			return None
+		argv = self._cmdline(main_pid)
+
+		if any("run_dual_bind.py" in arg for arg in argv):
+			return 8760
+		if any(arg.endswith("llama-server") for arg in argv):
+			for i, arg in enumerate(argv):
+				if arg == "--port" and i + 1 < len(argv):
+					try:
+						return int(argv[i + 1])
+					except ValueError:
+						return None
+		return None
+
+	def _unit_main_pid(self) -> int | None:
+		"""MainPID del unit (None si systemd no lo sabe o el unit no corre)."""
+		import subprocess
+
+		try:
+			show = subprocess.run(
+				["systemctl", "--user", "show", self.service_unit, "--property=MainPID"],
+				capture_output=True,
+				text=True,
+				timeout=5,
+			)
+			if "=" not in show.stdout:
+				return None
+			pid = int(show.stdout.split("=", 1)[1].strip() or 0)
+			return pid if pid > 0 else None
+		except Exception:
+			return None
+
+	@staticmethod
+	def _cmdline(pid: int) -> list[str]:
+		"""argv del proceso (vacío si no se puede leer)."""
+		try:
+			with open(f"/proc/{pid}/cmdline", "rb") as fh:
+				return fh.read().decode(errors="replace").split("\0")
+		except Exception:
+			return []
 
 	def _get_llama_cpu(self) -> float:
 		import subprocess
