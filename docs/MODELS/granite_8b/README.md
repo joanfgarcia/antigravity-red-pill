@@ -118,6 +118,11 @@ camino grande, y un nombre único mentiría por simplificación.
   cambió.
   **Para prompts futuros**: pedir con margen (~20 %), nunca al filo; validar o
   reintentar en vez de asumir que cumple.
+- **La RAÍZ (maestro) se pasa más que las partes.** Medido el 2026-11-20: con
+  objetivo 800 la llamada maestra escribió **1035** (+29 %) y chocó con el tope
+  duro 1000, mientras las partes a 800 pasaban. Fix: objetivo propio de raíz
+  **700** (`SLEEP_HUB_ROOT_TARGET_CHARS`); confirmado con raíz de 660 chars y
+  12 partes (job `61833df6`). El tope duro sigue en 1000.
 - **No confundir con truncación** (`finish_reason=length`): este fallo es por
   **exceso** de longitud, no por corte del proveedor.
 
