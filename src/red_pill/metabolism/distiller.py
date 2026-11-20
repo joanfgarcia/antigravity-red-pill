@@ -1182,6 +1182,8 @@ def synthesize_hub_v2(
 	reduce_pack = max(500, reduce_budget - 96)
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
 	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800))
+	# La raíz se pasa más que las partes (medido 2026-11-20: 1035 con target 800).
+	root_target = max(200, int(getattr(cfg, "SLEEP_HUB_ROOT_TARGET_CHARS", 700) or 700))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
 	texture_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS", compact_attempts) or compact_attempts))
 	# Híbrido de modelos (AD-115): la decisión es POR LLAMADA y depende del
@@ -1211,12 +1213,17 @@ def synthesize_hub_v2(
 	_budget_line_es = f"\nLONGITUD OBLIGATORIA: el 'summary' no puede pasar de {summary_target} caracteres."
 	_budget_line_en = f"\nMANDATORY LENGTH: 'summary' must not exceed {summary_target} characters."
 	_budget_line = _budget_line_es if output_lang == "es" else _budget_line_en
-	if _budget_line not in system_prompt:
-		system_prompt += _budget_line
+	# El maestro (raíz) pide MENOS que las partes: su tarea es más propensa a
+	# alargarse (medido 2026-11-20) y el tope duro es el mismo para ambos.
+	_root_budget_es = f"\nLONGITUD OBLIGATORIA: el 'summary' no puede pasar de {root_target} caracteres."
+	_root_budget_en = f"\nMANDATORY LENGTH: 'summary' must not exceed {root_target} characters."
+	_root_budget = _root_budget_es if output_lang == "es" else _root_budget_en
+	if _root_budget not in system_prompt:
+		system_prompt += _root_budget
 	if _budget_line not in partial_system_prompt:
 		partial_system_prompt += _budget_line
-	if large_system_prompt and _budget_line_en not in large_system_prompt:
-		large_system_prompt += _budget_line_en
+	if large_system_prompt and _root_budget_en not in large_system_prompt:
+		large_system_prompt += _root_budget_en
 
 	def _make_fallback(reason: str = "llm_unavailable") -> Dict[str, Any]:
 		# Fallback mecánico y acotado: no manda la sesión al modelo (el giant
