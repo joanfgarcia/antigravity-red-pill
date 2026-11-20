@@ -118,7 +118,16 @@ def test_mood_caducada_se_marca_y_no_se_presenta_como_actual():
 def test_bloque_lleva_procedencia():
 	k = block("coro", "texto de otro agente", origin="coro", trusted=False)
 	assert k == {"kind": "coro", "origin": "coro", "trusted": False, "text": "texto de otro agente"}
-	assert block("identity", "x")["trusted"] is True
+	assert block("identity", "x", trusted=True)["trusted"] is True
+
+
+def test_bloque_sin_trusted_no_compila():
+	# `trusted` es obligatorio (sin default): un kind nuevo no puede entrar
+	# confiable por omisión (seguridad F8).
+	import pytest
+
+	with pytest.raises(TypeError):
+		block("identity", "x")
 
 
 def test_ledger_de_acks_es_idempotente_y_acotado(tmp_path):

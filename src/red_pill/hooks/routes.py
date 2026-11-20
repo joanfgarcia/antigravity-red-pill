@@ -269,7 +269,7 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 		key = _cache_key(originator, req.model)
 		cached = _CORE_CACHE.get(key)
 		if cached and cached.get("generation") == generation():
-			blocks.append(block("identity", str(cached["text"])))
+			blocks.append(block("identity", str(cached["text"]), trusted=True))
 		else:
 			# En frío NO se responde con las manos vacías: el wake completo tarda
 			# 2,3-2,7 s y se calcula en segundo plano, pero mientras tanto se sirve la
@@ -278,13 +278,13 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 			# presenta como el arnés (pasó el 19-11: "Soy Pi" / "Soy Aleth").
 			fast = _fast_identity_text()
 			if fast:
-				blocks.append(block("identity", fast))
+				blocks.append(block("identity", fast, trusted=True))
 			_start_full(originator, req.model, continuity)
 			hint = "retry_full"
 
 	if req.need in ("full", "light"):
 		if "error" in identity:
-			blocks.append(block("notice", f"identidad no resuelta: {identity['error']}", origin="kernel"))
+			blocks.append(block("notice", f"identidad no resuelta: {identity['error']}", origin="kernel", trusted=False))
 		try:
 			from red_pill.registry import registry as _tool_registry  # noqa: F401 — sólo para tipar
 			from red_pill.session.store import SessionRegistry
@@ -310,7 +310,7 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 			# se enteraba de OPEN LOOPS y del dolor únicamente llamando a la tool.
 			line = _kernel_telemetry_text()
 		if line:
-			blocks.append(block("telemetry", line, origin="telemetry"))
+			blocks.append(block("telemetry", line, origin="telemetry", trusted=True))
 
 	return {
 		"delivery_id": req.delivery,

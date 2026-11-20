@@ -118,12 +118,13 @@ class HookRequest:
 		return req
 
 
-def block(kind: str, text: str, *, origin: str = "kernel", trusted: bool = True) -> Dict[str, Any]:
+def block(kind: str, text: str, *, origin: str = "kernel", trusted: bool) -> Dict[str, Any]:
 	"""Bloque de contexto con procedencia explícita (seguridad F8).
 
-	Lo que no redacta el kernel —digest del coro con texto de terceros, salida de
-	jobs— va con `trusted: false` y el arnés lo envuelve como **datos**, nunca
-	como instrucción de sistema.
+	`trusted` es obligatorio y **sin default**: un `kind` nuevo debe declarar si lo
+	redacta el kernel (`identity`, `telemetry`) o es de terceros (`coro`, `notice`)
+	y va envuelto como **datos**, nunca como instrucción de sistema. Sin default,
+	un kind que olvide el flag falla en el call-site, no entra confiable por error.
 	"""
 	return {"kind": kind, "origin": origin, "trusted": bool(trusted), "text": text}
 
