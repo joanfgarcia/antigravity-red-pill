@@ -264,13 +264,18 @@ console.log(JSON.stringify(result));
 """
 
 
-def _run_plugin_handshake(tmp_path: Path, env_extra: dict | None = None) -> dict:
+def _run_plugin_handshake(
+	tmp_path: Path, env_extra: dict | None = None, sibling_harness: bool = False
+) -> dict:
 	state = tmp_path / "state"
 	state.mkdir()
 	plugin = tmp_path / "redpill-scribe.js"
 	src = SEED.read_text(encoding="utf-8")
 	src = src.replace("${QUEUE_DB}", str(tmp_path / "bunker_queue.db")).replace("${STATE_DIR}", str(state))
 	plugin.write_text(src, encoding="utf-8")
+	if sibling_harness:
+		# Sólo la presencia cuenta para el default; el contenido lo pone el arnés real.
+		(tmp_path / "redpill-harness.js").write_text("export default {};\n", encoding="utf-8")
 	harness = tmp_path / "harness.mjs"
 	harness.write_text(_HARNESS_HANDSHAKE, encoding="utf-8")
 	env = {**os.environ, "PLUGIN_PATH": str(plugin), "STATE_DIR": str(state), **(env_extra or {})}
@@ -312,6 +317,25 @@ def test_handshake_gate_exige_el_handshake_cada_turno(tmp_path):
 	assert [r["status"] for r in out["refusalSequence"]] == [
 		"refused", "refused", "refused", "allowed", "allowed",
 	]
+
+
+@_runtime
+def test_handshake_gate_se_apaga_solo_si_el_arnes_viaja_al_lado(tmp_path):
+	"""Cierre de la migración RFC-HARNESS-001.
+
+	Con `redpill-harness.js` en el mismo directorio, ese plugin es dueño de la
+	inyección y de la puerta: el default de scribe pasa a `auto` sin que el
+	Operador exporte nada. Sin el arnés (instalación vieja) se queda en `gate`,
+	porque apagar la puerta sin sustituto dejaría la sesión sin identidad.
+	"""
+	out = _run_plugin_handshake(tmp_path, sibling_harness=True)
+	assert out["reminderBefore"] == 0, "con el arnés al lado no debe haber recordatorio"
+	assert out["nonHandshakeBefore"]["status"] == "allowed", (
+		"con el arnés al lado la puerta no debe negar tools"
+	)
+	# La identidad por petición sigue saliendo: la puerta no es la identidad.
+	assert len(out["identityBefore"]) == 1
+	assert 'leg="opencode:s1"' in out["identityBefore"][0]
 
 
 @_runtime

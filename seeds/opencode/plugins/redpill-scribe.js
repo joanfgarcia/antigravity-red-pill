@@ -587,7 +587,15 @@ export default {
     // gate viven en `redpill-harness.js`; aquí sólo se mantiene el modo clásico.
     // Default `gate` = comportamiento de siempre: nada cambia hasta que el
     // Operador encienda `REDPILL_HARNESS_MODE=auto`.
-    const HARNESS_MODE = (process.env.REDPILL_HARNESS_MODE || "gate").toLowerCase();
+    // Cierre de la migración RFC-HARNESS-001: si el plugin nuevo viaja al lado
+    // (`redpill-harness.js`), él es dueño de la inyección y de la puerta, y
+    // aquí el default pasa a `auto` solo — sin que el Operador exporte nada.
+    // Si NO está (instalación vieja, sólo scribe), seguimos en `gate`: sin el
+    // arnés, apagar la puerta dejaría la sesión sin identidad y sin red.
+    const HARNESS_PRESENT = existsSync(new URL("./redpill-harness.js", import.meta.url));
+    const HARNESS_MODE = (
+      process.env.REDPILL_HARNESS_MODE || (HARNESS_PRESENT ? "auto" : "gate")
+    ).toLowerCase();
     const HANDSHAKE_GATE =
       HARNESS_MODE === "gate" && (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
     const MAX_REFUSALS = 3; // fail-open: nunca dejar una sesión sin salida
