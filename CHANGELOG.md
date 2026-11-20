@@ -61,6 +61,14 @@ petición (contexto de sistema, no persistido) y el turno se sella al responder.
 - **[FIX] el destilado usaba 512 tokens clavados**: una sesión larga se destilaba
 	truncada y el annotate trabajaba sobre material pobre. Ahora sale de la task
 	`distill`.
+- **[NEW] un engrama por autor (AD-126)**: `interaction_memories` guarda dos
+	puntos por turno —uno del Operador y otro del agente— cada uno con **su** texto
+	limpio y **su** `tag_emotion`. Antes había un par mezclado y un solo ánimo, así
+	que el del Operador se contaminaba con la respuesta de su agente.
+- **[NEW] etiquetado por trozos**: un turno largo ya no se recorta a cabeza y
+	cola; se etiqueta en ventanas con solape y se agrega por confianza acumulada
+	(medido: 33 de 80 lados pasaban de 1.500 chars, con respuestas de 2.281 de
+	mediana perdiendo el medio).
 - **[FIX] `RP_NO_THINK=1` apaga el razonamiento por petición** (no reiniciando el
 	servidor, que también sirve al chat): medido, con thinking las notas salen como
 	extractos literales; sin thinking, sintetizadas.

@@ -3995,6 +3995,39 @@ degradación al buzón sin cuerpo); 146 passed en `test_soul_notify` + `test_cor
 tiene un único dueño identificable y auditado (`modo=steer` en la respuesta de `send`), y
 sigue sin ser un verbo del protocolo: es un permiso del servidor sobre el transporte.
 
+## [AD-126] El turno tiene dos ánimos: un engrama por autor
+**Date**: 2026-11-20
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: el buffer rápido guardaba **un** punto por turno con el par entero
+(`USER: prompt … ASSISTANT: response`) y un solo `tag_emotion`. El etiquetador
+tenía que resumir dos voces en una, así que el ánimo del Operador quedaba
+contaminado por la respuesta de su propio agente — y al revés. Además el texto se
+recortaba a 1.500 chars cogiendo cabeza y cola: medido sobre 40 turnos, 33 de 80
+lados pasaban del tope y las respuestas (mediana 2.281) perdían el medio, que es
+donde a veces está el matiz. El tag salía `degraded: truncated` y nadie lo leía.
+
+**Decision**:
+- **Dos engramas por turno** (`record_interaction_turn`): uno con
+	`metadata.author="operator"` y el texto del prompt; otro con `author="agent"` y
+	la respuesta. Cada uno con su vector y su etiqueta.
+- **Un tag por engrama**, calculado sobre su propio texto (sin tooling: el filtro
+	de ruido sigue corriendo antes, en el drenaje; el scribe solo captura partes
+	`text`, así que tampoco entra el razonamiento).
+- **Troceado** (`split_chunks` + `aggregate_tags`): un texto largo se etiqueta en
+	ventanas de `MEMENTO_REALTIME_TAG_MAX_CHARS` con solape y se agrega por
+	confianza acumulada; la confianza del ganador es su mayor evidencia, no la
+	media con los trozos que votaron otra cosa.
+- **El mood del Operador** (`situation_semaphore`) solo lee engramas suyos; los
+	antiguos sin `author` cuentan como suyos para no romper la serie.
+
+**Consequences**: el buffer duplica puntos (TTL 72 h, es un termómetro, no un
+archivo) y el coste de etiquetado sube a 2–5 llamadas locales por turno
+(milisegundos). A cambio, cada voz tiene su ánimo y el texto largo deja de
+perderse por el medio.
+
+---
+
 ## [AD-125] El turno no se espera: los minions en background despiertan a su alma
 **Date**: 2026-11-19
 **Status**: ACCEPTED & IMPLEMENTED.

@@ -203,8 +203,7 @@ def pair_tag(operator: dict, assistant: dict) -> dict:
 	"""Compone los campos de un turno con DOS moods (puro: sin socket).
 
 	- `tag_emotion` = el del Operador (compatibilidad: quien ya leía `tag_emotion`
-	  sigue leyendo el ánimo de quien escribe, no la mezcla de los dos).
-	- `tag_emotion_assistant` = el del agente, desde su respuesta.
+		sigue leyendo el ánimo de quien escribe, no la mezcla de los dos).	- `tag_emotion_assistant` = el del agente, desde su respuesta.
 	- `tag_status` global = el peor de los dos: si un lado falló, se dice.
 	"""
 
@@ -236,12 +235,95 @@ def pair_tag(operator: dict, assistant: dict) -> dict:
 	return out
 
 
+# ── Troceado (2026-11-20) ────────────────────────────────────────────────────
+# El turno se recortaba a `MAX_CHARS` cogiendo cabeza y cola: con respuestas de
+# 2.281 chars de mediana, el medio de lo que dice el agente no se etiquetaba
+# nunca y el tag salía `degraded: truncated`. Se trocea en ventanas con solape
+# y se agrega por confianza acumulada: el ánimo de un texto largo no es el de su
+# primera frase.
+CHUNK_OVERLAP = 120
+
+
+def split_chunks(text: str, cap: int, overlap: int = CHUNK_OVERLAP) -> list[str]:
+	"""Parte `text` en trozos de ≤cap chars, cortando por espacio y con solape."""
+	body = (text or "").strip()
+	if not body:
+		return []
+	if len(body) <= cap:
+		return [body]
+	chunks: list[str] = []
+	start = 0
+	while start < len(body):
+		end = min(start + cap, len(body))
+		if end < len(body):
+			cut = body.rfind(" ", start + cap // 2, end)
+			if cut > start:
+				end = cut
+		chunks.append(body[start:end].strip())
+		if end >= len(body):
+			break
+		start = max(start + 1, end - overlap)
+	return [c for c in chunks if c]
+
+
+def aggregate_tags(tags: list[dict]) -> dict:
+	"""Agrega etiquetas de varios trozos: emoción/tema por confianza acumulada."""
+	ok = [t for t in tags if str(t.get("tag_status") or "") in ("ok", "degraded") and t.get("tag_emotion")]
+	if not ok:
+		last = tags[-1] if tags else {}
+		return {"tag_status": "failed", "tag_reason": str(last.get("tag_reason") or "no-chunks")}
+	emo_w: dict[str, float] = {}
+	thm_w: dict[str, float] = {}
+	for t in ok:
+		try:
+			w = float(t.get("tag_confidence")) if t.get("tag_confidence") is not None else 0.5
+		except (TypeError, ValueError):
+			w = 0.5
+		emo = str(t.get("tag_emotion") or "?")
+		thm = str(t.get("tag_theme") or "?")
+		emo_w[emo] = emo_w.get(emo, 0.0) + w
+		thm_w[thm] = thm_w.get(thm, 0.0) + w
+	best_emo = max(emo_w.items(), key=lambda kv: kv[1])
+	best_thm = max(thm_w.items(), key=lambda kv: kv[1])
+	# La confianza del ganador es la mayor evidencia a su favor (no la media con
+	# los trozos que votaron otra cosa: eso la hundía artificialmente).
+	confs = []
+	for t in ok:
+		if str(t.get("tag_emotion") or "") != best_emo[0]:
+			continue
+		try:
+			confs.append(float(t.get("tag_confidence")) if t.get("tag_confidence") is not None else 0.5)
+		except (TypeError, ValueError):
+			confs.append(0.5)
+	conf_ganadora = max(confs) if confs else round(best_emo[1] / max(1, len(ok)), 3)
+	status = "ok" if all(str(t.get("tag_status")) == "ok" for t in ok) else "degraded"
+	return {
+		"tag_status": status,
+		"tag_emotion": best_emo[0],
+		"tag_theme": best_thm[0],
+		"tag_confidence": conf_ganadora,
+		"tag_chunks": len(ok),
+	}
+
+
+def tag_turn_chunked(text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+	"""Etiqueta un texto largo por trozos y agrega. Nunca lanza."""
+	if not enabled():
+		return {"tag_status": "disabled"}
+	chunks = split_chunks(text, max_chars())
+	if not chunks:
+		return {"tag_status": "failed", "tag_reason": "empty-text"}
+	if len(chunks) == 1:
+		return tag_turn(chunks[0], socket_path=socket_path, timeout=timeout)
+	return aggregate_tags([tag_turn(c, socket_path=socket_path, timeout=timeout) for c in chunks])
+
+
 def tag_pair(operator_text: str, assistant_text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
 	"""Etiqueta las dos mitades por separado: su ánimo y el del agente."""
 	if not enabled():
 		return {"tag_status": "disabled"}
-	op = tag_turn(operator_text, socket_path=socket_path, timeout=timeout)
-	asst = tag_turn(assistant_text, socket_path=socket_path, timeout=timeout)
+	op = tag_turn_chunked(operator_text, socket_path=socket_path, timeout=timeout)
+	asst = tag_turn_chunked(assistant_text, socket_path=socket_path, timeout=timeout)
 	return pair_tag(op, asst)
 
 
