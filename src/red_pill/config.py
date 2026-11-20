@@ -1230,6 +1230,10 @@ class RedPillConfig(BaseSettings):
 	# 16-22 % del objetivo; con 900 escribió 1048/1097 y chocó con el tope.
 	# 800 deja 200 chars de margen incluso en el peor desvío observado.
 	# Ver observaciones en model_profiles.yaml (granite_8b).
+	# La RAÍZ (llamada maestra) se pasa un 29 % del objetivo con más facilidad
+	# que las partes: medido 2026-11-20, con 800 escribió 1035 y chocó con el
+	# tope duro 1000. 700 deja margen (700 × 1.29 ≈ 903 < 1000).
+	SLEEP_HUB_ROOT_TARGET_CHARS: int = 700
 	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 800
 	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle, 8k).
 	# 6k permite agrupar 3-4 parciales y que el árbol REDUZCA; con 3k cada
