@@ -1,0 +1,20 @@
+# MEM-011 · reparación del árbol del canario tras el aplanado del nightly.
+#
+# El nightly de las 03:30 (flag todavía OFF) re-sintetizó las 3 sesiones del
+# canario en monolítico: las hojas volvieron a colgar de la raíz y las partes
+# quedaron huérfanas. Con el flag ON y sin `--reuse` (force=True) se reconstruye
+# el árbol: cada parte se re-escribe y sus hojas se re-parentan, y la raíz se
+# rehace con las partes como miembros.
+source: element_job
+title: "MEM-011 reparación — reconstruir el árbol del canario (force)"
+priority: 7
+step_command: .venv/bin/python scripts/mem011_canary.py
+elements:
+  - { session: "opencode:ses_e7ea995c6ffeqcxuZKqwz2DXih", collection: work_memories }
+  - { session: "opencode:ses_e6522bb5fffe4bTB5MfyeGzU7G", collection: work_memories }
+  - { session: "opencode:ses_e9a8212e5ffeaR6EnnTcdZC8d1", collection: work_memories }
+skip_exit_code: 75
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 30
