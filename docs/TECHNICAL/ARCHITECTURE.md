@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.4.0 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
+**System Version**: v8.5.0 (El arnés deja de pedir permiso; la memoria aprende a contar)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 

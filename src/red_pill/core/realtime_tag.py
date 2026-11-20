@@ -41,6 +41,15 @@ _TAG_FIELDS = (
 	"tag_confidence",
 	"tag_engine",
 	"tagged_at",
+	# Dos moods por turno (2026-11-20): el del Operador sale de SU prompt y el del
+	# agente de SU respuesta. `tag_emotion` se mantiene como el del Operador para
+	# no romper a los consumidores que ya lo leen.
+	"tag_emotion_operator",
+	"tag_theme_operator",
+	"tag_confidence_operator",
+	"tag_emotion_assistant",
+	"tag_theme_assistant",
+	"tag_confidence_assistant",
 )
 
 
@@ -188,6 +197,68 @@ def apply_tag(memory: Any, uid: str, tag: dict, *, collection: str = COLLECTION,
 	except Exception as e:
 		logger.warning(f"[realtime_tag] set_payload falló para {uid}: {e}")
 		return False
+
+
+def pair_tag(operator: dict, assistant: dict) -> dict:
+	"""Compone los campos de un turno con DOS moods (puro: sin socket).
+
+	- `tag_emotion` = el del Operador (compatibilidad: quien ya leía `tag_emotion`
+	  sigue leyendo el ánimo de quien escribe, no la mezcla de los dos).
+	- `tag_emotion_assistant` = el del agente, desde su respuesta.
+	- `tag_status` global = el peor de los dos: si un lado falló, se dice.
+	"""
+
+	def _st(tag: dict) -> str:
+		return str(tag.get("tag_status") or "failed")
+
+	op_ok = _st(operator) in ("ok", "degraded")
+	as_ok = _st(assistant) in ("ok", "degraded")
+	out: dict = {
+		"tag_status": "ok" if (_st(operator) == "ok" and _st(assistant) == "ok") else "degraded",
+		"tag_engine": TAG_ENGINE,
+		"tag_emotion": operator.get("tag_emotion") or "?",
+		"tag_theme": operator.get("tag_theme") or "?",
+		"tag_confidence": operator.get("tag_confidence"),
+		"tag_emotion_operator": operator.get("tag_emotion") or "?",
+		"tag_theme_operator": operator.get("tag_theme") or "?",
+		"tag_confidence_operator": operator.get("tag_confidence"),
+		"tag_emotion_assistant": assistant.get("tag_emotion") or "?",
+		"tag_theme_assistant": assistant.get("tag_theme") or "?",
+		"tag_confidence_assistant": assistant.get("tag_confidence"),
+	}
+	if not op_ok and not as_ok:
+		out["tag_status"] = "failed"
+		out["tag_reason"] = f"operator:{_st(operator)} assistant:{_st(assistant)}"
+	elif not op_ok:
+		out["tag_reason"] = "operator-failed"
+	elif not as_ok:
+		out["tag_reason"] = "assistant-failed"
+	return out
+
+
+def tag_pair(operator_text: str, assistant_text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+	"""Etiqueta las dos mitades por separado: su ánimo y el del agente."""
+	if not enabled():
+		return {"tag_status": "disabled"}
+	op = tag_turn(operator_text, socket_path=socket_path, timeout=timeout)
+	asst = tag_turn(assistant_text, socket_path=socket_path, timeout=timeout)
+	return pair_tag(op, asst)
+
+
+def maybe_tag_pair(
+	memory: Any, uid: str, operator_text: str, assistant_text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None
+) -> dict:
+	"""Pipeline completo del turno con dos moods. Nunca lanza."""
+	tag = tag_pair(operator_text, assistant_text, socket_path=socket_path, timeout=timeout)
+	if tag.get("tag_status") == "disabled":
+		return tag
+	persisted = False
+	try:
+		persisted = apply_tag(memory, uid, tag)
+	except Exception as e:  # noqa: BLE001 — el tag nunca tumba el drenaje
+		logger.error(f"[realtime_tag] apply_tag inesperado (par): {e}")
+	tag["tag_persisted"] = persisted
+	return tag
 
 
 def maybe_tag(memory: Any, uid: str, text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:

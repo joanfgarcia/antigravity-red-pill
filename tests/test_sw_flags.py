@@ -16,6 +16,10 @@ class FakeMemory:
 		self.calls.append(kwargs)
 		return "id"
 
+	def record_interaction_turn(self, **kwargs):
+		self.calls.append(kwargs)
+		return ("id-op", "id-agent")
+
 
 def _queue(tmp_path):
 	q = MemoryQueueManager(db_path=str(tmp_path / "q.db"))

@@ -100,7 +100,9 @@ def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 	confianza acumulada (conteo como desempate)."""
 	from collections import Counter
 
-	tagged = [it for it in items if str(it.get("tag_status") or "") in ("ok", "degraded") and it.get("tag_emotion")]
+	# Sólo los engramas del Operador (los antiguos sin `author` cuentan como suyos).
+	del_operador = [it for it in items if it.get("author") in (None, "operator")]
+	tagged = [it for it in del_operador if str(it.get("tag_status") or "") in ("ok", "degraded") and it.get("tag_emotion")]
 	if not tagged:
 		return None
 	total = len([it for it in items if str(it.get("content") or "").strip()]) or len(items)
@@ -285,6 +287,9 @@ def update_situation(
 		{
 			"content": (t.payload or {}).get("content") or "",
 			"ts": (t.payload or {}).get("timestamp", 0),
+			# 2026-11-20: dos engramas por turno. El ánimo que se mide es el del
+			# Operador; el del agente se guarda pero no se promedia con el suyo.
+			"author": ((t.payload or {}).get("metadata") or {}).get("author"),
 			# RFC-004: los tags se agregan por solera (modo tag) sin destilar texto.
 			"tag_status": (t.payload or {}).get("tag_status"),
 			"tag_emotion": (t.payload or {}).get("tag_emotion"),

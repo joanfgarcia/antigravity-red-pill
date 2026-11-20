@@ -171,6 +171,7 @@ def fake_memory():
 	"""MemoryManager de mentira: ingiere sin Qdrant y cuenta lo ingerido."""
 	memory = MagicMock()
 	memory.record_interaction_pair.return_value = "uid-fake"
+	memory.record_interaction_turn.return_value = ("uid-op", "uid-agent")
 	return memory
 
 
@@ -180,7 +181,11 @@ def test_drain_ingests_and_completes(queue, fake_memory):
 	queue.enqueue_memory("una pregunta con sustancia suficiente", "una respuesta con sustancia suficiente", "assistant")
 
 	assert drain_memory_queue(queue, fake_memory) == 1
-	assert fake_memory.record_interaction_pair.call_count == 1
+	# Dos engramas por turno (2026-11-20): Operador y agente, cada uno con su texto.
+	assert fake_memory.record_interaction_turn.call_count == 1
+	_kwargs = fake_memory.record_interaction_turn.call_args.kwargs
+	assert "una pregunta" in _kwargs["prompt"]
+	assert "una respuesta" in _kwargs["response"]
 	assert queue.get_pending_count() == 0
 
 

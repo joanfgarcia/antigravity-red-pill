@@ -87,7 +87,10 @@ def gate_hook_vivo() -> Dict[str, Any]:
 	`redpill-mcp.service` seguía con el código anterior. El árbol estaba verde y
 	el arnés no funcionaba. Esta puerta mira al proceso, no al fichero.
 	"""
-	sock = Path.home() / ".local/share/red-pill/state/mcp.sock"
+	# La raíz de estado la posee core/paths.py: aquí no se compone a mano.
+	from red_pill.core.paths import get_state_dir
+
+	sock = get_state_dir() / "mcp.sock"
 	if not sock.exists():
 		return {"gate": "hook vivo", "ok": True, "skipped": True, "detail": "sin socket (kernel no levantado)"}
 	proc = subprocess.run(

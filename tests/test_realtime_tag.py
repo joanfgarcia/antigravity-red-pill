@@ -330,6 +330,10 @@ class _FakeWorkerMemory:
 		self.recorded.append(kwargs)
 		return "u1"
 
+	def record_interaction_turn(self, **kwargs):
+		self.recorded.append(kwargs)
+		return ("u1-op", "u1-agent")
+
 
 _ITEM = {
 	"id": "q1",
@@ -398,7 +402,9 @@ def test_worker_gate_on_etiqueta(monkeypatch, tmp_path):
 	with _ServerThread(sock, CANNED):
 		n = drain_memory_queue(q, mem, limit=10, max_batches=1)
 	assert n == 1
-	assert client.calls and client.calls[0]["points"] == ["u1"]
+	# Dos engramas por turno → dos tags: el del Operador y el del agente.
+	puntos = [c["points"][0] for c in client.calls]
+	assert puntos == ["u1-op", "u1-agent"]
 	assert client.calls[0]["payload"]["tag_status"] == "ok"
 	assert client.calls[0]["payload"]["tag_emotion"] == "calm"
 	assert ("q1", "completed") in q.statuses

@@ -559,7 +559,10 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 						"session_id": item.get("session_id"),
 						"affinity": parse_affinity(item.get("affinity")),
 					}
-				uid = memory.record_interaction_pair(
+				# Dos engramas por turno (2026-11-20): el del Operador y el del
+				# agente. Cada uno lleva su texto limpio y su autor; así el ánimo
+				# se calcula de quien escribe, no de una media de dos voces.
+				uid_op, uid_agent = memory.record_interaction_turn(
 					prompt=clean_prompt,
 					response=clean_response,
 					role=item["role"],
@@ -568,8 +571,9 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 					originator=item.get("originator"),
 					**_extra,
 				)
+				uid = uid_agent or uid_op
 				queue.update_status(item["id"], "completed")
-				logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")
+				logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid}, op: {uid_op or '—'})")
 
 				# RFC-004 P2: etiquetado en captura (emoción/tema) — fail-visible.
 				# El registro YA está hecho y la cola marcada `completed`: el tag
@@ -579,7 +583,15 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 				try:
 					if _rt_tag.enabled():
 						if time.monotonic() < _tag_deadline:
-							_t = _rt_tag.maybe_tag(memory, uid, f"{clean_prompt}\n{clean_response}")
+							# Un tag por engrama: el del Operador desde SU prompt y el
+							# del agente desde SU respuesta (sin mezclar las voces).
+							_t = {"tag_status": "ok"}
+							if uid_op and clean_prompt.strip():
+								_t = _rt_tag.maybe_tag(memory, uid_op, clean_prompt)
+							if uid_agent and clean_response.strip():
+								_ta = _rt_tag.maybe_tag(memory, uid_agent, clean_response)
+								if _t.get("tag_status") in ("ok", "degraded") and _ta.get("tag_status") not in ("ok", "degraded"):
+									_t = _ta
 							if _t.get("tag_status") == "failed":
 								logger.info(f"realtime_tag {uid}: failed ({_t.get('tag_reason')})")
 							elif not _t.get("tag_persisted", True):

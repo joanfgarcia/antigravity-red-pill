@@ -575,6 +575,81 @@ class MemoryManager:
 			logger.error(f"Failed to record interaction pair: {e}")
 			return ""
 
+	def record_interaction_turn(
+		self,
+		prompt: str,
+		response: str,
+		role: str = "assistant",
+		category: str = "mixed",
+		model: Optional[str] = None,
+		originator: Optional[str] = None,
+		session_id: Optional[str] = None,
+		affinity: Optional[List[str]] = None,
+	) -> tuple[str, str]:
+		"""Dos engramas por turno: uno del Operador y otro del agente (2026-11-20).
+
+		Un turno no tiene un ánimo: tiene dos. El del Operador sale de lo que
+		escribe él; el del agente, de lo que responde. Con un solo punto por par
+		el etiquetador tenía que inventar una media de las dos voces, y el ánimo
+		del Operador quedaba contaminado por su propio agente.
+
+		Se escribe el texto limpio de cada lado (sin tooling: el filtro corre
+		antes, en el drenaje) y `metadata.author` dice de quién es cada engrama.
+		Devuelve `(uid_operador, uid_agente)`; cadena vacía en el lado que no
+		tenía nada que decir.
+		"""
+		collection = "interaction_memories"
+		timestamp = int(time.time())
+		uids: list[str] = []
+		lados = (
+			("operator", "user", prompt),
+			("agent", role, response),
+		)
+		try:
+			self._ensure_collection(collection)
+		except Exception as e:  # noqa: BLE001
+			logger.error(f"Failed to ensure interaction collection: {e}")
+			return ("", "")
+		points = []
+		for author, autor_role, text in lados:
+			if not (text or "").strip():
+				uids.append("")
+				continue
+			uid = str(uuid.uuid4())
+			prefijo = "USER" if author == "operator" else autor_role.upper()
+			payload = {
+				"content": f"{prefijo}: {text}",
+				"importance": 5.0,
+				"timestamp": timestamp,
+				"last_recalled_at": timestamp,
+				"recall_count": 0,
+				"associations": [],
+				"associated_weight": 0.0,
+				"color": "gray",
+				"difficulty": 5.0,
+				"stability": 2.0,
+				"metadata": {
+					"type": "raw_interaction",
+					"author": author,
+					"role": autor_role,
+					"category": category,
+					"model": model or "unknown",
+					"originator": originator or "unknown",
+					"session_id": session_id,
+					"affinity": affinity or [],
+				},
+			}
+			points.append(models.PointStruct(id=uid, payload=payload, vector=self._get_vector(payload["content"])))
+			uids.append(uid)
+		if not points:
+			return ("", "")
+		try:
+			self.client.upsert(collection_name=collection, points=points)
+			return (uids[0], uids[1])
+		except Exception as e:  # noqa: BLE001
+			logger.error(f"Failed to record interaction turn: {e}")
+			return ("", "")
+
 	def search_and_reinforce(
 		self,
 		collection: str,
