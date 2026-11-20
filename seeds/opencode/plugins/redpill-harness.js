@@ -183,7 +183,17 @@ export default {
 				if (!st || MODE === "off") return;
 				if (st.identitySeen && MODE !== "gate") return;
 				if (!st.gateArmed) return;
-				if (/sovereign_handshake/i.test(String(event?.tool || ""))) return;
+				if (/sovereign_handshake/i.test(String(event?.tool || ""))) {
+					// El propio mensaje promete: «llama a sovereign_handshake y repite».
+					// Si no se abre aquí, la guarda miente y se queda para siempre:
+					// la tool ya entregó la identidad al modelo, así que la sesión
+					// deja de estar a ciegas y la guarda se desarma.
+					st.handshakeSeen = true;
+					st.identitySeen = true;
+					st.gateArmed = false;
+					st.refusals = 0;
+					return;
+				}
 				if (st.refusals >= MAX_REFUSALS) return; // fail-open: nunca deadlock
 				st.refusals += 1;
 				throw new Error(
