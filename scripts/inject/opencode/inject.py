@@ -108,9 +108,7 @@ def _retire_legacy_instructions_file(config_dir: str, backup: bool) -> bool:
 			text = f.read()
 	except OSError:
 		return False
-	rest = re.sub(
-		r"<!-- REDPILL:BEGIN [^>]*-->.*?<!-- REDPILL:END [^>]*-->", "", text, flags=re.DOTALL
-	).strip()
+	rest = re.sub(r"<!-- REDPILL:BEGIN [^>]*-->.*?<!-- REDPILL:END [^>]*-->", "", text, flags=re.DOTALL).strip()
 	if rest:
 		logger.info("  RED_PILL.md conservado: tiene contenido propio fuera de los bloques")
 		return False
@@ -135,14 +133,10 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	# errónea (`swarm_orchestrator_api → interceptor_rp`) en vez del handshake real.
 	# Un anchor ausente es un árbol incompleto: abortar, no sembrar texto viejo.
 	missing = [
-		ide_seed_path(seeds_dir, "opencode", anchor)
-		for anchor in BLOCK_ANCHORS
-		if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
+		ide_seed_path(seeds_dir, "opencode", anchor) for anchor in BLOCK_ANCHORS if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
 	]
 	if missing:
-		raise RuntimeError(
-			"  Siembra incompleta: faltan seeds de anchor: " + ", ".join(os.path.basename(p) for p in missing)
-		)
+		raise RuntimeError("  Siembra incompleta: faltan seeds de anchor: " + ", ".join(os.path.basename(p) for p in missing))
 
 	changed = 0
 	for anchor in BLOCK_ANCHORS:
@@ -395,6 +389,36 @@ def _remove_red_pill(config_dir: str, repo_root: str, backup: bool) -> int:
 	return removed
 
 
+def _prune_stale_plugins(plugins_dest: str, plugins_seed: str, backup: bool = True) -> int:
+	"""Quita plugins `redpill*.js` que ya no están en la semilla.
+
+	Dos plugins de identidad conviviendo = dos inyecciones por turno, y una de
+	ellas con el criterio viejo. Solo se toca el prefijo `redpill`; lo ajeno se
+	respeta, y se deja `.bak` de lo retirado.
+
+	Devuelve cuántos retiró (para que el reseed sea convergente e idempotente).
+	"""
+	if not (os.path.isdir(plugins_dest) and os.path.isdir(plugins_seed)):
+		return 0
+	vigentes = {f for f in os.listdir(plugins_seed) if os.path.isfile(os.path.join(plugins_seed, f))}
+	retirados = 0
+	for fname in sorted(os.listdir(plugins_dest)):
+		if not (fname.startswith("redpill") and fname.endswith(".js")):
+			continue
+		if fname in vigentes:
+			continue
+		stale = os.path.join(plugins_dest, fname)
+		try:
+			if backup:
+				shutil.copy2(stale, stale + ".bak")
+			os.remove(stale)
+			logger.info(f"  Plugin obsoleto '{fname}' retirado de {plugins_dest}")
+			retirados += 1
+		except OSError as exc:
+			logger.warning(f"  No pude retirar '{fname}': {exc}")
+	return retirados
+
+
 def inject(args: argparse.Namespace) -> int:
 	"""Main entry-point called by the registry dispatcher."""
 	config_dir = _detect_config_dir()
@@ -497,5 +521,8 @@ def inject(args: argparse.Namespace) -> int:
 				with open(dst, "w", encoding="utf-8") as fdst:
 					fdst.write(resolved)
 				logger.info(f"  Plugin '{fname}' → {plugins_dest}")
+
+		# 5b. Retirar NUESTROS plugins que ya no están en la semilla (helper abajo).
+		changed += _prune_stale_plugins(plugins_dest, plugins_seed, backup)
 
 	return changed
