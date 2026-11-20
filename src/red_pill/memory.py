@@ -1735,6 +1735,9 @@ class MemoryManager:
 		criticality: str = "WARNING",
 		message: Optional[str] = None,
 		diagnosis: Optional[str] = None,
+		restore_first_seen_at: Optional[str] = None,
+		restore_acked_at: Optional[str] = None,
+		restore_acked_intensity: Optional[float] = None,
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
@@ -1780,7 +1783,10 @@ class MemoryManager:
 				previous = {}
 
 			now = datetime.now(timezone.utc)
-			first_seen_iso = previous.get("first_seen_at") or previous.get("created_at") or now.isoformat()
+			# `restore_*`: una señal que vuelve dentro de la ventana de gracia
+			# (RFC-OBS-005 §4.4) recupera su edad y su acuse; sin esto, evaporar y
+			# reinyectar la reinicia el reloj y borra lo que el Operador ya vio.
+			first_seen_iso = previous.get("first_seen_at") or previous.get("created_at") or restore_first_seen_at or now.isoformat()
 			try:
 				first_seen_ts = datetime.fromisoformat(str(first_seen_iso).replace("Z", "+00:00")).timestamp()
 			except ValueError:
@@ -1788,7 +1794,7 @@ class MemoryManager:
 			age_hours = max(0.0, (now.timestamp() - first_seen_ts) / 3600.0)
 
 			diagnosis_hash = hashlib.sha256(diagnosis.encode("utf-8")).hexdigest() if diagnosis else None
-			acked_at = previous.get("acked_at")
+			acked_at = previous.get("acked_at") or restore_acked_at
 			# Diagnóstico nuevo ⇒ se re-arma el acuse: lo reconocido era el ruido anterior.
 			if acked_at and diagnosis_hash and previous.get("diagnosis_hash") and diagnosis_hash != previous.get("diagnosis_hash"):
 				acked_at = None
@@ -1846,8 +1852,11 @@ class MemoryManager:
 				payload["acknowledged"] = acknowledged
 				if ack_mode:
 					payload["ack_mode"] = ack_mode
-				if previous.get("acked_intensity") is not None:
-					payload["acked_intensity"] = previous.get("acked_intensity")
+				restored_intensity = previous.get("acked_intensity")
+				if restored_intensity is None:
+					restored_intensity = restore_acked_intensity
+				if restored_intensity is not None:
+					payload["acked_intensity"] = restored_intensity
 
 			# Zero vector for purely semantic/flag signals
 			vector = [0.0] * self.cfg.VECTOR_SIZE

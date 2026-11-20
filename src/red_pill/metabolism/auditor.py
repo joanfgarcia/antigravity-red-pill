@@ -632,6 +632,15 @@ class SentinelAuditor:
 				criticality = "CRITICAL" if finding.severity >= 8.0 else "WARNING"
 
 				self.logger.warning(f"Active Pain detected: {finding.message}")
+				grace: Dict[str, Any] = {}
+				try:
+					from red_pill.metabolism.reconcile import restore_within_grace
+
+					grace = restore_within_grace(signal_name)
+					if grace:
+						self.logger.info(f"[RECONCILE] gracia: '{signal_name}' vuelve dentro de la ventana; conserva su edad y acuse")
+				except Exception as grace_ex:
+					self.logger.debug(f"[RECONCILE] gracia no disponible para '{signal_name}': {grace_ex}")
 				self.memory_mgr.inject_signal(
 					name=signal_name,
 					intensity=finding.severity,
@@ -640,6 +649,9 @@ class SentinelAuditor:
 					criticality=criticality,
 					originator="Sentinel",
 					message=(finding.message or "")[:500],
+					restore_first_seen_at=grace.get("first_seen_at"),
+					restore_acked_at=grace.get("acked_at"),
+					restore_acked_intensity=grace.get("acked_intensity"),
 				)
 				# Drop a task report in MinionInbox for repository checks (formatting, typing, test)
 				if finding.type in ("formatting", "typing", "test"):

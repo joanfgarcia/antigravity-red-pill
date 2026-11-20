@@ -145,3 +145,64 @@ class TestIntegracion:
 		reconcile(_round(), memory_manager, policy=policy, state_dir=tmp_path)
 		assert memory_manager.has_signal("signal_test_failure") is False
 		assert memory_manager.has_signal("jobs_frustrated") is True
+
+
+class TestGracia:
+	"""§4.4: una señal que vuelve dentro de la ventana conserva edad y acuse.
+
+	Sin esto, P1 borra el punto y la reinyección lo hace nacer de cero: el
+	Operador ve otra vez el mismo ruido como si fuese nuevo y su acuse se pierde.
+	"""
+
+	def test_evaporar_guarda_edad_y_acuse(self, tmp_path):
+		from red_pill.metabolism.reconcile import GRACE_FILE, restore_within_grace
+
+		signal = _signal("signal_test_failure")
+		signal["first_seen_at"] = "2026-11-01T00:00:00+00:00"
+		signal["acked_at"] = "2026-11-02T00:00:00+00:00"
+		signal["acked_intensity"] = 6.0
+		mem = FakeMemory([signal])
+		now = 1795140000.0
+		report = reconcile(_round(), mem, policy={"report_only": False, "absences": 1}, state_dir=tmp_path, now=now)
+		assert report["evaporated"]
+		assert (tmp_path / GRACE_FILE).exists()
+		entry = restore_within_grace("signal_test_failure", state_dir=tmp_path, now=now + 3600)
+		assert entry["first_seen_at"] == "2026-11-01T00:00:00+00:00"
+		assert entry["acked_at"] == "2026-11-02T00:00:00+00:00"
+		assert entry["acked_intensity"] == 6.0
+
+	def test_fuera_de_ventana_no_resucita(self, tmp_path):
+		from red_pill.metabolism.reconcile import restore_within_grace
+
+		mem = FakeMemory([_signal("signal_test_failure")])
+		now = 1795140000.0
+		reconcile(_round(), mem, policy={"report_only": False, "absences": 1}, state_dir=tmp_path, now=now)
+		assert restore_within_grace("signal_test_failure", state_dir=tmp_path, now=now + 3600)
+		assert restore_within_grace("signal_test_failure", state_dir=tmp_path, now=now + 25 * 3600) == {}
+		# Caducada, la entrada se tira: la gracia no sostiene un dolor viejo.
+		assert restore_within_grace("signal_test_failure", state_dir=tmp_path, now=now + 26 * 3600) == {}
+
+	def test_lo_no_evaporado_no_deja_gracia(self, tmp_path):
+		from red_pill.metabolism.reconcile import restore_within_grace
+
+		mem = FakeMemory([_signal("signal_test_failure")])
+		reconcile(_round(), mem, state_dir=tmp_path)
+		assert restore_within_grace("signal_test_failure", state_dir=tmp_path) == {}
+
+	def test_reinyectar_restaura_edad_contra_qdrant(self, memory_manager):
+		memory_manager.storage.ensure_collection("signal_memories")
+		first_seen = "2026-11-01T00:00:00+00:00"
+		memory_manager.inject_signal(
+			"signal_test_failure",
+			intensity=6.0,
+			signal_type="pain",
+			source="SentinelAuditor",
+			restore_first_seen_at=first_seen,
+			restore_acked_at="2026-11-02T00:00:00+00:00",
+			restore_acked_intensity=6.0,
+		)
+		point = memory_manager.client.scroll(collection_name="signal_memories", limit=10)[0][0]
+		assert point.payload["name"] == "signal_test_failure"
+		assert point.payload["first_seen_at"] == first_seen
+		assert point.payload["age_hours"] > 24
+		assert point.payload["acked_at"] == "2026-11-02T00:00:00+00:00"
