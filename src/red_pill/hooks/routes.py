@@ -50,13 +50,28 @@ def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
 		state.mkdir(parents=True, exist_ok=True)
 		import time as _time
 
+		bridge = state / f"{prov}_session.json"
+		if not workdir:
+			# El contrato (§2) no lleva `workdir`: opencode no lo manda nunca, y
+			# `_write_bridge("")` borraba el bueno que escribe el scribe. El daño
+			# no es cosmético: `open_loops_line()` resuelve el workspace con este
+			# puente, y en el mismo request ya lee el "" — así que cuenta shards
+			# y ramas del workspace de otro arnés (o del cwd del backend).
+			try:
+				prev = json.loads(bridge.read_text(encoding="utf-8"))
+				prev_dir = str(prev.get("workdir") or "") if isinstance(prev, dict) else ""
+			except (OSError, ValueError, TypeError):
+				prev_dir = ""
+			if prev_dir and os.path.isdir(prev_dir):
+				workdir = prev_dir
+
 		payload = {
 			"provider": prov,
 			"session_id": session_id,
 			"workdir": workdir,
 			"updated_at": _time.time(),
 		}
-		(state / f"{prov}_session.json").write_text(json.dumps(payload), encoding="utf-8")
+		bridge.write_text(json.dumps(payload), encoding="utf-8")
 	except OSError:
 		pass
 

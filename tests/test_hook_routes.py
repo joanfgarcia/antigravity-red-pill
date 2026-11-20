@@ -122,6 +122,24 @@ def test_telemetria_del_kernel_es_silenciosa_si_no_hay_nada(monkeypatch, tmp_pat
 	assert routes._kernel_telemetry_text() == ""
 
 
+def test_el_puente_no_pierde_el_workdir_si_el_arnes_no_lo_manda(monkeypatch, tmp_path):
+	"""`/hook/context` no recibe `workdir` (no está en el contrato §2).
+
+	Un `""` no puede borrar el que escribió el scribe: `open_loops_line()`
+	resuelve el workspace con este puente y se ejecuta en el MISMO request, así
+	que el borrado hace que la línea cuente shards y ramas del workspace de otro
+	arnés —o del cwd del backend, que es el checkout del kernel.
+	"""
+	monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	routes._write_bridge("opencode", "ses_bridge", str(ws))
+	routes._write_bridge("opencode", "ses_bridge", "")
+	data = json.loads((routes.get_state_dir() / "opencode_session.json").read_text(encoding="utf-8"))
+	assert data["workdir"] == str(ws)
+	assert data["session_id"] == "ses_bridge"
+
+
 @pytest.mark.asyncio
 async def test_ack_es_idempotente(monkeypatch, tmp_path):
 	monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
