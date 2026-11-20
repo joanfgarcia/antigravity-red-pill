@@ -1,0 +1,12 @@
+# Capacidad `local-9b`: MiMo V2.6 9B en pi, ventana SERVIDA de 16k (no 262k).
+# Presupuesto: redpill ≤500 tok de arranque, identidad ≤700 tok (tarjeta).
+id: local-9b
+window: 16384
+surface: codemode          # 0 tools del kernel declaradas
+identity_mode: low         # tarjeta reducida, no wake_up_v6 completo
+identity_max_tokens: 700
+skills_budget: 3
+tools_native: [read, write, edit, bash, grep]
+compact_at: 0.65
+kv: q8_0
+notes: "KV q8_0 medido: +0,02% de perplejidad vs f16 (REPORTE_W2)."

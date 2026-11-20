@@ -1,0 +1,279 @@
+"""Rutas HTTP del hook sobre el UDS del backend (RFC-HARNESS-001 · P1).
+
+`POST /hook/context` y `POST /hook/ack`. No son una superficie del modelo: son el
+**arnés** hablando con el kernel, como el scribe habla con SQLite. Por eso no van
+por MCP.
+
+Decisiones que materializa (ver `CONTRATO_HOOK.md`):
+
+- Se envuelven **explícitamente** en `IdentityMiddleware`: las rutas de Starlette
+	no pasan por el `Mount("/mcp")`, así que sin esto el endpoint sería *menos*
+	fiable que el proxy (S18).
+- `full` **no bloquea**: arranca el cálculo en un hilo y responde `retry_full`.
+	`wake_up_v6` tarda 2,3-2,7 s en cualquier modo (es arranque, no payload), así
+	que esperar en el turno 1 sería un impuesto fijo (S22).
+- El ack lleva la **respuesta** y sella el turno; el cursor del coro se mueve ahí,
+	no al inyectar (S13).
+- `delivery_id` determinista + libro de acks → reintentar no sella dos veces.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import subprocess
+from typing import Any, Dict
+
+from red_pill.core.paths import get_state_dir
+from red_pill.hooks.context_api import AckLedger, HookRequest, block, telemetry_text
+
+# ── caché de identidad (core) ────────────────────────────────────────────────
+
+_CORE_CACHE: Dict[str, Dict[str, Any]] = {}
+_INFLIGHT: set[str] = set()
+
+
+def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
+	"""Puente del arnés: lo único que el hook sabe y el kernel (cwd=repo) no.
+
+	Sin esto, las llamadas MCP de `pi` no resuelven cuerpo: su identidad sólo
+	viajaba como argumento del modelo, que es justo lo que dejamos de aceptar.
+	"""
+	try:
+		from red_pill.hooks.context_api import canon_harness
+
+		prov = canon_harness(harness)
+		state = get_state_dir()
+		state.mkdir(parents=True, exist_ok=True)
+		import time as _time
+
+		payload = {
+			"provider": prov,
+			"session_id": session_id,
+			"workdir": workdir,
+			"updated_at": _time.time(),
+		}
+		(state / f"{prov}_session.json").write_text(json.dumps(payload), encoding="utf-8")
+	except OSError:
+		pass
+
+
+def _ledger() -> AckLedger:
+	return AckLedger(path=get_state_dir() / "hook_acks.json")
+
+
+def _identity_mode() -> str:
+	"""Modo de identidad: `low` para modelos pequeños, `full` para grandes."""
+	mode = os.getenv("REDPILL_IDENTITY_MODE", "").strip().lower()
+	return mode if mode in ("low", "medium", "full") else "full"
+
+
+def generation() -> int:
+	"""Generación de directivas (S12). La suben todos los escritores."""
+	try:
+		state = json.loads((get_state_dir() / "bunker_state.json").read_text(encoding="utf-8"))
+		return int(state.get("generation") or 0)
+	except (OSError, ValueError, TypeError):
+		return 0
+
+
+def bump_generation() -> int:
+	"""Sube la generación y la persiste. Idempotente por llamada."""
+	path = get_state_dir() / "bunker_state.json"
+	try:
+		state = json.loads(path.read_text(encoding="utf-8"))
+	except (OSError, ValueError):
+		state = {}
+	if not isinstance(state, dict):
+		state = {}
+	state["generation"] = int(state.get("generation") or 0) + 1
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_text(json.dumps(state), encoding="utf-8")
+	except OSError:
+		pass
+	return int(state["generation"])
+
+
+def _cache_key(originator: str, model: str) -> str:
+	return f"{originator}|{model}|{generation()}"
+
+
+def _fast_identity_text() -> str:
+	"""Identidad fija desde Qdrant (`ID_IDENTITY`), sin embeddings ni wake.
+
+	Lectura de UN punto: milisegundos. Es la red de seguridad del arranque en frío.
+	"""
+	try:
+		import red_pill.config as cfg
+		from red_pill.core.storage import StorageEngine
+		from red_pill.seed import ID_IDENTITY
+
+		client = StorageEngine(url=cfg.QDRANT_URL).client
+		points = client.retrieve(collection_name="directive_memories", ids=[ID_IDENTITY], with_payload=True)
+		if not points:
+			return ""
+		payload = getattr(points[0], "payload", None) or {}
+		return str(payload.get("content") or "").strip()
+	except Exception:  # noqa: BLE001 — fail-open: el wake completo sigue en marcha
+		return ""
+
+
+def _wake_text(mode: str, continuity: str) -> str:
+	"""Texto de identidad: el mismo `wake_up_v6` que usa la tool. Bloqueante."""
+	from red_pill.mcp_server import GET_PYTHON, PROJECT_ROOT
+
+	cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode]
+	if continuity:
+		cmd += ["--continuity-id", continuity]
+	try:
+		out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+		return (out.stdout or "").strip()
+	except (OSError, subprocess.SubprocessError):
+		return ""
+
+
+def _start_full(originator: str, model: str, continuity: str) -> None:
+	key = _cache_key(originator, model)
+	if key in _INFLIGHT:
+		return
+	_INFLIGHT.add(key)
+
+	async def _run() -> None:
+		try:
+			text = await asyncio.to_thread(_wake_text, _identity_mode(), continuity)
+			if text:
+				_CORE_CACHE[key] = {"text": text, "generation": generation()}
+		finally:
+			_INFLIGHT.discard(key)
+
+	asyncio.get_running_loop().create_task(_run())
+
+
+def reset_caches() -> None:
+	"""Vacía la caché (tests y re-siembra)."""
+	_CORE_CACHE.clear()
+	_INFLIGHT.clear()
+
+
+# ── handlers ─────────────────────────────────────────────────────────────────
+
+
+async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
+	"""Construye los bloques para el arnés. Nunca lanza por fallo interno."""
+	from red_pill import mcp_server
+
+	req = HookRequest.from_payload(payload)
+
+	# El canal es el arnés: se publica la identidad como la publicaría el proxy.
+	token = mcp_server._shared_identity_var.set({"originator": req.originator, "harness": req.harness, "hook": True, "ambiguous": False})
+	try:
+		identity = await mcp_server._resolve_session_identity({"caller_leg": None}, persist=True)
+	except Exception as exc:  # noqa: BLE001 — el endpoint informa, no tumba el turno
+		identity = {"originator": req.originator, "error": str(exc)}
+	finally:
+		mcp_server._shared_identity_var.reset(token)
+
+	blocks: list[Dict[str, Any]] = []
+	hint = "none"
+	originator = str(identity.get("originator") or req.originator)
+	continuity = str(identity.get("continuity_id") or "")
+	_write_bridge(req.harness, req.session_id, str(payload.get("workdir") or ""))
+
+	if req.need == "full":
+		key = _cache_key(originator, req.model)
+		cached = _CORE_CACHE.get(key)
+		if cached and cached.get("generation") == generation():
+			blocks.append(block("identity", str(cached["text"])))
+		else:
+			# En frío NO se responde con las manos vacías: el wake completo tarda
+			# 2,3-2,7 s y se calcula en segundo plano, pero mientras tanto se sirve la
+			# identidad fija (`ID_IDENTITY`, ~470 tok). Sin esto, cada proceso `pi -p`
+			# arranca "en frío" y el turno se queda sin identidad: el modelo se
+			# presenta como el arnés (pasó el 19-11: "Soy Pi" / "Soy Aleth").
+			fast = _fast_identity_text()
+			if fast:
+				blocks.append(block("identity", fast))
+			_start_full(originator, req.model, continuity)
+			hint = "retry_full"
+
+	if req.need in ("full", "light"):
+		if "error" in identity:
+			blocks.append(block("notice", f"identidad no resuelta: {identity['error']}", origin="kernel"))
+		try:
+			from red_pill.registry import registry as _tool_registry  # noqa: F401 — sólo para tipar
+			from red_pill.session.store import SessionRegistry
+
+			_store = SessionRegistry()
+			until_seq = _store.get_max_event_seq()
+			digest = mcp_server._coro_digest(identity, until_seq) if until_seq else None
+			if digest:
+				blocks.append(block("coro", digest, origin="coro", trusted=False))
+		except Exception:  # noqa: BLE001 — el digest es best-effort
+			pass
+		stats = {
+			"coro": int(payload.get("coro_novelties") or 0),
+			"open_loops": int(payload.get("open_loops") or 0),
+			"pain": int(payload.get("pain") or 0),
+			"jobs": int(payload.get("jobs") or 0),
+			"mood": payload.get("mood"),
+		}
+		line = telemetry_text(stats)
+		if line:
+			blocks.append(block("telemetry", line, origin="telemetry"))
+
+	return {
+		"delivery_id": req.delivery,
+		"generation": generation(),
+		"blocks": blocks,
+		"hint": hint,
+	}
+
+
+async def handle_ack(payload: Dict[str, Any]) -> Dict[str, Any]:
+	"""Cierra el turno: cursor del coro + sellado. Idempotente por `delivery_id`."""
+	from red_pill import mcp_server
+
+	req = HookRequest.from_payload({**payload, "need": payload.get("need") or "poll"})
+	delivery = str(payload.get("delivery_id") or req.delivery)
+	delivered = bool(payload.get("delivered", True))
+	seq = int(payload.get("seq") or 0)
+	response = str(payload.get("response") or "")
+
+	ledger = _ledger()
+	if ledger.seen(delivery):
+		return {"delivery_id": delivery, "cursor": seq, "sealed": False, "duplicate": True}
+
+	token = mcp_server._shared_identity_var.set({"originator": req.originator, "harness": req.harness, "hook": True})
+	try:
+		if delivered and seq:
+			from red_pill.session.store import SessionRegistry
+
+			_session_store = SessionRegistry()
+			if seq:
+				_session_store.set_last_seen_event_seq(req.originator, seq)
+			try:
+				mcp_server._reconcile_pull_first({"originator": req.originator}, seq)
+			except Exception:  # noqa: BLE001
+				pass
+		sealed = False
+		if delivered and response.strip():
+			try:
+				from red_pill.session.turn_seal import seal_turn
+
+				seal_turn(
+					originator=req.originator,
+					requested_id=delivery,
+					role="user",
+					prompt=req.prompt or None,
+					response=response,
+				)
+				sealed = True
+			except Exception:  # noqa: BLE001 — el sellado es best-effort, pero se informa
+				sealed = False
+	finally:
+		mcp_server._shared_identity_var.reset(token)
+
+	ledger.mark(delivery)
+	return {"delivery_id": delivery, "cursor": seq, "sealed": sealed, "duplicate": False}

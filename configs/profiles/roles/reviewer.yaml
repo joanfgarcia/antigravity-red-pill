@@ -1,0 +1,9 @@
+# Rol `reviewer`: audita, no muta.
+id: reviewer
+purpose: "Audita sin modificar; produce hallazgos con evidencia."
+skills_install: [adversarial-review, scout, knowledge-access, frontmatter]
+rules_blocks: [sovereign_handshake, agent_core, knowledge_access, frontmatter_docs]
+boot_card: reviewer
+limits:
+  max_steps: 60
+gates: [audit_evidence_present]

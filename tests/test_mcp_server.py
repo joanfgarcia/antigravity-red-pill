@@ -333,7 +333,8 @@ class TestListTools:
 		# F4 (A1): el claim de etapa es tool del coro, no solo función interna.
 		assert "try_claim_stage" in tool_names
 		# 16 antes de AD-095: −3 sueltas del coro, +1 `coro_api` consolidada.
-		assert len(result) == 13
+		# 13 tools del kernel + redpill_search/redpill_call (puerta única, P1b).
+		assert len(result) == 15
 
 
 class TestControlBunkerAdditional:

@@ -1,0 +1,10 @@
+# Capacidad `cloud-flash`: modelo cloud barato, ventana media.
+id: cloud-flash
+window: 200000
+surface: gateway           # 0 declaradas + redpill_search/redpill_call
+identity_mode: full
+identity_max_tokens: 2500
+skills_budget: 10
+tools_native: [read, write, edit, bash, grep]
+compact_at: 0.8
+kv: null

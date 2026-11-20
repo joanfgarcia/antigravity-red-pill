@@ -36,6 +36,12 @@ def main():
 	parser.add_argument("--remove", action="store_true", help="Remove red-pill from target IDE(s).")
 	parser.add_argument("--list", action="store_true", help="List discovered adapters and exit.")
 	parser.add_argument("--ide", help="Target a specific IDE (csv). Default: auto-detect all present.")
+	parser.add_argument(
+		"--profile",
+		default="full",
+		help="Perfil de arnés `rol:capacidad:egress` (p.ej. worker:local-9b:none) o `full` (por defecto). Ver configs/profiles/.",
+	)
+	parser.add_argument("--dry-run", action="store_true", help="Resuelve el perfil y muestra el plan sin escribir nada.")
 	args = parser.parse_args()
 
 	adapters = discover_adapters()

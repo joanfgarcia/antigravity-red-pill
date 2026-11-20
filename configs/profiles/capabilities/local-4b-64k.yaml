@@ -1,0 +1,16 @@
+# Capacidad `local-4b-64k`: Spark-X2.6-4B en pi, ventana servida de 64k.
+#
+# Por qué existe: MiMo 9B (Q4) ocupa 5,5 GB de pesos y con KV q8_0 sólo deja ~2 GB
+# para caché → 16k de ventana. Spark 4B pesa 3,5 GB y su KV q8_0 son 34 KiB/token:
+#   pesos 3,5 + overhead 0,3 + 65.536 × 34 KiB (2,2 GB) ≈ 6,0 GB → cabe en 8 GB.
+# Sirve para medir si la continuidad aguanta ventanas largas sin compactar.
+id: local-4b-64k
+window: 65536
+surface: codemode
+identity_mode: low
+identity_max_tokens: 700
+skills_budget: 3
+tools_native: [read, write, edit, bash, grep]
+compact_at: 0.65
+kv: q8_0
+notes: "Spark-X2.6-4B Q4_K_M · 34 KiB/token con KV q8_0 · 64k deja ~1,7 GB de margen."

@@ -81,6 +81,16 @@ def inscribe_identity(manager: Any, identity_text: str) -> None:
 	)
 
 
+def _bump_generation() -> None:
+	"""El pacto es identidad: mueve la generación (RFC-HARNESS-001 S12)."""
+	try:
+		from red_pill.hooks.routes import bump_generation
+
+		bump_generation()
+	except Exception:  # noqa: BLE001
+		pass
+
+
 def inscribe_pact(manager: Any, level: str, sealed_on: Optional[str] = None) -> None:
 	"""Inscribe la directiva del nivel de pacto (plantilla). No toca la vigencia.
 
@@ -95,6 +105,8 @@ def inscribe_pact(manager: Any, level: str, sealed_on: Optional[str] = None) -> 
 		pact_text(level, sealed_on=when),
 		{"type": "pact", "associations": [ID_ALEPH], "pact_level": level, "sealed_on": when},
 	)
+
+	_bump_generation()
 
 
 def _content_of(manager: Any, point_id: str) -> Optional[str]:
@@ -243,6 +255,8 @@ def seal_pact(manager: Any, level: str, grant: bool = False, accept: bool = Fals
 		return "[OK] Bond sellado en 770 (Operador + agente); el 760 queda reemplazado."
 	except Exception as e:
 		return f"[ERROR] Failed to seal pact: {e}"
+
+	_bump_generation()
 
 
 def active_pact_level(manager: Any) -> Optional[str]:

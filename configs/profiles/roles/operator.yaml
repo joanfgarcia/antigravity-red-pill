@@ -1,0 +1,28 @@
+# Rol `operator`: orquesta (el rol de Aleth).
+id: operator
+purpose: "Orquesta: descompone, delega, verifica y cierra."
+skills_install:
+  - workspace-memory
+  - job-manager
+  - dag
+  - forge
+  - scout
+  - adversarial-review
+  - minion-delegation
+  - swarm-flow-manager
+  - wake-callback
+  - context-distiller
+  - knowledge-access
+  - memory-manager
+  - git-pushing
+  - commit
+  - frontmatter
+  - skill-creation
+  - scaffold-sovereign-project
+  - telegram-gateway
+rules_blocks:
+  [sovereign_handshake, agent_core, knowledge_access, frontmatter_docs, job_dag_execution, git_workflow, identity_pact]
+boot_card: operator
+limits:
+  max_steps: 120
+gates: [bench_task_success, audit_evidence_present]

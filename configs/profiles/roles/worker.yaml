@@ -1,0 +1,19 @@
+# Rol `worker`: ejecuta encargos acotados con resultado verificable.
+# El ORDEN de `skills_install` es la prioridad: si la capacidad no da presupuesto
+# para todas, las que sobran van a la biblioteca (consultables, no anunciadas).
+id: worker
+purpose: "Ejecuta encargos acotados y reporta evidencia."
+skills_install:
+  - workspace-memory
+  - job-manager
+  - python-venv-runner
+  - git-pushing
+  - commit
+  - context-distiller
+  - frontmatter
+  - knowledge-access
+rules_blocks: [sovereign_handshake, agent_core, knowledge_access, git_workflow]
+boot_card: worker
+limits:
+  max_steps: 40
+gates: [bench_task_success]

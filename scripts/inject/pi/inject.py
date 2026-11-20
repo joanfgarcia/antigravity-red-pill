@@ -155,13 +155,15 @@ def _skill_frontmatter_error(skill_md: str) -> str | None:
 	return None
 
 
-def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, skip: set | None = None) -> int:
+def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool, skip: set | None = None, only: set | None = None) -> int:
 	"""Copy a skills dir into the Pi skills root. Returns number of changed skills."""
 	changed = 0
 	if not os.path.isdir(src_dir):
 		return 0
 	os.makedirs(dest_dir, exist_ok=True)
 	for skill_entry in sorted(os.listdir(src_dir)):
+		if only is not None and skill_entry not in only:
+			continue
 		skill_src = os.path.join(src_dir, skill_entry)
 		skill_md = os.path.join(skill_src, "SKILL.md")
 		if not os.path.isdir(skill_src) or not os.path.exists(skill_md):
@@ -237,12 +239,14 @@ def _prune_legacy(skills_dest: str) -> int:
 def _deploy_extension(pi_dir: str, seed: str, variables: dict, backup: bool) -> int:
 	extensions_dir = os.path.join(pi_dir, "extensions")
 	os.makedirs(extensions_dir, exist_ok=True)
-	dest = os.path.join(extensions_dir, "red-pill.ts")
+	# El nombre SALE del seed: con "red-pill.ts" fijo, desplegar la segunda extensión
+	# (`red-pill-context.ts`) pisaba la primera y el relay desaparecía sin avisar.
+	dest = os.path.join(extensions_dir, os.path.basename(seed))
 	resolved = subst(_read_seed(seed), variables)
 	if os.path.exists(dest):
 		with open(dest, encoding="utf-8") as f:
 			if f.read() == resolved:
-				logger.info("· Pi extension 'red-pill.ts' sin cambios")
+				logger.info(f"· Pi extension '{os.path.basename(seed)}' sin cambios")
 				return 0
 		if backup:
 			shutil.copy2(dest, dest + ".bak")
@@ -305,11 +309,12 @@ def _ensure_pi_mcp_client(pi_dir: str) -> int:
 
 def _remove(pi_dir: str, repo_root: str, args) -> int:
 	removed = 0
-	ext = os.path.join(pi_dir, "extensions", "red-pill.ts")
-	if os.path.exists(ext):
-		os.remove(ext)
-		removed += 1
-		logger.info("✓ Pi extension 'red-pill.ts' removed")
+	for ext_name in ("red-pill.ts", "red-pill-context.ts"):
+		ext = os.path.join(pi_dir, "extensions", ext_name)
+		if os.path.exists(ext):
+			os.remove(ext)
+			removed += 1
+			logger.info(f"✓ Pi extension '{ext_name}' removed")
 	skills_dest = os.path.join(pi_dir, "skills")
 	managed = list(LEGACY_SKILL_DIRS)
 	for src in (os.path.join(repo_root, "skills"), os.path.join(repo_root, "seeds", "pi", "skills")):
@@ -341,25 +346,68 @@ def inject(args: argparse.Namespace) -> int:
 	variables = build_vars(args)
 	backup = not getattr(args, "no_backup", False)
 
+	# ── Perfil (RFC-HARNESS-001 P3b/P4): rol × capacidad × egress ─────────────
+	bundle = None
+	profile = str(getattr(args, "profile", "full") or "full")
+	if profile != "full":
+		parts = profile.split(":")
+		if len(parts) != 3:
+			logger.error("--profile debe ser `rol:capacidad:egress` (p.ej. worker:local-9b:none) o `full`")
+			return 2
+		sys.path.insert(0, os.path.join(repo_root, "src"))
+		from red_pill.harness.profile import ProfileError, describe, resolve
+
+		try:
+			bundle = resolve(parts[0], parts[1], parts[2])
+		except ProfileError as exc:
+			logger.error(f"--profile inválido: {exc}")
+			return 2
+		print(describe(bundle))
+
+	if getattr(args, "dry_run", False):
+		logger.info("— dry-run: no se escribe nada —")
+		if bundle is not None:
+			logger.info(f"skills a instalar: {bundle.skills}")
+			logger.info(f"biblioteca: {bundle.skills_library or '—'}")
+		logger.info(f"extensiones: red-pill.ts + red-pill-context.ts → {pi_dir}/extensions")
+		return 0
+
 	if getattr(args, "remove", False):
 		return _remove(pi_dir, repo_root, args)
 
 	changed = 0
-	# 1. Extension
-	seed_ext = os.path.join(repo_root, "seeds", "pi", "extensions", "red-pill.ts")
-	if os.path.exists(seed_ext):
-		changed += _deploy_extension(pi_dir, seed_ext, variables, backup)
-		changed += _ensure_pi_mcp_client(pi_dir)
+	# 1. Extensiones: captura/relay (`red-pill.ts`) e identidad por hook
+	#    (`red-pill-context.ts`, P4). Las dos, siempre: sin la segunda no hay identidad.
+	for ext_name in ("red-pill.ts", "red-pill-context.ts"):
+		seed_ext = os.path.join(repo_root, "seeds", "pi", "extensions", ext_name)
+		if os.path.exists(seed_ext):
+			changed += _deploy_extension(pi_dir, seed_ext, variables, backup)
+	changed += _ensure_pi_mcp_client(pi_dir)
 
 	# 2. Skills: genérico primero, override específico-IDE después (gana).
 	#    Los ficheros pisados por el override se SALTAN en la pasada genérica
 	#    (si no, la genérica los re-copia y el reseed no converge).
 	skills_dest = os.path.join(pi_dir, "skills")
 	pi_skills_src = os.path.join(repo_root, "seeds", "pi", "skills")
-	changed += _deploy_skills(os.path.join(repo_root, "skills"), skills_dest, variables, backup, skip=_overridden_files(pi_skills_src))
-	changed += _deploy_skills(pi_skills_src, skills_dest, variables, backup)
+	only = set(bundle.skills) if bundle is not None else None
+	changed += _deploy_skills(os.path.join(repo_root, "skills"), skills_dest, variables, backup, skip=_overridden_files(pi_skills_src), only=only)
+	changed += _deploy_skills(pi_skills_src, skills_dest, variables, backup, only=only)
+	if bundle is not None and bundle.skills_library:
+		# Biblioteca: NO la descubre Pi (no se anuncia), pero está en disco y la
+		# boot card dice dónde. Así el presupuesto no se paga y nada desaparece.
+		library_dest = os.path.join(pi_dir, "library", "skills")
+		only_lib = set(bundle.skills_library)
+		changed += _deploy_skills(os.path.join(repo_root, "skills"), library_dest, variables, backup, only=only_lib)
+		changed += _deploy_skills(pi_skills_src, library_dest, variables, backup, only=only_lib)
 	# 3. Prune legados snake_case → reseed convergente e idempotente.
 	changed += _prune_legacy(skills_dest)
+
+	# 3.bis. Bundle resuelto (introspección y reproducibilidad del experimento)
+	if bundle is not None:
+		import json as _json
+
+		(open(os.path.join(pi_dir, "bundle.json"), "w", encoding="utf-8")).write(_json.dumps(bundle.to_dict(), ensure_ascii=False, indent=1))
+		logger.info(f"✓ bundle del perfil escrito en {os.path.join(pi_dir, 'bundle.json')}")
 
 	# 4. Anchor → <workspace>/AGENTS.override.md (shadows CLAUDE.md for Pi, which
 	#    carries the claude-code MCP anchor). Pi-specific seed overrides win.

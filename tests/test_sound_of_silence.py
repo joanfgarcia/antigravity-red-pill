@@ -12,7 +12,13 @@ EXTENSIONS = [".py", ".sh", ".md"]
 ROOT_FILES = ["README.md", "QUICKSTART.md"]
 # Files excluded from space-indent and ornamental checks due to legitimate exceptions
 # (e.g. embedded Python heredoc in shell scripts requires space indentation)
-EXCLUDED_FROM_STYLE_CHECKS = {"scripts/install_neo.sh"}
+EXCLUDED_FROM_STYLE_CHECKS = {
+	"scripts/install_neo.sh",
+	# `bench_suite.py` embebe el CÓDIGO de sus fixtures en literales: son ficheros
+	# Python con indentación de espacios a propósito (y uno de ellos está roto a
+	# propósito). Convertirlos a tabs cambiaría lo que el banco mide.
+	"scripts/bench_suite.py",
+}
 
 
 def test_sound_of_silence_compliance():

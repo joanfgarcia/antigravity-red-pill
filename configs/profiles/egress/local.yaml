@@ -1,0 +1,5 @@
+# `local`: puede hablar con servicios locales del Operador (Qdrant, cola, coro).
+id: local
+network: local
+secrets: none
+skills_blocked: [telegram-gateway]

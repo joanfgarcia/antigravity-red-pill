@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -71,8 +72,38 @@ def GET_PYTHON() -> str:
 	return sys.executable
 
 
+# Router card (RFC-HARNESS-001 §4.4): lo ÚNICO que un cliente con divulgación
+# progresiva declara del servidor. Explica qué familias hay y cuándo buscarlas, en
+# lugar de costar 10.171 tokens de esquemas (medido en REPORTE_W0).
+ROUTER_CARD = (
+	"RedPill-Kernel: memoria y orquestación soberanas. Familias: "
+	"bunker_memory_api (recall/escritura de memoria y directivas), coro_api (mensajería entre almas), "
+	"job_manager_api (trabajos diferidos), swarm_orchestrator_api (minions y control), "
+	"metabolism_health_api (salud del sistema), sovereign_handshake (identidad, sólo arneses sin hook). "
+	"Si tu perfil difiere herramientas, usa redpill_search para encontrarlas y redpill_call para invocarlas."
+)
+
+# SUPERFICIE declarada (P1b). Viaja en el payload del proxy (`surface`), no en una
+# env global: el backend es UN proceso para N clientes (S16).
+GATEWAY_TOOLS = ("redpill_search", "redpill_call")
+
+
+def _surface() -> str:
+	shared = _shared_identity_var.get() or {}
+	surface = str(shared.get("surface") or "").strip().lower()
+	if surface in ("full", "gateway", "none"):
+		return surface
+	env = os.getenv("REDPILL_TOOLS_PROFILE", "").strip().lower()
+	if env in ("full", "gateway", "none"):
+		return env
+	# Default `full`: el perfil elige (el proxy manda `surface` por petición). Un
+	# default `gateway` cambiaría el comportamiento de todo cliente que no lo
+	# declare, y esta pieza no puede perder funcionalidad para ahorrar tokens.
+	return "full"
+
+
 # Initialize the Sovereign MCP Server
-server = Server("RedPill-Kernel")
+server = Server("RedPill-Kernel", instructions=ROUTER_CARD)
 
 
 @server.list_prompts()
@@ -2319,7 +2350,9 @@ def _harness_bridge(provider: Optional[str] = None) -> Dict[str, str]:
 	state = get_state_dir()
 	now = time.time()
 	ttl = _bridge_ttl_s()
-	providers = (provider,) if provider else ("opencode", "claude_code")
+	# `pi` y `antigravity` escriben su bridge desde el hook (P4): sin ellos aquí,
+	# sus llamadas MCP no resolvían cuerpo y el arnés con hook quedaba cojo.
+	providers = (provider,) if provider else ("opencode", "claude_code", "pi", "antigravity")
 	best: Optional[tuple[float, Dict[str, str]]] = None
 	for prov in providers:
 		try:
@@ -3728,7 +3761,93 @@ except Exception as _coro_register_error:  # non-fatal: el servidor arranca igua
 
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
-	return registry.get_tools()
+	surface = _surface()
+	tools = registry.get_tools()
+	if surface == "full":
+		return tools
+	if surface == "none":
+		return []
+	return [tool for tool in tools if tool.name in GATEWAY_TOOLS]
+
+
+@registry.register(
+	name="redpill_search",
+	description=(
+		"Busca herramientas del kernel por lenguaje natural y devuelve nombre, descripción y esquema "
+		"como TEXTO. Úsala cuando tu perfil no declare la herramienta que necesitas, y luego invócala "
+		"con redpill_call. El router card del servidor dice qué familias hay."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string", "description": "Qué necesitas hacer, en lenguaje natural."},
+			"limit": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Máximo de resultados (default 3)."},
+		},
+		"required": ["query"],
+	},
+)
+async def handle_redpill_search(arguments: Dict[str, Any]):
+	"""Descubrimiento bajo demanda: el esquema viaja como texto, no como tool."""
+	query = str(arguments.get("query") or "").strip().lower()
+	try:
+		limit = min(10, max(1, int(arguments.get("limit") or 3)))
+	except (TypeError, ValueError):
+		limit = 3
+	if not query:
+		return [types.TextContent(type="text", text=json.dumps({"error": "invalid_arguments", "detail": "query vacío"}))]
+	# términos de 1-2 letras ("no", "de") casan con todo: fuera.
+	terms = [term for term in re.split(r"[^a-z0-9_]+", query) if len(term) >= 3]
+	scored = []
+	for tool in registry.get_tools():
+		blob = f"{tool.name} {tool.description or ''}".lower()
+		score = sum(1 for term in terms if term in blob)
+		if score:
+			scored.append((score, len(tool.name), tool))
+	scored.sort(key=lambda item: (-item[0], item[1]))
+	found = [{"name": tool.name, "description": tool.description, "schema": tool.inputSchema} for _, _, tool in scored[:limit]]
+	payload = {"results": found} if found else {"results": [], "detail": "sin coincidencias; prueba otras palabras"}
+	return [types.TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+
+@registry.register(
+	name="redpill_call",
+	description=(
+		"Invoca una herramienta del kernel por nombre, con sus argumentos. Valida en el servidor y "
+		"devuelve errores estructurados (unknown_tool, invalid_arguments) para que puedas corregir sin adivinar."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"name": {"type": "string", "description": "Nombre exacto de la herramienta (de redpill_search)."},
+			"arguments": {"type": "object", "description": "Objeto de argumentos de esa herramienta."},
+		},
+		"required": ["name"],
+	},
+)
+async def handle_redpill_call(arguments: Dict[str, Any]):
+	name = str(arguments.get("name") or "").strip()
+	payload = arguments.get("arguments") or {}
+	if not isinstance(payload, dict):
+		return [types.TextContent(type="text", text=json.dumps({"error": "invalid_arguments", "detail": "arguments debe ser un objeto"}))]
+	known = {tool.name for tool in registry.get_tools()}
+	actions = {action for parent in getattr(registry, "_actions", {}).values() for action in parent}
+	if name not in known and name not in actions:
+		suggestions = sorted(n for n in known if name.split("_")[0][:4] in n)[:3]
+		return [
+			types.TextContent(
+				type="text",
+				text=json.dumps({"error": "unknown_tool", "detail": name, "hints": suggestions}, ensure_ascii=False),
+			)
+		]
+	try:
+		return await registry.execute(name, payload)
+	except Exception as exc:  # noqa: BLE001 — error estructurado, no traza
+		return [
+			types.TextContent(
+				type="text",
+				text=json.dumps({"error": "invalid_arguments", "tool": name, "detail": str(exc)[:300]}, ensure_ascii=False),
+			)
+		]
 
 
 @server.call_tool()

@@ -21,7 +21,9 @@ from typing import Any, Callable, Optional
 import uvicorn
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 
 import red_pill.mcp_server as kernel
 from red_pill.mcp_proxy import default_socket
@@ -58,6 +60,34 @@ class IdentityMiddleware:
 			kernel._shared_identity_var.reset(token)
 
 
+async def _hook_endpoint(request: Request, *, ack: bool = False) -> JSONResponse:
+	"""Adaptador HTTP → `hooks.routes`. 4xx es bug del cliente, no caída."""
+	from red_pill.hooks import routes as hook_routes
+	from red_pill.hooks.context_api import HookPayloadError
+
+	try:
+		payload = await request.json()
+	except Exception:
+		return JSONResponse({"error": "invalid_json"}, status_code=400)
+	try:
+		result = await (hook_routes.handle_ack(payload) if ack else hook_routes.handle_context(payload))
+	except HookPayloadError as exc:
+		return JSONResponse({"error": "invalid_payload", "detail": str(exc)}, status_code=400)
+	return JSONResponse(result)
+
+
+def _asgi(fn):
+	"""Envuelve un handler de Request como app ASGI para poder meterlo en el
+	`IdentityMiddleware` (el middleware sólo envuelve apps ASGI, no endpoints)."""
+
+	async def app(scope, receive, send):
+		request = Request(scope, receive)
+		response = await fn(request)
+		await response(scope, receive, send)
+
+	return app
+
+
 def build_app(json_response: bool = False) -> Starlette:
 	# Stateless (2026-10-27): el kernel no guarda estado por conexión — la
 	# identidad viaja en cada request (`X-RedPill-Proxy`). Con sesión viva, un
@@ -70,8 +100,17 @@ def build_app(json_response: bool = False) -> Starlette:
 		async with manager.run():
 			yield
 
+	# Las rutas del hook se envuelven EXPLÍCITAMENTE: no están dentro del Mount,
+	# así que sin esto `_shared_identity_var` quedaría None y el endpoint sería
+	# menos fiable que el proxy (AUDIT_R1 S18).
+	hook_context = _asgi(lambda request: _hook_endpoint(request, ack=False))
+	hook_ack = _asgi(lambda request: _hook_endpoint(request, ack=True))
 	return Starlette(
-		routes=[Mount("/mcp", app=IdentityMiddleware(manager.asgi_app))],
+		routes=[
+			Mount("/mcp", app=IdentityMiddleware(manager.asgi_app)),
+			Route("/hook/context", endpoint=IdentityMiddleware(hook_context), methods=["POST"]),
+			Route("/hook/ack", endpoint=IdentityMiddleware(hook_ack), methods=["POST"]),
+		],
 		lifespan=lifespan,
 	)
 

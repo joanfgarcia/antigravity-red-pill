@@ -58,6 +58,29 @@ SCRIPTS_PRE_SEED = {
 	SCRIPTS_DIR / "opencode_version.py",
 	SCRIPTS_DIR / "migrate_opencode_v2.py",
 }
+# Instrumentos de laboratorio del HOST (banco de modelos, sondas de calidad y el
+# bootstrapper del sandbox). Miden modelos locales por la ruta absoluta del
+# Operador (`~/.local/share/red-pill/models`, `/home/joan/opt/k2-bench/...`) y no
+# son código del kernel: corren desde el host o desde dentro del sandbox, a veces
+# sin `.env`, sin red y antes de que exista estado de red-pill. No resuelven por
+# `core/paths.py` porque son standalone a propósito (misma clase que el pre-seed).
+# La excepción sólo es válida mientras sigan siéndolo:
+# `test_host_instruments_son_standalone` lo blinda.
+SCRIPTS_HOST_INSTRUMENTS = {
+	SCRIPTS_DIR / "bench_admission.py",
+	SCRIPTS_DIR / "dokime.py",
+	SCRIPTS_DIR / "kv_perplexity_probe.py",
+	SCRIPTS_DIR / "voice_probe.py",
+}
+
+# Scripts que miden los directorios de OTROS arneses (`.opencode`, `.claude`,
+# `.pi`): mismas dirs de terceros que `EXTERNAL_TOOL_FILES` para `src/`, con la
+# misma razón — son ubicaciones oficiales del arnés, no raíces XDG de red-pill,
+# así que `core/paths.py` no las posee. Su propio `~/.local/share/red-pill` sí
+# pasa por `get_models_dir()`; esto sólo cubre lo ajeno.
+SCRIPTS_EXTERNAL_TOOL = {
+	SCRIPTS_DIR / "harness_cost.py",
+}
 INJECT_PKG = SCRIPTS_DIR / "inject"
 
 HARDCODED_PATTERNS = [
@@ -70,7 +93,7 @@ HARDCODED_PATTERNS = [
 
 
 def _is_allowed(py: Path) -> bool:
-	if py in ALLOWED_FILES or py in EXTERNAL_TOOL_FILES or py in SCRIPTS_PRE_SEED:
+	if py in ALLOWED_FILES or py in EXTERNAL_TOOL_FILES or py in SCRIPTS_PRE_SEED or py in SCRIPTS_HOST_INSTRUMENTS or py in SCRIPTS_EXTERNAL_TOOL:
 		return True
 	return INJECT_PKG in py.parents  # the whole scripts/inject/** package (IDE injectors)
 
@@ -120,7 +143,19 @@ def test_preseed_scripts_son_standalone(script: Path):
 	"""
 	assert script.is_file(), f"{script} desapareció: retira su entrada del allowlist"
 	content = script.read_text(encoding="utf-8")
+	assert not _STDLIB_IMPORT.search(content), f"{script.name} importa red_pill: resuelve sus rutas por core/paths.py y sácalo de SCRIPTS_PRE_SEED"
+
+
+@pytest.mark.parametrize("script", sorted(SCRIPTS_HOST_INSTRUMENTS), ids=lambda p: p.name)
+def test_host_instruments_son_standalone(script: Path):
+	"""La excepción de instrumentos de host sólo vale si siguen siendo standalone.
+
+	Si uno importa `red_pill`, ya puede resolver sus rutas por `core/paths.py` y
+	su entrada deja de estar justificada: hay que refactorizarlo, no ampliar la
+	lista.
+	"""
+	assert script.is_file(), f"{script} desapareció: retira su entrada del allowlist"
+	content = script.read_text(encoding="utf-8")
 	assert not _STDLIB_IMPORT.search(content), (
-		f"{script.name} importa red_pill: resuelve sus rutas por core/paths.py "
-		"y sácalo de SCRIPTS_PRE_SEED"
+		f"{script.name} importa red_pill: resuelve sus rutas por core/paths.py y sácalo de SCRIPTS_HOST_INSTRUMENTS"
 	)

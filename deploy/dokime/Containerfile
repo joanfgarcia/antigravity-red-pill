@@ -1,0 +1,62 @@
+# Dokimé — banco de pruebas aislado de RFC-HARNESS-001.
+#
+# Base node:22-slim porque pi se instala por npm; qdrant corre en su propio
+# contenedor (imagen oficial), no aquí.
+#
+# Construcción (sin credenciales dentro, sin secretos en capas):
+#   podman build -t localhost/dokime:latest -f deploy/dokime/Containerfile deploy/dokime
+#
+# El código de red-pill NO se hornea: se monta en /opt/red-pill en tiempo de
+# ejecución (clon dentro del volumen, ver scripts/dokime.py).
+
+FROM docker.io/library/node:22-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PATH=/opt/py/bin:$PATH
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      python3 python3-venv python3-pip git curl ca-certificates jq ripgrep \
+ && rm -rf /var/lib/apt/lists/*
+
+# venv propio con el Python del repo: `pure-mls 4.0.0` exige >=3.12 y la imagen
+# base trae 3.11. `uv` (el mismo gestor que usa el proyecto) provisiona 3.12.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && /root/.local/bin/uv python install 3.12 \
+ && /root/.local/bin/uv venv /opt/py --python 3.12
+
+# Dependencias del sandbox: es un banco de pruebas, no la instalación completa.
+# Aquí sólo lo que el kernel necesita para arrancar y hablar con Qdrant/MCP.
+# Crece por fase (ver DOKIME.md §3). Nada de torch: no se infiere en el contenedor.
+RUN /root/.local/bin/uv pip install --python /opt/py/bin/python \
+      "platformdirs>=4" "pyyaml>=6" "python-dotenv>=1.0" "pydantic>=2" "pydantic-settings>=2" \
+      "httpx>=0.28" "mcp>=1.30,<2" "qdrant-client>=1.19" "starlette>=1.0" "uvicorn>=0.27" \
+      "psutil>=7" "requests>=2.31" "urllib3>=2.8" "cryptography>=50" "argon2-cffi>=23" \
+      "pluggy>=1.6" "watchfiles>=1.1" "websockets>=16" "pillow>=13" \
+      "fastembed>=0.9" "pure-mls==4.0.0"
+
+# Los PESOS del modelo de embeddings no se hornean: se montan `:ro` desde el host
+# en /models (scripts/dokime.py). Sin ellos el sandbox no tiene egress para bajarlos.
+
+# `red-pill` en el PATH del sandbox: el kernel se monta :ro en /src/red-pill, así que
+# el wrapper sólo fija PYTHONPATH. Sin esto, Dokimé no puede buscar en su memoria
+# desde bash (y la continuidad depende de que pueda).
+RUN printf '#!/bin/sh\nexport PYTHONPATH=/src/red-pill/src\nexec /opt/py/bin/python -m red_pill.cli "$@"\n' \
+      > /usr/local/bin/red-pill \
+ && chmod 0755 /usr/local/bin/red-pill
+
+# pi (arnés) — la versión se fija aquí, no "latest"
+RUN npm install -g @earendil-works/pi-coding-agent@1.5.2 \
+ && npm cache clean --force
+
+# usuario sin privilegios; el estado vive en volúmenes con nombre
+RUN useradd -m -s /bin/bash dokime \
+ && mkdir -p /srv/dokime && chown -R dokime:dokime /srv/dokime
+USER dokime
+WORKDIR /srv/dokime
+
+# Sin ENTRYPOINT: el camino medido es `podman exec -i dokime pi -p "…"`
+CMD ["sleep", "infinity"]

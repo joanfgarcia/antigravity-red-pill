@@ -1,0 +1,5 @@
+# `none`: sandbox. Nada alcanza el mundo real.
+id: none
+network: none
+secrets: none
+skills_blocked: [telegram-gateway, wake-callback, minion-delegation, swarm-flow-manager]

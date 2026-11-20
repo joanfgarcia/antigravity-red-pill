@@ -48,7 +48,7 @@ BLOCK_ANCHORS = (
 )
 
 BLOCK_VERSION = {
-	"sovereign_handshake": 4,
+	"sovereign_handshake": 5,
 	"agent_core": 2,
 	"knowledge_access": 5,
 	"frontmatter_docs": 3,
@@ -153,8 +153,10 @@ def ide_call_vars(ide):
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
 			"RELAY_INSTRUCTION": 'Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook — the handshake is the persistence relay). Also pass `originator` ("antigravity") and, when you have seen them in a previous response\'s `<session …/>` tag, echo back `continuity_id` and `mission_id` so the alma survives without a hook.',
 		}
-	# Pi has NO MCP and NO handshake tool: the harness extension IS the relay (identity
-	# on session_start/model_select/session_compact, per-turn RAG, agent_end scribe).
+	# Pi **sí** tiene MCP desde 1.5.x (`~/.pi/agent/mcp.json`, `exposure`/`toolExposure`,
+	# `pi.registerMcpServer()`). Lo que NO tiene es un hook de editor: su relay y su
+	# identidad los sirven las extensiones (`red-pill-context.ts` para la identidad por
+	# `context`; `red-pill.ts` para captura, RAG y ack). Corrección P4 (RFC-HARNESS-001).
 	if ide == "pi":
 		return {
 			"RELAY_CALL": "el handshake automático de la extensión `red-pill.ts` (no hay tool que llamar)",
@@ -354,6 +356,12 @@ def main():
 	parser.add_argument("--seeds-dir", help="Dir with <anchor>.md seeds. Default: ../seeds/anchors next to this script.")
 	parser.add_argument("--update", action="store_true", help="Rewrite the block even if unchanged.")
 	parser.add_argument("--no-backup", action="store_true", help="Do not write a .bak before modifying.")
+	parser.add_argument(
+		"--mode",
+		default="auto",
+		choices=["auto", "prompt", "hook"],
+		help="Variante del block de handshake: `hook` (identidad inyectada por el arnés), `prompt` (el modelo llama a la tool) o `auto` (hook donde el arnés lo soporte).",
+	)
 	parser.add_argument("--print", dest="print_only", action="store_true", help="Print resolved anchor(s) to stdout; touch no files.")
 	parser.add_argument("--remove", action="store_true", help="Remove red-pill anchor block(s) instead of writing.")
 	args = parser.parse_args()
@@ -391,9 +399,34 @@ def main():
 	variables = build_vars(args)
 	variables.update(agent_core_vars())
 
+	# Arneses con hook (D8: 5/5). `claude-desktop` = Claude Code embebido.
+	HOOK_CAPABLE = {"opencode", "pi", "claude-code", "claude-code-project", "claude-desktop-project"}
+
+	def _variant(ide: str) -> str:
+		if args.mode == "prompt":
+			return "prompt"
+		if args.mode == "hook":
+			return "hook"
+		return "hook" if ide in HOOK_CAPABLE else "prompt"
+
 	def _body(ide: str, anchor: str) -> str:
-		"""Per-IDE seed override: seeds/<ide>/anchors/<anchor>.md wins over seeds/anchors/<anchor>.md."""
-		with open(ide_seed_path(seeds_dir, ide, anchor), encoding="utf-8") as f:
+		"""Per-IDE seed override: seeds/<ide>/anchors/<anchor>.md wins over seeds/anchors/<anchor>.md.
+
+		Para `sovereign_handshake` existe una variante `hook` (identidad inyectada):
+		se usa cuando el arnés la soporta y no hay override propio del IDE.
+		"""
+		specific = ide_seed_path(seeds_dir, ide, anchor)
+		# Override propio del IDE = fichero EN su carpeta (no el fallback genérico).
+		# Override propio del IDE = distinto del seed genérico. (Ojo: buscar "/{ide}/"
+		# en la ruta da falsos positivos — el checkout vive en .../opencode/worktree.)
+		generic = os.path.join(seeds_dir, anchor + ".md")
+		ide_own = specific if os.path.abspath(specific) != os.path.abspath(generic) else ""
+		if anchor == "sovereign_handshake" and _variant(ide) == "hook" and not os.path.exists(ide_own):
+			hook_seed = os.path.join(seeds_dir, "sovereign_handshake.hook.md")
+			if os.path.exists(hook_seed):
+				with open(hook_seed, encoding="utf-8") as f:
+					return f.read()
+		with open(specific, encoding="utf-8") as f:
 			return f.read()
 
 	backup = not args.no_backup

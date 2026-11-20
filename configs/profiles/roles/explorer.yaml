@@ -1,0 +1,9 @@
+# Rol `explorer`: investiga, lee mucho, escribe poco.
+id: explorer
+purpose: "Investiga y mapea; escribe sólo notas."
+skills_install: [scout, graphify, knowledge-access, memory-manager, frontmatter]
+rules_blocks: [sovereign_handshake, agent_core, knowledge_access, frontmatter_docs]
+boot_card: explorer
+limits:
+  max_steps: 50
+gates: [bench_task_success]

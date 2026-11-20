@@ -16,6 +16,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import cast
 
 import httpx
 from mcp import types
@@ -36,10 +37,10 @@ def state_dir() -> Path:
 
 
 def default_socket() -> str:
-	runtime = os.getenv("XDG_RUNTIME_DIR")
-	if runtime:
-		return str(Path(runtime) / "red-pill" / "mcp.sock")
-	return str(state_dir() / "mcp.sock")
+	"""Socket del backend (resolutor único: `core.paths.get_mcp_socket`)."""
+	from red_pill.core.paths import get_mcp_socket
+
+	return str(get_mcp_socket())
 
 
 def _instance_cwd() -> str:
@@ -189,13 +190,76 @@ async def _call_backend(socket_path: str, harness: str | None, client_info, fn):
 			await asyncio.sleep(0.3)
 
 
+async def _fetch_backend_meta(socket_path: str, harness: str | None) -> types.InitializeResult | None:
+	"""`initialize` del backend, que hoy se descartaba.
+
+	Sin esto, el `instructions` del servidor (el router card: qué hay y cuándo
+	buscarlo) **no llega a ningún cliente** que pase por el proxy. Se pide una
+	vez al arrancar y se degrada a None si el backend no responde.
+	"""
+	client_info = types.Implementation(name="RedPill-Proxy", version="0.1")
+	try:
+		# `_with_backend` está tipado como Any (sirve a cualquier método del
+		# protocolo); aquí sí sabemos qué devuelve `initialize`, así que se acota.
+		meta = await _with_backend(socket_path, harness, client_info, lambda session: session.initialize())
+		return cast("types.InitializeResult | None", meta)
+	except Exception as exc:  # noqa: BLE001 - el proxy debe arrancar igual
+		logger.warning(f"[RedPill-Proxy] sin metadatos del backend: {exc}")
+		return None
+
+
+# ── superficie declarada (RFC-HARNESS-001 · P1b) ─────────────────────────────
+# `full`     → el arnés ve las 15 tools (coste de arranque alto).
+# `gateway`  → lo caliente + el handshake (que los anclajes exigen por nombre) + la
+#              puerta única (`redpill_search`/`redpill_call`);
+#              el resto se alcanza nombrando la tool, con los argumentos de su
+#              esquema. Medido: 16.385 → 7.578 tok de arranque en opencode.
+# `a,b,c`    → lista explícita (para A/B y para perfiles raros).
+SURFACE_DEFAULT_GATEWAY = (
+	"bunker_memory_api",
+	"sovereign_handshake",
+	"redpill_search",
+	"redpill_call",
+)
+
+
+def surface_profile() -> str:
+	return (os.getenv("REDPILL_SURFACE") or "full").strip().lower()
+
+
+def visible_tools(names: list[str]) -> list[str]:
+	"""Filtra los nombres que se DECLARAN al arnés (no los que se pueden llamar)."""
+	prof = surface_profile()
+	if prof == "full" or not prof:
+		return names
+	keep = set(SURFACE_DEFAULT_GATEWAY) if prof == "gateway" else {n.strip() for n in prof.split(",") if n.strip()}
+	return [n for n in names if n in keep]
+
+
+def _proxy_server(meta: types.InitializeResult | None) -> Server:
+	"""Servidor stdio del proxy, anunciando lo que el backend declaró."""
+	name = "RedPill-Kernel"
+	version = "0.1"
+	instructions = None
+	if meta is not None:
+		try:
+			name = meta.serverInfo.name or name
+			version = meta.serverInfo.version or version
+			instructions = meta.instructions
+		except Exception:  # noqa: BLE001 - metadatos raros: no romper
+			pass
+	return Server(name, version=version, instructions=instructions)
+
+
 async def _run(socket_path: str, harness: str | None) -> None:
 	client_info = types.Implementation(name="RedPill-Proxy", version="0.1")
-	proxy = Server("RedPill-Kernel", version="0.1")
+	proxy = _proxy_server(await _fetch_backend_meta(socket_path, harness))
 
 	@proxy.list_tools()
 	async def list_tools():
-		return (await _call_backend(socket_path, harness, client_info, lambda session: session.list_tools())).tools
+		tools = (await _call_backend(socket_path, harness, client_info, lambda session: session.list_tools())).tools
+		keep = set(visible_tools([t.name for t in tools]))
+		return [t for t in tools if t.name in keep]
 
 	@proxy.call_tool()
 	async def call_tool(name: str, arguments: dict):

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from red_pill.core.paths import get_mcp_socket
 from red_pill.mcp_proxy import default_socket, identity_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -94,9 +95,22 @@ def test_resolve_workspace_sin_repo_conserva_precedencia(tmp_path):
 	assert mirror.get("worktree") is None
 
 
-def test_default_socket_prefers_runtime(monkeypatch):
+def test_default_socket_is_one_resolver(monkeypatch, tmp_path):
+	"""S17: una sola ruta, y es la que escucha el servicio.
+
+	Antes `default_socket()` prefería `$XDG_RUNTIME_DIR`, mientras el servicio se
+	lanzaba con `--socket …/state/mcp.sock` y las configs de los IDEs fijaban esa
+	misma ruta: un cliente que resolviera por el library apuntaba a un socket
+	donde no escuchaba nadie, y el fail-open se lo tragaba sin ruido.
+	"""
+	monkeypatch.delenv("REDPILL_MCP_SOCKET", raising=False)
 	monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
-	assert default_socket() == "/run/user/1000/red-pill/mcp.sock"
+	assert default_socket() == str(get_mcp_socket())
+	assert default_socket().endswith("/state/mcp.sock")
+
+	override = str(tmp_path / "custom.sock")
+	monkeypatch.setenv("REDPILL_MCP_SOCKET", override)
+	assert default_socket() == override
 
 
 def _env(base: Path) -> dict:

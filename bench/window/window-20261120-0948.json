@@ -1,0 +1,53 @@
+{
+  "model": "spark",
+  "rows": [
+    {
+      "distance": 1,
+      "session": "win-1-20261120-0948",
+      "code": "6828",
+      "answer": "6828",
+      "verdict": "recordado",
+      "seconds": 5.1
+    },
+    {
+      "distance": 2,
+      "session": "win-2-20261120-0948",
+      "code": "5289",
+      "answer": "5289",
+      "verdict": "recordado",
+      "seconds": 3.1
+    },
+    {
+      "distance": 3,
+      "session": "win-3-20261120-0948",
+      "code": "7103",
+      "answer": "7103",
+      "verdict": "recordado",
+      "seconds": 3.5
+    },
+    {
+      "distance": 4,
+      "session": "win-4-20261120-0948",
+      "code": "5282",
+      "answer": "5282",
+      "verdict": "recordado",
+      "seconds": 2.7
+    },
+    {
+      "distance": 6,
+      "session": "win-6-20261120-0948",
+      "code": "2360",
+      "answer": "2360",
+      "verdict": "recordado",
+      "seconds": 4.5
+    },
+    {
+      "distance": 8,
+      "session": "win-8-20261120-0948",
+      "code": "2810",
+      "answer": "2810",
+      "verdict": "recordado",
+      "seconds": 3.6
+    }
+  ]
+}

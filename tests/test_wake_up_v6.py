@@ -192,7 +192,11 @@ def test_main_qdrant_down(capsys):
 
 			assert e.value.code == 1
 			captured = capsys.readouterr()
-			assert "CRITICAL: Qdrant is down" in captured.out
+			# El aviso va a STDERR a propósito: en `wake_up_v6` stdout ES la
+			# identidad, y un CRITICAL colado ahí se inyectaría como texto del
+			# despertar. Se comprueba que no contamina stdout.
+			assert "CRITICAL: Qdrant is down" in captured.err
+			assert "CRITICAL: Qdrant is down" not in captured.out
 
 
 def test_query_qdrant_excludes_superseded_directives():

@@ -136,6 +136,16 @@ def migrate_directives(manager: MemoryManager) -> None:
 	inject_genesis(manager)
 
 
+def _bump_generation() -> None:
+	"""Sube la generación de directivas (best-effort: el seed no falla por esto)."""
+	try:
+		from red_pill.hooks.routes import bump_generation
+
+		bump_generation()
+	except Exception:  # noqa: BLE001
+		pass
+
+
 def inject_genesis(manager: MemoryManager) -> None:
 	"""Injects hardcoded genesis memories."""
 	genesis_memories: List[Dict[str, Any]] = [
@@ -288,6 +298,10 @@ def inject_genesis(manager: MemoryManager) -> None:
 			point_id=m["id"],
 			force_immune=True if m["id"].startswith("00000000") else False,
 		)
+
+	# `generation` invalida la caché de identidad del hook (RFC-HARNESS-001 S12):
+	# cualquier escritor de directivas tiene que moverla, no sólo el seed.
+	_bump_generation()
 
 
 def load_markdown_seeds(manager: MemoryManager) -> None:

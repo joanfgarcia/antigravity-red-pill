@@ -173,7 +173,7 @@ def _distill_unit(
 			prompt = prompts.render("distill_user_continuation", previous=prev_summary or "(ninguno)", content=frag_text)
 		else:
 			prompt = prompts.render("distill_user_opening", content=frag_text)
-		raw = transport(prompts.system("distill_user_opening") or "", prompt, 512)
+		raw = transport(prompts.system("distill_user_opening") or "", prompt, runtime.distill_max_tokens())
 		if runtime.is_degraded(raw):
 			degraded = True
 		parsed = runtime._extract_json(raw) or {}
