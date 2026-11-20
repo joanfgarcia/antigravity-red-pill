@@ -23,6 +23,8 @@ import asyncio
 import json
 import os
 import subprocess
+import time
+from pathlib import Path
 from typing import Any, Dict
 
 from red_pill.core.paths import get_state_dir
@@ -48,13 +50,28 @@ def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
 		state.mkdir(parents=True, exist_ok=True)
 		import time as _time
 
+		bridge = state / f"{prov}_session.json"
+		if not workdir:
+			# El contrato (§2) no lleva `workdir`: opencode no lo manda nunca, y
+			# `_write_bridge("")` borraba el bueno que escribe el scribe. El daño
+			# no es cosmético: `open_loops_line()` resuelve el workspace con este
+			# puente, y en el mismo request ya lee el "" — así que cuenta shards
+			# y ramas del workspace de otro arnés (o del cwd del backend).
+			try:
+				prev = json.loads(bridge.read_text(encoding="utf-8"))
+				prev_dir = str(prev.get("workdir") or "") if isinstance(prev, dict) else ""
+			except (OSError, ValueError, TypeError):
+				prev_dir = ""
+			if prev_dir and os.path.isdir(prev_dir):
+				workdir = prev_dir
+
 		payload = {
 			"provider": prov,
 			"session_id": session_id,
 			"workdir": workdir,
 			"updated_at": _time.time(),
 		}
-		(state / f"{prov}_session.json").write_text(json.dumps(payload), encoding="utf-8")
+		bridge.write_text(json.dumps(payload), encoding="utf-8")
 	except OSError:
 		pass
 
@@ -118,6 +135,73 @@ def _fast_identity_text() -> str:
 		return str(payload.get("content") or "").strip()
 	except Exception:  # noqa: BLE001 — fail-open: el wake completo sigue en marcha
 		return ""
+
+
+_STATE_MAX_AGE_S = 300.0  # el daemon del Búnker late cada minuto
+
+
+def _state_path() -> Path:
+	"""`bunker_state.json` del daemon, en el runtime dir (misma fuente que el
+	interceptor de telemetría y que el handshake: una sola verdad, no dos)."""
+	import red_pill.config as cfg
+
+	return Path(cfg.get_config().RUNTIME_DIR) / "bunker_state.json"
+
+
+def _bunker_state() -> Dict[str, Any]:
+	"""Estado del Búnker (lo escribe el daemon). `{}` si falta o está rancio."""
+	try:
+		state = json.loads(_state_path().read_text(encoding="utf-8"))
+	except (OSError, ValueError, TypeError):
+		return {}
+	if not isinstance(state, dict):
+		return {}
+	# Rancio = números de hace media hora disfrazados de presente (misma regla
+	# que el interceptor de telemetría). Mejor silencio que dato viejo.
+	try:
+		if time.time() - float(state.get("timestamp") or 0) > _STATE_MAX_AGE_S:
+			return {}
+	except (TypeError, ValueError):
+		return {}
+	return state
+
+
+def _count(state: Dict[str, Any], group: str, key: str) -> int:
+	try:
+		return max(0, int((state.get(group) or {}).get(key) or 0))
+	except (TypeError, ValueError):
+		return 0
+
+
+def _kernel_telemetry_text() -> str:
+	"""Línea de telemetría cuando el arnés no manda contadores.
+
+	El contrato de `POST /hook/context` (§2) define SIETE campos y ninguno es un
+	contador: los clientes (opencode, pi) cumplen y mandan exactamente eso. Si
+	`light` sólo sabe leer los números del payload, nunca devuelve nada y el
+	arnés se queda sin estado del mundo —que es justo lo que el hook venía a
+	ahorrar. Aquí los cuenta el kernel, con las mismas fuentes que el handshake:
+	`OPEN LOOPS` (desk + workspace) y `bunker_state.json` (dolor, minions).
+
+	Best-effort: cualquier fallo deja la línea más corta, nunca tumba el turno.
+	"""
+	parts: list[str] = []
+	try:
+		from red_pill.core.open_loops import open_loops_line
+
+		loops = open_loops_line()
+		if loops:
+			parts.append(loops)
+	except Exception:  # noqa: BLE001 — sin desk legible, el resto sigue
+		pass
+	state = _bunker_state()
+	pain = _count(state, "signals", "active")
+	if pain:
+		parts.append(f"dolor {pain}")
+	minions = _count(state, "minions", "unread")
+	if minions:
+		parts.append(f"minions {minions}")
+	return " · ".join(parts)
 
 
 def _wake_text(mode: str, continuity: str) -> str:
@@ -220,6 +304,11 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 			"mood": payload.get("mood"),
 		}
 		line = telemetry_text(stats)
+		if not line:
+			# El contrato no pide contadores al arnés: si no vinieron, se cuentan
+			# aquí. Sin esto `light` sólo devolvía el digest del coro y el agente
+			# se enteraba de OPEN LOOPS y del dolor únicamente llamando a la tool.
+			line = _kernel_telemetry_text()
 		if line:
 			blocks.append(block("telemetry", line, origin="telemetry"))
 

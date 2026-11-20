@@ -8,6 +8,9 @@ endpoint declarado en la app.
 
 from __future__ import annotations
 
+import json
+import time
+
 import pytest
 
 from red_pill.hooks import routes
@@ -58,6 +61,83 @@ async def test_full_sin_cache_devuelve_retry_full_y_no_bloquea():
 async def test_payload_invalido_es_error_de_cliente():
 	with pytest.raises(HookPayloadError):
 		await routes.handle_context({"harness": "opencode", "need": "light"})
+
+
+@pytest.mark.asyncio
+async def test_light_cuenta_la_telemetria_en_el_kernel(monkeypatch):
+	"""El contrato no pide contadores: sin ellos, `light` no decía nada.
+
+	`need=light` promete «la línea de telemetría», pero ningún arnés manda
+	`open_loops`/`pain`/`jobs` (no están en el contrato §2). Si el servidor los
+	lee del payload y nadie los pone, el bloque `telemetry` no existe y el
+	agente sólo ve OPEN LOOPS llamando a la tool: justo el viaje que el hook
+	venía a ahorrar.
+	"""
+	monkeypatch.setattr(routes, "_kernel_telemetry_text", lambda: "OPEN LOOPS: 11 shards OPEN · dolor 7")
+	res = await routes.handle_context(
+		{"session_id": "ses_test_light", "harness": "opencode", "need": "light", "turn": 2, "model": "m"}
+	)
+	telemetria = [b["text"] for b in res["blocks"] if b["kind"] == "telemetry"]
+	assert telemetria == ["OPEN LOOPS: 11 shards OPEN · dolor 7"]
+
+
+@pytest.mark.asyncio
+async def test_light_respeta_los_contadores_si_el_cliente_los_manda(monkeypatch):
+	"""Compatibilidad: un cliente que sí manda números manda él."""
+	monkeypatch.setattr(routes, "_kernel_telemetry_text", lambda: "no debería usarse")
+	res = await routes.handle_context(
+		{
+			"session_id": "ses_test_light2",
+			"harness": "opencode",
+			"need": "light",
+			"turn": 2,
+			"model": "m",
+			"open_loops": 4,
+			"pain": 1,
+		}
+	)
+	telemetria = [b["text"] for b in res["blocks"] if b["kind"] == "telemetry"]
+	assert telemetria and "OPEN LOOPS 4" in telemetria[0] and "dolor 1" in telemetria[0]
+
+
+def _estado(monkeypatch, tmp_path, payload: dict):
+	monkeypatch.setattr(routes, "_state_path", lambda: tmp_path / "bunker_state.json")
+	(tmp_path / "bunker_state.json").write_text(json.dumps(payload), encoding="utf-8")
+	monkeypatch.setattr("red_pill.core.open_loops.open_loops_line", lambda *a, **k: "")
+
+
+def test_telemetria_del_kernel_cuenta_dolor_y_minions(monkeypatch, tmp_path):
+	_estado(monkeypatch, tmp_path, {"timestamp": time.time(), "signals": {"active": 7}, "minions": {"unread": 3}})
+	assert routes._kernel_telemetry_text() == "dolor 7 · minions 3"
+
+
+def test_telemetria_del_kernel_ignora_el_estado_rancio(monkeypatch, tmp_path):
+	"""Un `bunker_state.json` de hace media hora no es el presente."""
+	_estado(monkeypatch, tmp_path, {"timestamp": time.time() - 3600, "signals": {"active": 7}, "minions": {"unread": 3}})
+	assert routes._kernel_telemetry_text() == ""
+
+
+def test_telemetria_del_kernel_es_silenciosa_si_no_hay_nada(monkeypatch, tmp_path):
+	_estado(monkeypatch, tmp_path, {"timestamp": time.time()})
+	assert routes._kernel_telemetry_text() == ""
+
+
+def test_el_puente_no_pierde_el_workdir_si_el_arnes_no_lo_manda(monkeypatch, tmp_path):
+	"""`/hook/context` no recibe `workdir` (no está en el contrato §2).
+
+	Un `""` no puede borrar el que escribió el scribe: `open_loops_line()`
+	resuelve el workspace con este puente y se ejecuta en el MISMO request, así
+	que el borrado hace que la línea cuente shards y ramas del workspace de otro
+	arnés —o del cwd del backend, que es el checkout del kernel.
+	"""
+	monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	routes._write_bridge("opencode", "ses_bridge", str(ws))
+	routes._write_bridge("opencode", "ses_bridge", "")
+	data = json.loads((routes.get_state_dir() / "opencode_session.json").read_text(encoding="utf-8"))
+	assert data["workdir"] == str(ws)
+	assert data["session_id"] == "ses_bridge"
 
 
 @pytest.mark.asyncio

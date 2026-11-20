@@ -1,3 +1,37 @@
+## [8.5.1] - 2026-11-20 (El arnés deja de inyectar un contexto mutilado)
+
+### 🧵 Arnés — la puerta se apaga sola y la telemetría vuelve a viajar
+
+`8.5.0` dejó la migración a medias y un bloque del contrato vacío: el arnés
+inyectaba identidad y digest del coro, pero el estado del mundo (OPEN LOOPS,
+dolor, minions) seguía exigiendo una tool, y la puerta por turno seguía
+pidiendo permiso. Las dos cosas cabían en el mismo turno.
+
+- **[FIX] La puerta por turno se apaga sola** cuando `redpill-harness.js` viaja
+  al lado: él es dueño de la inyección y del gate, así que el default de
+  `redpill-scribe.js` pasa a `auto` sin que el Operador exporte
+  `REDPILL_HARNESS_MODE`. Sin el plugin nuevo (instalación vieja) se queda en
+  `gate`: apagar la puerta sin sustituto dejaría la sesión sin identidad.
+- **[FIX] `need=light` vuelve a devolver el bloque `telemetry`.** El contrato de
+  `/hook/context` (§2) define siete campos y ninguno es un contador, pero el
+  handler los leía del payload. Ningún cliente los manda (ni el plugin de
+  opencode, ni la extensión de pi, ni el bench), así que `telemetry_text`
+  devolvía `None` y el bloque no existía nunca: OPEN LOOPS y el dolor sólo
+  llegaban llamando a `sovereign_handshake`, que es el viaje que el hook venía
+  a ahorrar. Ahora los cuenta el kernel con las fuentes del handshake
+  (`open_loops_line` y el `bunker_state.json` del runtime dir, con la regla de
+  rancio de 5 minutos). Compatibilidad intacta: un cliente que sí mande
+  contadores manda él.
+- **[FIX] Un `workdir` vacío no borra el puente del arnés.** `/hook/context` no
+  lleva ruta (no está en el contrato) y cada llamada dejaba
+  `state/<harness>_session.json` con `workdir: ""`. Como `open_loops_line()`
+  resuelve el workspace con ese puente **en el mismo request**, la línea
+  contaba shards y ramas del workspace de otro arnés o del cwd del backend
+  (el checkout del kernel). Medido: 11 shards en proceso, 0 por el socket.
+- **[TESTS]** Seis casos nuevos: el gate con el plugin al lado y sin él, la
+  línea que cuenta el kernel, la compatibilidad con contadores del cliente, el
+  estado rancio, el silencio sin nada que decir y el puente sin `workdir`.
+
 ## [8.5.0] - 2026-11-20 (El arnés deja de pedir permiso; la memoria aprende a contar)
 
 ### 🧵 Arnés — la identidad llega por el hook, no por el turno
