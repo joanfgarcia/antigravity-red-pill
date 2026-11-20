@@ -234,13 +234,21 @@ class SipCheck(ServiceSentinelPlugin):
 			return []
 
 	def _get_llama_cpu(self) -> float:
+		"""CPU de NUESTRO `llama-server` (0.0 si no hay ninguno propio).
+
+		Antes sumaba la CPU de todos los `llama-server` del host: con un
+		vecino (dokime-llama, unit aparte) trabajando, el umbral de «stuck»
+		se cruzaba con CPU ajena y el centinela acusaba a nuestro proxy.
+		Desconocido no alarmaba antes y no alarma ahora: 0.0.
+		"""
 		import subprocess
 
 		try:
-			result = subprocess.run(["pgrep", "-f", "llama-server"], capture_output=True, text=True, timeout=5)
+			from red_pill.core.llama_identity import own_llama_pids
+
 			total_cpu = 0.0
-			for pid in result.stdout.strip().splitlines():
-				ps_result = subprocess.run(["ps", "-p", pid.strip(), "-o", "%cpu", "--no-headers"], capture_output=True, text=True, timeout=5)
+			for pid in own_llama_pids():
+				ps_result = subprocess.run(["ps", "-p", str(pid), "-o", "%cpu", "--no-headers"], capture_output=True, text=True, timeout=5)
 				try:
 					total_cpu += float(ps_result.stdout.strip().replace(",", "."))
 				except ValueError:

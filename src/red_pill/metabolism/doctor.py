@@ -101,16 +101,26 @@ def _check_model_match() -> list:
 			return out
 		model_file = os.path.basename(str(model_path))
 
-		# Check if native llama-server is running
-		ps = subprocess.run(["pgrep", "-af", "llama-server"], stdout=subprocess.PIPE, text=True, timeout=10)
-		running = ps.stdout.strip()
+		# De QUIÉN es el `llama-server` (CONVENTIONS §10.8.7): el del unit propio,
+		# nunca el primero del host. Con dokime-llama en :8080 conviviendo con
+		# nuestro proxy en :8760, un `pgrep -af llama-server` del host prestaba
+		# identidad ajena: rojo por el modelo de un vecino, o «hay servidor»
+		# con el nuestro caído.
+		from red_pill.core.llama_identity import child_pids, cmdline, own_llama_pids, unit_main_pid
 
-		# Check if python dual-bind daemon is running
-		ps_py = subprocess.run(["pgrep", "-af", "run_dual_bind.py"], stdout=subprocess.PIPE, text=True, timeout=10)
-		running_py = ps_py.stdout.strip()
+		main_pid = unit_main_pid()
+		unit_pids = [main_pid, *child_pids(main_pid)] if main_pid else []
+		running_py = any("run_dual_bind.py" in " ".join(cmdline(pid)) for pid in unit_pids)
+		own_pids = own_llama_pids()
+		own_argv = " ".join(" ".join(cmdline(pid)) for pid in own_pids)
 
-		if not running and not running_py:
-			out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}); no hay servidor LLM activo — N/A."))
+		if not own_pids and not running_py:
+			out.append(
+				(
+					"info",
+					f"Perfil configurado: '{profile_name}' ({model_file}); el unit de inferencia no sirve ningún modelo — N/A.",
+				)
+			)
 		elif running_py:
 			# Query uvicorn endpoint to find the loaded model
 			import json
@@ -151,8 +161,8 @@ def _check_model_match() -> list:
 					)
 			except Exception as exc:
 				out.append(("yellow", f"Servidor dual-bind running pero no responde en puerto 8760: {exc}"))
-		elif running:
-			if model_file not in running:
+		elif own_pids:
+			if model_file not in own_argv:
 				out.append(("red", f"Modelo en ejecución NO coincide con el configurado (perfil '{profile_name}' → {model_file})."))
 	except Exception as exc:
 		out.append(("yellow", f"No se pudo verificar modelo↔config: {exc}"))

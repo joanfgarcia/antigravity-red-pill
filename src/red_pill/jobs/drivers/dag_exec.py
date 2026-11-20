@@ -74,29 +74,17 @@ def _gpu_health_probe() -> Tuple[bool, int, int]:
 	except Exception:
 		return False, 0, 0
 
+	# `-ngl` de NUESTRO servidor, nunca el del primer `llama-server` del host: con
+	# un vecino en CPU (`-ngl 0`) toda etapa `requires_gpu` se difería para
+	# siempre, y con un vecino en GPU (`-ngl 99`) pasaba aunque el nuestro
+	# sirviera en CPU. Familia del `8080` del centinela del SIP (2026-11-20).
 	ngl = -1
 	try:
-		ps = subprocess.run(["pgrep", "-af", "llama-server"], capture_output=True, text=True, timeout=5)
-		for line in (ps.stdout or "").splitlines():
-			low = line.lower()
-			if "-ngl" in low:
-				parts = line.split()
-				for i, part in enumerate(parts):
-					if part.startswith("-ngl"):
-						try:
-							# Soporta `-ngl=33`, `-ngl33` y `-ngl 33` (valor en el
-							# siguiente token).
-							if "=" in part:
-								ngl = int(part.split("=")[-1])
-							elif part != "-ngl" and part[4:].lstrip("-").isdigit():
-								ngl = int(part[4:])
-							elif i + 1 < len(parts):
-								ngl = int(parts[i + 1])
-						except Exception:
-							ngl = 0
-						break
+		from red_pill.core.llama_identity import own_ngl
+
+		ngl = own_ngl()
 	except Exception:
-		pass
+		ngl = -1
 
 	return True, free_mb, ngl
 

@@ -436,6 +436,13 @@ integrators), **independent of any single feature**:
 6. **Separate transient from permanent.** Generated/transient artifacts go to a
    **configured** staging/temp location (see §7) — never to a repo/`docs/` path or
    the desk; moving something to its permanent home is an **explicit** action.
+7. **De quién es un proceso compartido: por su unit, no por `pgrep`.** Un
+   binario puede tener instancias de **otro producto** en el mismo host
+   (`llama-server`, servidores, daemons). La identidad de la instancia propia se
+   resuelve por su **unit systemd** (`MainPID` + hijos directos), nunca por la
+   primera coincidencia del barrido del host; si no se puede identificar, el dato
+   es **desconocido** (no bloquea, no alarma), no «el del primero que aparezca».
+   Un resolver, muchos consumidores: `core/llama_identity.py` (AD-127, AD-128).
 
 > **When NOT to use #3**: a **single** implementation, or a value that is just
 > **data**. Wrapping those in a registry is over-abstraction. The pattern pays off

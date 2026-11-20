@@ -104,3 +104,31 @@ def test_cpu_baja_no_dispara_probe(monkeypatch):
 	fake = _FakeSip(slot_busy=True, probe_ok=False, cpu_pct=12.0)
 	assert fake.audit_health(cfg=None) == []
 	assert fake.probe_budgets == []
+
+
+class TestCpuPropia:
+	"""La CPU que decide «stuck» es la de nuestro servidor, no la del vecino."""
+
+	def test_suma_solo_los_pids_propios(self, monkeypatch):
+		from unittest.mock import MagicMock
+
+		import red_pill.core.llama_identity as ident
+
+		monkeypatch.setattr(ident, "own_llama_pids", lambda unit=None: [111, 222])
+		seen = []
+
+		def fake_run(cmd, **kwargs):
+			seen.append(cmd)
+			return MagicMock(stdout={"111": "12.5", "222": "30.0"}.get(cmd[2], "0.0"))
+
+		monkeypatch.setattr("subprocess.run", fake_run)
+		assert SipCheck()._get_llama_cpu() == 42.5
+		assert [cmd[2] for cmd in seen] == ["111", "222"]
+		assert not any("pgrep" in cmd for cmd in seen), "volvió el barrido del host"
+
+	def test_sin_proceso_propio_no_hay_fiebre(self, monkeypatch):
+		"""Unit caído (o modelo no residente) = 0.0: el vecino no da fiebre."""
+		import red_pill.core.llama_identity as ident
+
+		monkeypatch.setattr(ident, "own_llama_pids", lambda unit=None: [])
+		assert SipCheck()._get_llama_cpu() == 0.0

@@ -506,35 +506,36 @@ def test_gpu_health_probe_exit_nonzero(monkeypatch):
 
 
 def test_gpu_health_probe_ok_con_ngl(monkeypatch):
-	"""nvidia-smi OK (8192 MB) y llama-server con -ngl 33 → (True, 8192, 33)."""
+	"""nvidia-smi OK (8192 MB) y NUESTRO llama-server con -ngl 33 → (True, 8192, 33)."""
+	import red_pill.core.llama_identity as llama_identity
 	import red_pill.jobs.drivers.dag_exec as dag_exec
 
 	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	responses = iter(
-		[
-			type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
-			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl 33\n"})(),
-		]
+	monkeypatch.setattr(
+		dag_exec.subprocess,
+		"run",
+		lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
 	)
-	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: next(responses))
+	monkeypatch.setattr(llama_identity, "own_ngl", lambda unit=None: 33)
 	usable, free_mb, ngl = dag_exec._gpu_health_probe()
 	assert (usable, free_mb, ngl) == (True, 8192, 33)
 
 
-def test_gpu_health_probe_ngl_malformado(monkeypatch):
-	"""llama-server con -ngl no numérico → ngl=0 (CPU disfrazada detectada)."""
+def test_gpu_health_probe_ngl_ajeno_no_bloquea(monkeypatch):
+	"""Un `llama-server` vecino en CPU no decide por nosotros: sin proceso propio
+	identificable el `-ngl` es desconocido (-1) y el probe NO inventa `-ngl 0`."""
+	import red_pill.core.llama_identity as llama_identity
 	import red_pill.jobs.drivers.dag_exec as dag_exec
 
 	monkeypatch.setattr(dag_exec.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	responses = iter(
-		[
-			type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
-			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl abc\n"})(),
-		]
+	monkeypatch.setattr(
+		dag_exec.subprocess,
+		"run",
+		lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
 	)
-	monkeypatch.setattr(dag_exec.subprocess, "run", lambda *a, **kw: next(responses))
+	monkeypatch.setattr(llama_identity, "own_ngl", lambda unit=None: -1)
 	usable, _free_mb, ngl = dag_exec._gpu_health_probe()
-	assert usable is True and ngl == 0
+	assert usable is True and ngl == -1
 
 
 def test_gpu_health_probe_excepcion(monkeypatch):

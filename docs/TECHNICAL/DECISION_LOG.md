@@ -4062,3 +4062,31 @@ con `sleep`/polling — justo lo que el job manager existe para evitar.
 **Consequences**: lanzar y olvidarse es real en todos los caminos de background: el
 reporte queda en el inbox y el alma recibe un aviso encolado. Ninguna espera activa
 en el turno tiene excusa.
+
+---
+
+## [AD-127] El `-ngl` del DAG es el de NUESTRO servidor, no el del vecino
+**Date**: 2026-11-20
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El preflight de GPU por etapa (`dag_exec._gpu_health_probe`) resolvía el `-ngl` efectivo con `pgrep -af llama-server` y se quedaba con la **primera** línea que lo llevara. En este puesto conviven dos productos con `llama-server` propio: el SIP dual-bind (`redpill-llm.service`, :8760) y `dokime-llama` (:8080, unit aparte). Medido el 2026-11-20: el unit del SIP corría (`MainPID 1090394`, `run_dual_bind.py`) **sin** servidor cargado, y el único `llama-server` vivo era el del vecino (`-ngl 99`). El probe leía el flag ajeno: un vecino en CPU (`-ngl 0`) habría diferido **para siempre** cada etapa `requires_gpu` con «CPU disfrazada», y uno en GPU la dejaba pasar aunque el nuestro sirviera en CPU. Es la misma familia que el `:8080` que el centinela del SIP tomó por su proxy 9 h (2026-11-19).
+**Decision**:
+1. Nuevo resolver de identidad `core/llama_identity.py`: `unit_main_pid` + `child_pids` + `cmdline` → `own_llama_pids()` (el MainPID del unit de inferencia — `REDPILL_INFERENCE_UNIT`, por defecto `redpill-llm.service` — si es el binario, y sus hijos directos que lo sean).
+2. `own_ngl()` devuelve el `-ngl` de esos procesos; con varios, el **menor** conocido (si alguno de los nuestros sirve en CPU, la etapa no se declara lista). Sin proceso propio identificable → `-1` (**desconocido**), que no bloquea.
+3. `_gpu_health_probe` usa `own_ngl()` y deja de barrer el host para el flag. El barrido de `pgrep` **no** es fuente de verdad para un recurso compartido.
+**Alternatives**: (a) seguir con `pgrep` y filtrar por `--port` del SIP — el puerto tampoco está garantizado y el vecino puede ocuparlo; (b) importar los helpers de `check_sip` — acopla un driver de jobs a un plugin de centinela; (c) leer solo la VRAM libre y olvidar `-ngl` — se pierde la detección de «CPU disfrazada», que era el propósito del probe.
+**Rationale / Evidence**: `own_ngl()` medido en el puesto devuelve `-1` con el vecino en `-ngl 99` vivo (antes: 99 ajeno). `tests/test_llama_identity.py` (7 casos: tres formas de `-ngl`, hijos del proxy, unit que es el binario, unit caído, vecino ignorado, varios propios → menor, sin propio → `-1`) y `tests/test_dag_job_driver.py` adaptado: **58 verdes**; batería `-k "dag or llama_identity or gpu"`: **138 verdes**. `ruff check`/`format` limpios.
+**Consequences**: Un DAG `requires_gpu` ya no hereda el veredicto de otro producto; si el servidor propio no está cargado el probe no inventa veredicto (desconocido ≠ CPU). Sus consumidores restantes cerraron en AD-128 (`doctor._check_model_match`, `check_sip._get_llama_cpu`): el barrido del host ya no es fuente de verdad en ningún camino de veredicto.
+
+---
+
+## [AD-128] El doctor y la fiebre de CPU preguntan al unit, no al host
+**Date**: 2026-11-20
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: `doctor._check_model_match` decidía «¿hay servidor LLM?» con `pgrep -af llama-server` del host y comparaba el modelo configurado contra ese texto; `check_sip._get_llama_cpu` sumaba la CPU de **todos** los `llama-server` del host para decidir «stuck». En este puesto conviven nuestro SIP (`redpill-llm.service`, :8760) y `dokime-llama` (:8080, unit aparte). Medido el 2026-11-20: el unit del SIP corría sin servidor cargado y el único `llama-server` vivo era el del vecino ⇒ el doctor podía cantar **rojo** («modelo no coincide») por el argv de un producto ajeno, decir «hay servidor» con el nuestro caído, y el umbral de CPU de `sip_stuck` podía cruzarse con trabajo del vecino. Es la tercera cara del mismo defecto que AD-127 (preflight GPU) y del `:8080` del SIP (2026-11-19).
+**Decision**:
+1. `_check_model_match` resuelve identidad con `core/llama_identity` (`unit_main_pid`/`child_pids`/`cmdline`/`own_llama_pids`): el proxy se reconoce por el argv del unit, el `llama-server` nativo por `own_llama_pids()`; sin ninguno de los dos el veredicto es **N/A** (info), no un rojo heredado del vecino.
+2. `_get_llama_cpu` suma CPU solo de `own_llama_pids()`; sin proceso propio → `0.0` (desconocido no dispara alarma, como antes).
+3. El `pgrep` del host deja de ser fuente de verdad en cualquier camino de veredicto del kernel. Queda solo como último recurso de descubrimiento de puerto en `check_sip._find_llama_port`, después del unit (workers fuera del árbol).
+**Alternatives**: (a) filtrar por `--port`/`--alias` del argv del vecino — depende de flags que no controlamos; (b) deduplicar con `pgrep -P <MainPID>` ad hoc en cada consumidor — repetir la lógica que el resolver ya centraliza (CONVENTIONS §10.8.7); (c) silenciar el doctor — se pierde la verificación config↔runtime que es su razón de existir.
+**Rationale / Evidence**: `tests/test_doctor.py::TestCheckModelMatch` reescrito (13 casos) para parchear el resolver en vez de `subprocess.run`; añadido `test_vecino_del_host_no_canta_rojo`, que falla si el doctor vuelve a barrer el host. `tests/test_sip_stuck_detection.py::TestCpuPropia` (2 casos: suma solo los PIDs propios, unit caído → 0.0). Medido desde la raíz del worktree: `test_doctor.py` + `test_sip_stuck_detection.py` = **46 verdes**; batería `-k "doctor or sip or llama_identity or gpu"` = **105 verdes**; `ruff check` y `format --check` limpios. En vivo: `own_llama_pids()` = `[]` con el vecino vivo, y el doctor responde «el proxy no tiene modelo residente (carga on-demand)» en vez de comparar contra el argv ajeno.
+**Consequences**: Un vecino vivo ya no puede fabricar un rojo del doctor ni una fiebre de CPU del centinela. Si el unit propio no sirve, el doctor lo dice con honestidad (N/A) y el centinela no acusa «stuck»: el silencio es preferible a un CRITICAL prestado. También se corrige el id duplicado de AD-089, que la rama `awaken/20261120-1200` había insertado en la cabecera sin renumerar: pasa a AD-127 (AD-126 ya era «El turno tiene dos ánimos»), al final del log.

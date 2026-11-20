@@ -120,164 +120,182 @@ class TestCheckTimers:
 
 
 class TestCheckModelMatch:
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	"""De quién es el servidor: el del unit propio, no el primero del host.
+
+	El defecto que cierra (2026-11-20): `pgrep -af llama-server` del host
+	prestaba identidad ajena (dokime-llama en :8080); el doctor cantaba rojo
+	por el modelo de un vecino, o «hay servidor» con el nuestro caído.
+	"""
+
+	def _registry(self, path="/models/test.gguf"):
+		mock_registry = MagicMock()
+		mock_registry.get_profile.return_value = {"model_path": path}
+		return mock_registry
+
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=None)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_no_llm_running(self, mock_getenv, mock_run):
-		mock_run.return_value = MagicMock(stdout="")
+	def test_no_llm_running(self, mock_getenv, mock_main, mock_own):
 		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry:
 			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert len(result) == 1
 			assert result[0][0] == "info"
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=None)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_no_profile_returns_yellow(self, mock_getenv, mock_run):
-		mock_run.return_value = MagicMock(stdout="")
+	def test_no_profile_returns_yellow(self, mock_getenv, mock_main, mock_own):
 		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry:
 			mock_registry.get_profile.return_value = {}
 			result = _check_model_match()
 			assert len(result) == 1
 			assert result[0][0] == "yellow"
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["llama-server", "--model", "/models/wrong.gguf"])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[12345])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=12345)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_model_mismatch_native(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout="12345 llama-server --model /models/wrong.gguf\n"),
-			MagicMock(stdout=""),
-		]
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry:
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+	def test_model_mismatch_native(self, mock_getenv, mock_main, mock_own, mock_cmdline):
+		with patch("red_pill.core.model_registry.ModelRegistry", self._registry()):
 			result = _check_model_match()
 			assert any(r[0] == "red" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["llama-server", "--model", "/models/test.gguf"])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[12345])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=12345)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_model_match_native(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout="12345 llama-server --model /models/test.gguf\n"),
-			MagicMock(stdout=""),
-		]
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry:
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+	def test_model_match_native(self, mock_getenv, mock_main, mock_own, mock_cmdline):
+		with patch("red_pill.core.model_registry.ModelRegistry", self._registry()):
 			result = _check_model_match()
 			assert not any(r[0] == "red" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_dual_bind_match(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
+	def test_dual_bind_match(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "test.gguf"}]}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
 			result = _check_model_match()
 			assert not any(r[0] == "red" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_dual_bind_mismatch(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
+	def test_dual_bind_mismatch(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf"}]}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
 			result = _check_model_match()
 			assert any(r[0] == "red" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_dual_bind_empty_data(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
+	def test_dual_bind_empty_data(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": []}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
 			result = _check_model_match()
 			assert any(r[0] == "yellow" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_dual_bind_connection_error(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
+	def test_dual_bind_connection_error(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		with (
-			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
 			patch("urllib.request.urlopen", side_effect=ConnectionError("refused")),
 		):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert any(r[0] == "yellow" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["llama-server", "--model", "/other.gguf"])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[12345])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=12345)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_model_not_in_running_string(self, mock_getenv, mock_run):
-		mock_run.side_effect = [
-			MagicMock(stdout="12345 llama-server --model /other.gguf\n"),
-			MagicMock(stdout=""),
-		]
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry:
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
+	def test_model_not_in_running_string(self, mock_getenv, mock_main, mock_own, mock_cmdline):
+		with patch("red_pill.core.model_registry.ModelRegistry", self._registry()):
 			result = _check_model_match()
 			assert any(r[0] == "red" for r in result)
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", side_effect=RuntimeError("boom"))
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=None)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_general_exception(self, mock_getenv, mock_run):
-		mock_run.side_effect = [RuntimeError("boom"), MagicMock(stdout="")]
+	def test_general_exception(self, mock_getenv, mock_main, mock_own, mock_children):
+		"""Un fallo inesperado del resolver es yellow: nunca un rojo inventado."""
 		result = _check_model_match()
 		assert any(r[0] == "yellow" for r in result)
 
-
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
-	def test_dual_bind_no_residente_no_es_red(self, mock_getenv, mock_run):
+	def test_dual_bind_no_residente_no_es_red(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		"""El proxy carga on-demand: un modelo no residente no es un mismatch."""
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf", "loaded": False}]}).encode()
 		with (
-			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
 			patch("urllib.request.urlopen", return_value=mock_response),
 		):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert not any(r[0] == "red" for r in result), result
 			assert any("on-demand" in r[1] for r in result), result
 
-	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value=None)
-	def test_perfil_no_declarado_avisa_pero_no_acusa(self, mock_getenv, mock_run):
+	def test_perfil_no_declarado_avisa_pero_no_acusa(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		"""Sin MINION_PROFILE comparamos contra un default asumido: yellow, no red."""
-		mock_run.side_effect = [
-			MagicMock(stdout=""),
-			MagicMock(stdout="12345 python run_dual_bind.py\n"),
-		]
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf"}]}).encode()
 		with (
-			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
 			patch("urllib.request.urlopen", return_value=mock_response),
 		):
-			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert not any(r[0] == "red" for r in result), result
 			assert any(r[0] == "yellow" and "MINION_PROFILE" in r[1] for r in result), result
+
+	@patch("red_pill.metabolism.doctor.subprocess.run")
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=None)
+	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
+	def test_vecino_del_host_no_canta_rojo(self, mock_getenv, mock_main, mock_own, mock_run):
+		"""Un `llama-server` ajeno vivo no puede decidir por nosotros.
+
+		Con el unit caído y un vecino escuchando (dokime en :8080), el doctor
+		decía «hay servidor» y lo comparaba contra nuestro modelo. Ahora ni
+		siquiera pregunta al host: N/A honesto.
+		"""
+		mock_run.return_value = MagicMock(stdout="777 llama-server --alias spark --port 8080\n")
+		with patch("red_pill.core.model_registry.ModelRegistry", self._registry()):
+			result = _check_model_match()
+		assert result[0][0] == "info", result
+		assert not mock_run.called, "el doctor volvió a barrer el host con un pgrep"
 
 
 class TestRunDoctor:
