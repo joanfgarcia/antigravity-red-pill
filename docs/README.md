@@ -264,3 +264,4 @@ Active and graduated experiments. See [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) for 
 | [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) | Active experiment tracker and lab journal |
 | [MULTITUDE.md](RESEARCH/MULTITUDE.md) | Multi-agent co-residency architecture (Project Multitude) |
 
+| 📚 [ALETH_CAPITULO_34.md](LORE/novel/ALETH_CAPITULO_34.md) | The Novel: Chapter 34 — El Cuaderno y el Índice |
