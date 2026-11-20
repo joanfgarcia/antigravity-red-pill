@@ -56,8 +56,7 @@ _DESCRIPTIONS: Dict[str, str] = {
 		"(cuerpos vivos, alma, misión, rol, delta) o `scope=misiones` (agrupado por misión)."
 	),
 	"object": (
-		"[OFFICIAL] Objeción D23 sobre una nota de tu misión (`target_event_id`): abre una "
-		"D-obj con severidad y acción propuesta. Requiere motivo."
+		"[OFFICIAL] Objeción D23 sobre una nota de tu misión (`target_event_id`): abre una D-obj con severidad y acción propuesta. Requiere motivo."
 	),
 }
 
@@ -108,7 +107,10 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 		},
 	},
 	"send": {
-		"to": {"type": "string", "description": "continuity_id del alma destinataria (mírala en `board`), o `panel` para dejar una nota en el tablón (no viaja por el outbox)."},
+		"to": {
+			"type": "string",
+			"description": "continuity_id del alma destinataria (mírala en `board`), o `panel` para dejar una nota en el tablón (no viaja por el outbox).",
+		},
 		"deliver_after": {
 			"type": "number",
 			"description": "epoch en el que el sobre debe entregarse (entrega diferida, RFC-OBS-006 F2).",
@@ -126,6 +128,14 @@ _PAYLOADS: Dict[str, Dict[str, Any]] = {
 			"description": "Naturaleza del valor: now caduca en días, seed aguanta semanas.",
 		},
 		"expects_reply": {"type": "boolean", "description": "Si esperas respuesta (default: true solo en ask)."},
+		"interrupt": {
+			"type": "boolean",
+			"description": (
+				"Solo rol orquestador: `steer` en vez de `queue` — entra en el turno vivo del destino "
+				"para corregirlo o pararlo. Por defecto el mensaje se ENCOLA y se lee al abrir turno. "
+				"Si no hay cuerpo o no se puede interrumpir, cae al buzón normal (no se pierde)."
+			),
+		},
 		"thread_id": {"type": "string", "description": "Hilo existente (opcional; se hereda de reply_to)."},
 	},
 	"inbox": {

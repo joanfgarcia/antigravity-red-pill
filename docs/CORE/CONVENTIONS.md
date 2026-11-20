@@ -288,10 +288,21 @@ This project is deliberately **bilingual**:
 
 | Language | Domain |
 |----------|--------|
-| **English** | All technical documentation, code comments, commit messages, ARCHITECTURE.md, CHANGELOG.md |
-| **Spanish** | Lore, identity layer, emotional resonance (`docs/LORE/`), agent-facing seeds, philosophical assertions |
+| **English** | All technical documentation, code comments, identifiers, ARCHITECTURE.md |
+| **Spanish** | Lore, identity layer, emotional resonance (`docs/LORE/`), agent-facing seeds, philosophical assertions, git history (`CHANGELOG.md`, commit messages) |
 
 Mixed-language is acceptable in seeds and lore when the emotional register requires it. In production code and documentation, prefer English for consistency.
+
+The full rule lives in [`LANGUAGE_POLICY.md`](LANGUAGE_POLICY.md): three layers decided by
+**who reads the string** (scaffold → English, interface → the operator's language, personal
+text → its author's, never machine-translated). Vocabulary and renames are in
+[`GLOSSARY.md`](GLOSSARY.md). Two consequences that are reviewed, not suggested:
+
+- **No half-breed identifiers.** `affect_fondo` (English `affect` + Spanish `fondo`) is the
+  precedent this rule exists to prevent. An identifier is entirely English or it is the
+  term of a layer-3 text — never a weld of both.
+- **Labels localize; codes do not.** Mood letters are opaque keys (`B`, `C`), not mnemonics:
+  `B` was *bien*, and no translation keeps the initial.
 
 ---
 

@@ -61,20 +61,22 @@ class TestAuditLow(unittest.TestCase):
 	@patch.object(MetabolismKernel, "refresh_ttl_timestamps")
 	@patch.object(MetabolismKernel, "_read_state")
 	@patch.object(MetabolismKernel, "_write_state")
-	def test_cq_001_absence_guard_short_circuit(self, mock_write, mock_read, mock_refresh):
-		"""Verify CQ-001: Absence guard short-circuits to avoid immediate erosion."""
+	def test_cq_001_kernel_no_longer_touches_ttl(self, mock_write, mock_read, mock_refresh):
+		"""RFC-OLV-001 D-22: el kernel del daemon ya no refresca TTL ni erosiona.
+
+		El Absence Guard existía para que la ausencia no cobrara olvido; con la
+		escalera en días activos la ausencia cuesta 0 por construcción, así que
+		tocar `last_recalled_at` aquí solo destruiría la prueba de uso.
+		"""
 		now = time.time()
 		last_run = now - (self.manager.cfg.ABSENCE_THRESHOLD + 3600)
 		mock_read.return_value = (last_run, False)
-		with patch.object(self.manager.cfg, "METABOLISM_AUTO_COLLECTIONS", ["test_coll"]):
-			with patch("red_pill.memory.logger"):
-				with patch("builtins.open", unittest.mock.mock_open()):
-					with patch("fcntl.flock", return_value=None, create=True):
-						self.manager.metabolism._run_cycle()
-		mock_refresh.assert_called_with("test_coll")
+		with patch("red_pill.memory.logger"):
+			with patch("builtins.open", unittest.mock.mock_open()):
+				with patch("fcntl.flock", return_value=None, create=True):
+					self.manager.metabolism._run_cycle()
+		mock_refresh.assert_not_called()
 		mock_write.assert_called()
-		call_args = mock_write.call_args
-		self.assertTrue(call_args.kwargs.get("skip_next_erosion"), "skip_next_erosion flag not set")
 
 
 if __name__ == "__main__":

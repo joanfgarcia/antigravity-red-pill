@@ -119,6 +119,73 @@ def _cost_model_enabled() -> bool:
 		return False
 
 
+def _deferred_first_enabled() -> bool:
+	"""Flag F3.2 (RULE 4): default OFF → orden byte-idéntico al de siempre."""
+	try:
+		import red_pill.config as cfg
+
+		return bool(getattr(cfg, "NIGHTLY_DEFERRED_FIRST_ENABLED", False))
+	except Exception:
+		return False
+
+
+def _order_cost(
+	source: str,
+	session_id: str,
+	*,
+	cost_model: bool,
+	phase: Optional[str],
+	registry: Optional[Any],
+	root: Optional[Any],
+) -> Tuple[int, int, int]:
+	"""Coste de una sesión en la divisa de su fase, para ORDENAR (D-NB-16).
+
+	Es el mismo coste que usa el presupuesto —no una métrica nueva— para que
+	«barato» signifique lo que de verdad ocupa sitio en la noche. Sin modelo de
+	coste la divisa es la de siempre: mensajes.
+	"""
+	if cost_model and phase in ("distill", "annotate"):
+		dir_rel = _entry(registry, source, session_id).get("dir") or ""
+		cost = predict_session_cost(root, dir_rel, phase)
+		if phase == "distill":
+			return (int(cost.get("chars", 0)), 0, 0)
+		return (int(cost.get("units", 0)), int(cost.get("notes", 0)), 0)
+	return (0, 0, message_count(registry, source, session_id))
+
+
+def _order_deferred_first(
+	pending: Sequence[Tuple[str, str, str]],
+	*,
+	cost_model: bool,
+	phase: Optional[str],
+	registry: Optional[Any],
+	root: Optional[Any],
+) -> List[Tuple[str, str, str]]:
+	"""D-NB-16: más noches diferidas primero; a igualdad, el MÁS BARATO.
+
+	El desempate por coste no es un adorno: `select_targets` corta con `break` en
+	el primer desbordamiento, así que el orden decide quién queda fuera. Sin él,
+	«lo diferido primero» sería «el monstruo otra vez» y las pequeñas —las que
+	llevan más noches fuera— no saldrían nunca.
+
+	`stale-first` se conserva como último criterio: `sorted` es estable, así que
+	los empates exactos mantienen el orden previo.
+	"""
+	from red_pill.core import nightly_deferred
+
+	ledger = nightly_deferred.load()
+	if not ledger:
+		return list(pending)
+
+	def _key(item: Tuple[str, str, str]) -> Tuple[int, ...]:
+		source, session_id, _reason = item
+		unit = nightly_deferred.unit_key(source, session_id)
+		cost = _order_cost(source, session_id, cost_model=cost_model, phase=phase, registry=registry, root=root)
+		return (-nightly_deferred.nights(ledger, unit), *cost)
+
+	return sorted(pending, key=_key)
+
+
 def _distill_char_limit() -> int:
 	try:
 		import red_pill.config as cfg
@@ -180,6 +247,9 @@ def select_targets(
 		return list(pending)
 	ordered = sorted(pending, key=lambda t: t[2] != "stale")
 	cost_model = _cost_model_enabled() and phase in ("distill", "annotate")
+	if _deferred_first_enabled():
+		# D-NB-16: lo que el techo dejó fuera vuelve PRIMERO (noches desc, coste asc).
+		ordered = _order_deferred_first(ordered, cost_model=cost_model, phase=phase, registry=registry, root=root)
 	chosen: List[Tuple[str, str, str]] = []
 	total_msgs = 0
 	total_chars = 0

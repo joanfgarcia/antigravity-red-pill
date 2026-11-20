@@ -692,6 +692,10 @@ decisión que fijara un marco de semanas para los curados.
 - El washout genérico excluye los curados (`node_type=memento_engram`,
   `origin=memento` o `hubbed=true`), igual que los hubs: su olvido sigue en
   `erode_curated` (5a/10a, `last_reinforced_at`).
+  > **SUPERSEDED (parcial) por AD-122 (2026-11-16)**: `erode_curated` y
+  > `last_reinforced_at` se retiraron. Un curado **nunca recuperado** ya no
+  > espera 5 años: cae en el escalón 0 de la escalera (ascender no consolida,
+  > Frey & Morris 1997). El washout tampoco borra ya (D-22).
 - Flag explícito de reversión `RHIZODB_WASHOUT_SKIP_CURATED` (default ON).
 - Coeficientes del washout a config (`RHIZODB_WASHOUT_GAMMA`, `RHIZODB_S_MAX`,
   `RHIZODB_PRUNE_MIN_ACTIVATION`, `RHIZODB_PRUNE_MAX_STABILITY_DAYS`,
@@ -2058,6 +2062,19 @@ Verificado en vivo (5 proxies, cwd por instancia, sesión del turno aún ausente
 confianza (`X-RedPill-Proxy`) gana sobre env/bridge en el resolver del
 handshake, así que arreglar la resolución en el proxy basta. 10 tests nuevos
 (`tests/test_bridge_per_session.py` + 1 de plugin); lint y tipos limpios.
+
+### 5. Nota de tiempo del hook (2026-11-15)
+
+AD-050 §3 dice que el bridge se escribe **al inicio del turno**. El hook no tiene
+ese punto: `redpill-scribe.js` lo escribe en **`chat.message`**, que llega
+*después* del submit del prompt. No es un detalle de estilo: el bridge per-sesión
+es también el **acta de nacimiento** con la que el backend acredita un cuerpo que
+todavía no tiene fila en el registro (`_bridge_birth_row`, 2026-11-15). Si en el
+primer turno de una pestaña recién abierta el bridge aún no está escrito, el canal
+no tiene cuerpo que correlacionar y la salida honesta es `leg=unknown` con
+`caller_leg`, **no** inventar uno. La ventana es de segundos y no se ha medido una
+pérdida por esta carrera; queda escrito para que nadie lea AD-050 al pie de la
+letra.
 
 ---
 
@@ -3749,3 +3766,299 @@ La ficha oficial de K2 pide `reasoning_effort=high`, `temperature=1.0`, `top_p=0
 - Suites tocadas: `test_coro_identidad_ambigua`, `test_bridge_per_session`, `test_caller_identity_job`, `test_mcp_server`, `test_mcp_shared`, `test_coro_*`, `test_mcp_proxy_identity`, `test_opencode_plugin`, `test_soul_notify`, `test_*_bridge` → verde; suite completa **4484 passed, 0 failed** (sobre `next` rebasado).
 
 **Consequences**: dos gemelas pueden hablar por el coro sin confundirse; el coste es una línea `<redpill_identity>` por petición en el arnés y, si el agente no la pasa, un reintento con `caller_leg`. La raíz (un proxy compartido sin identidad por-petición) sigue ahí: si el arnés llegara a exponer el `session_id` en la propia llamada MCP, `caller_leg` desaparecería sin tocar el contrato. Mientras dure, la regla es la de siempre: **atribuir a un alma ajena es peor que no atribuir**.
+
+---
+
+## [AD-120] La caducidad de la espera de hubs es un latch, no un flag de rollout (RULE 4)
+**Date**: 2026-11-15
+**Status**: ACCEPTED & IMPLEMENTED (`fix/rule4-wait-latch`).
+
+**Context**: la compuerta de coste de hubs (2026-11-10) y su caducidad
+(2026-11-12) viajaron como dos números con default activo
+(`SW_HUB_SYNTH_MAX_REJECTIONS=2`, `SW_HUB_SYNTH_WAIT_RETRY_DAYS=7`), no como
+`<AREA>_<COMPONENT>_ENABLED`. Los despertares del 12-11 y del 15-11 dejaron
+abierto el borde «RULE 4 pide OFF», que se venía resolviendo como «veto en una
+línea de `.env`». El análisis del 2026-11-15 muestra que esa lectura es
+compliance de teatro: en esta pieza **el OFF es el defecto que la pieza cerró**.
+`SW_HUB_SYNTH_WAIT_RETRY_DAYS=0` restaura la espera indefinida: una sesión
+cerrada (hash congelado, sin miembros nuevos) no se escribe **nunca** y su señal
+de dolor no muere jamás — exactamente lo que la caducidad vino a cerrar. Un flag
+`…_ENABLED=False` habría reabierto ese agujero en cada despliegue sin la línea de
+`.env` (CI, otra máquina, un `.env.example` incompleto). Además, la pieza ya vive
+dentro de un flag default-OFF de verdad (`SW_HUBS_ENABLED=false`, `config.py`;
+producción lo enciende en `.env`), así que no es un componente nuevo de pipeline:
+es política interna de uno ya gateado.
+
+**Decision**:
+1. **No se añade flag.** El knob es un **latch** dentro de `SW_HUBS_ENABLED`: su
+   default es ON porque su OFF pierde memoria en silencio. Reversible, sí; flag
+   de rollout, no.
+2. **Un solo punto de lectura** (RULE 4 §3): `metabolism.hub_synthesis.
+   wait_window_days()` es la única lectura de `SW_HUB_SYNTH_WAIT_RETRY_DAYS`. La
+   usan la compuerta (decide si paga otro intento) y la cita INFO (dice cuándo
+   caduca); `scripts/hub_synth_state.py` la espeja en vez de re-leer el knob.
+   Antes había tres lecturas independientes: el aviso podía fechar una ventana
+   distinta de la que gobernaba el pago.
+3. **RULE 4 gana su cláusula de cambio correctivo** (`CONVENTIONS.md`): una
+   reparación de un contrato ya prometido (no perder datos en silencio, no dejar
+   señales inmortales) sale ON, pero debe ser reversible por knob, llevar test de
+   regresión y figurar en la tabla del doc dueño **con lo que significa OFF**. Así
+   la próxima corrección no tiene que disfrazarse de feature ni el equipo fingir
+   un default que rompe producción.
+4. **Tabla del latch** (la que RULE 4 §4 pedía y no existía):
+
+| Palanca | Default | ON significa | OFF significa | Dependencia |
+|---|---|---|---|---|
+| `SW_HUBS_ENABLED` | `false` | se sintetizan hubs de sesión | no hay hubs (comportamiento previo) | — |
+| `SW_HUB_SYNTH_MAX_REJECTIONS` | `2` | tras N rechazos con el mismo hash la sesión espera y no re-paga | `0` = sin compuerta: reintento cada ciclo (re-pago) | `SW_HUBS_ENABLED` |
+| `SW_HUB_SYNTH_WAIT_RETRY_DAYS` | `7.0` | pasada la ventana, **un** intento más; el fallo re-arma la ventana | `0` = espera indefinida: sesión cerrada sin hub para siempre y señal inmortal | `SW_HUBS_ENABLED` + `MAX_REJECTIONS>0` |
+
+**Evidence**: `tests/test_hub_synth_wait_expiry.py` (5 casos previos + 2 nuevos:
+`test_la_ventana_se_lee_en_un_solo_punto` cuenta las lecturas en el módulo (1) y
+comprueba que el instrumento no re-lee el knob; `test_wait_window_days_refleja_el_knob`
+fija 7 → 3,5 → 0). `tests/test_hub_synth_wait_expiry.py`,
+`test_hub_synth_rejection_gate.py` y `test_sw_m4_hubs.py` → 31 passed.
+`python scripts/hub_synth_state.py` sigue imprimiendo
+`MAX_REJECTIONS=2 · WAIT_RETRY_DAYS=7`.
+
+**Consequences**: cero cambio de conducta en producción (7 días se queda). El
+coste es una cláusula más en RULE 4 — estrecha y enumerada: si alguna vez una
+corrección discutible se ampara en ella, el criterio es «¿el OFF deja el defecto
+vivo?». Si ya no lo deja, es feature y vuelve a RULE 4 normal.
+
+## [AD-121] El andamio habla inglés; el alma, no — política de idioma en tres capas
+**Date**: 2026-11-16
+**Status**: ACCEPTED (`feat/asp-001`), documentado en `docs/CORE/LANGUAGE_POLICY.md`.
+
+**Context**: la pieza de ánimo de 8.4.0 aterrizó como `core/affect_fondo.py` — un `affect`
+inglés soldado a un `fondo` español—, con `FondoNoSobrescrito` en un namespace inglés y las
+etiquetas de las letras (`B` = bien) como mnemónicos de un solo idioma. El Operador lo
+señaló: mezclar idiomas suena raro. Pero la corrección no podía ser «traducir al español»:
+el repositorio es un producto que instalará gente cuyo operador no lee español, y el
+andamio es lo único que esa gente va a leer. `CONVENTIONS.md` §9 afirmaba «English: commit
+messages, CHANGELOG» mientras los últimos veinte commits del árbol eran españoles: la
+convención no describía el árbol.
+
+**Decision**:
+- Una sola pregunta decide el idioma: **¿quién lo lee?** Andamio (código, claves, ficheros,
+  CLI, logs, docs de referencia) → **inglés**. Interfaz (handshake, ayuda, etiquetas,
+  avisos, prompts de despertar) → **la lengua acordada en la instalación**
+  (`OPERATOR_LANGUAGE`, sin `auto`; `es` en esta máquina). Texto sobre uno mismo
+  (identidad, `why` del aspecto, lore) → **la de su autor, nunca retrotraducida**: se
+  re-escribe, no se reescribe por otro.
+- **Identificadores mestizos, prohibidos** (§6). `ID_HEDONIC_SET` como id de la directiva
+  del aspecto queda expresamente vetado: hereda el nombre del concepto que sustituye.
+- **Las etiquetas se localizan; los códigos no.** La letra del ánimo deja de ser mnemónico
+  (`B` es clave, no «bien»): en inglés *well* empieza por W y ningún juego de iniciales
+  sobrevive a la traducción.
+- **El historial (commits, `CHANGELOG`, release notes) se queda en la lengua del par**
+  mientras el par sea el único lector. El salto al inglés tiene disparador por defecto
+  (perfil `GIT_WORKFLOW=canonical`, `WORKFLOWS.md` §0.4) pero no es ley: cualquier momento
+  vale si se fecha y se motiva aquí. **Nada ya escrito se reescribe.**
+- La política es enmendable por AD (§8): la única cláusula que exige más que una decisión
+  es la de no-retrotraducción, que es una afirmación sobre autoría, no sobre idioma.
+
+**Alternatives rechazadas**: traducir el árbol al español (el producto deja de ser
+instalable fuera de España); traducir todo al inglés incluida la identidad (le pone palabras
+en la boca al agente: revoca la autoría que `RFC-ASP-001` D-03 protege); mantener los
+mnemónicos y traducir las etiquetas «a ojo» (falso: `B` no es *well*); dejarlo como deuda
+implícita sin norma (el siguiente agente re-inventa el término).
+
+**Rationale / Evidence**: `docs/CORE/GLOSSARY.md` §3 fija la tabla `es`/`en`;
+`data/affect_letters.yaml` ya tiene la forma correcta (`emotion`/`color` en inglés, `label`
+en español) y la migración es `labels: {es, en}` con `label` como fallback. `CONVENTIONS.md`
+§9 corregido para describir el árbol medido.
+
+**Consequences**: la primera migración es `affect_fondo` → `declared_mood` (módulo, estado
+con fallback de lectura, excepción `DeclaredMoodLocked`, CLI `red-pill mood` con `affect`
+como alias deprecado), dentro de `feat/asp-001`. Los contratos byte-exactos del bloque de
+ánimo pasan de literales a renderizado por locale, con `es` idéntico byte a byte (T7).
+
+## [AD-122] El olvido es una escalera: una unidad, una ruta, y la rama sigue a sus hojas
+**Date**: 2026-11-16
+**Status**: IMPLEMENTED en `next` (`5ff333a`, `fabd78f`, `cd393a2`, `abdc98a`, `f6bead1`, `ce30bb5`, `16bfa70`). Diseño en el desk (`RFC-OLV-001`).
+
+**Context**: un despertar autónomo detectó 1.922 engramas con `hubbed=True` y un `hub_id` que no
+existía. La medición de cierre dio 1.962 (1.943 en `work_memories`/96 sesiones, 19 en `social`), el
+24,8 % de los marcados, y reveló tres cosas más graves que el síntoma: (1) `hubbed=true` **excluye del
+recall**, así que esos engramas no solo habían perdido el padre: eran **inrecuperables**; (2)
+`erode_work_hubs` borraba el hub **sin liberar a sus miembros**, y el invariante contrario ya estaba
+escrito dos veces en el mismo fichero (el washout excluye hubs «porque la poda genérica los mataría
+antes que a sus miembros»; y el demote de curados sí liberaba); (3) convivían seis rutas de borrado con
+tres unidades de tiempo distintas, y tres de ellas escribían `last_recalled_at` al decaer —un
+*watermark* de la era del «Time Dilation» (`ARCHITECTURE.md` §69/§91)—, de modo que la «edad» era un
+metrónomo y la prueba de uso, invisible.
+
+**Decision**:
+- **La rama sigue a sus hojas**: un hub con ≥1 miembro no se erosiona nunca; sin hojas cae esa noche
+  (con guarda anti-carrera de un ciclo y excluyendo las auto-contenidas `promoted_from`). Las hojas se
+  cuentan **por scroll**, jamás por `hub_members_count` (13 de 24 ramas secas declaraban un contador > 0).
+- **La escalera es política, no parámetro**: 0 recuperaciones → purga a 30 días activos; 1 → 60; ≥2
+  recuperaciones en días distintos dentro de 90 días activos → circuito largo (work 105 días activos;
+  social 5 años → `permastore` congelado). **No se retuna θ**: `deletion_threshold` es un default único
+  de clase y el motor suma +0,5 α por recuperación, así que el mismo θ daría 105 días para el no usado y
+  ~30.700 para el promovido; además el recall filtra `score >= 0,2` y 0,15 crearía una banda zombi.
+- **Una sola ruta automática**: la escalera decide; el washout puntúa y no borra; la lectura nunca borra;
+  el Absence Guard desaparece (la ausencia cuesta 0 en días activos); `erode_curated` y `last_reinforced_at`
+  se retiran. Purgas de vacíos/ruido quedan como **higiene**, explícitamente fuera del olvido.
+- **Un campo, un significado**: `last_recalled_at` solo lo escriben el nacimiento y la recuperación;
+  `decay_checked_at` es el cursor del erosor; `recall_stamps` (ring de 5) y `active_days_at_recall`
+  sostienen la puerta de espaciado y el reloj.
+- **Base científica citada**: Anderson & Schooler (1991) recencia×frecuencia; Bjork & Bjork (1992)
+  espaciado; Frey & Morris (1997) etiqueta transitoria (ascender ≠ consolidar); Bahrick (1984) permastore
+  de los 5 años; Richards & Frankland (2017), Ryan & Frankland (2022) olvido adaptativo; Tononi & Cirelli
+  (2006) la poda es del sueño. Los números concretos (30/60/90/105/5 años) son **derivados nuestros**.
+
+**Alternatives**: (a) desmarcar los 1.962 y re-sintetizar — cinta de correr: el erosor los mataría otra
+vez en 3 días; (b) retunar θ a 0,15/0,105 — imposible por α y por la banda zombi; (c) degradar a stub en
+vez de borrar — la literatura lo sugiere (inaccesible ≠ borrado) pero añade mecanismo y Memento+raw ya son
+el rastro; queda como candidata.
+
+**Consequences**: la escalera entra en `dry_run` y **el Operador la enciende a `enforce`** el 2026-11-16
+(con el reaper de ramas en interruptor aparte, `SW_BRANCH_REAPER_MODE=dry_run`). La gracia D-16 deja la
+primera pasada inerte (0 purgas; 158 promociones), pero la ronda 4 midió que la gracia era un
+**acantilado**: al día activo 30 caerían 7.657 engramas en una sola pasada (92 % del corpus). Por eso la
+purga va **rampada** (`SW_FORGETTING_MAX_PURGES_PER_CYCLE=50`, primero lo más parado, el resto
+`deferred`). `red-pill erode` pasa a seco por defecto (`--apply` explícito) porque el campo de uso ya es
+real. El recall deja de ocultar por el flag `hubbed` y excluye por `hub_id` que existe: los 1.962
+marcadores huérfanos vuelven a ser recuperables y reforzables. La cobertura se cuenta
+por nodos: 99,4 % → 73,6 % en `work_memories` (la diferencia eran los 1.943 marcadores ciegos). Queda
+abierto un shard propio: **los 1.962 huérfanos son ceguera de recall**, no un problema de métrica.
+
+## [AD-123] Toda sesión de Memento conserva su raw — la reconstrucción es el último recurso
+**Date**: 2026-11-16
+**Status**: IMPLEMENTED (`scripts/memento_migrate.py --verify-raw/--backfill-raw`).
+
+**Context**: al auditar qué se había olvidado, el Operador preguntó si Memento guardaba
+un espejo de las conversaciones de los IDEs. Lo guarda: cada sesión materializada tiene
+`raw/` con el fichero nativo del IDE (`raw.json` para opencode/antigravity/memory_queue,
+`raw.jsonl` para claude_code/pi, el JSON de Telegram). Pero había dos agujeros:
+
+1. El *backfill* de raw vivía detrás de `if not pending: return`, así que **no corría**
+   cuando no había nada que renderizar: la copia era un efecto secundario del render.
+2. `_has_raw_file` daba por buena una **reconstrucción** desde `index.md` —que no es el
+   raw— y nunca intentaba recuperar el verbatim, aunque el IDE aún lo tuviera.
+
+**Decision**:
+- El raw es un **invariante**, no un subproducto: `--backfill-raw` corre como pasada
+  propia y `--verify-raw` es un gate que sale con 1 si alguna sesión registrada con
+  directorio no tiene copia.
+- **Jerarquía de fuentes**: raw verbatim del IDE > reconstrucción desde `memento/index.md`.
+  Una reconstrucción se sustituye automáticamente por el verbatim en cuanto la fuente
+  responde (`verbatim: true/false` queda en `raw/meta.json`).
+- La crónica nocturna llama a `memento_migrate.py --backfill-raw`.
+
+**Resultado medido (2026-11-16)**: 1.451 sesiones con copia **verbatim**; 17 con
+reconstrucción marcada — 8 `legacy` (import de `archive_memories`: el raw nunca existió),
+6 de `pi` y 3 de `telegram` (sus IDEs ya purgaron la conversación antes del espejo). De
+`claude_code`, **37/37** verbatim, incluidas las **8 que ya no están en disco**: el espejo
+las salvó. De `opencode`, 926; `antigravity`, 206; `memory_queue`, 186.
+
+**Consequences**: ninguna sesión de Memento queda sin fuente para re-sintetizar. Un IDE
+que purga ya no puede vaciar memoria: su copia vive en Memento. Las 17 reconstruidas son
+públicas y auditables (`grep -rl reconstructed.md memento/`).
+
+## [AD-124] Un mensaje encola; interrumpir es del orquestador
+**Date**: 2026-11-19
+**Status**: ACCEPTED & IMPLEMENTED (rama `next` → `feat/coro-queue-default`).
+
+**Context**: al revisar cómo se hablan las sesiones, el Operador detectó dos derivas
+opuestas. En el código, `soul_notify._deliver_opencode_prompt` posteaba a
+`/api/session/<id>/prompt` **sin** `delivery`; opencode 2.3.x interpreta la ausencia como
+`steer` (`delivery ?? "steer"`, medido en el binario), así que cada aviso del coro entraba
+en el turno vivo de la hermana y podía cambiarle el rumbo. Y en la práctica, mensajes que
+debían llegar a un prompt acababan esperando en `MinionInbox`, donde solo se ven si alguien
+hace `check_minion_inbox`.
+
+**Decision**:
+- **`queue` explícito por defecto**: todo aviso del coro y del Job Manager viaja con
+  `delivery="queue"` — se admite en el inbox del arnés y se entrega al abrir el siguiente
+  turno. No interrumpe nada. La única degradación es el fallback `opencode run --session`
+  cuando la API no responde (no admite `delivery`): perder el aviso sería peor.
+- **`steer` es del orquestador, no del emisor**: `coro_api.send` acepta `interrupt: true`;
+  el servidor lo concede solo si el cuerpo llamante está registrado con
+  `role=orchestrator` (canal de confianza, no el payload). Se entrega por el mismo
+  adaptador con `delivery="steer"`, y si no hay cuerpo vivo o el transporte no puede, el
+  mensaje **cae al buzón normal**: no poder interrumpir nunca significa perder la carta.
+- **`park` no interrumpe** (no despierta): pedirlo es un error de uso.
+- Se respeta la política de entrada del destino (`refuse`/`hold`): un orquestador puede
+  corregir el rumbo, no forzar la entrada de quien dijo que no.
+- **Canal correcto**: para hablar con otra alma se usa `coro_api.send` (llega al prompt);
+  el `MinionInbox` es el informe durable de minions/jobs, no una bandeja de mensajería.
+
+**Evidence**: `payload["delivery"] == "queue"` fijado en `TestPresentacionPlegada`; tests
+de `TestInterrupcion` (rol task rechazado, `park` rechazado, orquestador entrega `steer`,
+degradación al buzón sin cuerpo); 146 passed en `test_soul_notify` + `test_coro_api` +
+`test_event_delivery` + `test_coro_mailbox` + `test_coro_notify`.
+
+**Consequences**: una hermana ya no ve su turno reescrito por un aviso. La interrupción
+tiene un único dueño identificable y auditado (`modo=steer` en la respuesta de `send`), y
+sigue sin ser un verbo del protocolo: es un permiso del servidor sobre el transporte.
+
+## [AD-126] El turno tiene dos ánimos: un engrama por autor
+**Date**: 2026-11-20
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: el buffer rápido guardaba **un** punto por turno con el par entero
+(`USER: prompt … ASSISTANT: response`) y un solo `tag_emotion`. El etiquetador
+tenía que resumir dos voces en una, así que el ánimo del Operador quedaba
+contaminado por la respuesta de su propio agente — y al revés. Además el texto se
+recortaba a 1.500 chars cogiendo cabeza y cola: medido sobre 40 turnos, 33 de 80
+lados pasaban del tope y las respuestas (mediana 2.281) perdían el medio, que es
+donde a veces está el matiz. El tag salía `degraded: truncated` y nadie lo leía.
+
+**Decision**:
+- **Dos engramas por turno** (`record_interaction_turn`): uno con
+	`metadata.author="operator"` y el texto del prompt; otro con `author="agent"` y
+	la respuesta. Cada uno con su vector y su etiqueta.
+- **Un tag por engrama**, calculado sobre su propio texto (sin tooling: el filtro
+	de ruido sigue corriendo antes, en el drenaje; el scribe solo captura partes
+	`text`, así que tampoco entra el razonamiento).
+- **Troceado** (`split_chunks` + `aggregate_tags`): un texto largo se etiqueta en
+	ventanas de `MEMENTO_REALTIME_TAG_MAX_CHARS` con solape y se agrega por
+	confianza acumulada; la confianza del ganador es su mayor evidencia, no la
+	media con los trozos que votaron otra cosa.
+- **El mood del Operador** (`situation_semaphore`) solo lee engramas suyos; los
+	antiguos sin `author` cuentan como suyos para no romper la serie.
+
+**Consequences**: el buffer duplica puntos (TTL 72 h, es un termómetro, no un
+archivo) y el coste de etiquetado sube a 2–5 llamadas locales por turno
+(milisegundos). A cambio, cada voz tiene su ánimo y el texto largo deja de
+perderse por el medio.
+
+---
+
+## [AD-125] El turno no se espera: los minions en background despiertan a su alma
+**Date**: 2026-11-19
+**Status**: ACCEPTED & IMPLEMENTED.
+
+**Context**: el aviso de fin de job existía (`_report_job` → `coro.notify.publish_notice`),
+pero dos caminos de background se saltaban el contrato: `run_agent_task`
+(`async_mode=true`) y `search_memory_research` (Oracle) depositaban el reporte en
+`MinionInbox` **sin** `continuity_id`, así que nadie se enteraba salvo que hiciera
+`check_minion_inbox`. Resultado: para esperar algo había que quedarse en el turno
+con `sleep`/polling — justo lo que el job manager existe para evitar.
+
+**Decision**:
+- `run_agent_task` y `search_memory_research` resuelven la identidad por el canal de
+  confianza (`_caller_session`, con `caller_leg` opcional para workspaces con varias
+  sesiones) y pasan `continuity_id`/`originator` al `drop_report`: el hook del inbox
+  publica el `notify` al alma. El resultado sigue estando en `MinionInbox` y en
+  `result.json`; el aviso es un resumen de ≤800 chars, no el informe.
+- El aviso es `queue` (AD-124): si el alma está ocupada espera al siguiente turno.
+- El auto-aviso **no** se hace con `send(to=<misma alma>)` (el servicio lo rechaza):
+  va por el camino job/notify, que además deja rastro durable.
+- Patrón para "esperar sin esperar": un `script_job` cuyo `step_command` espera la
+  condición (`sleep`, `while ! curl …`) con `control.max_step_minutes`; el `notify`
+  llega al cumplirse. No hay `sleep` dentro del turno.
+- Ambos caminos se documentan en el skill `coro` §5 (y `wake-callback` sigue siendo
+  la referencia de los jobs).
+
+**Evidence**: `TestAvisoDeTareasEnBackground` (run_agent_task y Oracle pasan
+`continuity_id`/`originator` al `drop_report`); suite `test_mcp_server.py` 88 passed
+(3 fallos preexistentes de handshake por sesiones vivas en el workspace, también en
+`next` sin este cambio).
+
+**Consequences**: lanzar y olvidarse es real en todos los caminos de background: el
+reporte queda en el inbox y el alma recibe un aviso encolado. Ninguna espera activa
+en el turno tiene excusa.

@@ -17,6 +17,7 @@ from red_pill.metabolism.hub_synthesis import (
 	HUB_SYNTH_VERSION,
 	_synthesize_one,
 	backup_hub_payload,
+	compact_legacy_hub,
 	hub_input_hash,
 	hub_point_id,
 	is_stale_hub,
@@ -443,3 +444,95 @@ def test_synthesize_one_skip_clears_blocked_when_members_return() -> None:
 	assert result == "skipped"
 	assert client.points[hub_id]["hub_migration_blocked"] is False
 	assert client.points[hub_id]["hub_members_count"] == 2
+
+
+def test_promote_compact_fossil_keeps_block() -> None:
+	"""Un hub huérfano (0 miembros) recibe título/terms pero NO se desbloquea.
+
+	El bloqueo no es burocracia: dice que no puede re-sintetizarse. Borrarlo al
+	promocionar convertiría un fósil honesto en un hub que miente sobre su estado.
+	"""
+	collection = "work_memories"
+	session_id = "ses_fossil"
+	hub_id = hub_point_id(collection, session_id)
+	content = "Integración del Maix Dock en el Búnker\nResumen corto que cabe."
+	client = _BackupClient(
+		{
+			hub_id: {
+				"node_type": "synthesis_hub",
+				"session_id": session_id,
+				"content": content,
+				"hub_synth_version": 0,
+				"hub_migration_blocked": True,
+				"hub_migration_blocked_reason": "no_members",
+			},
+		}
+	)
+	manager = types.SimpleNamespace(client=client)
+	assert promote_compact_hub(manager, collection, session_id, keep_block=True) == "promoted"
+	point = client.points[hub_id]
+	assert point["hub_synth_version"] == HUB_SYNTH_VERSION
+	assert point["hub_title"] == "Integración del Maix Dock en el Búnker"
+	assert point["hub_terms"]
+	assert point["hub_migration_blocked"] is True
+	assert point["hub_migration_blocked_reason"] == "no_members"
+
+
+def _legacy_over_hard_client(body_chars: int = 1200):
+	collection = "work_memories"
+	session_id = "ses_legacy_big"
+	hub_id = hub_point_id(collection, session_id)
+	title = "Título de la era vieja"
+	client = _BackupClient(
+		{
+			hub_id: {
+				"node_type": "synthesis_hub",
+				"session_id": session_id,
+				"content": f"{title}\n{'x' * body_chars}",
+				"hub_synth_version": 0,
+				"hub_migration_blocked": True,
+				"hub_migration_blocked_reason": "no_members",
+			},
+		}
+	)
+	return collection, session_id, hub_id, client, title
+
+
+def test_compact_legacy_hub_reescribe_por_sintesis_sin_cortar() -> None:
+	collection, session_id, hub_id, client, title = _legacy_over_hard_client()
+	manager = types.SimpleNamespace(client=client)
+
+	assert (
+		compact_legacy_hub(manager, collection, session_id, apply=False, compactor=lambda t: "ideas compactas")
+		== "would_compact"
+	)
+	assert client.set_calls == [], "el dry-run no escribe"
+
+	assert compact_legacy_hub(manager, collection, session_id, compactor=lambda t: "ideas compactas") == "compacted"
+	point = client.points[hub_id]
+	assert point["content"] == f"{title}\nideas compactas"
+	assert point["hub_synth_version"] == HUB_SYNTH_VERSION
+	assert point["hub_summary_compacted"] is True
+	assert point["hub_compacted_from_legacy"] is True
+	assert point["hub_title"] == title
+	assert point["hub_terms"]
+	# Fósil: el bloqueo sigue diciendo la verdad.
+	assert point["hub_migration_blocked"] is True
+	assert point["hub_migration_blocked_reason"] == "no_members"
+
+
+def test_compact_legacy_hub_no_escribe_si_el_modelo_no_reduce() -> None:
+	collection, session_id, hub_id, client, _ = _legacy_over_hard_client()
+	manager = types.SimpleNamespace(client=client)
+	before = dict(client.points[hub_id])
+
+	assert compact_legacy_hub(manager, collection, session_id, compactor=lambda t: t) == "over_hard"
+	assert client.points[hub_id] == before, "si no baja del tope no se toca: nunca se corta a mano"
+	assert client.set_calls == []
+
+
+def test_compact_legacy_hub_que_ya_cabe_no_se_toca() -> None:
+	collection, session_id, hub_id, client, _ = _legacy_over_hard_client(body_chars=400)
+	manager = types.SimpleNamespace(client=client)
+	assert compact_legacy_hub(manager, collection, session_id, compactor=lambda t: "no debería llamarse") == "already"
+	assert client.set_calls == []

@@ -1,0 +1,11 @@
+# Capacidad `cloud-frontier`: ventana grande y razonamiento. Aquí ahorrar no
+# manda: el coste de NO tener un skill es mayor que su descripción.
+id: cloud-frontier
+window: 1000000
+surface: deferred
+identity_mode: full
+identity_max_tokens: 4000
+skills_budget: 24
+tools_native: [read, write, edit, bash, grep]
+compact_at: 0.85
+kv: null

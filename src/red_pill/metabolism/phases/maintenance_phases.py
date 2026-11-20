@@ -6,7 +6,9 @@ GPU-heavy consolidation phase is deferred (the partial-deferral win of ADR-SLEEP
 
 import logging
 
-from red_pill.metabolism.maintenance import erode_curated, erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
+import red_pill.config as cfg
+from red_pill.metabolism.forgetting import reap_leafless_branches, run_ladder
+from red_pill.metabolism.maintenance import promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
 logger = logging.getLogger(__name__)
@@ -37,21 +39,65 @@ class ErosionPhase(SleepPhase):
 		return "erosion"
 
 	def execute(self, ctx: SleepContext) -> None:
-		eroded = decayed = demoted = 0
-		try:
-			stats = erode_work_hubs(ctx.memory_manager) or {}
-			eroded = int(stats.get("eroded", 0) or 0)
-			decayed = int(stats.get("decayed", 0) or 0)
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
-		try:
-			curated = erode_curated(ctx.memory_manager)
-			if curated.get("enabled"):
-				logger.info(f"[SLEEP ENGINE] Curated demote: {curated}")
-			demoted = int(curated.get("demoted", 0) or 0)
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Failed to run curated demote: {e}")
-		ctx.record(self.name, eroded + decayed + demoted, eroded=eroded, decayed=decayed, demoted=demoted)
+		"""RFC-OLV-001: una sola política de olvido, en este orden.
+
+		Orden: primero la escalera, después el reaper, para que una rama que
+		acaba de perder su ultima hoja caiga en la MISMA pasada (C-06).
+
+		`erode_work_hubs` (la erosion bayesiana heredada) ya NO se llama aqui: el
+		reaper cubre su caso bueno y su decay borraba ramas auto-contenidas
+		(`promoted_from`) que el reaper excluye por definicion. Queda como funcion
+		manual/legada, con sus tests, sin participar del ciclo automatico.
+		"""
+		reaped = purged = frozen = promoted = planned = write_errors = 0
+		mode = str(getattr(cfg, "SW_FORGETTING_LADDER_MODE", "off") or "off").strip().lower()
+		if mode not in ("off", "dry_run", "enforce"):
+			logger.warning(f"[OLVIDO] Modo de escalera desconocido {mode!r}: se trata como 'off'.")
+			mode = "off"
+
+		if mode != "off":
+			try:
+				ladder = run_ladder(ctx.memory_manager, mode=mode)
+				for name, col in (ladder.get("collections") or {}).items():
+					# Producción = solo lo APLICADO. Lo planificado va en detalle aparte
+					# (`*_plan`), que es lo que R3-C-06 pedía no mezclar.
+					purged += int(col.get("applied_delete", 0) or 0)
+					frozen += int(col.get("applied_freeze", 0) or 0)
+					promoted += int(col.get("applied_promote", 0) or 0)
+					write_errors += int(col.get("write_errors", 0) or 0)
+					planned += int(col.get("planned_delete", 0) or 0)
+					if col.get("planned_delete") or col.get("frozen") or col.get("errors"):
+						logger.info(
+							f"[OLVIDO] Escalera ({mode}) en {name}: planificado={col.get('planned_delete')} "
+							f"aplicado={col.get('applied_delete', 0)} congelado={col.get('frozen')} "
+							f"promovido={col.get('promoted')} errores={col.get('errors')}"
+						)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to run forgetting ladder: {e}")
+			try:
+				reaper_mode = str(getattr(cfg, "SW_BRANCH_REAPER_MODE", "dry_run") or "dry_run").strip().lower()
+				if reaper_mode not in ("off", "dry_run", "enforce"):
+					logger.warning(f"[OLVIDO] Modo de reaper desconocido {reaper_mode!r}: se trata como 'dry_run'.")
+					reaper_mode = "dry_run"
+				rep = reap_leafless_branches(ctx.memory_manager, mode=reaper_mode)
+				reaped = int(rep.get("reaped", 0) or 0)
+				if rep.get("candidates"):
+					logger.info(f"[OLVIDO] Reaper ({reaper_mode}): {rep['candidates']} ramas sin hojas candidatas.")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to run branch reaper: {e}")
+
+		ctx.record(
+			self.name,
+			reaped + purged + frozen + promoted,
+			reaped=reaped,
+			ladder_purga=purged,
+			ladder_permastore=frozen,
+			ladder_promovidos=promoted,
+			ladder_planificado=planned,
+			ladder_errores=write_errors,
+		)
+		if mode != "off":
+			logger.info(f"[OLVIDO] Pasada ({mode}): purga={purged} permastore={frozen} promovidos={promoted} reaper={reaped}")
 
 
 class WashoutPhase(SleepPhase):

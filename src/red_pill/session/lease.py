@@ -128,26 +128,19 @@ class LeaseStore:
 				and not allow_takeover
 			):
 				conn.rollback()
-				raise LeaseHeld(
-					f"lease {key!r} de otra alma ({current['continuity_id']}); "
-					"se requiere --force/Operador para reclamarlo"
-				)
+				raise LeaseHeld(f"lease {key!r} de otra alma ({current['continuity_id']}); se requiere --force/Operador para reclamarlo")
 			if current is not None and str(current["state"]) == "active":
 				expires = min(
 					float(current["last_heartbeat_at"]) + int(current["idle_ttl_s"]),
 					float(current["started_at"]) + int(current["max_wall_s"]),
 				)
 				if expires > now:
-					same_owner = (
-						str(current["continuity_id"]) == continuity
-						and str(current["holder_originator"] or "") == str(holder_originator or "")
+					same_owner = str(current["continuity_id"]) == continuity and str(current["holder_originator"] or "") == str(
+						holder_originator or ""
 					)
 					if not same_owner and not allow_takeover:
 						conn.rollback()
-						raise LeaseHeld(
-							f"lease {key!r} activo de continuity={current['continuity_id']} "
-							f"holder={current['holder_originator'] or '-'}"
-						)
+						raise LeaseHeld(f"lease {key!r} activo de continuity={current['continuity_id']} holder={current['holder_originator'] or '-'}")
 					if same_owner:
 						conn.execute(
 							"UPDATE session_leases SET last_heartbeat_at=?, extended_by='runner', "
@@ -388,8 +381,7 @@ class LeaseStore:
 				expired.append(out)
 				if mark_stalled:
 					cur = conn.execute(
-						"UPDATE session_leases SET state='stalled', reason=? "
-						"WHERE lease_key=? AND state='active' AND last_heartbeat_at=?",
+						"UPDATE session_leases SET state='stalled', reason=? WHERE lease_key=? AND state='active' AND last_heartbeat_at=?",
 						(reason, row["lease_key"], float(row["last_heartbeat_at"])),
 					)
 					if cur.rowcount:

@@ -75,6 +75,7 @@ class SamanthaSummarizer:
 		try:
 			if self._invoke is None:
 				from red_pill.inference.samantha_on_demand import invoke
+
 				raw = invoke(prompt=prompt, system_prompt=system, max_tokens=max_tokens)
 			else:
 				raw = self._invoke(prompt=prompt, system_prompt=system, max_tokens=max_tokens)
@@ -108,6 +109,7 @@ class MementoSummarizer:
 		try:
 			if self._transport is None:
 				from red_pill.memento.agentic.runtime import http_transport
+
 				raw = http_transport(system, prompt, max_tokens)
 			else:
 				raw = self._transport(system, prompt, max_tokens)

@@ -41,6 +41,15 @@ _TAG_FIELDS = (
 	"tag_confidence",
 	"tag_engine",
 	"tagged_at",
+	# Dos moods por turno (2026-11-20): el del Operador sale de SU prompt y el del
+	# agente de SU respuesta. `tag_emotion` se mantiene como el del Operador para
+	# no romper a los consumidores que ya lo leen.
+	"tag_emotion_operator",
+	"tag_theme_operator",
+	"tag_confidence_operator",
+	"tag_emotion_assistant",
+	"tag_theme_assistant",
+	"tag_confidence_assistant",
 )
 
 
@@ -188,6 +197,152 @@ def apply_tag(memory: Any, uid: str, tag: dict, *, collection: str = COLLECTION,
 	except Exception as e:
 		logger.warning(f"[realtime_tag] set_payload falló para {uid}: {e}")
 		return False
+
+
+def pair_tag(operator: dict, assistant: dict) -> dict:
+	"""Compone los campos de un turno con DOS moods (puro: sin socket).
+
+	- `tag_emotion` = el del Operador (compatibilidad: quien ya leía `tag_emotion`
+		sigue leyendo el ánimo de quien escribe, no la mezcla de los dos).	- `tag_emotion_assistant` = el del agente, desde su respuesta.
+	- `tag_status` global = el peor de los dos: si un lado falló, se dice.
+	"""
+
+	def _st(tag: dict) -> str:
+		return str(tag.get("tag_status") or "failed")
+
+	op_ok = _st(operator) in ("ok", "degraded")
+	as_ok = _st(assistant) in ("ok", "degraded")
+	out: dict = {
+		"tag_status": "ok" if (_st(operator) == "ok" and _st(assistant) == "ok") else "degraded",
+		"tag_engine": TAG_ENGINE,
+		"tag_emotion": operator.get("tag_emotion") or "?",
+		"tag_theme": operator.get("tag_theme") or "?",
+		"tag_confidence": operator.get("tag_confidence"),
+		"tag_emotion_operator": operator.get("tag_emotion") or "?",
+		"tag_theme_operator": operator.get("tag_theme") or "?",
+		"tag_confidence_operator": operator.get("tag_confidence"),
+		"tag_emotion_assistant": assistant.get("tag_emotion") or "?",
+		"tag_theme_assistant": assistant.get("tag_theme") or "?",
+		"tag_confidence_assistant": assistant.get("tag_confidence"),
+	}
+	if not op_ok and not as_ok:
+		out["tag_status"] = "failed"
+		out["tag_reason"] = f"operator:{_st(operator)} assistant:{_st(assistant)}"
+	elif not op_ok:
+		out["tag_reason"] = "operator-failed"
+	elif not as_ok:
+		out["tag_reason"] = "assistant-failed"
+	return out
+
+
+# ── Troceado (2026-11-20) ────────────────────────────────────────────────────
+# El turno se recortaba a `MAX_CHARS` cogiendo cabeza y cola: con respuestas de
+# 2.281 chars de mediana, el medio de lo que dice el agente no se etiquetaba
+# nunca y el tag salía `degraded: truncated`. Se trocea en ventanas con solape
+# y se agrega por confianza acumulada: el ánimo de un texto largo no es el de su
+# primera frase.
+CHUNK_OVERLAP = 120
+
+
+def split_chunks(text: str, cap: int, overlap: int = CHUNK_OVERLAP) -> list[str]:
+	"""Parte `text` en trozos de ≤cap chars, cortando por espacio y con solape."""
+	body = (text or "").strip()
+	if not body:
+		return []
+	if len(body) <= cap:
+		return [body]
+	chunks: list[str] = []
+	start = 0
+	while start < len(body):
+		end = min(start + cap, len(body))
+		if end < len(body):
+			cut = body.rfind(" ", start + cap // 2, end)
+			if cut > start:
+				end = cut
+		chunks.append(body[start:end].strip())
+		if end >= len(body):
+			break
+		start = max(start + 1, end - overlap)
+	return [c for c in chunks if c]
+
+
+def aggregate_tags(tags: list[dict]) -> dict:
+	"""Agrega etiquetas de varios trozos: emoción/tema por confianza acumulada."""
+	ok = [t for t in tags if str(t.get("tag_status") or "") in ("ok", "degraded") and t.get("tag_emotion")]
+	if not ok:
+		last = tags[-1] if tags else {}
+		return {"tag_status": "failed", "tag_reason": str(last.get("tag_reason") or "no-chunks")}
+	emo_w: dict[str, float] = {}
+	thm_w: dict[str, float] = {}
+	for t in ok:
+		raw = t.get("tag_confidence")
+		try:
+			w = float(raw) if raw is not None else 0.5
+		except (TypeError, ValueError):
+			w = 0.5
+		emo = str(t.get("tag_emotion") or "?")
+		thm = str(t.get("tag_theme") or "?")
+		emo_w[emo] = emo_w.get(emo, 0.0) + w
+		thm_w[thm] = thm_w.get(thm, 0.0) + w
+	best_emo = max(emo_w.items(), key=lambda kv: kv[1])
+	best_thm = max(thm_w.items(), key=lambda kv: kv[1])
+	# La confianza del ganador es la mayor evidencia a su favor (no la media con
+	# los trozos que votaron otra cosa: eso la hundía artificialmente).
+	confs = []
+	for t in ok:
+		if str(t.get("tag_emotion") or "") != best_emo[0]:
+			continue
+		raw_c = t.get("tag_confidence")
+		try:
+			confs.append(float(raw_c) if raw_c is not None else 0.5)
+		except (TypeError, ValueError):
+			confs.append(0.5)
+	conf_ganadora = max(confs) if confs else round(best_emo[1] / max(1, len(ok)), 3)
+	status = "ok" if all(str(t.get("tag_status")) == "ok" for t in ok) else "degraded"
+	return {
+		"tag_status": status,
+		"tag_emotion": best_emo[0],
+		"tag_theme": best_thm[0],
+		"tag_confidence": conf_ganadora,
+		"tag_chunks": len(ok),
+	}
+
+
+def tag_turn_chunked(text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+	"""Etiqueta un texto largo por trozos y agrega. Nunca lanza."""
+	if not enabled():
+		return {"tag_status": "disabled"}
+	chunks = split_chunks(text, max_chars())
+	if not chunks:
+		return {"tag_status": "failed", "tag_reason": "empty-text"}
+	if len(chunks) == 1:
+		return tag_turn(chunks[0], socket_path=socket_path, timeout=timeout)
+	return aggregate_tags([tag_turn(c, socket_path=socket_path, timeout=timeout) for c in chunks])
+
+
+def tag_pair(operator_text: str, assistant_text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:
+	"""Etiqueta las dos mitades por separado: su ánimo y el del agente."""
+	if not enabled():
+		return {"tag_status": "disabled"}
+	op = tag_turn_chunked(operator_text, socket_path=socket_path, timeout=timeout)
+	asst = tag_turn_chunked(assistant_text, socket_path=socket_path, timeout=timeout)
+	return pair_tag(op, asst)
+
+
+def maybe_tag_pair(
+	memory: Any, uid: str, operator_text: str, assistant_text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None
+) -> dict:
+	"""Pipeline completo del turno con dos moods. Nunca lanza."""
+	tag = tag_pair(operator_text, assistant_text, socket_path=socket_path, timeout=timeout)
+	if tag.get("tag_status") == "disabled":
+		return tag
+	persisted = False
+	try:
+		persisted = apply_tag(memory, uid, tag)
+	except Exception as e:  # noqa: BLE001 — el tag nunca tumba el drenaje
+		logger.error(f"[realtime_tag] apply_tag inesperado (par): {e}")
+	tag["tag_persisted"] = persisted
+	return tag
 
 
 def maybe_tag(memory: Any, uid: str, text: str, *, socket_path: Optional[str] = None, timeout: Optional[float] = None) -> dict:

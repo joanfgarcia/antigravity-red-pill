@@ -103,6 +103,10 @@ class StorageEngine:
 			("node_type", models.PayloadSchemaType.KEYWORD),
 			("session_id", models.PayloadSchemaType.KEYWORD),
 			("hub_synth_version", models.PayloadSchemaType.INTEGER),
+			# RFC-OLV-001: `permastore` se consulta en varias rutas. `decay_checked_at`
+			# se escribe como rastro de auditoría pero NO se indexa: un índice sin
+			# lector es coste puro (R3-B A12).
+			("permastore", models.PayloadSchemaType.BOOL),
 		)
 		for field_name, field_schema in indexes:
 			try:

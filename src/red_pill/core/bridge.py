@@ -139,9 +139,7 @@ def _session_row(session_id: str) -> Optional[dict]:
 	return None
 
 
-def recent_session_by_activity(
-	provider: str, cwd: str, *, max_age_s: float = 120.0, tie_s: float = 30.0
-) -> Optional[str]:
+def recent_session_by_activity(provider: str, cwd: str, *, max_age_s: float = 120.0, tie_s: float = 30.0) -> Optional[str]:
 	"""Sesión de opencode que está PRODUCIENDO actividad en ESTE workspace ahora.
 
 	Es la señal que la correlación por cwd no tiene: `session_v2.time_updated`
@@ -167,9 +165,7 @@ def recent_session_by_activity(
 		try:
 			for table in ("session_v2", "session"):
 				try:
-					got = con.execute(
-						f"SELECT id, directory, time_updated FROM {table} WHERE directory IS NOT NULL"
-					).fetchall()
+					got = con.execute(f"SELECT id, directory, time_updated FROM {table} WHERE directory IS NOT NULL").fetchall()
 				except sqlite3.OperationalError:
 					continue
 				rows.extend(dict(r) for r in got)
@@ -281,9 +277,7 @@ def resolve_body_by_cwd(provider: str, cwd: str) -> Optional[dict]:
 	live_set = set(live)
 
 	# Capa 1: bridges per-sesión cuyo workdir == cwd Y cuya sesión está viva.
-	by_cwd = [
-		e for e in list_session_bridges(provider) if e.get("session_id") and _norm(str(e.get("workdir") or "")) == target
-	]
+	by_cwd = [e for e in list_session_bridges(provider) if e.get("session_id") and _norm(str(e.get("workdir") or "")) == target]
 	by_cwd_live = [e for e in by_cwd if e.get("session_id") in live_set]
 	if len(by_cwd_live) == 1:
 		return by_cwd_live[0]
@@ -338,11 +332,7 @@ def resolve_body(provider: str, cwd: str) -> "tuple[Optional[dict], str]":
 	# ¿Había candidatas que no supieron decidir? Eso es ambigüedad, no ignorancia.
 	try:
 		live = set(_live_session_ids(provider))
-		same_cwd = [
-			e
-			for e in list_session_bridges(provider)
-			if e.get("session_id") in live and _norm(str(e.get("workdir") or "")) == target
-		]
+		same_cwd = [e for e in list_session_bridges(provider) if e.get("session_id") in live and _norm(str(e.get("workdir") or "")) == target]
 	except Exception:
 		return None, REASON_UNKNOWN
 	if len(same_cwd) > 1:

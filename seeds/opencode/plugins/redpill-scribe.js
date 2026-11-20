@@ -583,7 +583,13 @@ export default {
     // el agente vea el recordatorio en cada turno — inmune a la compactación
     // porque no se persiste. `tool.hook("execute.before")` lo hace cumplir.
     // Exentas las sub-sesiones (`task`/paneles): su padre ya hizo el handshake.
-    const HANDSHAKE_GATE = (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
+    // Migración RFC-HARNESS-001 (P2): en `auto` la inyección de identidad y el
+    // gate viven en `redpill-harness.js`; aquí sólo se mantiene el modo clásico.
+    // Default `gate` = comportamiento de siempre: nada cambia hasta que el
+    // Operador encienda `REDPILL_HARNESS_MODE=auto`.
+    const HARNESS_MODE = (process.env.REDPILL_HARNESS_MODE || "gate").toLowerCase();
+    const HANDSHAKE_GATE =
+      HARNESS_MODE === "gate" && (process.env.REDPILL_HANDSHAKE_GATE || "").toLowerCase() !== "off";
     const MAX_REFUSALS = 3; // fail-open: nunca dejar una sesión sin salida
     // El nombre REAL de la tool depende del modo de exposición del servidor MCP
     // (opencode v2, docs/tools §Extensions):

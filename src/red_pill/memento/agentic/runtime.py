@@ -220,6 +220,26 @@ def annotate_max_tokens(default: int = 1024) -> int:
 	return default
 
 
+def distill_max_tokens(default: int = 2048) -> int:
+	"""Presupuesto de salida del destilado, según la task `distill`.
+
+	Estaba clavado a **512** en `distill.py`: una sesión larga se destilaba en un
+	resumen corto y truncado (`finish_reason=length`), y el annotate posterior
+	trabajaba sobre material pobre. Con Spark a 128k, 512 tokens no cubren ni un
+	episodio de la conversación.
+	"""
+	try:
+		from red_pill.core import model_runtime as mr
+
+		resolved = mr.resolve({"task": "distill"})
+		val = int(getattr(resolved, "max_tokens", 0) or 0)
+		if val > 0:
+			return val
+	except Exception:
+		pass
+	return default
+
+
 def annotate_prompt_set() -> str:
 	"""Variante de prompts de ANNOTATE que debe usar el juez actual.
 
@@ -586,6 +606,12 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		payload["thinking"] = llm["thinking"]
 	if llm["device_fallback"]:
 		payload["device_fallback"] = llm["device_fallback"]
+	# El pase de memoria sintetiza mejor SIN razonamiento en un modelo pequeño: con
+	# thinking gasta el presupuesto pensando y devuelve extractos literales en vez de
+	# notas en su voz. Se apaga por PETICIÓN (no reiniciando el servidor, que también
+	# sirve al chat, donde el thinking sí ayuda).
+	if os.getenv("RP_NO_THINK", "").strip().lower() in ("1", "true", "yes"):
+		payload.setdefault("chat_template_kwargs", {})["enable_thinking"] = False
 	truncated = False
 	for _attempt in range(4):
 		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
@@ -656,6 +682,31 @@ def _strip_code_fence(text: str) -> str:
 
 	m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
 	return m.group(1) if m else text
+
+
+class TruncatedResponseError(RuntimeError):
+	"""JSON abierto: el modelo se cortó a mitad de generar el array.
+
+	`finish_reason=length` deja la respuesta sin cierre; el parser no puede
+	distinguir "el modelo no encontró ideas" de "se quedó sin presupuesto". Antes
+	se degradaba a lista vacía y el pase de annotate podaba las notas previas y
+	sellaba la sesión con 0 notas (E-e03edb, 2026-11-19). Un corte es un fallo
+	del pase, no un resultado.
+	"""
+
+
+def unclosed_json_array(text: str) -> bool:
+	"""True si el texto abre un array JSON que no cierra (respuesta truncada).
+
+	Un `[]` válido cierra y no dispara: la lista vacía legítima sigue siendo un
+	resultado. Solo cuenta el desbalance de corchetes desde el primer `[`.
+	"""
+	stripped = _strip_code_fence(text or "")
+	start = stripped.find("[")
+	if start < 0:
+		return False
+	body = stripped[start:]
+	return body.count("]") < body.count("[")
 
 
 def _extract_json_array(text: str) -> Optional[List[Dict[str, Any]]]:

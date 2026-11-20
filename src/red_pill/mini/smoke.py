@@ -36,7 +36,7 @@ def prepare_fixture(workspace: str) -> Dict[str, str]:
 		encoding="utf-8",
 	)
 	(root / "test_calc.py").write_text(
-		f'''from calc import median
+		f"""from calc import median
 
 
 def test_median_odd():
@@ -45,7 +45,7 @@ def test_median_odd():
 
 def test_median_even():
 	assert median([1, 2, 3, 4]) == 2.5, "RUN_ID={run_id}"
-''',
+""",
 		encoding="utf-8",
 	)
 	return {"workspace": str(root), "run_id": run_id}
@@ -146,18 +146,21 @@ def run_smoke(
 		"tool_turns": sum(1 for turn in turn_rows if turn.get("role") == "tool"),
 		"plumbing_rows": sum(1 for turn in turn_rows if "sovereign_handshake" in json.dumps(turn, ensure_ascii=False)),
 	}
-	report["ok"] = all(
-		report["checks"][key]
-		for key in (
-			"nonce_in_tool_history",
-			"nonce_in_loom_text",
-			"loom_no_tool_calls",
-			"tests_pass_after_fix",
-			"tests_pass_after_apply",
-			"new_test_added",
-			"one_active_leg",
+	report["ok"] = (
+		all(
+			report["checks"][key]
+			for key in (
+				"nonce_in_tool_history",
+				"nonce_in_loom_text",
+				"loom_no_tool_calls",
+				"tests_pass_after_fix",
+				"tests_pass_after_apply",
+				"new_test_added",
+				"one_active_leg",
+			)
 		)
-	) and report["checks"]["plumbing_rows"] == 0
+		and report["checks"]["plumbing_rows"] == 0
+	)
 	if not keep_fixture:
 		report["fixture"] = str(Path(workspace))
 	return report

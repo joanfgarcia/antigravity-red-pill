@@ -128,4 +128,4 @@ def test_read_deletes_when_flag_enabled(memory_manager, monkeypatch):
 	with patch("red_pill.memory.get_memory_engine", return_value=_ErodingEngine()):
 		memory_manager.search_and_reinforce("work_memories", "consulta", limit=10)
 
-	assert _count(memory_manager) == 0, "legacy destructive read: engram deleted"
+	assert _count(memory_manager) == 1, "RFC-OLV-001 D-19: la lectura nunca borra (la única ruta es la escalera)"

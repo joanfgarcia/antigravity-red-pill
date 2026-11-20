@@ -104,3 +104,33 @@ def test_caducidad_no_resucita_un_hub_ya_escrito(monkeypatch):
 	stats = _run(FakeMM(client), _over_limit)
 	assert stats["hubs_written"] == 1
 	assert client.points["m1"]["hub_synth_reject_count"] == 0
+
+
+def test_la_ventana_se_lee_en_un_solo_punto():
+	"""RULE 4 §3: compuerta y cita comparten la lectura, no cada una la suya.
+
+	Si alguien vuelve a leer el knob por su cuenta, el aviso podría fechar una
+	ventana distinta de la que gobierna el pago (y el instrumento una tercera).
+	"""
+	import inspect
+
+	from red_pill.metabolism import hub_synthesis
+
+	src = inspect.getsource(hub_synthesis)
+	assert src.count('getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS"') == 1, (
+		"el knob debe leerse solo en wait_window_days()"
+	)
+
+	script = (__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "hub_synth_state.py").read_text()
+	assert 'getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS"' not in script, (
+		"el instrumento debe espejar wait_window_days(), no re-leer el knob"
+	)
+
+
+def test_wait_window_days_refleja_el_knob(monkeypatch):
+	from red_pill.metabolism.hub_synthesis import wait_window_days
+
+	_setup(monkeypatch, retry_days=3.5)
+	assert wait_window_days() == 3.5
+	_setup(monkeypatch, retry_days=0)
+	assert wait_window_days() == 0.0, "0 = espera indefinida, no un default silencioso"

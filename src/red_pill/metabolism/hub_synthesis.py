@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 _NS = uuid.NAMESPACE_OID
 HUB_NODE_TYPE = "synthesis_hub"
 
+# Mínimo de miembros por sesión para que la síntesis escriba hub. Es la ÚNICA
+# fuente del umbral: `synthesize_session_hubs` lo aplica al agrupar y
+# `sw_observability` lo importa para no volver a mentir con una copia.
+HUB_MIN_SESSION_MEMBERS = 2
+
 # Nodo de contenido: ascendido de Memento (o legacy sin node_type). Nunca un hub.
 _CONTENT_NODE_TYPES = (None, "memento_engram")
 
@@ -62,6 +67,19 @@ _BILLABLE_FALLBACK_REASONS = frozenset({"invalid_output", "map_reduce_exhausted"
 # entrada nunca, así que sin caducidad no se escribiría jamás. Los fallos
 # transitorios (LLM caído) NO cuentan: son baratos y sí cambian solos.
 # Marcador por miembro: hash + intentos + motivo + cuándo.
+
+
+def wait_window_days() -> float:
+	"""Ventana de caducidad de la espera, leída en UN solo punto (RULE 4 §3).
+
+	`0` = espera indefinida, la conducta previa a 2026-11-12 (una sesión cerrada
+	sin hub para siempre). La leen la compuerta —que decide si se paga otro
+	intento— y la cita INFO —que dice cuándo caduca—: si cada una leyera el knob
+	por su cuenta, el aviso podría fechar una ventana distinta de la que gobierna
+	el pago. `scripts/hub_synth_state.py` la refleja para el instrumento; allí la
+	lectura es de diagnóstico y no decide nada.
+	"""
+	return float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
 
 
 def hub_point_id(collection: str, session_id: str) -> str:
@@ -210,6 +228,7 @@ def _record_rejection(
 	members: List[Tuple[Any, Dict[str, Any]]],
 	ihash: str,
 	reason: str,
+	detail: Optional[Dict[str, Any]] = None,
 ) -> None:
 	"""Anota en los miembros que ESTA entrada ya fue rechazada.
 
@@ -217,6 +236,12 @@ def _record_rejection(
 	pagar la síntesis — el lado seguro (no se pierde nada, solo se gasta).
 	El contador se reinicia cuando cambia el `hub_input_hash`: un miembro nuevo
 	es una entrada nueva y merece su intento.
+
+	`detail` (opcional) viaja CON el marcador: sin él, el rechazo solo dice
+	«summary_over_hard_limit» y la noche siguiente repite el mismo veredicto
+	sin poder distinguir «la compactación no llegó a correr» de «corrió N veces
+	y el maestro no bajó». El marcador es el único sitio donde ese dato
+	sobrevive: el hub no se escribe, así que no hay payload que lo guarde.
 	"""
 	prev_hash, prev_count = _rejection_marker(members)
 	count = prev_count + 1 if prev_hash == ihash else 1
@@ -224,17 +249,23 @@ def _record_rejection(
 	if not ids:
 		return
 	try:
+		payload: Dict[str, Any] = {
+			"hub_synth_reject_hash": ihash,
+			"hub_synth_reject_count": count,
+			"hub_synth_reject_reason": reason,
+			"hub_synth_reject_at": time.time(),
+		}
+		if detail:
+			payload["hub_synth_reject_detail"] = dict(detail)
 		memory_manager.client.set_payload(
 			collection_name=collection,
-			payload={
-				"hub_synth_reject_hash": ihash,
-				"hub_synth_reject_count": count,
-				"hub_synth_reject_reason": reason,
-				"hub_synth_reject_at": time.time(),
-			},
+			payload=payload,
 			points=ids,
 		)
-		logger.info(f"[HUBS] rechazo #{count} anotado en {collection}:{session_id} ({reason}).")
+		suffix = ""
+		if detail:
+			suffix = " · " + " ".join(f"{k}={v}" for k, v in detail.items())
+		logger.info(f"[HUBS] rechazo #{count} anotado en {collection}:{session_id} ({reason}){suffix}.")
 	except Exception as e:
 		logger.debug(f"[HUBS] no se pudo anotar el rechazo en {collection}:{session_id}: {e}")
 
@@ -249,6 +280,9 @@ def _synthesize_one(
 	force: bool = False,
 	failure_reasons: Optional[List[Tuple[str, str]]] = None,
 	waiting_notes: Optional[List[Tuple[str, Optional[float]]]] = None,
+	point_id: Optional[str] = None,
+	hub_role: str = "root",
+	part_key: Optional[str] = None,
 ) -> str:
 	"""Escribe (upsert) el hub de un grupo de sesión y marca sus miembros.
 
@@ -265,21 +299,24 @@ def _synthesize_one(
 	acordada no es una herida, y su canal es INFO (con la fecha de la cita).
 	"""
 
-	def _fail(reason: str, billable: bool = False) -> str:
+	def _fail(reason: str, billable: bool = False, detail: Optional[Dict[str, Any]] = None) -> str:
 		"""Registra el fallo y, si costó una síntesis real, lo cuenta en el miembro.
 
 		`billable=True` solo para rechazos del hub YA sintetizado: el LLM corrió
-		y su veredicto no cambia si la entrada no cambia.
+		y su veredicto no cambia si la entrada no cambia. `detail` se guarda en
+		el marcador para que el reintento sepa POR QUÉ falló, no solo que falló.
 		"""
 		if failure_reasons is not None:
 			failure_reasons.append((f"{collection}:{session_id}", reason))
 		if billable:
-			_record_rejection(memory_manager, collection, session_id, members, ihash, reason)
+			_record_rejection(memory_manager, collection, session_id, members, ihash, reason, detail)
 		return "failed"
 
 	members = sort_members_chronologically(members)
 	member_ids = [pid for pid, _ in members]
-	hid = hub_point_id(collection, session_id)
+	# MEM-011: una PARTE se escribe con su propio id (derivado de su primera
+	# polaroid) y se marca como hija de la raíz; la raíz conserva el id de sesión.
+	hid = point_id or hub_point_id(collection, session_id)
 	ihash = hub_input_hash(member_ids)
 
 	# Idempotencia: si el hub ya existe con el mismo input, no se re-sintetiza.
@@ -296,16 +333,13 @@ def _synthesize_one(
 	if not force and previous_payload:
 		if previous_payload.get("hub_input_hash") == ihash:
 			prev_version = int(previous_payload.get("hub_synth_version") or 0)
-			version_ok = prev_version >= HUB_SYNTH_VERSION or not bool(
-				getattr(cfg, "SW_HUB_VERSION_INVALIDATION_ENABLED", False)
-			)
+			version_ok = prev_version >= HUB_SYNTH_VERSION or not bool(getattr(cfg, "SW_HUB_VERSION_INVALIDATION_ENABLED", False))
 			if version_ok:
 				# Reversible: si el hub estaba bloqueado y ahora tiene >=2
 				# miembros (p.ej. tras una ascensión), se limpia el bloqueo
 				# aunque el input hash no haya cambiado (skip).
 				if len(member_ids) >= 2 and (
-					bool(previous_payload.get("hub_migration_blocked"))
-					or int(previous_payload.get("hub_members_count") or -1) != len(member_ids)
+					bool(previous_payload.get("hub_migration_blocked")) or int(previous_payload.get("hub_members_count") or -1) != len(member_ids)
 				):
 					try:
 						memory_manager.client.set_payload(
@@ -335,7 +369,7 @@ def _synthesize_one(
 			# cambiar (sesión cerrada, miembro nuevo improbable) no se escribe
 			# NUNCA y su aviso de dolor no muere jamás — no hay ciclo limpio que
 			# lo entierre. Un intento por ventana mantiene el coste acotado.
-			window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+			window = wait_window_days()
 			age = _rejection_age_days(members)
 			if not (window > 0 and (age is None or age >= window)):
 				logger.info(
@@ -371,8 +405,7 @@ def _synthesize_one(
 		fallback_reason = str(hub.get("_fallback_reason") or "llm_unavailable")
 		if fallback_reason in _BILLABLE_FALLBACK_REASONS:
 			logger.warning(
-				f"[HUBS] síntesis descartada en {collection}:{session_id} ({fallback_reason}); "
-				"se cuenta el intento (misma entrada, mismo veredicto)."
+				f"[HUBS] síntesis descartada en {collection}:{session_id} ({fallback_reason}); se cuenta el intento (misma entrada, mismo veredicto)."
 			)
 			return _fail(f"sintesis_{fallback_reason}", billable=True)
 		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
@@ -384,17 +417,26 @@ def _synthesize_one(
 	# por síntesis, NO se escribe el hub: se reintenta, no se inyectan 3k chars.
 	hard_limit = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000))
 	if len(body) > hard_limit:
+		# El veredicto necesita su traza: `compaction_calls=0` significa que la
+		# compactación por síntesis no llegó a correr (nada que reintentar igual);
+		# `>0` significa que el maestro la ignoró N veces (medido 2026-11-20:
+		# 1.441 chars contra tope 1.000 tras dos intentos). Sin este dato, el
+		# marcador de rechazo solo dice «no cupo» y la noche siguiente repite.
+		detail = {
+			"chars": len(body),
+			"hard": hard_limit,
+			"compaction_calls": int(hub.get("compaction_calls") or 0),
+			"compacted": bool(hub.get("summary_compacted")),
+		}
 		logger.warning(
 			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id} "
-			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope); "
+			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope; "
+			f"compaction_calls={detail['compaction_calls']}, compacted={detail['compacted']}); "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
-		return _fail("summary_over_hard_limit", billable=True)
+		return _fail("summary_over_hard_limit", billable=True, detail=detail)
 	if hub.get("summary_lang_mismatch"):
-		logger.warning(
-			f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; "
-			"no se escribe (se reintenta con reescritura)"
-		)
+		logger.warning(f"[HUBS] summary en idioma distinto al dominante en {collection}:{session_id}; no se escribe (se reintenta con reescritura)")
 		return _fail("summary_lang_mismatch", billable=True)
 	title = str(hub.get("title") or "").strip()
 	# D-12: el hub puede contener credenciales tecleadas en la sesión; se
@@ -411,9 +453,10 @@ def _synthesize_one(
 	metadata: Dict[str, Any] = {
 		"node_type": HUB_NODE_TYPE,
 		"lazarus_phase": HUB_NODE_TYPE,
-		"hub_key": f"{collection}:{session_id}",
+		"hub_key": f"{collection}:{session_id}:{part_key}" if part_key else f"{collection}:{session_id}",
 		"hub_input_hash": ihash,
-		"hub_depth": 2,
+		"hub_role": hub_role,
+		"hub_depth": 1 if hub_role == "part" else 2,
 		"session_id": session_id,
 		"origin": "memento_hub",
 		"hub_members_count": len(member_ids),
@@ -423,8 +466,11 @@ def _synthesize_one(
 		"hub_migration_blocked_reason": "",
 		"hub_members_checked_at": time.time(),
 		"hub_snapshot_ts": time.time(),
-		"last_reinforced_at": time.time(),
 	}
+	if part_key:
+		# MEM-011: identidad de la parte (primera polaroid que agrupa). Estable
+		# cuando la sesión crece, y el orden de navegación (rango de mensajes).
+		metadata["part_key"] = part_key
 	# Textura: si cabe, campo canónico; si se partió (síntesis o lossless), la
 	# lista `texture_parts` conserva TODO el contenido y `texture` queda vacío.
 	texture = str(hub.get("texture") or "").strip()
@@ -585,9 +631,7 @@ def _clear_rebuild_pending(memory_manager: Any, collection: str, session_id: str
 				qm.FieldCondition(key="hub_rebuild_pending", match=qm.MatchValue(value=True)),
 			]
 		)
-		points, _ = memory_manager.client.scroll(
-			collection_name=collection, scroll_filter=flt, limit=64, with_payload=False, with_vectors=False
-		)
+		points, _ = memory_manager.client.scroll(collection_name=collection, scroll_filter=flt, limit=64, with_payload=False, with_vectors=False)
 		ids = [p.id for p in points]
 		if ids:
 			memory_manager.client.set_payload(
@@ -596,6 +640,68 @@ def _clear_rebuild_pending(memory_manager: Any, collection: str, session_id: str
 			logger.info(f"[HUBS] hub_rebuild_pending consumido en {collection}:{session_id} ({len(ids)} punto(s)).")
 	except Exception as e:
 		logger.debug(f"[HUBS] no se pudo consumir hub_rebuild_pending en {collection}:{session_id}: {e}")
+
+
+def repair_stale_orphan_markers(
+	memory_manager: Any,
+	collections: Tuple[str, ...] = ("work_memories", "social_memories"),
+	dry_run: bool = False,
+) -> Dict[str, Any]:
+	"""Borra los marcadores huérfanos que ninguna síntesis podrá resolver (MET-001).
+
+	Una sesión por debajo de `HUB_MIN_SESSION_MEMBERS` nunca tendrá hub, así que
+	su `hubbed=True` con un `hub_id` inexistente es residuo de una poda: el
+	olvido se llevó a los hermanos (y con ellos el hub) y el flag quedó escrito.
+	Dejarlo ahí mantiene el crudo de integridad en rojo para siempre (40 el
+	2026-11-18) y enseña a ignorar la lámpara justo cuando llegue una fuga real.
+
+	Idempotente y conservador: solo borra `hubbed`/`hub_id` de marcadores en
+	sesiones sin hub posible. NO toca contenido, y un marcador huérfano en una
+	sesión agrupable sigue intacto: ese sí es una fuga y debe ringar.
+	"""
+	stats: Dict[str, Any] = {"enabled": True, "dry_run": bool(dry_run), "cleared": 0, "sessions": 0, "collections": {}}
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+			points: List[Tuple[Any, Dict[str, Any]]] = []
+			offset = None
+			while True:
+				batch, offset = memory_manager.client.scroll(collection, limit=1000, offset=offset, with_payload=True, with_vectors=False)
+				points.extend((p.id, p.payload or {}) for p in batch)
+				if offset is None:
+					break
+		except Exception as e:
+			logger.warning(f"[HUBS] repair: no se pudo inventariar {collection}: {e}")
+			continue
+		hub_ids = {str(pid) for pid, pl in points if is_hub_node(pl or {})}
+		stale_ids: List[Any] = []
+		stale_sessions: Set[str] = set()
+		for session_id, members in group_by_session(points).items():
+			if len(members) >= HUB_MIN_SESSION_MEMBERS:
+				continue
+			for pid, pl in members:
+				if bool(pl.get("hubbed")) and str(pl.get("hub_id") or "") not in hub_ids:
+					stale_ids.append(pid)
+					stale_sessions.add(session_id)
+		stats["collections"][collection] = len(stale_ids)
+		if not stale_ids:
+			continue
+		if not dry_run:
+			try:
+				# Misma forma de desmarcar que `restore_hub_payload`: el flag se
+				# borra, no se pone a False (un `hubbed` ausente es el estado real).
+				memory_manager.client.delete_payload(collection_name=collection, keys=["hubbed", "hub_id"], points=stale_ids)
+			except Exception as e:
+				logger.warning(f"[HUBS] repair: no se pudieron limpiar {len(stale_ids)} marcador(es) en {collection}: {e}")
+				stats["collections"][collection] = 0
+				continue
+		stats["cleared"] += len(stale_ids)
+		stats["sessions"] += len(stale_sessions)
+		logger.info(
+			f"[HUBS] repair: {len(stale_ids)} marcador(es) residuo limpiados en {collection} ({len(stale_sessions)} sesión(es) sin hub posible)"
+		)
+	return stats
 
 
 def synthesize_session_hubs(
@@ -643,10 +749,16 @@ def synthesize_session_hubs(
 		except Exception as e:
 			logger.error(f"[HUBS] no se pudo inventariar {collection}: {e}")
 			continue
-		for i, (session_id, members) in enumerate(groups.items()):
-			if limit_sessions is not None and i >= limit_sessions:
+		# El tope cuenta sesiones REALMENTE sintetizadas, no la posición en el
+		# diccionario: con el índice, un prefijo de sesiones de un solo miembro
+		# gastaba el cupo y la cola no se visitaba nunca (RFC-OLV-001, hallazgo
+		# lateral del despertar de las 20:00).
+		processed = 0
+		_cap = limit_sessions if limit_sessions and limit_sessions > 0 else None
+		for session_id, members in groups.items():
+			if _cap is not None and processed >= _cap:
 				break
-			if len(members) < 2:
+			if len(members) < HUB_MIN_SESSION_MEMBERS:
 				# Hub de una sola idea: el engrama ya es buscable; no se
 				# parafrasea ni se oculta (evita perder precisión).
 				continue
@@ -656,6 +768,32 @@ def synthesize_session_hubs(
 			# (incidente 2026-11-09: una textura fuera de esquema se llevó por
 			# delante 7 grupos pendientes).
 			try:
+				if bool(getattr(cfg, "SW_HUB_POLAROID_ENABLED", False)):
+					from red_pill.metabolism.distiller import hub_budget
+					from red_pill.metabolism.hub_parts import synthesize_parts
+
+					parts_result = synthesize_parts(
+						memory_manager,
+						collection,
+						session_id,
+						members,
+						synthesizer,
+						affect_fn,
+						budget=hub_budget(),
+						force=force,
+						failure_reasons=failure_reasons,
+					)
+					if parts_result != "no_parts":
+						result = parts_result
+						if result == "written":
+							stats["hubs_written"] += 1
+						elif result == "failed":
+							stats["hubs_failed"] += 1
+							failed_sessions.append(f"{collection}:{session_id}")
+						elif result == "skipped":
+							stats["hubs_skipped"] += 1
+						processed += 1
+						continue
 				result = _synthesize_one(
 					memory_manager,
 					collection,
@@ -673,6 +811,11 @@ def synthesize_session_hubs(
 				failed_sessions.append(f"{collection}:{session_id}")
 				failure_reasons.append((f"{collection}:{session_id}", f"exception:{type(e).__name__}"))
 				continue
+			if result != "skipped":
+				# El cupo cuenta trabajo real (escritura/espera/fallo): un skip por
+				# `hub_input_hash` no gasta la noche, o el mismo prefijo ya sintetizado
+				# se comería el tope siempre (R4-04).
+				processed += 1
 			if result == "written":
 				stats["hubs_written"] += 1
 			elif result == "waiting":
@@ -795,7 +938,7 @@ def _emit_hub_waiting_signal(
 		waiting = int(stats.get("hubs_waiting") or 0)
 		notes = list(waiting_notes or [])
 		sesiones = ", ".join(session for session, _ in notes[:5])
-		window = float(getattr(cfg, "SW_HUB_SYNTH_WAIT_RETRY_DAYS", 7.0) or 0.0)
+		window = wait_window_days()
 		pending = [remaining for _, remaining in notes if remaining is not None]
 		if window <= 0:
 			cita = "espera indefinida (ventana 0: solo cambia la entrada)"
@@ -905,7 +1048,7 @@ def find_oversized_sessions(
 			if offset is None:
 				break
 		for session_id, members in group_by_session(points).items():
-			if len(members) < 2:
+			if len(members) < HUB_MIN_SESSION_MEMBERS:
 				continue
 			chars = len(render_hub_items(_members_to_chunks(members)))
 			if chars <= limit:
@@ -1100,9 +1243,7 @@ def reconcile_hub_blocks(
 		points: List[Tuple[Any, Dict[str, Any]]] = []
 		offset = None
 		while True:
-			batch, offset = memory_manager.client.scroll(
-				collection, limit=1000, offset=offset, with_payload=True, with_vectors=False
-			)
+			batch, offset = memory_manager.client.scroll(collection, limit=1000, offset=offset, with_payload=True, with_vectors=False)
 			points.extend((p.id, p.payload or {}) for p in batch)
 			if offset is None:
 				break
@@ -1165,6 +1306,7 @@ def promote_compact_hub(
 	session_id: str,
 	hard_limit: Optional[int] = None,
 	apply: bool = True,
+	keep_block: bool = False,
 ) -> str:
 	"""Promociona a v3 un hub legacy cuyo `content` YA cumple el tope duro.
 
@@ -1172,6 +1314,10 @@ def promote_compact_hub(
 	los contadores. Es la salida para hubs viejos compactos que el LLM no logra
 	re-sintetizar por debajo de 1.000 (se quedarían en bucle). Devuelve
 	`promoted|already|over_hard|missing`.
+
+	`keep_block=True` conserva `hub_migration_blocked` y su motivo: lo usan los
+	hubs huérfanos (fósiles sin miembros), que no pueden re-sintetizarse aunque se
+	les dé título y terms — el bloqueo dice la verdad y no debe borrarse.
 	"""
 	from red_pill.memento.hub_terms import hub_terms_chars, select_hub_terms
 
@@ -1204,11 +1350,12 @@ def promote_compact_hub(
 		"hub_terms": terms,
 		"hub_terms_chars": hub_terms_chars(terms),
 		"hub_members_count": len(members),
-		"hub_migration_blocked": False,
-		"hub_migration_blocked_reason": "",
 		"hub_members_checked_at": time.time(),
 		"hub_promoted_mechanical": True,
 	}
+	if not keep_block:
+		updates["hub_migration_blocked"] = False
+		updates["hub_migration_blocked_reason"] = ""
 	try:
 		memory_manager.client.set_payload(collection_name=collection, payload=updates, points=[hid])
 	except Exception as exc:
@@ -1218,16 +1365,149 @@ def promote_compact_hub(
 	return "promoted"
 
 
+def compact_legacy_hub(
+	memory_manager: Any,
+	collection: str,
+	session_id: str,
+	target: Optional[int] = None,
+	apply: bool = True,
+	compactor: Optional[Callable[[str], str]] = None,
+) -> str:
+	"""Reescribe por SÍNTESIS el `content` de un hub legacy que no cabe (AD-116).
+
+	Los hubs pre-v3 anteriores al tope duro pueden superar `SLEEP_HUB_SUMMARY_HARD_LIMIT`
+	y, como el límite solo se aplica al escribir, se inyectarían enteros en contexto.
+	No tienen miembros (sus engramas se purgaron), así que no se pueden re-sintetizar:
+	lo único honesto es compactar el texto que ya existe — por reescritura, NUNCA por
+	corte (si el modelo no baja del tope, el hub no se escribe y se reporta).
+
+	Devuelve `compacted|would_compact|already|over_hard|no_compactor|missing`.
+	"""
+	from red_pill.memento.hub_terms import hub_terms_chars, select_hub_terms
+
+	hid = hub_point_id(collection, session_id)
+	try:
+		points = memory_manager.client.retrieve(collection_name=collection, ids=[hid], with_payload=True)
+	except Exception:
+		return "missing"
+	if not points:
+		return "missing"
+	payload = points[0].payload or {}
+	if int(payload.get("hub_synth_version") or 0) >= HUB_SYNTH_VERSION:
+		return "already"
+	content = str(payload.get("content") or "")
+	hard = int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000)
+	first = content.split("\n", 1)[0].strip()
+	title = first if len(first) <= 120 else ""
+	body = content[len(title) + 1 :] if title and content.startswith(title + "\n") else content
+	if len(body) <= hard:
+		return "already"  # cabe: el camino es promote_compact_hub (mecánico)
+	target_chars = int(target or getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800)
+	target_chars = min(target_chars, hard)
+
+	if compactor is None:
+		compactor = _hub_compactor(target_chars)
+		if compactor is None:
+			return "no_compactor"
+
+	attempts = max(1, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 2))
+	for _ in range(attempts):
+		if len(body) <= target_chars:
+			break
+		try:
+			candidate = str(compactor(body) or "").strip().strip('"').strip()
+		except Exception as exc:
+			logger.warning(f"[HUBS] compactación legacy falló en {collection}:{session_id}: {exc}")
+			break
+		if not candidate or len(candidate) >= len(body):
+			break
+		body = candidate
+	if len(body) > hard:
+		return "over_hard"
+	if not apply:
+		return "would_compact"
+
+	new_content = f"{title}\n{body}" if title else body
+	members = _load_session_members(memory_manager, collection, session_id)
+	terms = select_hub_terms(new_content, title=title)
+	backup_hub_payload(memory_manager, collection, session_id)
+	updates: Dict[str, Any] = {
+		"content": new_content,
+		"hub_synth_version": HUB_SYNTH_VERSION,
+		"hub_title": title,
+		"hub_terms": terms,
+		"hub_terms_chars": hub_terms_chars(terms),
+		"hub_summary_compacted": True,
+		"hub_compacted_from_legacy": True,
+		"hub_compaction_task": "hub",
+		"hub_members_count": len(members),
+		"hub_members_checked_at": time.time(),
+	}
+	try:
+		memory_manager.client.set_payload(collection_name=collection, payload=updates, points=[hid])
+	except Exception as exc:
+		logger.warning(f"[HUBS] no se pudo compactar {collection}:{session_id}: {exc}")
+		return "missing"
+	_mark_members(memory_manager, collection, members, hid)
+	return "compacted"
+
+
+def _hub_compactor(target_chars: int) -> Optional[Callable[[str], str]]:
+	"""Compactor por defecto: el carril `hub` (granite) con el prompt de compactación."""
+	try:
+		from red_pill.core.providers import ProviderRegistry
+		from red_pill.metabolism.distiller import HUB_SUMMARY_COMPACT_PROMPT, load_prompt_text
+
+		system = load_prompt_text(HUB_SUMMARY_COMPACT_PROMPT, fallback_prompt="")
+		if not system:
+			return None
+		provider = ProviderRegistry.get_inference_provider()
+	except Exception as exc:
+		logger.warning(f"[HUBS] sin compactor para hubs legacy: {exc}")
+		return None
+	system = system.replace("{target}", str(target_chars))
+
+	def _compact(text: str) -> str:
+		return str(
+			provider.generate(
+				prompt=text,
+				messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+				temperature=0.1,
+				task="hub",
+			)
+		)
+
+	return _compact
+
+
 def resynthesize_session(memory_manager: Any, collection: str, session_id: str, force: bool = True) -> str:
-	"""Re-sintetiza el hub de UNA sesión (map-reduce). Devuelve written|skipped|failed."""
-	from red_pill.metabolism.distiller import derive_hub_affect, synthesize_hub_v2
+	"""Re-sintetiza el hub de UNA sesión (map-reduce). Devuelve written|skipped|failed.
+
+	MEM-011: con `SW_HUB_POLAROID_ENABLED` encendido delega en `synthesize_parts`
+	(el mismo camino que el sueño). Sin esto, la re-síntesis escribía una raíz
+	monolítica e ignoraba las partes; peor: si ya existían, `_synthesize_one`
+	re-parentaba todas las hojas a la raíz y **aplanaba el árbol** (auditoría
+	MEM-011 F-2). El flag OFF mantiene el comportamiento de siempre.
+	"""
+	from red_pill.metabolism.distiller import derive_hub_affect, hub_budget, synthesize_hub_v2
 
 	members = _load_session_members(memory_manager, collection, session_id)
-	if len(members) < 2:
+	if len(members) < HUB_MIN_SESSION_MEMBERS:
 		return "skipped"
-	return _synthesize_one(
-		memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force
-	)
+	if bool(getattr(cfg, "SW_HUB_POLAROID_ENABLED", False)):
+		from red_pill.metabolism.hub_parts import synthesize_parts
+
+		return synthesize_parts(
+			memory_manager,
+			collection,
+			session_id,
+			members,
+			synthesize_hub_v2,
+			derive_hub_affect,
+			budget=hub_budget(),
+			force=force,
+		)
+	return _synthesize_one(memory_manager, collection, session_id, members, synthesize_hub_v2, derive_hub_affect, force=force)
 
 
 # Alias públicos para scripts/auditorías (mismo contrato, sin guion bajo).
@@ -1273,9 +1553,7 @@ def backup_hub_payload(
 		"point_id": hid,
 		"vector": vector,
 		"payload": rec.payload or {},
-		"members": [
-			{"id": str(pid), "hubbed": bool((pl or {}).get("hubbed")), "hub_id": (pl or {}).get("hub_id")} for pid, pl in members
-		],
+		"members": [{"id": str(pid), "hubbed": bool((pl or {}).get("hubbed")), "hub_id": (pl or {}).get("hub_id")} for pid, pl in members],
 		"backed_up_at": time.time(),
 	}
 	out_dir = Path(backup_dir) if backup_dir else _hub_backup_dir()

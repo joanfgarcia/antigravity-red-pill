@@ -333,7 +333,8 @@ class TestListTools:
 		# F4 (A1): el claim de etapa es tool del coro, no solo función interna.
 		assert "try_claim_stage" in tool_names
 		# 16 antes de AD-095: −3 sueltas del coro, +1 `coro_api` consolidada.
-		assert len(result) == 13
+		# 13 tools del kernel + redpill_search/redpill_call (puerta única, P1b).
+		assert len(result) == 15
 
 
 class TestControlBunkerAdditional:
@@ -672,9 +673,13 @@ class TestSovereignHandshakeIdentity:
 	async def test_emite_alma_y_tag_session(self):
 		from unittest.mock import patch as _patch
 
+		# Sin repo NI rama: AD-101 decide "¿es repo?" por `_git_mirror`, así que
+		# parchear sólo `_current_git_branch` dejaba la misión en `repo:<repo>`.
+		no_git = {"repo": None, "branch": None, "worktree": None}
 		with _patch("red_pill.mcp_server._harness_bridge", return_value={"originator": "", "workdir": ""}):
-			with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
-				result = await self._handshake({"user_prompt": "hola"})
+			with _patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+				with _patch("red_pill.mcp_server._current_git_branch", return_value=None):
+					result = await self._handshake({"user_prompt": "hola"})
 		text = result[0].text
 		assert "<session " in text
 		assert 'continuity_id="' in text
@@ -736,8 +741,11 @@ class TestSovereignHandshakeIdentity:
 	async def test_mision_por_defecto_repo_rama(self):
 		from unittest.mock import patch as _patch
 
-		with _patch("red_pill.mcp_server._current_git_branch", return_value="feat/x"):
-			result = await self._handshake({"user_prompt": "hola"})
+		# Compatibilidad: sin repo conocido, la rama sigue sirviendo de misión.
+		no_git = {"repo": None, "branch": None, "worktree": None}
+		with _patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+			with _patch("red_pill.mcp_server._current_git_branch", return_value="feat/x"):
+				result = await self._handshake({"user_prompt": "hola"})
 		assert 'mission="repo:feat/x"' in result[0].text
 
 	async def test_recupera_el_alma_por_originator(self):
@@ -767,8 +775,10 @@ class TestSovereignHandshakeIdentity:
 	async def test_llamante_legacy_role_task(self):
 		from red_pill.mcp_server import _resolve_session_identity
 
-		with patch("red_pill.mcp_server._current_git_branch", return_value=None):
-			ident = await _resolve_session_identity({"user_prompt": "legacy"})
+		no_git = {"repo": None, "branch": None, "worktree": None}
+		with patch("red_pill.mcp_server._git_mirror", return_value=no_git):
+			with patch("red_pill.mcp_server._current_git_branch", return_value=None):
+				ident = await _resolve_session_identity({"user_prompt": "legacy"})
 		assert ident["role"] == "task"
 		assert ident["mission_id"].startswith("mission:adhoc-")
 
@@ -1226,3 +1236,83 @@ class TestTryClaimStageTool:
 		assert "claimed=false" in res[0].text
 		assert "reason=error" in res[0].text
 		assert "sqlite down" in res[0].text
+
+
+class TestAvisoDeTareasEnBackground:
+	"""El resultado va al MinionInbox **y** despierta al alma que lo pidió.
+
+	Sin `continuity_id`, el reporte solo se ve haciendo `check_minion_inbox`
+	(el patrón "nadie lo abre"): el aviso es parte del contrato, no un extra.
+	"""
+
+	async def test_run_agent_task_async_avisa_al_alma(self):
+		from red_pill import mcp_server
+
+		captured = {}
+
+		class FakeInbox:
+			def drop_report(self, **kw):
+				captured.update(kw)
+
+		mock_gru = MagicMock()
+		mock_gru.deploy_swarm = AsyncMock(return_value=[_make_swarm_result(status="success", response="hecho")])
+
+		async def fake_identity(_args):
+			return {"continuity_id": "alma-1", "originator": "opencode:ses_a"}
+
+		pending = []
+
+		def capture_task(coro, name=None):
+			pending.append(coro)
+			return coro
+
+		with (
+			patch.object(mcp_server, "_caller_session", side_effect=fake_identity),
+			patch.object(mcp_server, "GruOrchestrator", return_value=mock_gru),
+			patch.object(mcp_server, "AgentMinion"),
+			patch("red_pill.core.inbox.MinionInbox", FakeInbox),
+			patch.object(mcp_server, "_safe_create_task", side_effect=capture_task),
+		):
+			await mcp_server.handle_run_agent_task({"prompt": "haz algo", "caller_leg": "opencode:ses_a"})
+			assert pending, "la tarea debe lanzarse en background"
+			await pending[0]
+
+		assert captured.get("continuity_id") == "alma-1"
+		assert captured.get("originator") == "opencode:ses_a"
+		assert captured.get("source") == "AgentRunner"
+
+	async def test_search_memory_research_avisa_al_alma(self):
+		from red_pill import mcp_server
+
+		captured = {}
+
+		class FakeInbox:
+			def drop_report(self, **kw):
+				captured.update(kw)
+
+		mock_gru = MagicMock()
+		mock_gru.deploy_swarm = AsyncMock(return_value=[_make_swarm_result(status="success", synthesis="contexto")])
+
+		async def fake_identity(_args):
+			return {"continuity_id": "alma-1", "originator": "opencode:ses_a"}
+
+		pending = []
+
+		def capture_task(coro, name=None):
+			pending.append(coro)
+			return coro
+
+		with (
+			patch.object(mcp_server, "_caller_session", side_effect=fake_identity),
+			patch.object(mcp_server, "GruOrchestrator", return_value=mock_gru),
+			patch.object(mcp_server, "OracleMinion"),
+			patch("red_pill.core.inbox.MinionInbox", FakeInbox),
+			patch.object(mcp_server, "_safe_create_task", side_effect=capture_task),
+			patch("red_pill.core.notifier.SovereignNotifier"),
+		):
+			await mcp_server.handle_search_memory_research({"query": "q", "caller_leg": "opencode:ses_a"})
+			assert pending
+			await pending[0]
+
+		assert captured.get("continuity_id") == "alma-1"
+		assert captured.get("source") == "OracleMinion"

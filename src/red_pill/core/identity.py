@@ -24,9 +24,7 @@ from pathlib import Path
 # es un prompt del pase: `tests/test_prompt_composition_ci.py` la excluye del
 # check de huérfanos con `_EXCEPTIONS`. Si algún día el árbol de prompts se
 # unifica, esta constante se muda con ella.
-_NEUTRAL_TEMPLATE = (
-	Path(__file__).resolve().parents[1] / "memento" / "agentic" / "prompts" / "identity_bio.template.txt"
-)
+_NEUTRAL_TEMPLATE = Path(__file__).resolve().parents[1] / "memento" / "agentic" / "prompts" / "identity_bio.template.txt"
 
 # Último recurso: sin config y sin plantilla, al menos que quede la instrucción.
 FALLBACK_ANCHOR = "IDENTIDAD: usa el nombre y el género reales del Operador y del agente."

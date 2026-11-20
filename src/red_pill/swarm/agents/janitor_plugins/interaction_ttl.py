@@ -121,10 +121,7 @@ class InteractionTTLPlugin(JanitorPlugin):
 						intensity=5.0,
 						signal_type="pain",
 						source="Janitor",
-						message=(
-							f"{total} turno(s) sin renderizar caducan en <= {warn_days} d"
-							f" y se pierden para siempre (origen: {detalle})."
-						),
+						message=(f"{total} turno(s) sin renderizar caducan en <= {warn_days} d y se pierden para siempre (origen: {detalle})."),
 					)
 					janitor.log(f"[Janitor] interaction_ttl: {total} turno(s) a punto de caducar ({detalle}).")
 				else:

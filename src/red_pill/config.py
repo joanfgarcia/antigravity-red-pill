@@ -340,8 +340,9 @@ class RedPillConfig(BaseSettings):
 	RHIZODB_PRUNE_MIN_ACTIVATION: float = 0.1
 	RHIZODB_PRUNE_MAX_STABILITY_DAYS: float = 5.0
 	# AD-048: el washout genérico no toca curados (memento_engram/origin=memento/
-	# hubbed): su olvido va por erode_curated (5a/10a). OFF = comportamiento previo.
-	RHIZODB_WASHOUT_SKIP_CURATED: bool = True
+	# hubbed): su olvido va por la escalera (RFC-OLV-001); este skip ya no cambia nada
+	# desde que el washout no borra (D-22). OFF = comportamiento previo.
+	RHIZODB_WASHOUT_SKIP_CURATED: bool = True  # DEPRECATED (RFC-OLV-001): el washout ya no borra; la clave se conserva por compatibilidad
 	# Tope del esquema para metadata de tipo str (CreateEngramRequest). Fuente
 	# única: todo writer/merger que componga metadata deriva de aquí con margen
 	# (p. ej. situation_semaphore usa MAX_METADATA_STR - _META_MARGIN).
@@ -751,6 +752,28 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_WARN_BEFORE_DAYS: int = 7
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# MEM-011 (2026-11-17): partes por polaroid (la sesión se parte en hubs por sus
+	# polaroids renderizadas, con techo = nº de polaroids). Default OFF: apagado, el
+	# comportamiento es el de siempre (un hub por sesión).
+	SW_HUB_POLAROID_ENABLED: bool = False
+	# Enrutado por hoja (2026-11-17): busca en todo el espacio, agrega cada hoja a
+	# su raíz y devuelve la RAÍZ con la mejor evidencia. Default OFF.
+	SW_RECALL_LEAF_ROUTING_ENABLED: bool = False
+	# ── MEM-012 · abstención (D-AB-01/D-AB-05) ──────────────────────────────
+	# La señal es la SIMILITUD del hit (`hit.score`), nunca `reinforcement_score`
+	# (utilidad). D-AB-05 (Operador, 2026-11-18): suelo 0,38 medido sobre la
+	# ventana de inyección top-3 (banda válida 0,3453-0,4073; bloquea 12/12
+	# negativos sin suprimir positivos). Las bandas de confianza salen de la
+	# muestra de F0: p10 y p25 de los positivos. Cambiar un corte es
+	# configuración, no lógica.
+	SW_RECALL_ABSTENTION_FLOOR: float = 0.38
+	SW_RECALL_CONFIDENCE_MEDIA: float = 0.4551  # p10 de los positivos (F0)
+	SW_RECALL_CONFIDENCE_ALTA: float = 0.592  # p25 de los positivos (F0)
+	# MEM-012 F3: registro de demanda. Guarda la TASA (contadores) y la lista de
+	# lo que se preguntó y no estaba (solo consultas con no_recall, con secretos
+	# redactados y recortadas). Apagarlo no cambia el recall.
+	SW_RECALL_DEMAND_LOG_ENABLED: bool = True
+	SW_RECALL_DEMAND_MAX_CHARS: int = 240
 	# ── Hub como índice recuperable (HUB-RECALL-001, D-13) ──
 	# Flags independientes, default OFF: con ellos OFF el ranking de recall es
 	# byte-idéntico al baseline. `hub_members`/`traverse` no cambian el ranking;
@@ -762,6 +785,12 @@ class RedPillConfig(BaseSettings):
 	SW_HUB_VERSION_INVALIDATION_ENABLED: bool = False  # re-sintetiza si cambia HUB_SYNTH_VERSION
 	SW_HUB_SCRUB_ENABLED: bool = True  # D-12: redacta secretos del body antes del upsert
 	MEMORY_HUB_KEYWORD_MAX_HUBS: int = 500  # hubs escaneados por la pata keyword
+	# Techo de ids de hubs vivos que el recall materializa para excluir miembros
+	# por `hub_id` existente (no por el flag `hubbed`, que miente). Por encima,
+	# `_live_hub_ids` devuelve vacío y el recall cae al flag: una válvula de
+	# seguridad, no una decisión de producto. Subirlo si el árbol legítimo crece
+	# (MEM-011: 458 raíces medidas el 2026-11-18).
+	MEMORY_LIVE_HUB_IDS_MAX: int = 2000
 	MEMORY_HUB_KEYWORD_MAX_CHARS: int = 500  # presupuesto BLANDO de la lista de keywords (keywords enteras)
 	MEMORY_HUB_KEYWORD_MIN_SCORE: float = 0.0  # corta la cola de términos poco relevantes
 	MEMORY_HUB_MEMBERS_MAX_TITLES: int = 20  # títulos devueltos por hub_members
@@ -771,10 +800,12 @@ class RedPillConfig(BaseSettings):
 	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
 	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
 	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
-	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
-	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
-	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
-	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # piso MAYOR para hubs (anclan el hilo; no mueren antes que sus miembros)
+	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # DEPRECATED (RFC-OLV-001 D-08): el guard se retiró; la ausencia cuesta 0 en días activos
+	SW_EROSION_DEMOTE_ENABLED: bool = (
+		False  # DEPRECATED (RFC-OLV-001 D-03): el demote de curados se retiró; la clave se conserva por compatibilidad de .env
+	)
+	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # DEPRECATED (RFC-OLV-001): sin lector tras retirar erode_curated
+	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # DEPRECATED (RFC-OLV-001): la rama sigue a sus hojas; no hay reloj de rama
 	CURATED_LIFETIME_MULTIPLIER_WORK: float = 1.0  # factor por motor (work=Bayesiano)
 	CURATED_LIFETIME_MULTIPLIER_SOCIAL: float = 1.0  # factor por motor (social=RhizoDB)
 	SW_SITUATION_ENABLED: bool = False  # semáforo de situación por afinidad (situation_memories)
@@ -830,6 +861,14 @@ class RedPillConfig(BaseSettings):
 	# El techo SOLO corta fan-out: la cola del sueño (thread, finalize,
 	# memento-reinforce) nunca se difiere. OFF → comportamiento actual exacto.
 	JOB_COMPOUND_DEADLINE_ENABLED: bool = False
+	# F3.2 (NB-001, D-NB-16, RULE 4 default OFF): lo que el techo dejó fuera vuelve
+	# PRIMERO en el ciclo siguiente. El contador vive FUERA del job
+	# (`state/nightly_deferred.json`, clave `source:session`): cada noche es un job
+	# nuevo y el checkpoint no cruza. Orden: noches desc · coste asc · stale-first
+	# — sin el desempate por coste, «primero» sería «el monstruo otra vez», porque
+	# la selección corta en el primer desbordamiento. OFF → el driver no escribe el
+	# libro y la selección no lo lee (orden byte-idéntico al de siempre).
+	NIGHTLY_DEFERRED_FIRST_ENABLED: bool = False
 	# Presupuesto por coste real por etapa en la selección nocturna (NB-001 F5/P8,
 	# RULE 4 default OFF): con ON, la selección presupuesta en la DIVISA de cada
 	# fase en vez de en mensajes (el tope por mensajes es un proxy, no el coste):
@@ -962,7 +1001,43 @@ class RedPillConfig(BaseSettings):
 	ABSENCE_THRESHOLD: int = 3 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
-	MAX_SINK_TIME: int = 30 * 24 * 3600
+	# RFC-OLV-001 · la escalera del olvido. Una sola política de borrado, en
+	# días ACTIVOS (nunca calendario). off | dry_run (informe) | enforce.
+	SW_FORGETTING_LADDER_MODE: str = "off"
+	# El reaper de ramas tiene su propio interruptor: decide sobre 86 ramas sin
+	# hojas (24 work + 62 social) y no debe ir atado al de las hojas.
+	SW_BRANCH_REAPER_MODE: str = "dry_run"
+	# Rampa del olvido: cuántos engramas puede purgar la escalera por pasada
+	# (0 = sin tope). Sin esto, el día que la gracia D-16 se agota caen 7.657 de
+	# golpe (92 % del corpus): una escalera se sube, no se salta (R4-02).
+	SW_FORGETTING_MAX_PURGES_PER_CYCLE: int = 50
+
+	@field_validator("SW_BRANCH_REAPER_MODE", mode="before")
+	@classmethod
+	def _validate_reaper_mode(cls, v: Any) -> str:
+		norm = str(v or "dry_run").strip().lower().replace("-", "_")
+		norm = {"true": "enforce", "false": "off", "": "dry_run"}.get(norm, norm)
+		if norm not in ("off", "dry_run", "enforce"):
+			raise ValueError(f"SW_BRANCH_REAPER_MODE inválido: {v!r} (usa off | dry_run | enforce)")
+		return norm
+
+	@field_validator("SW_FORGETTING_LADDER_MODE", mode="before")
+	@classmethod
+	def _validate_ladder_mode(cls, v: Any) -> str:
+		"""Normaliza y rechaza modos inventados.
+
+		Sin esto, `dry-run`, `true` o `ENFORCE` degradaban a `off` en silencio en
+		unos consumidores y a `enforce` en otros: la peor combinación posible en
+		una política que borra.
+		"""
+		norm = str(v or "off").strip().lower().replace("-", "_")
+		aliases = {"true": "enforce", "1": "enforce", "on": "enforce", "false": "off", "0": "off", "": "off", "dryrun": "dry_run"}
+		norm = aliases.get(norm, norm)
+		if norm not in ("off", "dry_run", "enforce"):
+			raise ValueError(f"SW_FORGETTING_LADDER_MODE inválido: {v!r} (usa off | dry_run | enforce)")
+		return norm
+
+	MAX_SINK_TIME: int = 30 * 24 * 3600  # DEPRECATED (RFC-OLV-001 D-07): el sumidero es el escalón 0 de la escalera
 
 	@field_validator("METABOLISM_AUTO_COLLECTIONS", mode="before")
 	@classmethod
@@ -989,13 +1064,13 @@ class RedPillConfig(BaseSettings):
 	AFFECT_TTL_MIN: int = 15  # edad del estado antes de recalcular
 	AFFECT_WINDOW_MIN: int = 180  # ventana de turnos que se miran
 	AFFECT_TURNS: int = 8  # máximo de prompts por pasada
-	# FONDO declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta,
-	# no el que se infiere del texto. Sombra por defecto (feature nueva); se
-	# enciende en el `.env` del puesto. Letras y paleta en `data/affect_letters.yaml`.
+	# Ánimo declarado por el Operador (RFC-AFE-001 F1): el que él cuenta, no el que
+	# se infiere del texto. Sombra por defecto; se enciende en el `.env` del puesto.
+	# `DECLARED_MOOD_ENABLED` es el knob; `AFFECT_FONDO_ENABLED`
+	# es su nombre viejo y solo puede sumar (un `.env` sin actualizar no apaga la
+	# pieza en silencio). Retirar la clave vieja al migrar.
+	DECLARED_MOOD_ENABLED: bool = False
 	AFFECT_FONDO_ENABLED: bool = False
-	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
-	# This serves as the fallback if no config is yet present.
-	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
 	# -----------------------------------------------------------------------
@@ -1150,7 +1225,16 @@ class RedPillConfig(BaseSettings):
 	# síntesis (reescritura); si el modelo no obedece, el texto se conserva
 	# ENTERO y se marca `*_over_budget`. Nunca se corta. Si un campo de metadata
 	# supera `MAX_METADATA_STR`, se parte en `texture_parts` sin perder contenido.
-	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 900
+	# Objetivo de longitud que se le PIDE al modelo (el tope duro que se valida
+	# es 1000). Medido 2026-11-19 (canario MEM-011): Granite-4.1-8B se pasa
+	# 16-22 % del objetivo; con 900 escribió 1048/1097 y chocó con el tope.
+	# 800 deja 200 chars de margen incluso en el peor desvío observado.
+	# Ver observaciones en model_profiles.yaml (granite_8b).
+	# La RAÍZ (llamada maestra) se pasa un 29 % del objetivo con más facilidad
+	# que las partes: medido 2026-11-20, con 800 escribió 1035 y chocó con el
+	# tope duro 1000. 700 deja margen (700 × 1.29 ≈ 903 < 1000).
+	SLEEP_HUB_ROOT_TARGET_CHARS: int = 700
+	SLEEP_HUB_SUMMARY_TARGET_CHARS: int = 800
 	# Presupuesto del REDUCE/MASTER (ideas), separado del MAP (detalle, 8k).
 	# 6k permite agrupar 3-4 parciales y que el árbol REDUZCA; con 3k cada
 	# grupo tenía un solo parcial, el número de nodos no bajaba y se agotaban
@@ -1171,6 +1255,10 @@ class RedPillConfig(BaseSettings):
 	# fallo re-arma la ventana, así que el coste queda acotado a una síntesis por
 	# ventana y sesión). Sin caducidad, una sesión cuya entrada no vuelve a
 	# cambiar (hash congelado) no se escribe nunca. 0 = espera indefinida.
+	# RULE 4: esto NO es un flag de rollout, es un latch DENTRO de
+	# `SW_HUBS_ENABLED` (default OFF) y su OFF (`0`) es la conducta defectuosa que
+	# la caducidad vino a cerrar — por eso sale ON. Se lee en un solo punto:
+	# `metabolism.hub_synthesis.wait_window_days()` (AD-120).
 	SW_HUB_SYNTH_WAIT_RETRY_DAYS: float = 7.0
 	SLEEP_HUB_TEXTURE_MAX_CHARS: int = 400  # target de síntesis (2-3 frases); no es un corte
 	SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS: int = 2
@@ -1206,7 +1294,17 @@ class RedPillConfig(BaseSettings):
 
 	# ── Chronicle ingestion hygiene ──
 	CHRONICLE_STRIP_TOOL_PAYLOADS: bool = True  # Compact [TOOL: name target] markers instead of full JSON dumps (anti raw-noise)
-	SLEEP_PLUGIN_HYGIENE: bool = True  # HygienePhase: purge empty engrams re-stitching the raw chain first
+	SLEEP_PLUGIN_HYGIENE: bool = True
+	# RFC-OLV-001: la higiene reporta por defecto. Retirar engramas VACÍOS no es
+	# olvidar, pero tampoco puede ser una ruta automática silenciosa más.
+	SW_HYGIENE_PURGE_ENABLED: bool = False  # HygienePhase: purge empty engrams re-stitching the raw chain first
+	# MET-001 (2026-11-18): un marcador huérfano en una sesión que la síntesis
+	# nunca tocará (< HUB_MIN_SESSION_MEMBERS) es residuo, no fuga. Limpiarlo es
+	# idempotente y no borra memoria (solo `hubbed`/`hub_id`), así que va ON: con
+	# él OFF el crudo de integridad queda rojo para siempre y la próxima fuga
+	# real nace con la lámpara ya encendida. Los huérfanos en sesiones agrupables
+	# NO se tocan: esos son la fuga que la señal debe seguir gritando.
+	SW_HUB_MARKER_REPAIR_ENABLED: bool = True
 
 	# ── Texture space (T5: evocation by resonance) ──
 	TEXTURE_SHADOW_ENABLED: bool = False  # Write texture_shadow points at consolidation (born dark)
@@ -1226,7 +1324,7 @@ class RedPillConfig(BaseSettings):
 	# When False (default), a read (search_and_reinforce) never DELETES eroded
 	# engrams — it only hides them from the result. Forgetting belongs to the
 	# sleep cycle (erode_work_hubs / rhizodb washout), not to a lookup.
-	READ_PATH_PRUNING_ENABLED: bool = False
+	READ_PATH_PRUNING_ENABLED: bool = False  # DEPRECATED (RFC-OLV-001 D-19): la lectura nunca borra
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

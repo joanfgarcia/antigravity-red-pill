@@ -16,14 +16,54 @@ import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 
+def _count_hub_members(client, collection: str) -> dict | None:
+	"""Cuenta las hojas reales de cada rama (RFC-OLV-001, I-03).
+
+	Se cuenta por scroll de los miembros (`hubbed` + `hub_id`) y NUNCA por
+	`hub_members_count`: medido el 2026-11-16, 13 de las 24 ramas sin hojas
+	declaraban un contador > 0. Un fallo de lectura devuelve `None`, que el
+	llamante interpreta como «no se puede decidir» (fail-closed). Un `{}` es un
+	recuento válido: no hay ninguna hoja en la colección.
+	"""
+	from collections import Counter
+
+	counts: Counter = Counter()
+	offset = None
+	while True:
+		try:
+			batch, offset = client.scroll(
+				collection_name=collection,
+				limit=1000,
+				offset=offset,
+				with_payload=["hub_id", "hubbed"],
+				with_vectors=False,
+			)
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] No se pudieron contar hojas de ramas en {collection}: {e}")
+			return None
+		for point in batch:
+			payload = point.payload or {}
+			if payload.get("hubbed") and payload.get("hub_id"):
+				counts[str(payload["hub_id"])] += 1
+		if offset is None:
+			break
+	return counts
+
+
 def erode_work_hubs(memory_manager) -> dict:
 	"""
-	Applies Bayesian erosion to old/unreferenced synthesis hubs in work_memories.
-	Hubs that haven't been recalled/referenced in the last cycle have their
-	utility_beta increased (reducing utility score) and their intensity decayed.
+	Erosion de las ramas de `work_memories` — **la rama sigue a sus hojas**
+	(RFC-OLV-001, D-01).
 
-	Devuelve `{"eroded": N, "decayed": M}` para que la fase reporte producción
-	real (hubs borrados + hubs decaídos) en vez de un contador vacío.
+	Regla dura: una rama con al menos una hoja viva no se toca: ni decae ni se
+	borra. Su olvido es el olvido de sus hojas, y solo cuando no le queda
+	ninguna puede caer. El invariante estaba escrito dos veces en este mismo
+	fichero (el washout excluye hubs «porque la poda genérica los mataría antes
+	que a sus miembros», y el washout de hoy ya no borra);
+	esta era la única ruta que lo incumplía, y por eso dejó 1.962 marcadores
+	apuntando a un padre inexistente.
+
+	Devuelve `{"eroded": N, "decayed": M, "kept_with_leaves": K}`.
 	"""
 	client = memory_manager.client
 	collection = "work_memories"
@@ -49,18 +89,31 @@ def erode_work_hubs(memory_manager) -> dict:
 		return {"eroded": 0, "decayed": 0}
 
 	if not hubs or not isinstance(hubs, list):
-		return {"eroded": 0, "decayed": 0}
+		return {"eroded": 0, "decayed": 0, "kept_with_leaves": 0}
+
+	# RFC-OLV-001 I-01/I-02: antes de decidir nada, contar hojas. Si no se
+	# pueden contar (None), esta pasada no borra: fail-closed.
+	members_by_hub = _count_hub_members(client, collection)
+	if members_by_hub is None:
+		logger.warning("[SLEEP ENGINE] Sin recuento de hojas: no se erosiona ninguna rama en esta pasada (fail-closed).")
+		return {"eroded": 0, "decayed": 0, "kept_with_leaves": 0}
 
 	now = time.time()
 	update_operations = []
 	points_to_delete = []
+	kept_with_leaves = 0
 
 	# Cycle duration threshold: 1 cycle is approx 12 hours.
 	threshold_seconds = 12 * 3600
 
 	for hub in hubs:
 		payload = hub.payload or {}
-		if payload.get("immune"):
+		if payload.get("immune") or payload.get("permastore") or payload.get("promoted_from"):
+			continue
+
+		# La rama sigue a sus hojas: con ≥1 hoja viva no decae ni se borra.
+		if members_by_hub.get(str(hub.id), 0) > 0:
+			kept_with_leaves += 1
 			continue
 
 		last_recalled = float(payload.get("last_recalled_at", now))
@@ -91,7 +144,16 @@ def erode_work_hubs(memory_manager) -> dict:
 					f"[SLEEP ENGINE] Hub {hub.id} in 'work_memories' eroded below threshold (score={new_score}, intensity={new_intensity}). Deleting."
 				)
 			else:
-				update_payload = {"utility_beta": new_beta, "reinforcement_score": new_score, "intensity": new_intensity, "last_recalled_at": now}
+				# RFC-OLV-001 D-09: el decaimiento firma SU campo, no el de uso.
+				# `last_recalled_at` solo lo escriben el nacimiento y la recuperación;
+				# si lo escribiera el erosor, la edad sería un metrónomo y el uso, invisible.
+				update_payload = {
+					"utility_beta": new_beta,
+					"reinforcement_score": new_score,
+					"intensity": new_intensity,
+					"decay_checked_at": now,
+					"updated_at": now,
+				}
 				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[hub.id])))
 
 	if update_operations:
@@ -108,7 +170,10 @@ def erode_work_hubs(memory_manager) -> dict:
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
 
-	return {"eroded": len(points_to_delete), "decayed": len(update_operations)}
+	if kept_with_leaves:
+		logger.info(f"[SLEEP ENGINE] Erode hubs: {kept_with_leaves} ramas conservadas por tener hojas vivas (RFC-OLV-001 §2 regla 1).")
+
+	return {"eroded": len(points_to_delete), "decayed": len(update_operations), "kept_with_leaves": kept_with_leaves}
 
 
 def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:
@@ -222,12 +287,15 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 	"""
 	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
 	Washout formula: a_v = gamma(t) * a_v + (1 - gamma(t)) * b(s_v)
-	Pruning rule: delete if a_v < RHIZODB_PRUNE_MIN_ACTIVATION and s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS.
+	Poda: RETIRADA como borrado (RFC-OLV-001 D-22). El washout renormaliza la
+	puntuación; los candidatos que la poda habría borrado se registran en debug y
+	la decisión de olvidar es de la escalera, en días activos.
 	gamma(t) attenuates with the days elapsed since this collection's last washout
 	(capped at RHIZODB_WASHOUT_REFERENCE_DAYS): a repeated run never prunes the same
 	time span twice, and a missed sleep never compounds punishment. All coefficients are config-driven.
 
-	Devuelve `{"pruned": N, "washed": M}` para que la fase reporte producción real.
+	Devuelve `{"pruned": 0, "washed": M}`: `pruned` queda siempre a 0 porque esta
+	ruta ya no borra (la producción real es `washed`).
 	"""
 	client = memory_manager.client
 	now = time.time()
@@ -262,7 +330,6 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 		gamma = gamma_base if elapsed_days is None else gamma_base ** min(max(elapsed_days, 0.0) / reference_days, 1.0)
 
 		update_operations = []
-		points_to_delete = []
 		offset = None
 		scrolled = False
 
@@ -281,28 +348,30 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 
 			for p in points:
 				payload = p.payload or {}
-				if payload.get("immune"):
+				if payload.get("immune") or payload.get("permastore"):
 					continue
 
 				# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
-				# anclan el hilo y tienen erosión hub-específica (erode_curated, con
-				# piso propio). Sin esto, la poda genérica los mataría antes que a sus
-				# miembros y rompería Ariadne.
+				# anclan el hilo y siguen la regla de rama (RFC-OLV-001: sin reloj, y
+				# solo caen cuando no les queda ninguna hoja). La poda genérica los
+				# habría matado antes que a sus miembros y habría roto Ariadne.
 				if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
 					continue
 
 				# AD-048: los MIEMBROS curados (memento_engram/hubbed) tampoco: su
-				# olvido es por eje propio (last_reinforced_at → demote 5a/10a,
-				# M9/AD-034), no por poda genérica (~15-25 noches).
+				# olvido lo decide la escalera en días activos (RFC-OLV-001), no la poda
+				# genérica (~15-25 noches), que ya no borra.
 				if skip_curated and _is_curated(payload):
 					continue
 
 				# 1. Run lazy decay first to get current activation/score
 				decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
 
-				# If lazy decay wants to delete it
+				# Si el decaimiento perezoso pide borrar, NO se borra: la única
+				# ruta que decide olvidar es la escalera (RFC-OLV-001 D-22). El
+				# candidato se registra para poder comparar políticas.
 				if decay_updates.get("_delete"):
-					points_to_delete.append(p.id)
+					logger.debug(f"[OLVIDO] {collection}: {p.id} habría caído por decaimiento perezoso; la escalera decide.")
 					continue
 
 				score = max(_finite(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)), 1.0), 0.0)
@@ -315,14 +384,19 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 				b_sv = (1.0 - gamma) * (stability / s_max)
 				new_score = round(gamma * score + b_sv, 3)
 
-				# 3. Structural Pruning (Poda): delete if below the configured activation/stability floor
+				# 3. Poda: RETIRADA como borrado (RFC-OLV-001 D-22). El washout
+				# sigue renormalizando la puntuación, pero la única ruta que decide
+				# olvidar es la escalera, en días activos. El candidato se registra
+				# para poder comparar políticas sin que ninguna toque datos.
 				if new_score < prune_min_activation and stability < prune_max_stability_days:
-					points_to_delete.append(p.id)
-					logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
-				else:
-					# Otherwise, update score and commit time
-					update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
-					update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+					logger.debug(
+						f"[OLVIDO] {collection}: {p.id} habría caído por poda genérica (activation={new_score}, stability={stability}); la escalera decide."
+					)
+					continue
+				# Otherwise, update score and commit time
+				# RFC-OLV-001 D-09: el washout puntúa; no firma el campo de uso.
+				update_payload = {"reinforcement_score": new_score, "decay_checked_at": now}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
 
 			if not points or offset is None:
 				break
@@ -335,13 +409,8 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> dict:
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to update washout payloads in {collection}: {e}")
 
-		if points_to_delete:
-			try:
-				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
-				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
-				totals["pruned"] += len(points_to_delete)
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+		# RFC-OLV-001 D-22: el washout ya no borra. `totals["pruned"]` queda a 0
+		# a propósito: la única ruta que decide olvidar es la escalera.
 
 		if scrolled:
 			washout_state[collection] = now
@@ -385,6 +454,10 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 					# that is ONLY an opaque pointer is murky — count it, never touch it.
 					if _is_murky_pointer(str(payload.get("content", ""))):
 						murky_pointers += 1
+					continue
+				if payload.get("permastore"):
+					# Congelado es congelado, también si además es fragmento (R3-A-07).
+					skipped_immune += 1
 					continue
 				if payload.get("immune") and not payload.get("_is_fragment"):
 					# A deliberate immune anchor with no content is an anomaly for the
@@ -780,101 +853,3 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 			logger.info(f"[GARBAGE COLLECTION] Cleaned up {deleted_count} orphan raw_parent(s) in {col}.")
 
 	return report
-
-
-def erode_curated(memory_manager, collections=("work_memories", "social_memories")) -> dict:
-	"""Olvido elegante de los curados (SW_EROSION_DEMOTE_ENABLED, D11/D23).
-
-	Los engramas ascendidos y los hubs decaen por su **eje propio**
-	(`last_reinforced_at`, que solo se refresca al recuperar — no en el pulse). Un
-	curado nunca reforzado se **demota** (se borra de Qdrant; el gist persiste en
-	Memento) tras `CURATED_MIN_LIFETIME_YEARS`. No es `immune`.
-	"""
-	if not bool(getattr(cfg, "SW_EROSION_DEMOTE_ENABLED", False)):
-		return {"demoted": 0, "enabled": False}
-
-	base_years = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0))
-	hub_years = float(getattr(cfg, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0))
-	now = time.time()
-	stats = {"demoted": 0, "scanned": 0, "enabled": True}
-
-	from qdrant_client import models as qm
-
-	for collection in collections:
-		try:
-			if not memory_manager.client.collection_exists(collection):
-				continue
-			# Factor por motor (D17): work=Bayesiano, social=RhizoDB.
-			mult = float(getattr(cfg, f"CURATED_LIFETIME_MULTIPLIER_{collection.split('_')[0].upper()}", 1.0))
-			member_lifetime_s = base_years * mult * 365 * 86400
-			hub_lifetime_s = hub_years * mult * 365 * 86400
-			scroll_filter = qm.Filter(
-				should=[
-					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="memento_engram")),
-					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
-					qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
-				]
-			)
-			to_delete = []
-			hub_ids_to_release: list = []
-			offset = None
-			while True:
-				points, offset = memory_manager.client.scroll(
-					collection, scroll_filter=scroll_filter, limit=500, offset=offset, with_payload=True, with_vectors=False
-				)
-				for p in points:
-					pl = p.payload or {}
-					if pl.get("immune"):
-						continue
-					stats["scanned"] += 1
-					base = pl.get("last_reinforced_at") or pl.get("created_at")
-					if not isinstance(base, (int, float)):
-						continue
-					is_hub = pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub"
-					life = hub_lifetime_s if is_hub else member_lifetime_s
-					if now - float(base) > life:
-						to_delete.append(str(p.id))
-						# Si es un hub, liberar sus miembros (hubbed=False) para que
-						# vuelvan al recall primario (D9): se resuelven por `hub_id`
-						# (AD-116: el hub ya no duplica la lista de miembros).
-						if is_hub:
-							hub_ids_to_release.append(str(p.id))
-				if offset is None:
-					break
-			if to_delete:
-				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)  # type: ignore[arg-type]
-				stats["demoted"] += len(to_delete)
-				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
-			release: set = set()
-			for hid in hub_ids_to_release:
-				try:
-					flt = qm.Filter(must=[qm.FieldCondition(key="hub_id", match=qm.MatchValue(value=hid))])
-					off = None
-					while True:
-						members, off = memory_manager.client.scroll(
-							collection, scroll_filter=flt, limit=1000, offset=off, with_payload=False, with_vectors=False
-						)
-						release.update(str(m.id) for m in members)
-						if off is None:
-							break
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudieron resolver miembros del hub {hid}: {e}")
-			release -= set(to_delete)
-			if release:
-				try:
-					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=list(release))
-					stats["released"] = stats.get("released", 0) + len(release)
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
-			# La erosión puede dejar islas (miembros demotados, hub vivo): se
-			# reconcilia el estado blocked/count para no reintentar a ciegas.
-			if to_delete:
-				try:
-					from red_pill.metabolism.hub_synthesis import reconcile_hub_blocks
-
-					reconcile_hub_blocks(memory_manager, collections=(collection,), apply=True)
-				except Exception as e:
-					logger.warning(f"[SLEEP ENGINE] No se pudo reconciliar hubs bloqueados en {collection}: {e}")
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
-	return stats

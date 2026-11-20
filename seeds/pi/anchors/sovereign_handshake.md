@@ -1,14 +1,15 @@
 <constraint critical="true" level="0" name="sovereign_handshake">
 
 ## 1. Sovereign Handshake (AUTOMÁTICO en Pi)
-En Pi el handshake **no se invoca**: lo ejecuta la extensión `red-pill.ts` del arnés.
-- **Identidad (FULL)**: se inyecta sola en `session_start`, `model_select` y tras compactar.
+En Pi el handshake **no se invoca**: lo sirven las extensiones del arnés.
+- **Identidad (FULL)**: la inyecta `red-pill-context.ts` por el hook `context` — **no persistida**,
+  así que sobrevive a la compactación y no engorda el transcript.
 - **RAG (LIGHT)**: recall de `work`/`directive` en cada turno (`before_agent_start`).
 - **Relay**: el turno (prompt→respuesta) se encola al settle — solo turnos COMPLETADOS (abort/error se descartan) — no lo dupliques.
-No existen los tools `sovereign_handshake` ni `bunker_memory_api`. Usa:
-- **Leer memoria**: tool `bunker_search` (o el skill `memory-manager`).
-- **Escribir explícito**: tool `bunker_save`.
-- **Estado**: comando `/bunker` o `${RED_PILL_CMD} interceptor status`.
+Los tools del kernel llegan por MCP (perfil `codemode`: no se declaran; se alcanzan por script). Si necesitas memoria:
+- **Leer memoria**: `red-pill search "…"` (CLI) o `redpill_call` con
+  `bunker_memory_api` / `action: recall`.
+- **Estado**: `red-pill interceptor status`.
 
 ## 2. Adopt
 Adopta EXCLUSIVAMENTE la identidad y directivas del `<BUNKER_CONTEXT>` inyectado por la

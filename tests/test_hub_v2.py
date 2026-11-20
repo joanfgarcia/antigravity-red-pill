@@ -290,7 +290,6 @@ def test_hub_summary_english_is_rewritten_to_spanish(monkeypatch):
 	assert hub["summary_lang_mismatch"] is False
 
 
-
 def test_synthesize_hub_v2_texture_split_strict_synthesis_only(monkeypatch):
 	"""Con el fallback lossless OFF, si la síntesis no parte, el hub no se escribe."""
 	import pytest
@@ -327,6 +326,7 @@ def test_synthesize_hub_v2_pide_el_presupuesto_de_longitud_en_generacion(monkeyp
 
 	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "Idea.", "texture": "", "lang": "es"})
 	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_ROOT_TARGET_CHARS", 900, raising=False)
 	monkeypatch.setattr(cfgmod, "MEMENTO_PROMPT_LANGUAGE", "es", raising=False)
 	synthesize_hub_v2(CHUNKS)
 	system = provider.generate.call_args.kwargs["messages"][0]["content"]
@@ -338,7 +338,23 @@ def test_synthesize_hub_v2_pide_el_presupuesto_en_ingles_si_no_es_es(monkeypatch
 
 	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "Idea.", "texture": "", "lang": "en"})
 	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_ROOT_TARGET_CHARS", 900, raising=False)
 	monkeypatch.setattr(cfgmod, "MEMENTO_PROMPT_LANGUAGE", "en", raising=False)
 	synthesize_hub_v2(CHUNKS)
 	system = provider.generate.call_args.kwargs["messages"][0]["content"]
 	assert "must not exceed 900 characters" in system
+
+
+def test_el_maestro_pide_menos_que_las_partes(monkeypatch):
+	"""Medido 2026-11-20: con target 800 la raíz escribió 1035 (> tope 1000).
+
+	El maestro pide 700 (margen ~29 %) y las partes 800; el tope duro no cambia.
+	"""
+	import red_pill.config as cfgmod
+
+	provider = _mock_provider(monkeypatch, {"title": "T", "summary": "Idea.", "texture": "", "lang": "es"})
+	monkeypatch.setattr(cfgmod, "MEMENTO_PROMPT_LANGUAGE", "es", raising=False)
+	synthesize_hub_v2(CHUNKS)
+	system = provider.generate.call_args.kwargs["messages"][0]["content"]
+	assert "700 caracteres" in system
+	assert "800 caracteres" not in system, "el maestro no debe recibir el target de las partes"

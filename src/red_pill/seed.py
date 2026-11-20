@@ -12,6 +12,9 @@ ID_ALEPH = "00000000-0000-0000-0000-000000000001"
 ID_BOND = "00000000-0000-0000-0000-000000000002"
 # Engrama de IDENTIDAD (nombre + voz), redactado por el AGENTE en el NOMBRADO (con el 760).
 ID_IDENTITY = "00000000-0000-0000-0000-000000000003"
+# Aspecto declarado por el AGENTE (color + nombre + motivo) — RFC-ASP-001, D-01.
+# La directiva es la copia durable; `identity.json` guarda la caché rápida (`ASPECT`).
+ID_ASPECT = "00000000-0000-0000-0000-000000000008"
 # Pacto como directivas (solo carga la vigente; ver core/pact.py):
 ID_PACT_760 = "00000000-0000-0000-0000-000000000004"
 ID_PACT_770 = "00000000-0000-0000-0000-000000000005"
@@ -131,6 +134,16 @@ def migrate_directives(manager: MemoryManager) -> None:
 	except Exception as e:
 		logger.debug(f"Legacy skin cleanup skipped: {e}")
 	inject_genesis(manager)
+
+
+def _bump_generation() -> None:
+	"""Sube la generación de directivas (best-effort: el seed no falla por esto)."""
+	try:
+		from red_pill.hooks.routes import bump_generation
+
+		bump_generation()
+	except Exception:  # noqa: BLE001
+		pass
 
 
 def inject_genesis(manager: MemoryManager) -> None:
@@ -285,6 +298,10 @@ def inject_genesis(manager: MemoryManager) -> None:
 			point_id=m["id"],
 			force_immune=True if m["id"].startswith("00000000") else False,
 		)
+
+	# `generation` invalida la caché de identidad del hook (RFC-HARNESS-001 S12):
+	# cualquier escritor de directivas tiene que moverla, no sólo el seed.
+	_bump_generation()
 
 
 def load_markdown_seeds(manager: MemoryManager) -> None:

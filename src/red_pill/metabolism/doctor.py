@@ -127,7 +127,9 @@ def _check_model_match() -> list:
 				elif resident is False:
 					# El proxy carga modelos on-demand: "no residente" no es un mismatch,
 					# es el estado normal entre turnos.
-					out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}); el proxy no tiene modelo residente (carga on-demand)."))
+					out.append(
+						("info", f"Perfil configurado: '{profile_name}' ({model_file}); el proxy no tiene modelo residente (carga on-demand).")
+					)
 				elif model_file == loaded_model:
 					out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
 				elif not configured:
@@ -257,13 +259,16 @@ def _check_coro() -> list:
 			try:
 				tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 				if "event_deliveries" in tables:
-					out.append(("yellow", "event_deliveries sigue en session.db: ejecuta `red-pill coro reconcile` o reinicia el kernel para migrar a message_receipts."))
+					out.append(
+						(
+							"yellow",
+							"event_deliveries sigue en session.db: ejecuta `red-pill coro reconcile` o reinicia el kernel para migrar a message_receipts.",
+						)
+					)
 				if "message_receipts" not in tables:
 					out.append(("yellow", "message_receipts no existe: el kernel aún no ha migrado los recibos."))
 				elif "mailbox_reconcile_state" in tables:
-					state = con.execute(
-						"SELECT last_seq FROM mailbox_reconcile_state WHERE id = 'outbox'"
-					).fetchone()
+					state = con.execute("SELECT last_seq FROM mailbox_reconcile_state WHERE id = 'outbox'").fetchone()
 					if state is not None:
 						last = int(state[0])
 						n = con.execute(
@@ -275,7 +280,12 @@ def _check_coro() -> list:
 							(last,),
 						).fetchone()[0]
 						if n:
-							out.append(("yellow", f"{n} mensaje(s) dirigidos sin recibo tras la marca de agua: el reconciliador va atrasado (red-pill coro reconcile)."))
+							out.append(
+								(
+									"yellow",
+									f"{n} mensaje(s) dirigidos sin recibo tras la marca de agua: el reconciliador va atrasado (red-pill coro reconcile).",
+								)
+							)
 			finally:
 				con.close()
 	except Exception as exc:
@@ -333,7 +343,7 @@ def _check_coro() -> list:
 					else:
 						age = time.time() - oldest
 						if age > 3600:
-							out.append(("yellow", f"{row['n']} sobre(s) soul PENDING; el más viejo lleva {age/60:.0f} min. Revisa el SoulHub."))
+							out.append(("yellow", f"{row['n']} sobre(s) soul PENDING; el más viejo lleva {age / 60:.0f} min. Revisa el SoulHub."))
 				try:
 					dead = con.execute("SELECT COUNT(*) FROM dead_letters WHERE channel='soul'").fetchone()[0]
 				except sqlite3.Error as exc:

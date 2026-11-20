@@ -82,6 +82,8 @@ cookies/
 .cursor/rules/00_bunker_telemetry.mdc
 
 # Runtime-generated benchmark artifacts
+bench/**/*.json
+bench/*.json
 .cell/
 SOVEREIGNTY_PROOF.json
 

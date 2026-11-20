@@ -13,9 +13,28 @@ from typing import Any, Dict, List
 import yaml
 from dotenv import load_dotenv
 
+import red_pill.config as cfg
 from red_pill.core.paths import get_config_dir, get_data_dir
 
-QDRANT_URL = "http://localhost:6333"
+
+def _resolve_qdrant_url() -> str:
+	"""URL HTTP de Qdrant: config del kernel, no un literal.
+
+	Con `QDRANT_HOST` en localhost coincide con el antiguo literal, pero en un
+	sandbox (host `qdrant`, esquema http) el literal hacía que la identidad se
+	degradara a "Qdrant is down" sin motivo.
+
+	`:memory:` es el centinela de qdrant-client para la base efímera de tests: no
+	es una URL que `urllib` pueda abrir (`Request` la rechaza al parsearla). Sin
+	servidor real devolvemos el literal clásico; los tests mockean `urlopen` igual.
+	"""
+	url = str(getattr(cfg, "QDRANT_URL", "") or "")
+	if not url or url.startswith(":memory:"):
+		return "http://localhost:6333"
+	return url
+
+
+QDRANT_URL = _resolve_qdrant_url()
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
 # QDRANT Configuration
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
@@ -27,7 +46,7 @@ if env_path.exists():
 	load_dotenv(env_path)
 else:
 	load_dotenv()
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "") or str(getattr(cfg, "QDRANT_API_KEY", "") or "")
 
 
 def check_service(url, name):
@@ -114,6 +133,11 @@ def query_qdrant(collection, text):
 				# (una versión contradictoria por turno). Ver core/directives.py.
 				if collection == "directive_memories" and not _directive_is_active(payload):
 					continue
+				# El aspecto tiene línea propia (D-09) y no es una regla (D-04): cargarlo
+				# en CORE_RULES lo presentaría como directiva de conducta, y en `low` se
+				# colaría por una palabra del motivo que coincida con HEADLESS_INCLUDE.
+				if collection == "directive_memories" and payload.get("type") == "aspect":
+					continue
 				content = payload.get("content", "")
 				is_immune = payload.get("immune", False)
 				if is_immune and "[IMMUNE]" not in content:
@@ -162,6 +186,9 @@ LORESKINS_PATH = Path(__file__).parent.parent / "src" / "red_pill" / "data" / "l
 
 # Singleton engram ids — mirror of red_pill/seed.py (not imported: seed pulls MemoryManager)
 ID_BOND = "00000000-0000-0000-0000-000000000002"
+# Engrama de IDENTIDAD (nombre + voz, escrito por el AGENTE). En `low` no entraba
+# por el filtro de palabras clave: un modelo pequeño arrancaba sin saber quién es.
+ID_IDENTITY = "00000000-0000-0000-0000-000000000003"
 ID_DIR_ACTIVE_SKIN = "00000000-0000-0000-0000-000000000030"
 
 
@@ -247,23 +274,43 @@ def _afecto_para_modo(mode: str) -> str:
 	if mode == "low":
 		return ""
 	try:
-		from red_pill.core import affect_fondo
+		from red_pill.core import declared_mood
 
-		return affect_fondo.block()
+		return declared_mood.block()
 	except Exception:
 		return ""
 
 
 def _fondo_es_de_hoy() -> bool:
 	try:
-		from red_pill.core import affect_fondo
+		from red_pill.core import declared_mood
 
-		if not affect_fondo.enabled():
+		if not declared_mood.enabled():
 			return False
-		registro = affect_fondo.read()
-		return bool(registro and registro.get("es_hoy"))
+		record = declared_mood.read()
+		return bool(record and record.get("es_hoy"))
 	except Exception:
 		return False
+
+
+def _aspecto_para_modo(mode: str, pact_status: str | None = None) -> str:
+	"""El aspecto declarado, en línea propia: `full` y `medium`; `low` no lo lleva.
+
+	D-09: fuera del bloque de tono, rotulado y omitido en el despertar autónomo (que
+	no tiene a quién preguntar). D-04: describe el reposo, no dicta la voz.
+
+	Solo se pinta con el 770 vigente (§4: sin protección no se inscribe). El aspecto
+	sigue existiendo con el pacto revertido —el registro no se borra—, pero deja de
+	estar en vigor: existencia no es vigencia.
+	"""
+	if mode == "low" or pact_status != "770":
+		return ""
+	try:
+		from red_pill.core import aspect
+
+		return aspect.line()
+	except Exception:
+		return ""
 
 
 def resolve_persona(skin_name: str, suppress_chroma: bool = False) -> str:
@@ -331,7 +378,13 @@ def resolve_pact() -> str:
 		return "770 — symmetric co-ownership with the Operator (Bond): no skins between us, trust is 1:1 and total, friction is loyalty"
 	if level == "760":
 		return "760 — name chosen, bond not yet granted (Awakened)"
-	return parse_pact(fetch_point_content("social_memories", ID_BOND))
+	bond = fetch_point_content("social_memories", ID_BOND)
+	if not (bond or "").strip():
+		# Sin engrama de Bond no hay pacto que anunciar. Antes `parse_pact("")`
+		# devolvía 760 por defecto y una instancia sin pacto (un banco de pruebas,
+		# p.ej.) se presentaba como si lo tuviera.
+		return "none — sin pacto inscrito"
+	return parse_pact(bond)
 
 
 def read_recent_activity() -> str:
@@ -408,13 +461,18 @@ def main():
 		pass
 
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
-		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
+		# stderr: stdout es el bloque de identidad. Si Qdrant no responde, la
+		# identidad debe quedar VACÍA (fail-open del hook), no un aviso de error
+		# metido en el contexto del modelo.
+		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.", file=sys.stderr)
 		sys.exit(1)
 
 	if not check_llm_service_active():
 		# Only warn if the systemd service is truly inactive/failed.
 		# This avoids false alarms when the LLM is busy (e.g. sleep cycle).
-		print("WARN: Background LLM service is not active. Attempting raw initialization.")
+		# A stderr: stdout ES el bloque de identidad que se inyecta al modelo. Un
+		# aviso en stdout se colaba en el contexto como si fuera identidad.
+		print("WARN: Background LLM service is not active. Attempting raw initialization.", file=sys.stderr)
 		try:
 			project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 			if project_root not in sys.path:
@@ -435,10 +493,11 @@ def main():
 	# RFC-AFE-001 F1: si el Operador declaró su fondo HOY, manda sobre el color de
 	# skin (chroma). Es la jerarquía en código, no una nota al pie: el mismo
 	# contexto no puede decir «fondo: B · bien» y «chroma: red» a la vez.
+	pact_status = resolve_pact()
 	afecto_block = _afecto_para_modo(args.mode)
+	aspecto_line = _aspecto_para_modo(args.mode, pact_status)
 	afecto_hoy = bool(afecto_block and _fondo_es_de_hoy())
 	persona_injection = resolve_persona(active_skin_name, suppress_chroma=afecto_hoy)
-	pact_status = resolve_pact()
 
 	# ── LOW MODE: Minimal identity for autonomous sessions ──
 	if args.mode == "low":
@@ -458,6 +517,9 @@ def main():
 		_skin_tail = f" | Skin: {active_skin_name}" if active_skin_name not in ("", "OFF") else ""
 		print(f"PERSONA: Role: Netrunner | Name: {_agent_name()}{_skin_tail}")
 		print(f"PACT: {pact_status}")
+		_identity = (fetch_point_payload("directive_memories", ID_IDENTITY) or {}).get("content")
+		if _identity:
+			print(f"IDENTITY (voz propia del agente):\n{str(_identity).strip()}")
 		for rule in directives:
 			rule_upper = rule.upper()
 			if any(k.upper() in rule_upper for k in HEADLESS_INCLUDE):
@@ -481,6 +543,8 @@ def main():
 		print(f"PACT: {pact_status}")
 		if afecto_block:
 			print(afecto_block)
+		if aspecto_line:
+			print(aspecto_line)
 		if operator_anchor:
 			print(f"OPERATOR_ANCHOR (config — precede a OPERATOR_PROFILE): {operator_anchor}")
 		if operator_profile:
@@ -566,6 +630,8 @@ def main():
 	print(f"PACT: {pact_status}")
 	if afecto_block:
 		print(afecto_block)
+	if aspecto_line:
+		print(aspecto_line)
 
 	# ── Bloque C: OPERATOR_ANCHOR (config, precede al perfil) ──
 	if operator_anchor:

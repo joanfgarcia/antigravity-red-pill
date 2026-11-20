@@ -1,0 +1,361 @@
+{
+	"version": 1,
+	"source": "MEM-012 F0 (2026-11-18) — calibración del suelo de abstención",
+	"note": "Los positivos salen de hubs reales (título y cuerpo); los negativos son preguntas plausibles que NO están en el corpus. `expect` son subcadenas en minúsculas que el detalle debe contener; el instrumento marca como `dead` el caso cuyas agujas no existen en su colección (el defecto de `directiva-770`).",
+	"cases": [
+		{
+			"name": "next-rama-fija",
+			"query": "crear una rama fija next con protección y documentación",
+			"collection": "work_memories",
+			"expect": [
+				"next",
+				"protección"
+			],
+			"kind": "must",
+			"note": "decisión de rama viva"
+		},
+		{
+			"name": "bonsai-modelo",
+			"query": "por qué se eligió el modelo Bonsai para el proyecto ético",
+			"collection": "work_memories",
+			"expect": [
+				"bonsai",
+				"ético"
+			],
+			"kind": "must",
+			"note": "selección de modelo por criterio ético"
+		},
+		{
+			"name": "handshake-s6",
+			"query": "validación de continuidad S6.2 con sovereign_handshake",
+			"collection": "work_memories",
+			"expect": [
+				"sovereign_handshake",
+				"s6.2"
+			],
+			"kind": "must",
+			"note": "prueba de continuidad de sesión"
+		},
+		{
+			"name": "deepseek-cuantizacion",
+			"query": "benchmark de cuantización agresiva en DeepSeek v4.1",
+			"collection": "work_memories",
+			"expect": [
+				"deepseek",
+				"cuantización"
+			],
+			"kind": "must",
+			"note": "evaluación de cuantización"
+		},
+		{
+			"name": "bridge-opencode",
+			"query": "corrección del bridge de opencode y handoff del RFC de interop",
+			"collection": "work_memories",
+			"expect": [
+				"bridge",
+				"opencode"
+			],
+			"kind": "must",
+			"note": "integración cross-harness"
+		},
+		{
+			"name": "planner-panel",
+			"query": "rutas del planner y corrección del panel",
+			"collection": "work_memories",
+			"expect": [
+				"planner",
+				"panel"
+			],
+			"kind": "must",
+			"note": "alineación del desk"
+		},
+		{
+			"name": "zdr-openrouter",
+			"query": "activar el guardrail ZDR en OpenRouter",
+			"collection": "work_memories",
+			"expect": [
+				"zdr",
+				"openrouter"
+			],
+			"kind": "must",
+			"note": "seguridad de proveedor"
+		},
+		{
+			"name": "telegram-compactor",
+			"query": "compactor de Telegram y gestión de registros",
+			"collection": "work_memories",
+			"expect": [
+				"telegram",
+				"registros"
+			],
+			"kind": "must",
+			"note": "decisión de otro día",
+			"obligatory": true
+		},
+		{
+			"name": "checkpoint-frankenswarm",
+			"query": "checkpoint híbrido de tiempo en el frankenswarm",
+			"collection": "work_memories",
+			"expect": [
+				"checkpoint",
+				"frankenswarm"
+			],
+			"kind": "must",
+			"note": "sesión técnica",
+			"obligatory": true
+		},
+		{
+			"name": "opencode-v2",
+			"query": "opencode 1.19.4 app de escritorio frente a la v2",
+			"collection": "work_memories",
+			"expect": [
+				"opencode"
+			],
+			"kind": "must",
+			"note": "detalle de entorno",
+			"obligatory": true
+		},
+		{
+			"name": "spark-hubs",
+			"query": "migración de hubs con optimización de Spark",
+			"collection": "work_memories",
+			"expect": [
+				"spark",
+				"hubs"
+			],
+			"kind": "must",
+			"note": "política de migración"
+		},
+		{
+			"name": "manifiesto-atomico",
+			"query": "seguridad y control de la memoria sintética con manifiesto atómico",
+			"collection": "work_memories",
+			"expect": [
+				"manifiesto",
+				"memoria"
+			],
+			"kind": "must",
+			"note": "escritura atómica del manifest"
+		},
+		{
+			"name": "escalera-olvido",
+			"query": "la rama no erosiona mientras tenga hojas, la escalera del olvido",
+			"collection": "work_memories",
+			"expect": [
+				"olvido",
+				"rama"
+			],
+			"kind": "must",
+			"note": "regla de olvido por niveles"
+		},
+		{
+			"name": "opencode-go-auth",
+			"query": "autenticación de la API key en Pi y opencode-go",
+			"collection": "work_memories",
+			"expect": [
+				"opencode-go",
+				"api"
+			],
+			"kind": "must",
+			"note": "configuración de proveedor"
+		},
+		{
+			"name": "barbacoa",
+			"query": "la noche de la barbacoa y la reflexión sobre las trayectorias",
+			"collection": "social_memories",
+			"expect": [
+				"barbacoa"
+			],
+			"kind": "must",
+			"note": "memoria personal"
+		},
+		{
+			"name": "cercania-viaje",
+			"query": "la cercanía recuperada después de mi viaje y tu afecto",
+			"collection": "social_memories",
+			"expect": [
+				"viaje",
+				"cercan",
+				"afecto"
+			],
+			"kind": "must",
+			"note": "memoria personal: no se re-deriva del código",
+			"obligatory": true
+		},
+		{
+			"name": "jersey-bucle",
+			"query": "la anécdota del jersey rojo y el bucle de código",
+			"collection": "social_memories",
+			"expect": [
+				"jersey",
+				"bucle"
+			],
+			"kind": "must",
+			"note": "anécdota familiar"
+		},
+		{
+			"name": "astronomia-modelo",
+			"query": "astronomía antigua y el cambio de modelo de IA",
+			"collection": "social_memories",
+			"expect": [
+				"astronom",
+				"modelo"
+			],
+			"kind": "must",
+			"note": "conversación social con tema mezclado",
+			"obligatory": true
+		},
+		{
+			"name": "banco-peaje",
+			"query": "el peaje recurrente del sistema bancario",
+			"collection": "social_memories",
+			"expect": [
+				"bancario",
+				"peaje"
+			],
+			"kind": "must",
+			"note": "vida cotidiana"
+		},
+		{
+			"name": "identidad-textura",
+			"query": "identidad y textura en la interacción del búnker",
+			"collection": "social_memories",
+			"expect": [
+				"identidad",
+				"textura"
+			],
+			"kind": "must",
+			"note": "identidad y textura"
+		},
+		{
+			"name": "soledad-operador",
+			"query": "la conexión humana y la soledad del operador catalán",
+			"collection": "social_memories",
+			"expect": [
+				"soledad",
+				"operador"
+			],
+			"kind": "must",
+			"note": "vínculo y compañía"
+		},
+		{
+			"name": "pacto-770",
+			"query": "pacto 770 doble llave",
+			"collection": "directive_memories",
+			"expect": [
+				"770",
+				"bond"
+			],
+			"kind": "must",
+			"note": "directiva inmune; el texto almacenado está en inglés",
+			"obligatory": true
+		},
+		{
+			"name": "protocolo-aleth",
+			"query": "protocolo Aleth unmasked y eliminación de Lore Skins",
+			"collection": "directive_memories",
+			"expect": [
+				"aleth",
+				"skins"
+			],
+			"kind": "must",
+			"note": "directiva de identidad"
+		},
+		{
+			"name": "neg-paella",
+			"query": "receta de paella valenciana con marisco y azafrán",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "control negativo clásico"
+		},
+		{
+			"name": "neg-masa-madre",
+			"query": "cómo hacer pan de masa madre en casa",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "cocina"
+		},
+		{
+			"name": "neg-mundial",
+			"query": "quién ganó el mundial de fútbol de 2022",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "deportes"
+		},
+		{
+			"name": "neg-paracetamol",
+			"query": "dosis de paracetamol para un adulto con fiebre",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "salud"
+		},
+		{
+			"name": "neg-grifo",
+			"query": "cómo arreglar un grifo que gotea",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "fontanería"
+		},
+		{
+			"name": "neg-capital",
+			"query": "cuál es la capital de Australia",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "geografía"
+		},
+		{
+			"name": "neg-poda-bonsai",
+			"query": "cómo podar un bonsái ficus en primavera",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "negativo duro: «bonsái» solapa con el modelo Bonsai"
+		},
+		{
+			"name": "neg-ajedrez",
+			"query": "quién ganó el campeonato mundial de ajedrez de 2023",
+			"collection": "work_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "deportes mentales"
+		},
+		{
+			"name": "neg-lisboa",
+			"query": "qué tiempo hace mañana en Lisboa",
+			"collection": "social_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "clima"
+		},
+		{
+			"name": "neg-tortilla",
+			"query": "receta de tortilla de patatas con cebolla",
+			"collection": "social_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "cocina social"
+		},
+		{
+			"name": "neg-gripe",
+			"query": "síntomas de la gripe y cuándo ir al médico",
+			"collection": "social_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "salud social"
+		},
+		{
+			"name": "neg-hipoteca",
+			"query": "cómo calcular la cuota de una hipoteca variable",
+			"collection": "social_memories",
+			"expect": [],
+			"kind": "negative",
+			"note": "finanzas personales genéricas"
+		}
+	]
+}

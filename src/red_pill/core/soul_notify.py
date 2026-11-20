@@ -43,6 +43,9 @@ Reglas que respeta (no las salta)
 - **D-11**: la inyección tiene que ser **durable**, no un `api POST` que falle
 	cerrado y pierda el mensaje. En V2 la ruta durable es
 	`POST /api/session/<id>/prompt` (y, si no responde, `run --session`).
+- **No interrumpe por defecto** (2026-11-19): `delivery=queue` explícito. El
+	arnés interpreta la ausencia como `steer`; un aviso no cambia el plan en
+	curso de la hermana. `steer` solo lo pide el orquestador (`coro interrupt`).
 - **No bloquea al worker ni hereda su vida**: el CLI se lanza como hijo en su
 	propia sesión de procesos y sin timeout. Ni el llamante espera al turno del
 	receptor, ni el turno muere si el llamante (un MCP directo, la CLI) sale antes.
@@ -357,7 +360,11 @@ def notice_title(text: str) -> str:
 	return label[:NOTICE_TITLE_MAX].rstrip()
 
 
-def _deliver_opencode_prompt(session_id: str, text: str) -> bool:
+DELIVERY_MODES = frozenset({"queue", "steer"})
+DEFAULT_DELIVERY = "queue"
+
+
+def _deliver_opencode_prompt(session_id: str, text: str, *, delivery: str = DEFAULT_DELIVERY) -> bool:
 	"""Inyecta con `POST /api/session/<id>/prompt` y un `displayText` de título.
 
 	Por qué no `synthetic`: el mensaje sintético se pinta como aviso del sistema,
@@ -367,10 +374,23 @@ def _deliver_opencode_prompt(session_id: str, text: str) -> bool:
 	`metadata.displayText`, que la UI usa como texto visible **en lugar** del
 	cuerpo (el modelo sigue recibiendo el cuerpo entero).
 
+	**`delivery` siempre explícito**: opencode 2.3.x interpreta la ausencia del
+	campo como `steer` (medido en el binario: `delivery ?? "steer"`), es decir,
+	entra en el turno en curso. Un aviso no debe cambiar lo que la hermana está
+	haciendo: por defecto va `queue` y se entrega al abrir el siguiente turno.
+	`steer` existe solo para el orquestador que necesita corregir/interrumpir
+	(coro `interrupt`), y lo decide el servidor, no el emisor del mensaje.
+
 	Durable: la API V2 admite el mensaje en el inbox y programa el turno. Si la
 	llamada falla (servicio caído, versión sin ese endpoint, timeout), se cae al
-	`run --session` clásico: perder un aviso es peor que pintarlo sin plegar.
+	`run --session` clásico: perder un aviso es peor que pintarlo sin plegar
+	—el fallback no admite `delivery`, así que puede entrar en el turno en curso;
+	es la única degradación y se acepta a cambio de no perder el aviso.
 	"""
+	mode = str(delivery or DEFAULT_DELIVERY).strip().lower()
+	if mode not in DELIVERY_MODES:
+		logger.warning(f"[soul-notify] delivery desconocido {delivery!r}; se usa {DEFAULT_DELIVERY}")
+		mode = DEFAULT_DELIVERY
 	exe = opencode_binary()
 	if exe is None:
 		_set_last_error("opencode_no_encontrado")
@@ -385,7 +405,11 @@ def _deliver_opencode_prompt(session_id: str, text: str) -> bool:
 		_set_last_error("opencode_sonda_fallida")
 		return False
 	payload = json.dumps(
-		{"text": text, "metadata": {"displayText": notice_title(text), **_PRESENTATION_EMPTY}},
+		{
+			"text": text,
+			"metadata": {"displayText": notice_title(text), **_PRESENTATION_EMPTY},
+			"delivery": mode,
+		},
 		ensure_ascii=False,
 	)
 	try:
@@ -521,6 +545,17 @@ def _leg_provider(leg: Optional[str]) -> str:
 	return str(leg or "").partition(":")[0]
 
 
+def _accepts_delivery(fn: Any) -> bool:
+	"""¿El transporte sabe distinguir `queue` de `steer`?"""
+	import inspect
+
+	try:
+		params = inspect.signature(fn).parameters
+	except (TypeError, ValueError):
+		return False
+	return "delivery" in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
 # ── API pública ─────────────────────────────────────────────────────────────
 
 
@@ -576,8 +611,16 @@ def notify_soul(
 	text: str,
 	*,
 	originator: Optional[str] = None,
+	delivery: str = DEFAULT_DELIVERY,
 ) -> bool:
 	"""Avisa al alma `continuity_id` por el transporte activo. Non-fatal.
+
+	`delivery` gobierna **si el aviso entra en el turno en curso**:
+	- `queue` (defecto): se admite en el inbox del arnés y se entrega al abrir
+		el siguiente turno. No cambia lo que la hermana está haciendo.
+	- `steer`: entra en el turno vivo (interrumpe el plan en curso). Es potestad
+		del orquestador (`coro_api.send interrupt=true`); el transporte lo decide
+		aquí, no el texto del mensaje.
 
 	Devuelve True si se encoló una entrega. Un `False` no es un error del job:
 	el reporte ya está en el MinionInbox (pull siempre funciona).
@@ -621,12 +664,19 @@ def notify_soul(
 	if not session_id:
 		return False
 	transport = _resolve_transport(provider)
-	fn = _TRANSPORTS.get(transport)
+	# `Any` a propósito: el modo `delivery` solo lo aceptan algunos adaptadores y
+	# se pregunta a la firma (`_accepts_delivery`); sin esto mypy cree que todos
+	# comparten la firma de dos argumentos (error real en `soul_notify.py:676`).
+	fn: Any = _TRANSPORTS.get(transport)
 	if fn is None:
 		return False
 	try:
 		_set_last_trace("")
-		ok = bool(fn(session_id, text))
+		# Solo el adaptador que declara `delivery` recibe el modo; los demás
+		# (socket de Claude) no distinguen cola de interrupción. Se pregunta a la
+		# firma, no se captura TypeError: un bug del transporte no debe provocar
+		# una segunda inyección.
+		ok = bool(fn(session_id, text, delivery=delivery)) if _accepts_delivery(fn) else bool(fn(session_id, text))
 	except Exception as e:
 		logger.warning(f"[soul-notify] transporte {transport} falló: {e}")
 		return False

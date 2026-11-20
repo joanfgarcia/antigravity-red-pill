@@ -16,6 +16,7 @@ Procedimiento de medición: [`PROCEDURE.md`](PROCEDURE.md)
 | `bonsai_2_27b` | Ternary Bonsai 2 27B | **Se queda** — destilador alternativo y lector largo | 65.536 (`q4_0`) | [README](bonsai_2_27b/README.md) |
 | `spark_x2_6_4b` | Spark-X2.6-4B | **Se queda** — lector de contexto largo | **262.144** (`q4_0`), 117K verificados | [README](spark_x2_6_4b/README.md) |
 | `k2_horizon_3_7b` | K2-Horizon-3.7B | **Candidato** | 98.304 (`q4_0`), uso fiable ≤40K | [README](k2_horizon_3_7b/README.md) |
+| `mimo_v26_9b` | MiMo-V2.6-Distill-Qwen-9B | **Candidato** — 3/3 en bucle real de herramientas, el destilador más rápido | 12–16K (8 GB VRAM) | [README](mimo_v26_9b/README.md) |
 
 Inventario y purgas: [`INVENTORY.md`](INVENTORY.md).
 

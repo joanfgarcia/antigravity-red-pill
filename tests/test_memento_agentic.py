@@ -960,6 +960,104 @@ def test_pase_por_fases_polaroids_y_notas(tmp_path, monkeypatch):
 	assert list((root2 / rendered2.dir_rel / "annotate").glob("*.md")) == []
 
 
+def test_fase_annotate_con_flag_off_no_escribe_ni_borra_nada(tmp_path, monkeypatch):
+	"""E-97e9d2 (2026-11-19): `--phase annotate` sin `MEMENTO_ANNOTATE_FROM_RAW`.
+
+	La fase de notas no tiene sustituto legacy: `refine_session` necesita las
+	secciones destiladas en la MISMA corrida. Antes, con el flag OFF, el pase
+	llamaba a `refine_session(sections=[])`, que **vacía `refine/`** antes de
+	iterar y luego no escribe nada; después sellaba `significance: 0.0` y
+	marcaba la sesión como anotada. Cero notas, cero fallo, cero log.
+	"""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	root, registry, rendered = _tree_with_session(tmp_path)
+	base = root / rendered.dir_rel
+	refine_dir = base / "refine"
+	refine_dir.mkdir(parents=True, exist_ok=True)
+	previa = refine_dir / "001-idea-previa.md"
+	contenido_previo = "---\nsignificance: 0.8\nascended: true\n---\n\nnota previa intacta\n"
+	previa.write_text(contenido_previo, encoding="utf-8")
+	index_before = (base / "memento" / "index.md").read_text(encoding="utf-8")
+
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport(), phase="annotate")
+
+	assert stats["processed"] == 0
+	assert stats["skipped_annotate_disabled"] == 1
+	# Las notas legacy SOBREVIVEN intactas: el bug las borraba en el unlink inicial
+	# de refine_session (sister-review E-97e9d2: en su sandbox refine/ estaba vacío
+	# y por eso el barrido no se vio).
+	assert previa.exists()
+	assert previa.read_text(encoding="utf-8") == contenido_previo
+	assert not (base / "annotate").exists()  # no se inventa la fase
+	assert (base / "memento" / "index.md").read_text(encoding="utf-8") == index_before  # sin sello 0.0
+	assert registry.get("opencode", "opencode:s1").get("agentic") is None  # no se marca como hecha
+
+
+def test_pending_agentic_fase_annotate_con_flag_off_no_devuelve_nada(tmp_path, monkeypatch):
+	"""E-97e9d2: sin flag no hay fase de notas — ni siquiera hay pendientes."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	root, registry, rendered = _tree_with_session(tmp_path)
+	registry.upsert(
+		"opencode",
+		"opencode:s1",
+		{"agentic": {"distill_hash": rendered.memento_hash, "annotate_pending": True}},
+	)
+	assert pending_agentic(registry, root=root, phase="annotate") == []
+
+
+def test_cli_fase_annotate_con_flag_off_falla_antes_de_tocar_nada(monkeypatch):
+	"""E-97e9d2: el CLI rechaza la fase imposible (exit 2) en vez de 'completar'."""
+	import importlib.util
+	import sys
+	from pathlib import Path
+
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	spec = importlib.util.spec_from_file_location("memento_agentic_cli_flag_off", Path("scripts/memento_agentic.py"))
+	assert spec is not None and spec.loader is not None
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	monkeypatch.setattr(sys, "argv", ["memento_agentic.py", "--phase", "annotate"])
+	with pytest.raises(SystemExit) as exc:
+		mod.main()
+	assert exc.value.code == 2
+
+
+def test_pending_agentic_polaroids_al_dia_sin_sello_no_son_stale(tmp_path, monkeypatch):
+	"""Fase distill hecha y notas pendientes: NO es `stale` (2026-11-18).
+
+	El marcador honesto de "estas polaroids son de este hash" es `distill_hash`
+	(el sello `hash` solo lo escribe la fase de notas). Al comparar únicamente
+	`hash`, una sesión destilada hace un minuto salía `stale`: el janitor
+	`memento_stale` pedía `--heal-stale` (regeneración completa) y el pase
+	gastaba otro destilado sobre material al día."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	root, registry, rendered = _tree_with_session(tmp_path)
+
+	registry.upsert(
+		"opencode",
+		"opencode:s1",
+		{"agentic": {"distill_hash": rendered.memento_hash, "annotate_pending": True}},
+	)
+	pending = pending_agentic(registry, root=root)
+	assert [(r) for _s, _i, r in pending] == ["annotate"]
+
+	# Un hash de verdad viejo sí es stale: sus source_lines apuntan a rangos muertos.
+	registry.upsert(
+		"opencode",
+		"opencode:s1",
+		{"agentic": {"distill_hash": "0" * 64, "annotate_pending": True}},
+	)
+	assert [r for _s, _i, r in pending_agentic(registry, root=root)] == ["stale"]
+
+
 def test_pending_agentic_fase_annotate_solo_pide_notas(tmp_path, monkeypatch):
 	"""La fase annotate selecciona destiladas sin notas frescas — nunca despide
 	una fase de distill sobre material ya al día."""

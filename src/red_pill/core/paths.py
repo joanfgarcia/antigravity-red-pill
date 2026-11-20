@@ -274,6 +274,21 @@ def get_state_dir() -> Path:
 	return path
 
 
+def get_mcp_socket() -> Path:
+	"""Ruta canónica del socket del backend MCP (una sola, para todos).
+
+	Antes había tres resoluciones distintas (esta, el `--socket` del servicio y
+	las configs de los IDEs) y una discrepancia fallaba **en silencio**: el
+	cliente apuntaba a un socket donde no escuchaba nadie y el hook se apagaba
+	con fail-open. El servicio real escucha en `state/mcp.sock`, así que ése es
+	el valor por defecto; `REDPILL_MCP_SOCKET` permite override (tests, sandbox).
+	"""
+	override = os.environ.get("REDPILL_MCP_SOCKET")
+	if override:
+		return Path(override)
+	return get_state_dir() / "mcp.sock"
+
+
 def get_log_dir() -> Path:
 	"""Resuelve el directorio de logs del sistema ($XDG_STATE_HOME/red-pill/logs o fallback)."""
 	try:

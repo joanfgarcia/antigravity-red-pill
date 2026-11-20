@@ -93,11 +93,7 @@ class MemoryQueueSourcePlugin(ChronicleSourcePlugin):
 		except sqlite3.Error as e:
 			logger.warning(f"[{self.name}] Could not read queue database: {e}")
 			return []
-		return [
-			(f"{originator}:{day}", int(count))
-			for originator, day, count in rows
-			if day and not self._is_excluded(originator, excluded)
-		]
+		return [(f"{originator}:{day}", int(count)) for originator, day, count in rows if day and not self._is_excluded(originator, excluded)]
 
 	def _rows_of(self, conversation_id: str) -> List[Tuple[Any, ...]]:
 		originator, _, day = conversation_id.rpartition(":")

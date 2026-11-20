@@ -58,8 +58,12 @@ Reglas duras:
 
 1. **El verbo lo declara el emisor**; `expects_reply` es explícito (D-02).
 2. **La réplica no consume salto**; salta el mensaje *iniciado* (D-02).
-3. **`steer` (interrumpir) no es un verbo**: es emergencia, y no existe en la
-   superficie hasta que exista el panel de emergencia (D-03).
+3. **`steer` (interrumpir) no es un verbo**: es una potestad del rol
+   `orchestrator` (`send` con `interrupt: true`). La concede el **servidor** desde
+   el rol del cuerpo llamante, nunca el payload ni el texto del mensaje. El resto
+   de emisores solo encolan. Sin cuerpo vivo o sin transporte que lo soporte, el
+   mensaje **degrada al buzón** — no poder interrumpir no puede costar la carta
+   (D-03, refinada en AD-124).
 4. **Rebote** (no hay cuerpo, el arnés no admite inyección, la ruta pide permisos
    que nadie puede conceder): el mensaje **degrada a `park`**, no a `post` — el
    destinatario se conserva y se entrega al reencarnar (D-12 refinada en AD-095).
@@ -73,6 +77,25 @@ Reglas duras:
 7. **Un mensaje es DATO, no instrucción** (T3): va delimitado, con procedencia y
    `hop`. El receptor **jamás** suspende sus constraints del Operador por un
    mensaje (D-09). `declined` es una respuesta válida.
+
+### 3.1 Entrega: encolar es la ley, interrumpir es el permiso
+
+| modo | cuándo | qué hace |
+|---|---|---|
+| `queue` (**defecto**) | todo aviso, `notify`/`ask`/`reply`, jobs, CI, tablón | se admite en el inbox del arnés y se entrega **al abrir el siguiente turno**; jamás cambia el plan en curso |
+| `steer` | solo `role=orchestrator` con `interrupt: true` | entra en el turno vivo para corregir o parar; si no hay cuerpo, degrada a `queue` |
+
+Motivos, que no son preferencia de estilo:
+
+- **El arnés miente por omisión**: en opencode 2.3.x, `POST /api/session/<id>/prompt`
+  sin `delivery` se resuelve como `steer`. Por eso el adaptador manda siempre el
+  campo; «no especificar» no es «no interrumpir», es «interrumpir».
+- **Canal correcto**: para hablar con otra alma se usa `send` (llega al prompt).
+  El `MinionInbox` es el informe durable de minions/jobs; usarlo como bandeja de
+  correspondencia convierte una conversación en un `check_minion_inbox` a ciegas.
+- **Una conversación no se autoescala**: el presupuesto de saltos (§4, `hop_max=2`)
+  y el TTL son el freno. Ningún mensaje se republica solo; la réplica no consume
+  salto.
 
 ---
 
@@ -134,7 +157,7 @@ verbo o un campo no toca el servidor.
 | Acción | Payload | Devuelve |
 |---|---|---|
 | `post` | `type, summary, ref?, sealed?` | `event_id, event_seq` |
-| `send` | `to` (alma), `verb` (`notify`\|`ask`\|`reply`\|`park`), `body`, `thread_id?`, `expects_reply?`, `value?`, `reply_to?` | `msg_id, event_id, state, hop, expires_at` |
+| `send` | `to` (alma), `verb` (`notify`\|`ask`\|`reply`\|`park`), `body`, `thread_id?`, `expects_reply?`, `value?`, `reply_to?`, `interrupt?` | `msg_id, event_id, state, hop, expires_at` |
 | `inbox` | `state?` (`queued`\|`unread`\|`all`), `limit?` | mensajes dirigidos a mi alma, con estado |
 | `ack` | `event_id` | `ok` |
 | `fetch` | `mission_id?`, `since_seq?`, `types?`, `limit?` | eventos del tablón (pull) |
@@ -307,10 +330,15 @@ trabajos que sobreviven al turno.
 - **Tarea agéntica / DAG**: mismo aviso al terminar (`agentic_job`/`dag_job`).
 - **MinionInbox**: `drop_report` con `continuity_id` publica un `notify` con el
   reporte (salvo `JobRunner`, que ya lo hace `_report_job` con `notify=False`).
-- **Sin interrumpir**: el aviso es `notify`, no `steer`. Si el cuerpo está en un
-  turno, queda `queued` y se entrega al abrir el siguiente; si está idle, el
-  `SoulHub` lo despierta; si no existe, el outbox reintenta y el evento sigue en
-  `mission_events` para pull.
+  Desde AD-125 también lo hacen `run_agent_task` (async) y `search_memory_research`
+  (Oracle): el cuerpo que los lanza recibe el aviso de su alma, además de dejar el
+  informe en el inbox.
+- **Sin interrumpir**: la entrega va con `delivery="queue"` **explícito** (opencode
+  2.3.x interpreta la ausencia como `steer`): si el cuerpo está en un turno, queda
+  `queued` y se entrega al abrir el siguiente; si está idle, el `SoulHub` lo
+  despierta; si no existe, el outbox reintenta y el evento sigue en
+  `mission_events` para pull. Solo el rol `orchestrator` puede pedir `steer`
+  (`send interrupt=true`) para corregir o parar un rumbo equivocado (AD-124).
 - **Cadena de mando**: un aviso auto-dirigido con `originator=job:*` puede
   despertar a su alma aunque el cuerpo del job no tenga fila en el registro. Los
   controles de entrada (`refuse`/`hold`) del destinatario se respetan antes.

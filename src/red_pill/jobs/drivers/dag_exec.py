@@ -333,8 +333,7 @@ class DagExecMixin:
 		claim = self._claim_stage(payload, stage_path, str(workdir)) if claims_on else None
 		if claim is not None and not claim.claimed:
 			raise JobDeferred(
-				f"etapa '{stage_path}' reclamada por otra alma ({claim.owner or 'desconocida'}, {claim.reason}); "
-				"se reintenta cuando expire el claim"
+				f"etapa '{stage_path}' reclamada por otra alma ({claim.owner or 'desconocida'}, {claim.reason}); se reintenta cuando expire el claim"
 			)
 		renewer: Optional[threading.Event] = None
 		try:
@@ -403,12 +402,7 @@ class DagExecMixin:
 				raise ValueError(f"dag_job stage '{stage_path}' params no puede fijar claves de política: {sorted(protected)}")
 			kwargs.update({k: _render_item(v, item) if item is not None else v for k, v in stage["params"].items()})
 		if identity and stage.get("type") == _TYPE_AGENT:
-			task = (
-				task
-				+ "\n\n<redpill-identity>\n"
-				+ "\n".join(f"{key}: {value}" for key, value in identity.items())
-				+ "\n</redpill-identity>"
-			)
+			task = task + "\n\n<redpill-identity>\n" + "\n".join(f"{key}: {value}" for key, value in identity.items()) + "\n</redpill-identity>"
 		# AD-030 (v3): el bloque `llm:` POR ETAPA en el manifest del
 		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
 		# fan-out futuro declara su modelo/modo). Los minions command lo reciben

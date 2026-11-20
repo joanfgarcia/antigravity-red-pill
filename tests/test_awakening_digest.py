@@ -21,8 +21,35 @@ def test_directiva_canal_apunta_al_indice(tmp_path, monkeypatch):
 	worker = importlib.import_module("red_pill.core.agent_worker")
 	out = worker._awakening_channel_directive()
 	assert "AWAKEN-002" in out
-	assert "planner/design/AWAKEN-002-despertares-utiles/README.md" in out
+	assert "planner/design/AWAKEN-002-despertares-utiles/INDEX.md" in out
+	assert "README.md" not in out
 	assert "awakening/notes/" in out
+	# El placeholder se resuelve al emitir: el agente nunca debe leer `${AGENT_CORE_DIR}`.
+	assert "${" not in out
+	assert str(tmp_path) in out
+
+
+def test_resolve_desk_paths_sustituye_el_placeholder(tmp_path, monkeypatch):
+	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+	worker = importlib.import_module("red_pill.core.agent_worker")
+	assert worker._resolve_desk_paths("lee ${AGENT_CORE_DIR}/awakening/") == f"lee {tmp_path}/awakening/"
+
+
+def test_resolve_desk_paths_sin_placeholder_no_toca_el_texto():
+	worker = importlib.import_module("red_pill.core.agent_worker")
+	text = "texto sin puntero (planner/ideas/)"
+	assert worker._resolve_desk_paths(text) == text
+
+
+def test_resolve_desk_paths_no_lanza_si_el_desk_no_resuelve(monkeypatch):
+	worker = importlib.import_module("red_pill.core.agent_worker")
+
+	def boom():
+		raise RuntimeError("desk irresoluble")
+
+	monkeypatch.setattr(worker, "get_agent_core_root", boom)
+	text = "desk: ${AGENT_CORE_DIR}/awakening/"
+	assert worker._resolve_desk_paths(text) == text
 
 
 def test_directiva_cuenta_notas_pendientes(tmp_path, monkeypatch):

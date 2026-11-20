@@ -80,7 +80,27 @@ def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 					stop_token_ids=[eos_id],
 				)(messages=messages, enable_thinking=et, low_effort=le, **kw)
 
-			lcf.register_chat_format(name)(fmt)
+			# El registro de llama_cpp es GLOBAL y los nombres son fijos
+			# (`granite-nothink`…): al cargar un SEGUNDO modelo en el mismo proceso
+			# el registro anterior sobrevivía con el template del PRIMERO, y el
+			# modelo nuevo renderizaba con la plantilla del viejo (o directamente
+			# fallaba el registro y se usaba la del anterior). `overwrite=True`
+			# deja el handler apuntando al template del modelo realmente cargado
+			# (invariante del daemon: un modelo a la vez). 2026-11-16.
+			#
+			# `register_chat_format(name)` —el decorador público— NO acepta el
+			# kwarg en 0.3.31: el overwrite pedido moría en un TypeError mudo y
+			# se registraba por la rama vieja (ValueError al recargar ⇒ se seguía
+			# renderizando con el template del PRIMER modelo). El overwrite vive
+			# en el registry, que es lo que el decorador usa por dentro.
+			handler = lcf.chat_formatter_to_chat_completion_handler(fmt)
+			registry = lcf.LlamaChatCompletionHandlerRegistry()
+			try:
+				registry.register_chat_completion_handler(name, handler, overwrite=True)
+			except TypeError:  # builds antiguos sin el kwarg
+				if name in getattr(registry, "_chat_handlers", {}):
+					registry.unregister_chat_handler(name)
+				registry.register_chat_completion_handler(name, handler)
 			logger.debug("chat handler '%s' registrado (enable_thinking=%s, low_effort=%s)", name, et, le)
 
 		_mk(True, False, HANDLER_THINKING)

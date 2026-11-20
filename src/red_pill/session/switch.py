@@ -340,9 +340,7 @@ def _publish(
 ) -> None:
 	"""Cierra el leg anterior (si cambia de cuerpo) y abre el nuevo, misma alma."""
 	old_origin = str((old_row or {}).get("originator") or "")
-	new_origin = target.originator or (
-		f"{target.provider}:{result.conversation_id}" if result.conversation_id else ""
-	)
+	new_origin = target.originator or (f"{target.provider}:{result.conversation_id}" if result.conversation_id else "")
 	mission = str((old_row or {}).get("mission_id") or "").strip() or "mission:adhoc-switch"
 	campaign = (old_row or {}).get("campaign_id")
 	role = str((old_row or {}).get("role") or "task")
@@ -497,12 +495,7 @@ def switch_model(
 	for index, candidate in enumerate(candidates):
 		mode = "native_resume"
 		native_id = candidate.native_session_id or (old_native if same_family(old_provider, candidate.provider) else "")
-		use_native = bool(
-			index == 0
-			and native_id
-			and hasattr(candidate.bridge, "continue_conversation")
-			and _can_native_resume(candidate.bridge)
-		)
+		use_native = bool(index == 0 and native_id and hasattr(candidate.bridge, "continue_conversation") and _can_native_resume(candidate.bridge))
 		try:
 			if use_native:
 				raw = _invoke_native(candidate, prompt, str(native_id), 0, timeout)

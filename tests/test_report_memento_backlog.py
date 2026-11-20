@@ -81,8 +81,8 @@ def test_dry_run_no_toca_qdrant():
 
 def test_compute_cuenta_y_da_la_edad_del_mas_antiguo(monkeypatch):
 	mod = _load_script()
-	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 3 * 86400))
-	nuevo = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 3600))
+	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3 * 86400)) + "Z"
+	nuevo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3600)) + "Z"
 	reg = _FakeRegistry(
 		{
 			"opencode": {
@@ -99,7 +99,82 @@ def test_compute_cuenta_y_da_la_edad_del_mas_antiguo(monkeypatch):
 	out = mod.compute(reg, REPO)
 
 	assert out["pending"] == 2
+	assert out["distill_pending"] == 2 and out["annotate_pending"] == 0
 	assert 2.9 <= out["oldest_days"] <= 3.1
+
+
+def test_la_edad_se_mide_en_utc_no_en_la_hora_local():
+	"""El registry guarda `...Z`; `mktime` lo leía como hora local (+1–2 h de edad)."""
+	from datetime import datetime, timezone
+
+	mod = _load_script()
+
+	esperado = datetime(2026, 11, 17, 8, 16, tzinfo=timezone.utc).timestamp()
+	assert mod._epoch("2026-11-17T08:16:00.000000Z") == esperado
+	assert mod._epoch("") is None
+	assert mod._epoch(None) is None
+
+
+def test_compute_parte_por_motivo_y_las_notas_no_cuentan(monkeypatch):
+	"""2026-11-18: una sesión destilada con notas pendientes NO está "sin destilar"."""
+	mod = _load_script()
+	viejo = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 5 * 86400)) + "Z"
+	reg = _FakeRegistry(
+		{
+			"opencode": {
+				"opencode:ses_missing": {"created_at": viejo},
+				"opencode:ses_notas": {"created_at": viejo},
+				"opencode:ses_notas2": {"created_at": viejo},
+			}
+		}
+	)
+	monkeypatch.setattr(
+		"red_pill.memento.agentic.pending_agentic",
+		lambda *a, **kw: [
+			("opencode", "opencode:ses_missing", "missing"),
+			("opencode", "opencode:ses_notas", "annotate"),
+			("opencode", "opencode:ses_notas2", "annotate"),
+		],
+	)
+
+	out = mod.compute(reg, REPO)
+
+	assert out["pending"] == 3
+	assert out["distill_pending"] == 1 and out["annotate_pending"] == 2
+	assert out["by_reason"] == {"missing": 1, "annotate": 2}
+	assert 4.9 <= out["oldest_days"] <= 5.1
+
+
+def test_solo_notas_pendientes_no_encienden_la_senal():
+	"""La señal habla del tope (destilado); las notas se auto-curan en la pasada siguiente."""
+	mod = _load_script()
+	mem = _FakeMemory()
+
+	out = mod.report({"pending": 3, "distill_pending": 0, "annotate_pending": 3}, cap=30, memory=mem)
+
+	assert out["signal"] == "evaporated"
+	assert mem.evaporated == ["memento_backlog"]
+	assert mem.injected == []
+	assert out["annotate_pending"] == 3
+
+
+def test_la_senal_separa_notas_de_destilado_en_el_mensaje():
+	mod = _load_script()
+	mem = _FakeMemory()
+
+	out = mod.report(
+		{"pending": 9, "distill_pending": 6, "annotate_pending": 3, "oldest_days": 1.5},
+		cap=30,
+		msg_cap=3000,
+		memory=mem,
+	)
+
+	assert out["signal"] == "injected"
+	(call,) = mem.injected
+	assert "6 sesión" in call["message"]
+	assert "3 sesión(es) solo esperan notas" in call["message"]
+	assert "1.5 d" in call["message"]
+	assert call["originator"] == "memento_backlog (6 pendientes)"
 
 
 def test_la_senal_tiene_clase_sed_y_acantilado_de_30_dias():
@@ -117,5 +192,10 @@ def test_el_chronicle_cierra_con_el_contador():
 	stages = recipe["manifest"]["stages"]
 	backlog = next(s for s in stages if s["id"] == "memento-backlog")
 	assert backlog["command"].endswith("scripts/report_memento_backlog.py")
-	assert backlog["depends_on"] == ["memento-annotate"]
+	# 2026-11-20 (E-97e9d2): la reconciliación de huérfanos se inserta tras
+	# annotate y el contador pasa a depender de ella (cierra el ciclo de las
+	# notas reescritas antes de contar lo que queda).
+	reconcile = next(s for s in stages if s["id"] == "memento-reconcile")
+	assert reconcile["depends_on"] == ["memento-annotate"]
+	assert backlog["depends_on"] == ["memento-reconcile"]
 	assert backlog["on_fail"] == "warn"

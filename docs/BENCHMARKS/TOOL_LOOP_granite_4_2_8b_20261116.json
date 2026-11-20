@@ -1,0 +1,79 @@
+[
+ {
+  "escenario": "A · buscar en un directorio",
+  "pasos": 1,
+  "llego_a_respuesta": true,
+  "uso_resultado": false,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "list_dir"
+    ],
+    "s": 6.07
+   },
+   {
+    "vuelta": 2,
+    "sin_tool_calls": true,
+    "content": "",
+    "s": 3.58
+   }
+  ]
+ },
+ {
+  "escenario": "B · preguntar cuántas",
+  "pasos": 2,
+  "llego_a_respuesta": true,
+  "uso_resultado": true,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "list_dir"
+    ],
+    "s": 4.8
+   },
+   {
+    "vuelta": 2,
+    "tools": [
+     "grep"
+    ],
+    "s": 4.57
+   },
+   {
+    "vuelta": 3,
+    "sin_tool_calls": true,
+    "content": "Hay 2 funciones async en src/ (en src/a.py y src/c.py). Los resultados de la búsqueda muestran:\n- src/a.py:12: async def foo()\n- src/c.py:3: async def bar()\n\nNo se encontraron funciones async en src/b.js ni en README.md.",
+    "s": 4.79
+   }
+  ]
+ },
+ {
+  "escenario": "C · mirar un fichero concreto",
+  "pasos": 2,
+  "llego_a_respuesta": true,
+  "uso_resultado": true,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "list_dir"
+    ],
+    "s": 1.89
+   },
+   {
+    "vuelta": 2,
+    "tools": [
+     "read_file"
+    ],
+    "s": 1.31
+   },
+   {
+    "vuelta": 3,
+    "sin_tool_calls": true,
+    "content": "El archivo `src/a.py` contiene una función asíncrona definida con `async def foo():`. Por lo tanto, **sí**, contiene funciones async.",
+    "s": 1.65
+   }
+  ]
+ }
+]

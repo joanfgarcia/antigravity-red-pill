@@ -153,10 +153,7 @@ class AgenticJobDriver(ResumableJobDriver):
 		# si el payload lo declara: sin cwd, el bridge usa su default persistente.
 		cwd = str(payload.get("cwd") or "").strip()
 		if cwd and not Path(cwd).is_dir():
-			raise ValueError(
-				f"agentic_job cwd no existe o no es un directorio: {cwd}. "
-				"Para jobs reanudables usa un workspace persistente (no /tmp)."
-			)
+			raise ValueError(f"agentic_job cwd no existe o no es un directorio: {cwd}. Para jobs reanudables usa un workspace persistente (no /tmp).")
 		try:
 			bridge = self._create_bridge(payload)
 			healthy = bridge.health_check()

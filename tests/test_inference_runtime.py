@@ -8,7 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from red_pill.inference.runtime import apply_chat_handler, complete, renders_tool_role, tool_chat_format
+from red_pill.inference.runtime import (
+	HANDLER_NOTHINK,
+	apply_chat_handler,
+	complete,
+	register_thinking_handlers,
+	renders_tool_role,
+	tool_chat_format,
+)
 
 
 def _resolved(thinking="off", chat_format=None, supported=False, minion_chat_format=None):
@@ -124,9 +131,33 @@ def test_complete_delega_en_create_chat_completion():
 
 
 def test_register_thinking_handlers_noop_sin_soporte():
-	from red_pill.inference.runtime import register_thinking_handlers
-
 	llm = MagicMock()
 	r = _resolved(supported=False)
 	register_thinking_handlers(llm, r)  # no debe tocar llama_cpp
 	llm.metadata.get.assert_not_called()
+
+
+class _ThinkingLlm:
+	"""Lo mínimo de `llama_cpp.Llama` que toca register_thinking_handlers."""
+
+	metadata = {"tokenizer.chat_template": "{% for m in messages %}{{ m.content }}{% endfor %}"}
+	_model = None
+
+	def token_eos(self) -> int:
+		return 2
+
+
+def test_re_registrar_handlers_reemplaza_el_del_modelo_anterior():
+	"""Invariante del daemon: un modelo a la vez, y gana el último cargado.
+
+	El registry de llama_cpp es GLOBAL y los nombres son fijos: si la segunda
+	carga no sobrescribe, el modelo nuevo renderiza con el template del viejo."""
+	from llama_cpp import llama_chat_format as lcf
+
+	llm = _ThinkingLlm()
+	r = _resolved(supported=True)
+	register_thinking_handlers(llm, r)
+	primero = lcf.get_chat_completion_handler(HANDLER_NOTHINK)
+	register_thinking_handlers(llm, r)  # segundo modelo en el mismo proceso
+	segundo = lcf.get_chat_completion_handler(HANDLER_NOTHINK)
+	assert primero is not segundo

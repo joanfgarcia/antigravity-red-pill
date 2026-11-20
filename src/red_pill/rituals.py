@@ -61,18 +61,11 @@ async def maintenance_ritual(mm: MemoryManager) -> None:
 		except Exception:
 			logger.critical("Pulse: [COMA] Bünker connection lost. Memory injection impossible.")
 
-		# 2. Absence Guard (Proactive TTL refresh)
-		# SW_ABSENCE_GUARD_CONDITIONAL: el refresh incondicional cada pulse dejaba
-		# `last_recalled_at` siempre fresco → el olvido (erosión/sink) era inerte.
-		# Con el flag ON, NO se refresca aquí; la protección de ausencias reales la
-		# ya hace el guard CONDICIONAL de core/metabolism (gap > ABSENCE_THRESHOLD).
-		if cfg.METABOLISM_STRATEGY == "LAZY" and not getattr(cfg, "SW_ABSENCE_GUARD_CONDITIONAL", False):
-			logger.info("Pulse: Running proactive Absence Guard sync...")
-			for coll in ["work_memories", "social_memories", "story_memories", "directive_memories"]:
-				try:
-					await asyncio.to_thread(mm.metabolism.refresh_ttl_timestamps, coll)
-				except Exception as e:
-					logger.error(f"Pulse: Absence Guard failed for {coll}: {e}")
+		# 2. Absence Guard — RETIRADO (RFC-OLV-001 D-08).
+		# El pulse refrescaba `last_recalled_at` de todo el Búnker para que la
+		# ausencia no cobrara olvido: era mentir al reloj. Con la escalera en
+		# DÍAS ACTIVOS la ausencia cuesta 0 por construcción, así que aquí no se
+		# toca ningún timestamp (tocarlo borraría la prueba de uso).
 
 		# 3. Biological Dashboard: Migraine (Database Bloat)
 		try:

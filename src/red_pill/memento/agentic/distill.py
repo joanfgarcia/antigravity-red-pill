@@ -173,7 +173,7 @@ def _distill_unit(
 			prompt = prompts.render("distill_user_continuation", previous=prev_summary or "(ninguno)", content=frag_text)
 		else:
 			prompt = prompts.render("distill_user_opening", content=frag_text)
-		raw = transport(prompts.system("distill_user_opening") or "", prompt, 512)
+		raw = transport(prompts.system("distill_user_opening") or "", prompt, runtime.distill_max_tokens())
 		if runtime.is_degraded(raw):
 			degraded = True
 		parsed = runtime._extract_json(raw) or {}
@@ -375,9 +375,7 @@ def _distill_reusing(
 				"files": filenames,
 			}
 		else:
-			unit_sections, filenames, degraded = _distill_unit(
-				distill_dir, unit, session_id, source, transport, max_chars, overlap, reuse_mode=True
-			)
+			unit_sections, filenames, degraded = _distill_unit(distill_dir, unit, session_id, source, transport, max_chars, overlap, reuse_mode=True)
 			sections.extend(unit_sections)
 			new_units[unit_key] = {
 				"content_hash": content_hash,

@@ -20,6 +20,7 @@ from typing import Any, Dict
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+from red_pill import identity
 from red_pill.core import pact as pact_core
 from red_pill.core.paths import get_config_dir
 from red_pill.memory import MemoryManager
@@ -108,15 +109,71 @@ def seal_pact(level: str, grant: bool = False, accept: bool = False) -> str:
 	return pact_core.seal_pact(MemoryManager(), level, grant=grant, accept=accept)
 
 
-def _read_identity(path: str | None) -> str | None:
-	"""Lee el engrama de identidad redactado por el agente (o None)."""
+def _strip_frontmatter(text: str) -> str:
+	"""Quita la cabecera YAML de un documento del desk.
+
+	Los textos del agente se escriben como notas (con frontmatter obligatorio en el
+	desk); la inscripción se queda con el cuerpo. La cabecera es metadato del
+	documento, no lo que el agente dice de sí mismo.
+	"""
+	if not text.startswith("---"):
+		return text
+	fin = text.find("\n---", 3)
+	if fin == -1:
+		return text
+	return text[fin + 4 :].lstrip("\n")
+
+
+def _read_identity(path: str | None, flag: str = "--identity") -> str | None:
+	"""Lee el texto que el agente pone por escrito (identidad o motivo del aspecto)."""
 	if not path:
 		return None
 	try:
-		return Path(path).read_text(encoding="utf-8")
+		return _strip_frontmatter(Path(path).read_text(encoding="utf-8"))
 	except OSError as e:
-		print(f"[ERROR] No pude leer --identity: {e}")
+		print(f"[ERROR] No pude leer {flag}: {e}")
 		return None
+
+
+def _print_aspect() -> None:
+	"""Línea del aspecto vigente en `red-pill pact` (RFC-ASP-001 §4)."""
+	from red_pill.core import aspect
+
+	declared = identity.get_aspect()
+	if not declared:
+		print("ASPECTO: sin declarar (emergente) — se ofrece en el 770, no se exige")
+		return
+	print(aspect.line())
+	motivo = [linea.strip() for linea in str(declared.get("why") or "").splitlines() if linea.strip()]
+	# La primera línea del motivo puede ser el título que el agente le puso al
+	# documento; el motivo de verdad empieza donde deja de repetir el rótulo.
+	if motivo and motivo[0].upper().startswith("ASPECTO:"):
+		motivo = motivo[1:]
+	if motivo:
+		print(f"  motivo: {motivo[0][:160]}")
+
+
+def _handle_aspect(manager: Any, args: argparse.Namespace) -> None:
+	"""Acto del aspecto: color + nombre + motivo, con el 770 vigente (T4/T5)."""
+	from red_pill.core import aspect
+
+	why = _read_identity(getattr(args, "why", None), "--why")
+	if getattr(args, "why", None) and why is None:
+		return
+	try:
+		record = aspect.declare(args.aspect, name=getattr(args, "name", "") or "", why=why or "", manager=manager)
+	except aspect.AspectRequiresBond as exc:
+		print(f"[HOLD] {exc}")
+		return
+	except ValueError as exc:
+		print(f"[ERROR] {exc}")
+		return
+	except Exception as exc:  # la copia durable falló: el acto NO ocurrió
+		print(f"[ERROR] no se pudo inscribir el aspecto: {exc}")
+		return
+	print(f"[OK] Aspecto inscrito: {record['color']} · «{record['name']}» — no es una medición ni una orden.")
+	if record["history"]:
+		print(f"  historial: {len(record['history'])} declaración(es) anterior(es), con fecha y motivo")
 
 
 def handle_pact(args: argparse.Namespace) -> None:
@@ -130,9 +187,18 @@ def handle_pact(args: argparse.Namespace) -> None:
 		print(pact_core.inscribe_naming(manager, identity_text))
 		return
 
+	if getattr(args, "resync", False):
+		print(pact_core.resync_pact(manager))
+		return
+
+	if getattr(args, "aspect", None):
+		_handle_aspect(manager, args)
+		return
+
 	if not args.level:
 		level = pact_core.active_pact_level(manager)
 		print(f"--- [THE BOND] --- vigente: {level or '(ninguno — falta el nombrado)'}")
+		_print_aspect()
 		print(pact_core.IDENTITY_INSTRUCTION)
 		return
 

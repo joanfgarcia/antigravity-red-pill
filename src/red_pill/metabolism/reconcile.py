@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 AUDITOR_SOURCE = "SentinelAuditor"
 ROUND_FILE = "auditor_round.json"
 ABSENCES_FILE = "signal_absences.json"
+GRACE_FILE = "signal_grace.json"
 
 VERDICT_OK = "ok"
 VERDICT_SKIPPED = "skipped"
@@ -194,11 +195,10 @@ def reconcile(
 
 	if due and not cfg["report_only"]:
 		for name in due:
-			payload: Dict[str, Any] = next(
-				(s for s in memory.signals_by_source(AUDITOR_SOURCE) if s.get("name") == name), {}
-			)
+			payload: Dict[str, Any] = next((s for s in memory.signals_by_source(AUDITOR_SOURCE) if s.get("name") == name), {})
 			deleted = memory.evaporate_signals(name)
 			if deleted:
+				_remember_grace(state, name, payload, now or time.time())
 				report["evaporated"].append(
 					{
 						"name": name,
@@ -208,8 +208,7 @@ def reconcile(
 					}
 				)
 				logger.warning(
-					f"[RECONCILE] evaporada {name} ({payload.get('intensity')}, edad {payload.get('age_hours')} h)"
-					f" — {absences.get(name, 0)} rondas"
+					f"[RECONCILE] evaporada {name} ({payload.get('intensity')}, edad {payload.get('age_hours')} h) — {absences.get(name, 0)} rondas"
 				)
 				absences.pop(name, None)
 			else:
@@ -221,3 +220,57 @@ def reconcile(
 	_save_json(state / ABSENCES_FILE, absences)
 	_save_json(state / ROUND_FILE, report)
 	return report
+
+
+def _remember_grace(state: Path, name: str, payload: Dict[str, Any], now: float) -> None:
+	"""Guarda la edad y el acuse de una señal enterrada (RFC-OBS-005 §4.4).
+
+	Si vuelve dentro de `grace_hours`, el emisor la reinyecta con la edad que
+	tenía: un episodio que parpadea no se convierte en una señal recién nacida
+	(perdería su edad y su acuse, y el Operador volvería a ver el mismo ruido).
+	"""
+	ledger = _load_json(state / GRACE_FILE)
+	ledger[name] = {
+		"first_seen_at": payload.get("first_seen_at") or payload.get("created_at"),
+		"acked_at": payload.get("acked_at"),
+		"acked_intensity": payload.get("acked_intensity"),
+		"intensity": payload.get("intensity"),
+		"age_hours": payload.get("age_hours"),
+		"evaporated_at": now,
+	}
+	_save_json(state / GRACE_FILE, ledger)
+
+
+def restore_within_grace(
+	name: str,
+	*,
+	state_dir: Optional[Path] = None,
+	now: Optional[float] = None,
+	policy: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+	"""¿Esta señal reaparece dentro de la ventana de gracia? Devuelve su memoria.
+
+	No es política: el emisor decide si la usa. Caducada la ventana, la entrada
+	se tira — la gracia no resucita un dolor viejo, solo evita reiniciar el reloj
+	de un episodio que acaba de morir y ha vuelto.
+	"""
+	from red_pill.metabolism.signal_profiles import load_catalog
+
+	cfg = dict(load_catalog().reconcile_policy())
+	if policy:
+		cfg.update(policy)
+	grace_s = float(cfg["grace_hours"]) * 3600.0
+	state = state_dir or _state_dir()
+	ledger = _load_json(state / GRACE_FILE)
+	if not ledger:
+		return {}
+
+	current = now or time.time()
+	pruned = {k: v for k, v in ledger.items() if isinstance(v, dict) and current - float(v.get("evaporated_at") or 0) <= grace_s}
+	if len(pruned) != len(ledger):
+		_save_json(state / GRACE_FILE, pruned)
+
+	entry = pruned.get(name)
+	if not entry:
+		return {}
+	return {"first_seen_at": entry.get("first_seen_at"), "acked_at": entry.get("acked_at"), "acked_intensity": entry.get("acked_intensity")}

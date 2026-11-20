@@ -31,6 +31,9 @@ synaptic_split = synaptic_split
 
 logger = logging.getLogger(__name__)
 
+# RFC-OLV-001 F2: cuántas recuperaciones se conservan por engrama.
+_RECALL_STAMPS_MAX = 5
+
 
 def _mask_pii_exception(e: Exception) -> str:
 	"""Truncates exception strings to prevent payload PII leaks."""
@@ -430,6 +433,20 @@ class MemoryManager:
 		engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 		engine = get_memory_engine(engine_type)
 
+		# D-16: el reloj se lee UNA vez por recuperación, no una por punto (R3-C-03:
+		# era una conexión SQLite y un SELECT DISTINCT por engrama, bajo el lock).
+		# Si el reloj no es fiable (`None`), no se escribe contador: un 0 falso
+		# marcaría el recuerdo recién usado como el más viejo posible (R3-C-02).
+		_active_epoch = None
+		try:
+			from red_pill.metabolism.forgetting import active_day_clock
+
+			_clock = active_day_clock()
+			if _clock:
+				_active_epoch = int(_clock.get("epoch") or 0)
+		except Exception:
+			_active_epoch = None
+
 		with self._reinforce_lock:
 			for p in points:
 				if p.payload is None or p.payload.get("immune"):
@@ -453,10 +470,21 @@ class MemoryManager:
 					# Ensure updates are included for the batch operation
 					reinforced_updates["last_recalled_at"] = p.payload["last_recalled_at"]
 					reinforced_updates["recall_count"] = p.payload["recall_count"]
-					# Eje de activación de los curados (single-writer): solo se
-					# refresca al RECUPERAR, no en el pulse. Gobierna el demote.
-					if p.payload.get("node_type") in ("memento_engram", "synthesis_hub"):
-						reinforced_updates["last_reinforced_at"] = p.payload["last_recalled_at"]
+					# RFC-OLV-001 F2: historia de recuperaciones (ring de 5). Es lo
+					# que permite exigir DOS recuperaciones en DÍAS ACTIVOS distintos
+					# (D-06) en vez de dos golpes en el mismo turno: el espaciado es
+					# lo que consolida (Bjork & Bjork, 1992).
+					_stamps = list(p.payload.get("recall_stamps") or [])[-(_RECALL_STAMPS_MAX - 1) :]
+					_stamps.append(p.payload["last_recalled_at"])
+					p.payload["recall_stamps"] = _stamps
+					reinforced_updates["recall_stamps"] = _stamps
+					# D-16: epoch de días activos en el momento de la recuperación.
+					# Un día sin actividad no cobra olvido, y la migración no purga.
+					if _active_epoch is not None and _active_epoch > 0:
+						p.payload["active_days_at_recall"] = _active_epoch
+						reinforced_updates["active_days_at_recall"] = _active_epoch
+					# RFC-OLV-001 D-21: `last_reinforced_at` era una copia literal de
+					# `last_recalled_at` y su único lector era el demote retirado.
 
 					updated_points.append(p)
 					update_operations.append(
@@ -546,6 +574,82 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to record interaction pair: {e}")
 			return ""
+
+	def record_interaction_turn(
+		self,
+		prompt: str,
+		response: str,
+		role: str = "assistant",
+		category: str = "mixed",
+		model: Optional[str] = None,
+		originator: Optional[str] = None,
+		session_id: Optional[str] = None,
+		affinity: Optional[List[str]] = None,
+	) -> tuple[str, str]:
+		"""Dos engramas por turno: uno del Operador y otro del agente (2026-11-20).
+
+		Un turno no tiene un ánimo: tiene dos. El del Operador sale de lo que
+		escribe él; el del agente, de lo que responde. Con un solo punto por par
+		el etiquetador tenía que inventar una media de las dos voces, y el ánimo
+		del Operador quedaba contaminado por su propio agente.
+
+		Se escribe el texto limpio de cada lado (sin tooling: el filtro corre
+		antes, en el drenaje) y `metadata.author` dice de quién es cada engrama.
+		Devuelve `(uid_operador, uid_agente)`; cadena vacía en el lado que no
+		tenía nada que decir.
+		"""
+		collection = "interaction_memories"
+		timestamp = int(time.time())
+		uids: list[str] = []
+		lados = (
+			("operator", "user", prompt),
+			("agent", role, response),
+		)
+		try:
+			self._ensure_collection(collection)
+		except Exception as e:  # noqa: BLE001
+			logger.error(f"Failed to ensure interaction collection: {e}")
+			return ("", "")
+		points = []
+		for author, autor_role, text in lados:
+			if not (text or "").strip():
+				uids.append("")
+				continue
+			uid = str(uuid.uuid4())
+			prefijo = "USER" if author == "operator" else autor_role.upper()
+			contenido = f"{prefijo}: {text}"
+			payload = {
+				"content": contenido,
+				"importance": 5.0,
+				"timestamp": timestamp,
+				"last_recalled_at": timestamp,
+				"recall_count": 0,
+				"associations": [],
+				"associated_weight": 0.0,
+				"color": "gray",
+				"difficulty": 5.0,
+				"stability": 2.0,
+				"metadata": {
+					"type": "raw_interaction",
+					"author": author,
+					"role": autor_role,
+					"category": category,
+					"model": model or "unknown",
+					"originator": originator or "unknown",
+					"session_id": session_id,
+					"affinity": affinity or [],
+				},
+			}
+			points.append(models.PointStruct(id=uid, payload=payload, vector=self._get_vector(contenido)))
+			uids.append(uid)
+		if not points:
+			return ("", "")
+		try:
+			self.client.upsert(collection_name=collection, points=points)
+			return (uids[0], uids[1])
+		except Exception as e:  # noqa: BLE001
+			logger.error(f"Failed to record interaction turn: {e}")
+			return ("", "")
 
 	def search_and_reinforce(
 		self,
@@ -661,6 +765,56 @@ class MemoryManager:
 		results.sort(key=lambda r: (r.payload or {}).get("_texture_score", 0.0), reverse=True)
 		return results
 
+	def _live_hub_ids(self, collection: str) -> set:
+		"""Ids de los hubs que EXISTEN (caché de 60 s).
+
+		Es la única forma honesta de decidir qué miembros ocultar al recall: el
+		nodo, no el flag. Si el conjunto supera `MEMORY_LIVE_HUB_IDS_MAX`
+		(colecciones enormes), se devuelve vacío y el llamante cae al
+		comportamiento por flag — pero se avisa: el silencio convertía un techo de
+		seguridad en una ceguera invisible (el flag es justo lo que miente).
+		"""
+		now = time.time()
+		cached: dict[str, "tuple[float, set]"] = getattr(self, "_hub_ids_cache", None) or {}
+		hit = cached.get(collection)
+		if hit and now - hit[0] < 60:
+			return hit[1]
+		try:
+			from qdrant_client import models as _qm
+
+			flt = _qm.Filter(
+				should=[
+					_qm.FieldCondition(key="lazarus_phase", match=_qm.MatchValue(value="synthesis_hub")),
+					_qm.FieldCondition(key="node_type", match=_qm.MatchValue(value="synthesis_hub")),
+				]
+			)
+			ids: set = set()
+			cap = int(getattr(self.cfg, "MEMORY_LIVE_HUB_IDS_MAX", 2000) or 2000)
+			offset = None
+			while True:
+				batch, offset = self.client.scroll(
+					collection_name=collection, scroll_filter=flt, limit=1000, offset=offset, with_payload=False, with_vectors=False
+				)
+				ids.update(str(p.id) for p in batch)
+				# El techo se mira en CADA página: comprobarlo tras el corte de
+				# `offset is None` lo hacía inalcanzable en colecciones de una sola
+				# página (el techo nunca mordía donde se suponía que protegía).
+				if len(ids) > cap:
+					logger.warning(
+						f"[RECALL] {collection}: más de {cap} hubs vivos (MEMORY_LIVE_HUB_IDS_MAX); "
+						"se cae al flag `hubbed` y el enrutado por hoja queda inerte"
+					)
+					ids = set()
+					break
+				if offset is None:
+					break
+		except Exception as exc:
+			logger.debug(f"[RECALL] No se pudieron leer los hubs de {collection}: {exc}")
+			ids = set()
+		cached[collection] = (now, ids)
+		self._hub_ids_cache = cached
+		return ids
+
 	def _search_and_reinforce_impl(
 		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, hybrid: bool = False
 	) -> List[Any]:
@@ -687,8 +841,17 @@ class MemoryManager:
 		# Miembros ya agrupados en un hub de sesión (D14): el recall entra por el
 		# hub, no por cada idea. SOLO cuando los hubs están activos — apagar
 		# SW_HUBS_ENABLED devuelve los miembros al recall (reversibilidad, RULE 4).
+		#
+		# RFC-OLV-001 §1.3.5: se excluye por `hub_id` EXISTENTE, no por el flag.
+		# El flag `hubbed` miente (1.962 marcadores apuntaban a un padre borrado) y
+		# usarlo como filtro convertía el error en ceguera: esos engramas no se
+		# podían recuperar ni reforzar, así que su `recall_count` se quedaba a 0.
 		if getattr(cfg, "SW_HUBS_ENABLED", False):
-			structural_exclusions.append(models.FieldCondition(key="hubbed", match=models.MatchValue(value=True)))
+			_live = self._live_hub_ids(collection)
+			if _live:
+				structural_exclusions.append(models.FieldCondition(key="hub_id", match=models.MatchAny(any=sorted(_live))))
+			else:  # sin hubs legibles, el comportamiento previo (reversible)
+				structural_exclusions.append(models.FieldCondition(key="hubbed", match=models.MatchValue(value=True)))
 
 		if not deep_recall:
 			search_filter = models.Filter(
@@ -700,22 +863,32 @@ class MemoryManager:
 
 		use_hybrid = bool(hybrid and getattr(self.cfg, "MEMORY_HYBRID_RECALL_ENABLED", False) and collection in ("work_memories", "social_memories"))
 		use_mmr = bool(getattr(self.cfg, "MEMORY_RECALL_MMR_ENABLED", False))
-		use_hub_index = bool(
-			getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False)
-		)
+		use_hub_index = bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False) or getattr(self.cfg, "SW_HUB_BOOST_ENABLED", False))
 		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr or use_hub_index) else limit
-		try:
-			results = self.client.query_points(
-				collection_name=collection,
-				query=vector,
-				query_filter=search_filter,
-				limit=fetch,
-				with_payload=True,
-				with_vectors=use_hybrid or use_mmr,
-			).points
-		except Exception as e:
-			logger.error(f"Query failed: {_mask_pii_exception(e)}")
-			return []
+		# Enrutado por hoja (2026-11-17): las hojas son más afiladas que el resumen
+		# del hub (medido: 0,737 contra 0,491 para la misma consulta). Se busca en
+		# TODO el espacio, se agrega cada hoja a su raíz y se devuelve la RAÍZ con
+		# la mejor evidencia. El llamante sigue viendo hubs; la hoja solo enruta.
+		leaf_routed: List[Any] = []
+		if bool(getattr(self.cfg, "SW_RECALL_LEAF_ROUTING_ENABLED", False)):
+			leaf_routed = self._route_by_leaf(collection, vector, limit=max(fetch, limit * 6))
+			if leaf_routed:
+				use_hybrid = use_mmr = use_hub_index = False
+		if leaf_routed:
+			results = leaf_routed
+		else:
+			try:
+				results = self.client.query_points(
+					collection_name=collection,
+					query=vector,
+					query_filter=search_filter,
+					limit=fetch,
+					with_payload=True,
+					with_vectors=use_hybrid or use_mmr,
+				).points
+			except Exception as e:
+				logger.error(f"Query failed: {_mask_pii_exception(e)}")
+				return []
 		if use_hybrid or use_mmr or use_hub_index:
 			results = self._rerank_hybrid_mmr(
 				collection, query, vector, results, limit, use_hybrid, use_mmr, deep_recall, structural_exclusions, use_hub_index=use_hub_index
@@ -745,13 +918,8 @@ class MemoryManager:
 					# cycle's job, not a read's: keep the hit, demote it in ranking,
 					# and let the reinforcement below rehabilitate it organically.
 					# Hiding it here starves it of reinforcement forever (death spiral).
-					if self.cfg.READ_PATH_PRUNING_ENABLED:
-						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
-						try:
-							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-						except Exception:
-							pass
-						continue
+					# RFC-OLV-001 D-19: la lectura tampoco BORRA (única ruta: la
+					# escalera). El borrado opcional se retira; `_eroded` se queda.
 					hit.payload["_eroded"] = True
 					decay_updates = {}
 
@@ -1022,6 +1190,10 @@ class MemoryManager:
 		Read-only y acotado a `MEMORY_HUB_KEYWORD_MAX_HUBS`. Los hubs viejos sin
 		`hub_terms` caen a su `content`, así que siguen siendo recuperables sin
 		migrarlos (D-11). Cualquier fallo devuelve [] y no rompe el recall.
+
+		MEM-011: las PARTES (`hub_role=part`) quedan fuera del corpus. Solo la raíz
+		entra en el primario (D-SH-01/I-08); además, contarlas inflaba el IDF de la
+		pata keyword al triplicar los documentos con los mismos términos.
 		"""
 		if not bool(getattr(self.cfg, "SW_HUB_KEYWORD_ENABLED", False)):
 			return []
@@ -1054,7 +1226,9 @@ class MemoryManager:
 						should=[
 							qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
 							qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
-						]
+						],
+						# MEM-011: una parte no es una raíz y no compite en el primario.
+						must_not=[qm.FieldCondition(key="hub_role", match=qm.MatchValue(value="part"))],
 					),
 					limit=min(256, max_hubs - len(docs)),
 					offset=offset,
@@ -1130,15 +1304,85 @@ class MemoryManager:
 			logger.warning(f"[HUB-BOOST] no aplicado: {e}")
 			return fused
 
+	def _route_by_leaf(self, collection: str, vector: List[float], limit: int = 60) -> List[Any]:
+		"""Enruta por hoja: busca en todo el espacio y agrega cada hoja a su raíz.
+
+		Devuelve los **hubs** (raíces) con `score` = mejor similitud de sus hojas,
+		y un campo efímero `_entry_leaf` (id + `source_lines`) para que el llamante
+		pueda abrir la evidencia. Las hojas no se devuelven: solo enrutan.
+
+		Sin hubs vivos (o sin `hub_id` en las hojas) devuelve `[]` y el llamante
+		cae al camino de siempre (reversible).
+		"""
+		try:
+			points = self.client.query_points(collection_name=collection, query=vector, limit=limit, with_payload=True, with_vectors=False).points
+		except Exception as e:
+			logger.warning(f"[LEAF-ROUTING] consulta fallida: {e}")
+			return []
+		live = self._live_hub_ids(collection)
+		if not live:
+			return []
+		live_set = set(live)
+		best: Dict[str, Dict[str, Any]] = {}
+		for point in points:
+			payload = point.payload or {}
+			if payload.get("node_type") == "synthesis_hub" or payload.get("lazarus_phase") == "synthesis_hub":
+				root = str(point.id)
+				if root not in live_set:
+					continue
+				if root not in best or point.score > best[root]["score"]:
+					best[root] = {"score": float(point.score), "payload": payload, "leaf": None}
+				continue
+			root = str(payload.get("hub_id") or "")
+			if not root or root not in live_set:
+				continue
+			if root not in best or point.score > best[root]["score"]:
+				best[root] = {
+					"score": float(point.score),
+					"payload": None,
+					"leaf": {"id": str(point.id), "source_lines": payload.get("source_lines")},
+				}
+		if not best:
+			return []
+		ordered = sorted(best.items(), key=lambda kv: -kv[1]["score"])[:limit]
+		try:
+			hub_points = self.client.retrieve(collection_name=collection, ids=[rid for rid, _ in ordered], with_payload=True, with_vectors=False)
+		except Exception as e:
+			logger.warning(f"[LEAF-ROUTING] no se pudieron leer las raíces: {e}")
+			return []
+		by_id = {str(p.id): p for p in hub_points}
+		out: List[Any] = []
+		for rid, info in ordered:
+			hub = by_id.get(rid)
+			if hub is None:
+				continue
+			payload = dict(hub.payload or {})
+			if info.get("leaf"):
+				payload["_entry_leaf"] = info["leaf"]
+			out.append(models.ScoredPoint(id=hub.id, version=0, score=info["score"], payload=payload, vector=None))
+		return out
+
 	@staticmethod
 	def _excluded_by(payload: Dict[str, Any], exclusions: List[Any]) -> bool:
-		"""¿El payload cae en alguna exclusión estructural (FieldCondition MatchValue)?"""
+		"""¿El payload cae en alguna exclusión estructural?
+
+		Soporta `MatchValue` y `MatchAny`. Antes solo miraba `cond.match.value`, así
+		que una exclusión `MatchAny` (la de miembros por `hub_id`, la más caliente)
+		lanzaba `AttributeError`, se saltaba en silencio y NO excluía nada: el rescate
+		por palabras clave podía devolver miembros ya agrupados (auditoría MEM-011,
+		DG-06/AC-04).
+		"""
 		for cond in exclusions:
-			try:
-				if payload.get(cond.key) == cond.match.value:
-					return True
-			except AttributeError:
+			match = getattr(cond, "match", None)
+			if match is None:
 				continue
+			values = getattr(match, "any", None)
+			if values is not None:
+				if payload.get(cond.key) in values:
+					return True
+				continue
+			if payload.get(cond.key) == getattr(match, "value", None):
+				return True
 		return False
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
@@ -1289,6 +1533,10 @@ class MemoryManager:
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		self.metabolism.apply_erosion(collection, rate)
+
+	def count_erosion_candidates(self, collection: str, rate: Optional[float] = None) -> dict:
+		"""Recuento en seco de la erosión manual (RFC-OLV-001)."""
+		return self.metabolism.count_erosion_candidates(collection, rate)
 
 	def sanitize(self, collection: str, dry_run: bool = False, strict: bool = True) -> Dict[str, Any]:
 		"""Sanitizes a collection: removes duplicates, heals schemas, and refracts oversized legacy engrams."""
@@ -1563,6 +1811,9 @@ class MemoryManager:
 		criticality: str = "WARNING",
 		message: Optional[str] = None,
 		diagnosis: Optional[str] = None,
+		restore_first_seen_at: Optional[str] = None,
+		restore_acked_at: Optional[str] = None,
+		restore_acked_intensity: Optional[float] = None,
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
@@ -1608,7 +1859,10 @@ class MemoryManager:
 				previous = {}
 
 			now = datetime.now(timezone.utc)
-			first_seen_iso = previous.get("first_seen_at") or previous.get("created_at") or now.isoformat()
+			# `restore_*`: una señal que vuelve dentro de la ventana de gracia
+			# (RFC-OBS-005 §4.4) recupera su edad y su acuse; sin esto, evaporar y
+			# reinyectar la reinicia el reloj y borra lo que el Operador ya vio.
+			first_seen_iso = previous.get("first_seen_at") or previous.get("created_at") or restore_first_seen_at or now.isoformat()
 			try:
 				first_seen_ts = datetime.fromisoformat(str(first_seen_iso).replace("Z", "+00:00")).timestamp()
 			except ValueError:
@@ -1616,7 +1870,7 @@ class MemoryManager:
 			age_hours = max(0.0, (now.timestamp() - first_seen_ts) / 3600.0)
 
 			diagnosis_hash = hashlib.sha256(diagnosis.encode("utf-8")).hexdigest() if diagnosis else None
-			acked_at = previous.get("acked_at")
+			acked_at = previous.get("acked_at") or restore_acked_at
 			# Diagnóstico nuevo ⇒ se re-arma el acuse: lo reconocido era el ruido anterior.
 			if acked_at and diagnosis_hash and previous.get("diagnosis_hash") and diagnosis_hash != previous.get("diagnosis_hash"):
 				acked_at = None
@@ -1674,8 +1928,11 @@ class MemoryManager:
 				payload["acknowledged"] = acknowledged
 				if ack_mode:
 					payload["ack_mode"] = ack_mode
-				if previous.get("acked_intensity") is not None:
-					payload["acked_intensity"] = previous.get("acked_intensity")
+				restored_intensity = previous.get("acked_intensity")
+				if restored_intensity is None:
+					restored_intensity = restore_acked_intensity
+				if restored_intensity is not None:
+					payload["acked_intensity"] = restored_intensity
 
 			# Zero vector for purely semantic/flag signals
 			vector = [0.0] * self.cfg.VECTOR_SIZE
@@ -1758,9 +2015,7 @@ class MemoryManager:
 		try:
 			points, _ = self.client.scroll(
 				collection_name="signal_memories",
-				scroll_filter=models.Filter(
-					must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]
-				),
+				scroll_filter=models.Filter(must=[models.FieldCondition(key="signal_source", match=models.MatchValue(value=source))]),
 				limit=200,
 				with_payload=True,
 			)

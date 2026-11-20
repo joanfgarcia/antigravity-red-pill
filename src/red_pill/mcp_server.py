@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -71,8 +72,38 @@ def GET_PYTHON() -> str:
 	return sys.executable
 
 
+# Router card (RFC-HARNESS-001 §4.4): lo ÚNICO que un cliente con divulgación
+# progresiva declara del servidor. Explica qué familias hay y cuándo buscarlas, en
+# lugar de costar 10.171 tokens de esquemas (medido en REPORTE_W0).
+ROUTER_CARD = (
+	"RedPill-Kernel: memoria y orquestación soberanas. Familias: "
+	"bunker_memory_api (recall/escritura de memoria y directivas), coro_api (mensajería entre almas), "
+	"job_manager_api (trabajos diferidos), swarm_orchestrator_api (minions y control), "
+	"metabolism_health_api (salud del sistema), sovereign_handshake (identidad, sólo arneses sin hook). "
+	"Si tu perfil difiere herramientas, usa redpill_search para encontrarlas y redpill_call para invocarlas."
+)
+
+# SUPERFICIE declarada (P1b). Viaja en el payload del proxy (`surface`), no en una
+# env global: el backend es UN proceso para N clientes (S16).
+GATEWAY_TOOLS = ("redpill_search", "redpill_call")
+
+
+def _surface() -> str:
+	shared = _shared_identity_var.get() or {}
+	surface = str(shared.get("surface") or "").strip().lower()
+	if surface in ("full", "gateway", "none"):
+		return surface
+	env = os.getenv("REDPILL_TOOLS_PROFILE", "").strip().lower()
+	if env in ("full", "gateway", "none"):
+		return env
+	# Default `full`: el perfil elige (el proxy manda `surface` por petición). Un
+	# default `gateway` cambiaría el comportamiento de todo cliente que no lo
+	# declare, y esta pieza no puede perder funcionalidad para ahorrar tokens.
+	return "full"
+
+
 # Initialize the Sovereign MCP Server
-server = Server("RedPill-Kernel")
+server = Server("RedPill-Kernel", instructions=ROUTER_CARD)
 
 
 @server.list_prompts()
@@ -339,6 +370,10 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 				"type": "string",
 				"description": "Optional. Restrict search to a specific collection (e.g. 'work_memories', 'social_memories', 'directive_memories'). Default: searches work_memories + social_memories.",
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": "Solo si hay varias sesiones en el workspace: el `leg=` de tu tag `<session …/>`, para que el aviso de fin de research llegue a tu alma.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -351,6 +386,9 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	query = arguments["query"]
 	collection = arguments.get("collection")
 	collections = [collection] if collection else None  # None → OracleMinion default
+	ident = await _caller_session({"caller_leg": arguments.get("caller_leg")})
+	owner = str(ident.get("continuity_id") or "").strip() or None
+	owner_leg = str(ident.get("originator") or "").strip() or None
 
 	async def _run_bg():
 		try:
@@ -365,7 +403,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
 			def _deliver_report():
-				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="OracleMinion",
+					status=res.status,
+					content=content,
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 				if res.status != "success":
 					SovereignNotifier.notify_os("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 
@@ -377,7 +422,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
-				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {err_msg}")
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="OracleMinion",
+					status="crashed",
+					content=f"Exception: {err_msg}",
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 				SovereignNotifier.notify_os("Oracle Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
@@ -392,7 +444,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	description=(
 		"Run a single agentic task through an agent backend (claude/agy/opencode/local/local-tools/pi) and return the result. "
 		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
-		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox AND notifies the caller's soul (queue: read at the next turn, no interrupt); "
 		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
 	),
 	schema={
@@ -412,6 +464,10 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 				"description": "True (default): result to Minion Inbox. False: wait and return inline.",
 				"default": True,
 			},
+			"caller_leg": {
+				"type": "string",
+				"description": "Solo si hay varias sesiones en el workspace: el `leg=` de tu tag `<session …/>`, para que el aviso de fin de tarea llegue a tu alma.",
+			},
 		},
 		"required": ["prompt"],
 	},
@@ -430,6 +486,12 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 		"timeout": int(arguments.get("timeout", 600)),
 	}
 	async_mode = arguments.get("async_mode", True)
+	# El aviso de fin de tarea es parte del contrato: sin alma, el reporte queda
+	# en el MinionInbox y solo se ve si alguien hace `check_minion_inbox` (el
+	# patrón "nadie lo abre"). La identidad sale del canal de confianza.
+	ident = await _caller_session({"caller_leg": arguments.get("caller_leg")})
+	owner = str(ident.get("continuity_id") or "").strip() or None
+	owner_leg = str(ident.get("originator") or "").strip() or None
 
 	def _summarize(res) -> str:
 		if res.status == "success":
@@ -451,7 +513,14 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 			content = _summarize(res)
 
 			def _deliver():
-				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status=res.status, content=content)
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="AgentRunner",
+					status=res.status,
+					content=content,
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 
 			await asyncio.to_thread(_deliver)
 		except Exception as e:
@@ -460,7 +529,14 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 
 			def _deliver_err():
-				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status="crashed", content=f"Exception: {err_msg}")
+				MinionInbox().drop_report(
+					event_id=event_id,
+					source="AgentRunner",
+					status="crashed",
+					content=f"Exception: {err_msg}",
+					originator=owner_leg,
+					continuity_id=owner,
+				)
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -570,6 +646,14 @@ def _hub_pointer(payload: Dict[str, Any]) -> str:
 				"type": "boolean",
 				"description": "Deep recall (bypass the reinforcement floor). Default: false; DEEP_RECALL_TRIGGERS auto-enable it.",
 			},
+			"include_below_floor": {
+				"type": "boolean",
+				"description": (
+					"Inspección (MEM-012, D-AB-04): materializa la banda por debajo del suelo, "
+					"marcada `insuficiente`. Por defecto solo viaja `below_floor_count`. "
+					"El suelo decide qué se inyecta, nunca qué existe."
+				),
+			},
 		},
 		"required": ["query"],
 	},
@@ -579,11 +663,13 @@ async def handle_recall(arguments: Dict[str, Any]):
 
 	from red_pill.cli import get_collection
 	from red_pill.memory import MemoryManager
+	from red_pill.recall_abstention import build_abstention, search_memento_hint
 
 	query = arguments["query"]
 	collection = get_collection(arguments.get("collection", "work"))
 	limit = int(arguments.get("limit", 3))
 	deep = bool(arguments.get("deep", False))
+	include_below = bool(arguments.get("include_below_floor", False))
 
 	def _run() -> List[Any]:
 		return MemoryManager().search_and_reinforce(collection, query, limit=limit, deep_recall=deep, caller="mcp_recall", hybrid=True)
@@ -593,22 +679,107 @@ async def handle_recall(arguments: Dict[str, Any]):
 		results = await asyncio.to_thread(_run)
 	except Exception as e:
 		logger.error(f"recall failed: {e}", exc_info=True)
-		return [types.TextContent(type="text", text=f"[RED PILL ERROR] recall failed: {e}")]
+		# I-05: la ausencia de dato no es un «no lo sé» positivo.
+		return [
+			types.TextContent(
+				type="text",
+				text=(
+					f"[RED PILL ERROR] recall failed: {e}\n"
+					"[no_recall] confianza insuficiente (el motor no respondió). "
+					"Alternativas: memento_fulltext, replantear, ampliar."
+				),
+			)
+		]
 
-	header = f"--- [RESULTS: {collection.upper()}] ---"
-	if not results:
-		return [types.TextContent(type="text", text=f"{header}\n(no results in the Búnker)")]
+	floor = float(getattr(cfg, "SW_RECALL_ABSTENTION_FLOOR", 0.38))
+	anchors: List[str] = []
+	try:
+		from red_pill.memento.hybrid import salient_terms
+
+		anchors = [str(term) for term in salient_terms(query, max_terms=8)]
+	except Exception:
+		anchors = []
+	# MEM-012 F2: el objeto `no_recall` se construye sobre la SIMILITUD (F1) y se
+	# aplica al PRESENTAR, nunca al recuperar (I-06): la recuperación no trunca.
+	abstention = build_abstention(
+		results,
+		collection=collection,
+		floor=floor,
+		media=float(getattr(cfg, "SW_RECALL_CONFIDENCE_MEDIA", 0.4551)),
+		alta=float(getattr(cfg, "SW_RECALL_CONFIDENCE_ALTA", 0.592)),
+		include_below_floor=include_below,
+		exempt=collection == "directive_memories",
+		searched={
+			"collection": collection,
+			"strategy": "hybrid+deep" if deep else "hybrid",
+			"anchors": anchors,
+		},
+	)
+
+	# MEM-012 F3: tasa + demanda. Se registra aquí (consulta explícita), no en el
+	# interceptor: el prompt automático del turno no es una pregunta del agente.
+	try:
+		from red_pill.recall_demand import record_recall
+
+		record_recall(
+			query=query,
+			collection=collection,
+			confidence=abstention["confidence"],
+			no_recall=abstention["no_recall"],
+			max_similarity=abstention["max_similarity"],
+			below_floor_count=abstention["below_floor_count"],
+			caller="mcp_recall",
+		)
+	except Exception as exc:
+		logger.debug(f"[RECALL] no se pudo registrar la demanda: {exc}")
+
+	header = f"--- [RESULTS: {collection.upper()} · confianza {abstention['confidence'].upper()} · max sim {abstention['max_similarity']:.2f}"
+	if abstention["no_recall"]:
+		header += f" · no_recall · suelo {floor:.2f}"
+	header += "] ---"
+
 	lines = [header]
+
+	def _render_alternative(name: str) -> str:
+		# F4: la oferta de Memento es accionable (acción + literal), nunca automática.
+		if name == "memento_fulltext":
+			return f"memento_fulltext → {search_memento_hint(query, anchors)}"
+		return name
+
+	rendered = ", ".join(_render_alternative(name) for name in abstention["alternatives"]) or "-"
+	if abstention["no_recall"]:
+		lines.append(
+			f"[no_recall] ninguna memoria alcanza el suelo {floor:.2f}; "
+			f"{abstention['below_floor_count']} candidato(s) por debajo. "
+			f"Alternativas (no se ejecutan solas): {rendered}. "
+			"Pide include_below_floor=true para inspeccionarlos."
+		)
+	elif abstention["alternatives"]:
+		lines.append(f"[confianza {abstention['confidence']}] si no es esto: {rendered}")
+
+	above_ids = {row["id"] for row in abstention["hits"]}
+	below_ids = {row["id"] for row in abstention.get("below_floor", [])}
 	for hit in results:
+		hit_id = str(getattr(hit, "id", ""))
+		if hit_id not in above_ids and hit_id not in below_ids:
+			continue
 		payload = getattr(hit, "payload", {}) or {}
 		score = payload.get("reinforcement_score", 0.0)
+		sim = float(getattr(hit, "score", 0.0) or 0.0)
 		color = str(payload.get("color", "gray")).upper()
 		intensity = payload.get("intensity", 1.0)
-		status = " [IMMUNE]" if payload.get("immune") else f" (Score: {float(score):.2f})"
+		if payload.get("immune") or collection == "directive_memories":
+			status = f" [IMMUNE · sim {sim:.2f}]"
+		else:
+			status = f" (sim {sim:.2f} · util {float(score):.2f})"
+		if hit_id in below_ids:
+			status += " · insuficiente"
 		lines.append(f"- [{color}][Int: {intensity}] {payload.get('content', '')}{status}")
-		pointer = _hub_pointer({**payload, "_point_id": str(getattr(hit, "id", ""))})
+		pointer = _hub_pointer({**payload, "_point_id": hit_id})
 		if pointer:
 			lines.append(pointer)
+	if not results:
+		lines.append("(sin resultados en el Búnker)")
 	return [types.TextContent(type="text", text="\n".join(lines))]
 
 
@@ -720,11 +891,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 				limit=scan_limit,
 				with_payload=True,
 			)
-			members = [
-				(str(p.id), p.payload or {})
-				for p in pts
-				if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")
-			]
+			members = [(str(p.id), p.payload or {}) for p in pts if is_content_node(p.payload or {}) and not (p.payload or {}).get("_is_fragment")]
 			ordered = sort_members_chronologically(members)
 			window = ordered[offset : offset + limit]
 			start_id = str(start.id)
@@ -849,13 +1016,54 @@ async def handle_hub_members(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text=f"[HUB MEMBERS] hub no encontrado: {hub_id} en {collection}.")]
 		hub_payload = hub_points[0].payload or {}
 		session_id = hub_payload.get("session_id")
+		hub_role = str(hub_payload.get("hub_role") or "root")
+
+		# MEM-011 F3: la navegación respeta la jerarquía. Una PARTE abre sus hojas
+		# por `hub_id` (no por sesión: escanear la sesión devolvería los 302
+		# miembros de todas las partes). Una RAÍZ con partes lista sus partes y
+		# deja que se abran una a una; sin partes, se comporta como siempre.
+		if hub_role == "root":
+			part_points, _ = client.scroll(
+				collection,
+				scroll_filter=_qm.Filter(
+					must=[
+						_qm.FieldCondition(key="hub_id", match=_qm.MatchValue(value=hub_id)),
+						_qm.FieldCondition(key="hub_role", match=_qm.MatchValue(value="part")),
+					]
+				),
+				limit=min(200, max(limit + offset, 50)),
+				with_payload=True,
+			)
+			if part_points:
+				ordered_parts = sorted(
+					part_points,
+					key=lambda pt: str((pt.payload or {}).get("part_key") or ""),
+				)[offset : offset + limit]
+				lines = [
+					f"[HUB MEMBERS] collection={collection} | session={session_id} | "
+					f"{len(part_points)} partes | ventana {offset}-{offset + len(ordered_parts)} | mode={mode}",
+					"",
+				]
+				for pt in ordered_parts:
+					pp = pt.payload or {}
+					label = str(pp.get("hub_title") or pp.get("part_key") or "")[:80]
+					count = int(pp.get("hub_members_count") or 0)
+					lines.append(f"· parte [{str(pt.id)[:8]}] {count} hojas · {label}")
+				lines.append("")
+				lines.append("(abre una parte con hub_id=<id de la parte> para ver sus hojas)")
+				return [types.TextContent(type="text", text="\n".join(lines))]
+
 		if not session_id:
 			return [types.TextContent(type="text", text="[HUB MEMBERS] el hub no tiene session_id; no hay miembros que abrir.")]
 
 		scan_limit = min(500, max(limit + offset, 100))
+		if hub_role == "part":
+			scan_filter = _qm.Filter(must=[_qm.FieldCondition(key="hub_id", match=_qm.MatchValue(value=hub_id))])
+		else:
+			scan_filter = _qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))])
 		points, _ = client.scroll(
 			collection,
-			scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=session_id))]),
+			scroll_filter=scan_filter,
 			limit=scan_limit,
 			with_payload=True,
 		)
@@ -918,7 +1126,6 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		import mcp.types as types
 
 		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
-
 
 
 @registry.register_action(
@@ -1166,6 +1373,39 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="Engram updated." if succ else "Failed to update engram.")]
 
 
+def _workspace_registry_names() -> str:
+	"""Nombres registrados, para que el error diga DÓNDE mirar.
+
+	Medido el 2026-11-18 sobre el log del daemon: tres llamadas a
+	`read/list_workspace_memory` sin argumento murieron con KeyError('workspace')
+	(el registro solo logueaba `execution failed: 'workspace'`), y el despertar de
+	las 14:00 se comió un «Workspace 'sharing' not found» cuando el registro lo
+	llama `red-pill-sharing`. Un error que no distingue «falta» de «no existe» y
+	no dice qué nombres existen es un callejón sin salida: el paso obligatorio de
+	hidratación del banco falla sin dejar salida.
+	"""
+	try:
+		from red_pill.core.workspaces import list_workspaces
+
+		return ", ".join(sorted(w.name for w in list_workspaces()))
+	except Exception:
+		return ""
+
+
+def _workspace_lookup_error(workspace: Optional[str]) -> str:
+	"""Error accionable para una búsqueda de workspace: falta, o no existe."""
+	names = _workspace_registry_names()
+	hint = f" Registered: {names}." if names else " No workspaces are registered."
+	if not workspace:
+		return "[ERROR] Missing 'workspace' argument: pass a registered name or its root path." + hint
+	return f"[ERROR] Workspace '{workspace}' not found in registry." + hint
+
+
+def _missing_arg_error(arg: str) -> str:
+	"""El mismo defecto un nivel más abajo: `arguments['x']` sobre una clave ausente."""
+	return f"[ERROR] Missing '{arg}' argument."
+
+
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="read_workspace_memory",
@@ -1180,8 +1420,12 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_read_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
-	filename = arguments["filename"]
+	workspace = arguments.get("workspace")
+	filename = arguments.get("filename")
+	if not filename:
+		return [types.TextContent(type="text", text=_missing_arg_error("filename"))]
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1189,7 +1433,7 @@ async def handle_read_workspace_memory(arguments: Dict[str, Any]):
 	def _read():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
@@ -1223,9 +1467,15 @@ async def handle_read_workspace_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_write_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
-	filename = arguments["filename"]
-	content = arguments["content"]
+	workspace = arguments.get("workspace")
+	filename = arguments.get("filename")
+	content = arguments.get("content")
+	if not filename:
+		return [types.TextContent(type="text", text=_missing_arg_error("filename"))]
+	if content is None:
+		return [types.TextContent(type="text", text=_missing_arg_error("content"))]
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1233,7 +1483,7 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 	def _write():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
@@ -1265,7 +1515,9 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 	},
 )
 async def handle_list_workspace_memory(arguments: Dict[str, Any]):
-	workspace = arguments["workspace"]
+	workspace = arguments.get("workspace")
+	if not workspace:
+		return [types.TextContent(type="text", text=_workspace_lookup_error(workspace))]
 	import asyncio
 
 	from red_pill.core import workspaces as ws_core
@@ -1273,7 +1525,7 @@ async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 	def _list():
 		ws = ws_core.find_workspace(workspace)
 		if not ws:
-			return f"[ERROR] Workspace '{workspace}' not found in registry."
+			return _workspace_lookup_error(workspace)
 		mem_path = ws.get_memory_path
 		if not mem_path:
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
@@ -2002,9 +2254,7 @@ def _current_git_branch(workdir: Optional[str] = None) -> Optional[str]:
 	return _git_mirror(workdir).get("branch")
 
 
-def _resolve_workspace(
-	candidates: "list[str]", cwd: Optional[str] = None
-) -> "tuple[str, Optional[str], Dict[str, Optional[str]]]":
+def _resolve_workspace(candidates: "list[str]", cwd: Optional[str] = None) -> "tuple[str, Optional[str], Dict[str, Optional[str]]]":
 	"""Workspace del agente → `(workspace, branch, mirror)`.
 
 	Los candidatos son lo que el arnés DECLARA (proxy → puente → env), en orden de
@@ -2100,7 +2350,9 @@ def _harness_bridge(provider: Optional[str] = None) -> Dict[str, str]:
 	state = get_state_dir()
 	now = time.time()
 	ttl = _bridge_ttl_s()
-	providers = (provider,) if provider else ("opencode", "claude_code")
+	# `pi` y `antigravity` escriben su bridge desde el hook (P4): sin ellos aquí,
+	# sus llamadas MCP no resolvían cuerpo y el arnés con hook quedaba cojo.
+	providers = (provider,) if provider else ("opencode", "claude_code", "pi", "antigravity")
 	best: Optional[tuple[float, Dict[str, str]]] = None
 	for prov in providers:
 		try:
@@ -2431,9 +2683,7 @@ async def _resolve_session_identity(arguments: Dict[str, Any], *, persist: bool 
 				if row:
 					declared_leg, declared_row, identity_source = candidate, row, "activity"
 		if declared_leg and shared_originator and declared_leg != shared_originator:
-			logger.warning(
-				f"[identity] cuerpo declarado {declared_leg[:40]} != proxy {shared_originator[:40]}; se usa el declarado (verificado)"
-			)
+			logger.warning(f"[identity] cuerpo declarado {declared_leg[:40]} != proxy {shared_originator[:40]}; se usa el declarado (verificado)")
 	originator: Optional[str] = None
 	if shared is not None:
 		# Canal proxy (AD-018): NUNCA se cae al bridge global. Con VARIAS almas en
@@ -2967,9 +3217,7 @@ async def _caller_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
 		row = None
 		originator = None
 	elif row and row_mission and trusted_mission and str(row_mission) != str(trusted_mission):
-		logger.warning(
-			f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}"
-		)
+		logger.warning(f"[caller-session] misión del registro ({row_mission}) != misión de confianza ({trusted_mission}) para {str(originator)[:40]}")
 	return {
 		"originator": originator,
 		"continuity_id": (row or {}).get("continuity_id"),
@@ -3203,7 +3451,6 @@ async def handle_moderate_note(arguments: Dict[str, Any]):
 		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[MODERATE] error: {e}")]
-
 
 
 @registry.register(
@@ -3514,7 +3761,93 @@ except Exception as _coro_register_error:  # non-fatal: el servidor arranca igua
 
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
-	return registry.get_tools()
+	surface = _surface()
+	tools = registry.get_tools()
+	if surface == "full":
+		return tools
+	if surface == "none":
+		return []
+	return [tool for tool in tools if tool.name in GATEWAY_TOOLS]
+
+
+@registry.register(
+	name="redpill_search",
+	description=(
+		"Busca herramientas del kernel por lenguaje natural y devuelve nombre, descripción y esquema "
+		"como TEXTO. Úsala cuando tu perfil no declare la herramienta que necesitas, y luego invócala "
+		"con redpill_call. El router card del servidor dice qué familias hay."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string", "description": "Qué necesitas hacer, en lenguaje natural."},
+			"limit": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Máximo de resultados (default 3)."},
+		},
+		"required": ["query"],
+	},
+)
+async def handle_redpill_search(arguments: Dict[str, Any]):
+	"""Descubrimiento bajo demanda: el esquema viaja como texto, no como tool."""
+	query = str(arguments.get("query") or "").strip().lower()
+	try:
+		limit = min(10, max(1, int(arguments.get("limit") or 3)))
+	except (TypeError, ValueError):
+		limit = 3
+	if not query:
+		return [types.TextContent(type="text", text=json.dumps({"error": "invalid_arguments", "detail": "query vacío"}))]
+	# términos de 1-2 letras ("no", "de") casan con todo: fuera.
+	terms = [term for term in re.split(r"[^a-z0-9_]+", query) if len(term) >= 3]
+	scored = []
+	for tool in registry.get_tools():
+		blob = f"{tool.name} {tool.description or ''}".lower()
+		score = sum(1 for term in terms if term in blob)
+		if score:
+			scored.append((score, len(tool.name), tool))
+	scored.sort(key=lambda item: (-item[0], item[1]))
+	found = [{"name": tool.name, "description": tool.description, "schema": tool.inputSchema} for _, _, tool in scored[:limit]]
+	payload = {"results": found} if found else {"results": [], "detail": "sin coincidencias; prueba otras palabras"}
+	return [types.TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+
+@registry.register(
+	name="redpill_call",
+	description=(
+		"Invoca una herramienta del kernel por nombre, con sus argumentos. Valida en el servidor y "
+		"devuelve errores estructurados (unknown_tool, invalid_arguments) para que puedas corregir sin adivinar."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"name": {"type": "string", "description": "Nombre exacto de la herramienta (de redpill_search)."},
+			"arguments": {"type": "object", "description": "Objeto de argumentos de esa herramienta."},
+		},
+		"required": ["name"],
+	},
+)
+async def handle_redpill_call(arguments: Dict[str, Any]):
+	name = str(arguments.get("name") or "").strip()
+	payload = arguments.get("arguments") or {}
+	if not isinstance(payload, dict):
+		return [types.TextContent(type="text", text=json.dumps({"error": "invalid_arguments", "detail": "arguments debe ser un objeto"}))]
+	known = {tool.name for tool in registry.get_tools()}
+	actions = {action for parent in getattr(registry, "_actions", {}).values() for action in parent}
+	if name not in known and name not in actions:
+		suggestions = sorted(n for n in known if name.split("_")[0][:4] in n)[:3]
+		return [
+			types.TextContent(
+				type="text",
+				text=json.dumps({"error": "unknown_tool", "detail": name, "hints": suggestions}, ensure_ascii=False),
+			)
+		]
+	try:
+		return await registry.execute(name, payload)
+	except Exception as exc:  # noqa: BLE001 — error estructurado, no traza
+		return [
+			types.TextContent(
+				type="text",
+				text=json.dumps({"error": "invalid_arguments", "tool": name, "detail": str(exc)[:300]}, ensure_ascii=False),
+			)
+		]
 
 
 @server.call_tool()
@@ -4408,11 +4741,7 @@ async def handle_job_review(arguments: Dict[str, Any]):
 		undo = bool(arguments.get("undo"))
 		if qm.mark_review(task["id"], undo=undo):
 			if undo:
-				return [
-					types.TextContent(
-						type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga."
-					)
-				]
+				return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]}: reserva retirada (FRUSTRATED). Vuelve al pool de la purga.")]
 			return [
 				types.TextContent(
 					type="text",
@@ -4423,7 +4752,9 @@ async def handle_job_review(arguments: Dict[str, Any]):
 				)
 			]
 		esperado = "REVIEW" if undo else "FRUSTRATED"
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")]
+		return [
+			types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se reserva (o libera) desde {esperado}.")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_review falló: {e}")]
 
@@ -4460,7 +4791,9 @@ async def handle_job_discard(arguments: Dict[str, Any]):
 					type="text", text=f"[OK] Job {task['id'][:8]} cerrado definitivamente (CANCELLED). No se ejecutará ni contará como dolor."
 				)
 			]
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")]
+		return [
+			types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': solo se descarta desde REVIEW o FRUSTRATED.")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_discard falló: {e}")]
 

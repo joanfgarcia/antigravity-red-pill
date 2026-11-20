@@ -1,0 +1,81 @@
+[
+ {
+  "escenario": "A · buscar en un directorio",
+  "pasos": 2,
+  "llego_a_respuesta": true,
+  "uso_resultado": true,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "list_dir"
+    ],
+    "s": 0.91
+   },
+   {
+    "vuelta": 2,
+    "tools": [
+     "read_file",
+     "read_file",
+     "read_file"
+    ],
+    "s": 1.03
+   },
+   {
+    "vuelta": 3,
+    "sin_tool_calls": true,
+    "content": "Encontré **3 funciones async** en `src/`:\n\n| Archivo | Función | Línea |\n|---|---|---|\n| `src/a.py` | `async def foo()` | 2 |\n| `src/b.js` | `async def foo()` | 2 |\n| `src/c.py` | `async def foo()` | 2 |\n\nCada archivo contiene exactamente una función asíncrona llamada `foo`.",
+    "s": 1.89
+   }
+  ]
+ },
+ {
+  "escenario": "B · preguntar cuántas",
+  "pasos": 2,
+  "llego_a_respuesta": true,
+  "uso_resultado": true,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "list_dir"
+    ],
+    "s": 0.68
+   },
+   {
+    "vuelta": 2,
+    "tools": [
+     "grep"
+    ],
+    "s": 0.63
+   },
+   {
+    "vuelta": 3,
+    "sin_tool_calls": true,
+    "content": "Hay **2 funciones async** en `src/`:\n\n- `src/a.py:12` — `async def foo()`\n- `src/c.py:3` — `async def bar()`\n\n`src/b.js` no contiene ninguna función async.",
+    "s": 1.08
+   }
+  ]
+ },
+ {
+  "escenario": "C · mirar un fichero concreto",
+  "pasos": 1,
+  "llego_a_respuesta": true,
+  "uso_resultado": true,
+  "traza": [
+   {
+    "vuelta": 1,
+    "tools": [
+     "read_file"
+    ],
+    "s": 0.53
+   },
+   {
+    "vuelta": 2,
+    "sin_tool_calls": true,
+    "content": "Sí, `src/a.py` contiene una función async: `async def foo()`.",
+    "s": 0.41
+   }
+  ]
+ }
+]

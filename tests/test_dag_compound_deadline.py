@@ -226,3 +226,58 @@ def test_control_deadline_minutes_mapping(tmp_path, monkeypatch):
 		d.step(payload, ckpt)
 	assert exc.value.reason == "budget_exhausted"
 	assert exc.value.checkpoint["deferred_by_budget"] == 3
+
+
+def _corre_hasta_el_corte(tmp_path, monkeypatch, *, flag_f32: bool):
+	"""Arranca el manifiesto del contrato y devuelve (checkpoint del deferral, libro)."""
+	import red_pill.config as cfg
+	from red_pill.core import nightly_deferred as libro
+
+	_enable_deadline(monkeypatch)
+	monkeypatch.setattr(cfg, "NIGHTLY_DEFERRED_FIRST_ENABLED", flag_f32)
+	monkeypatch.setattr(libro, "get_state_dir", lambda: tmp_path / "state")
+
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_fanout_factory(monkeypatch, calls, ["i0", "i1", "i2", "i3", "i4", "i5"])
+	payload = _payload(str(ws), _deadline_manifest())
+
+	clock = {"t": 1000.0}
+	monkeypatch.setattr(_time, "time", lambda: clock["t"])
+	real_run = d._run_atomic
+
+	def _slow(payload_, stage_, path_, gate_=None):
+		if stage_.get("_item") is not None:
+			clock["t"] += 30.0
+		return real_run(payload_, stage_, path_, gate_)
+
+	monkeypatch.setattr(d, "_run_atomic", _slow)
+
+	ckpt = {}
+	for _ in range(4):
+		ckpt = d.step(payload, ckpt).new_checkpoint
+	with pytest.raises(JobDeferred) as exc:
+		d.step(payload, ckpt)
+	return exc.value.checkpoint, libro
+
+
+def test_f32_el_diferido_entra_en_el_libro_con_sus_noches(tmp_path, monkeypatch):
+	"""F3.2 (D-NB-16): al diferir se anota la UNIDAD (no la ruta) y sus noches.
+
+	La ruta (`plant/plant-3`) lleva índice de instancia y se recalcula cada noche;
+	la unidad (`i3`) es lo único estable para que el ciclo siguiente los ponga
+	primero.
+	"""
+	ckpt, libro = _corre_hasta_el_corte(tmp_path, monkeypatch, flag_f32=True)
+	assert ckpt["deferred_units"] == {"i3": 1, "i4": 1, "i5": 1}
+	assert set(libro.load()) == {"i3", "i4", "i5"}
+	assert libro.load()["i3"]["stage"] == "plant"
+
+
+def test_f32_flag_off_no_escribe_libro(tmp_path, monkeypatch):
+	"""Con el flag OFF el libro no existe: comportamiento exacto al de siempre."""
+	ckpt, libro = _corre_hasta_el_corte(tmp_path, monkeypatch, flag_f32=False)
+	assert "deferred_units" not in ckpt
+	assert libro.load() == {}

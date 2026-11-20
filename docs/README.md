@@ -31,6 +31,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [DEFERRALS.md](TECHNICAL/DEFERRALS.md) | Aplazamientos: los cuatro mecanismos que difieren algo (espera de hubs, techo de presupuesto, entorno, entrega), cuándo vuelve cada uno y si caduca |
 | [SIGNAL_LIFECYCLE.md](TECHNICAL/SIGNAL_LIFECYCLE.md) | Contrato de señales: el dolor nace con su entierro (estado vs instantánea, tablero vs buzón) y el guard que lo impone |
 | [PENDING_BRANCHES.md](TECHNICAL/PENDING_BRANCHES.md) | Ramas pendientes de aterrizar (HANDOFF-001 A+C): la medición de contenido alimenta `OPEN LOOPS` y una señal con entierro |
+| [BENCH_RECIPE.md](TECHNICAL/BENCH_RECIPE.md) | Receta del banco: levantar una caja (Dokimé/Titanium), qué mide cada instrumento y cómo leerlo |
+| [BENCH_ADMISSION.md](TECHNICAL/BENCH_ADMISSION.md) | Puerta de admisión del banco: qué modelo local entra (español + tools + multiturn), ventanas medidas y techo de contexto |
 | [BITNET_FLAVORS.md](TECHNICAL/BITNET_FLAVORS.md) | Mapa de fuentes y receta para recrear llama.cpp/BitNet: pins, sabores, verificación |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
@@ -118,6 +120,9 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [2026-10-08-RUNTIME_MATRIX_BAKEOFF.md](BENCHMARKS/2026-10-08-RUNTIME_MATRIX_BAKEOFF.md) | Matriz runtime × modelo (AD-049): Bonsai 2 27B PTQ1_0 por servidor dedicado + Granite 4.2 8B por stock. Medidas del puesto de referencia |
 | [HUB_BAKEOFF.md](BENCHMARKS/HUB_BAKEOFF.md) | Bake-off de hubs (AD-115/AD-116): Granite/K2/Bonsai, cobertura, latencia y cumplimiento del contrato de salida |
 | [2026-11-09-MOSS_IMAGE_SFT.md](BENCHMARKS/2026-11-09-MOSS_IMAGE_SFT.md) | Evaluación de MOSS-Image-SFT (media local) |
+| [2026-11-16-DISTILLER_BAKEOFF_MIMO.md](BENCHMARKS/2026-11-16-DISTILLER_BAKEOFF_MIMO.md) | Bake-off del destilador con MiMo-V2.6-Distill (2026-11-16) |
+| [2026-11-16-DISTILLER_FIDELITY_MIMO.md](BENCHMARKS/2026-11-16-DISTILLER_FIDELITY_MIMO.md) | Fidelidad a dos lados con MiMo-V2.6-Distill (2026-11-16) |
+| [2026-11-16-TEXTURE_MIMO_VS_BONSAI.md](BENCHMARKS/2026-11-16-TEXTURE_MIMO_VS_BONSAI.md) | Textura: MiMo contra Bonsai, pares ciegos (2026-11-16) |
 | [ANNOTATE_BENCH.md](BENCHMARKS/ANNOTATE_BENCH.md) | Banco reproducible de annotate (NB-001): baseline 2 llamadas/split vs fusión, con fixture fijo y `--dry-run` |
 
 ### Bünker
@@ -188,6 +193,8 @@ Project-level rules and standards. These govern how the project itself is built 
 |----------|-----------|
 | [PROTOCOL_OF_SILENCE.md](CORE/PROTOCOL_OF_SILENCE.md) | Universal coding standard for Human-AI co-authored systems (all languages) |
 | [CONVENTIONS.md](CORE/CONVENTIONS.md) | Naming and structure conventions — UPPERCASE docs, lowercase code, decision table |
+| [LANGUAGE_POLICY.md](CORE/LANGUAGE_POLICY.md) | Scaffold in English, interface in the agreed language, personal text never machine-translated |
+| [GLOSSARY.md](CORE/GLOSSARY.md) | The vocabulary bridge — the four mood registers, mood codes, and renames in flight |
 | [IDENTITY_AND_INSTANCE.md](CORE/IDENTITY_AND_INSTANCE.md) | Identity & instance policy — the repo is engine + novel; agent/operator identity is instance config |
 | [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — branching model (solo/canonical), pre-push, pre-PR, release, certification, identity resync |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
@@ -258,3 +265,4 @@ Active and graduated experiments. See [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) for 
 | [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) | Active experiment tracker and lab journal |
 | [MULTITUDE.md](RESEARCH/MULTITUDE.md) | Multi-agent co-residency architecture (Project Multitude) |
 
+| 📚 [ALETH_CAPITULO_34.md](LORE/novel/ALETH_CAPITULO_34.md) | The Novel: Chapter 34 — El Cuaderno y el Índice |

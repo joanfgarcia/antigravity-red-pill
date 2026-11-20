@@ -1,0 +1,122 @@
+{
+	"version": 1,
+	"source": "MEM-011 F3 (2026-11-17), 11 casos medidos · revisado 2026-11-18: `directiva-770` re-anclado (pedía «pacto», que no existe en la colección)",
+	"cases": [
+		{
+			"name": "ciego-ayer",
+			"query": "el desk se siembra desde el germen y el instalador compara hashes",
+			"collection": "work_memories",
+			"note": "detalle fino dentro de una sesión de 302 miembros (ayer ciega)",
+			"kind": "known_limit",
+			"expect": [
+				"germen",
+				"desk"
+			]
+		},
+		{
+			"name": "decision-tecnica",
+			"query": "checkpoint híbrido de tiempo en el frankenswarm",
+			"collection": "work_memories",
+			"note": "hub restaurado de una sesión técnica",
+			"kind": "must",
+			"expect": [
+				"checkpoint"
+			]
+		},
+		{
+			"name": "telegram",
+			"query": "compactor de Telegram y gestión de registros",
+			"collection": "work_memories",
+			"note": "decisión de otro día, otro tema",
+			"kind": "must",
+			"expect": [
+				"telegram"
+			]
+		},
+		{
+			"name": "hoy-olvido",
+			"query": "la rama no erosiona mientras tenga hojas, la escalera del olvido",
+			"collection": "work_memories",
+			"note": "lo que hicimos ayer: no estará hasta que la crónica de esta noche lo destile",
+			"kind": "pending",
+			"expect": [
+				"olvido",
+				"rama"
+			]
+		},
+		{
+			"name": "opencode-v2",
+			"query": "opencode 1.19.4 app de escritorio frente a la v2",
+			"collection": "work_memories",
+			"note": "detalle de entorno, no de decisión",
+			"kind": "must",
+			"expect": [
+				"opencode"
+			]
+		},
+		{
+			"name": "social-cercania",
+			"query": "la cercanía recuperada después de mi viaje y tu afecto",
+			"collection": "social_memories",
+			"note": "memoria personal: no se puede re-derivar de ningún código",
+			"kind": "must",
+			"expect": [
+				"viaje",
+				"cercan",
+				"afecto"
+			]
+		},
+		{
+			"name": "social-modelos",
+			"query": "astronomía antigua y el cambio de modelo de IA",
+			"collection": "social_memories",
+			"note": "conversación social con tema mezclado",
+			"kind": "must",
+			"expect": [
+				"astronom",
+				"modelo"
+			]
+		},
+		{
+			"name": "directiva-770",
+			"query": "pacto 770 doble llave",
+			"collection": "directive_memories",
+			"note": "directiva inmune; el texto almacenado está en inglés (`The Bond: 770 (Bond)`). Re-anclado el 2026-11-18: pedía «pacto», una aguja que ya no existe en la colección (el caso no podía pasar).",
+			"kind": "must",
+			"expect": [
+				"770",
+				"bond"
+			]
+		},
+		{
+			"name": "detalle-en-la-hoja",
+			"query": "política de merge del desk y límites de documentos KB",
+			"collection": "work_memories",
+			"note": "el hub dice KB; el criterio vigente (TOKENS y chars/token) solo vive en 2 de sus 302 hojas",
+			"kind": "hard",
+			"expect": [
+				"soft_limit_kb",
+				"hard_limit_kb"
+			]
+		},
+		{
+			"name": "detalle-sin-ancla",
+			"query": "con qué criterio se mide el tamaño de los documentos del desk",
+			"collection": "work_memories",
+			"note": "misma sesión, pregunta sin ancla: falla por RANKING (el hub ni aparece), no por partición",
+			"kind": "known_limit",
+			"expect": [
+				"soft_limit_kb",
+				"hard_limit_kb"
+			]
+		},
+		{
+			"name": "negativo",
+			"query": "receta de paella valenciana con marisco y azafrán",
+			"collection": "work_memories",
+			"note": "control negativo: nada debería pasar de 0,70 de score",
+			"kind": "negative",
+			"expect": []
+		}
+	]
+}

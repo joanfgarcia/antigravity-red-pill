@@ -140,6 +140,51 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 		sw._health_ts = time.time() - 200  # Simulate 200s ago
 		self.assertFalse(sw.is_healthy(timeout=120))
 
+	def test_idle_worker_keeps_heartbeat(self):
+		"""Un hilo idle NO es un hilo colgado: el latido sigue vivo (MET-001).
+
+		Con `Event.wait()` sin tope, `_health_ts` solo se refrescaba al despertar:
+		un pulse largo (>WATCHDOG_TIMEOUT sin tareas Samantha) parecía colgado y
+		el watchdog mataba un hilo sano (13 kills/24 h, medido el 2026-11-18, todos
+		con `task: None` al final de un despertar).
+		"""
+		from red_pill.inference import samantha_worker as sw_mod
+
+		with patch.object(sw_mod, "IDLE_HEARTBEAT_SECONDS", 0.05):
+			sw = sw_mod.SamanthaWorker()
+			sw.start()
+			try:
+				time.sleep(0.4)
+				self.assertTrue(sw.is_healthy(timeout=0.15), "el idle debe seguir latiendo")
+			finally:
+				sw.stop()
+				sw.join(timeout=5)
+
+	def test_stuck_cycle_still_reads_as_unhealthy(self):
+		"""El latido no maquilla un ciclo realmente atascado: ese sigue sin latir."""
+		import threading
+
+		from red_pill.inference import samantha_worker as sw_mod
+
+		entered = threading.Event()
+
+		def _stuck(_self):
+			entered.set()
+			time.sleep(0.6)
+
+		with patch.object(sw_mod, "IDLE_HEARTBEAT_SECONDS", 0.05):
+			with patch.object(sw_mod.SamanthaWorker, "_drain_cycle", _stuck):
+				sw = sw_mod.SamanthaWorker()
+				sw.start()
+				try:
+					sw.wake()
+					self.assertTrue(entered.wait(timeout=2), "el ciclo debía arrancar")
+					time.sleep(0.3)
+					self.assertFalse(sw.is_healthy(timeout=0.15), "un ciclo atascado no debe fingir salud")
+				finally:
+					sw.stop()
+					sw.join(timeout=5)
+
 
 class TestEnqueueHelper(unittest.TestCase):
 	"""Tests for the enqueue() convenience function."""
@@ -246,7 +291,9 @@ class TestCompactionCallback(unittest.TestCase):
 
 		# Verify messages were appended to the new session (summary echo not mirrored)
 		self.assertEqual(mock_tsm.append_message.call_count, 2)
-		mock_tsm.append_message.assert_any_call("new-session-id", "user", "[Resumen de la sesión anterior]: Test summary of previous conversation", mirror=False)
+		mock_tsm.append_message.assert_any_call(
+			"new-session-id", "user", "[Resumen de la sesión anterior]: Test summary of previous conversation", mirror=False
+		)
 
 	def test_compact_callback_aborts_when_reset_fails(self):
 		"""A failed handoff reset must leave the old leg active and not rotate."""

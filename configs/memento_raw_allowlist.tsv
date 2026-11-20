@@ -1,0 +1,21 @@
+# Sesiones de Memento SIN raw verbatim — imposible de recuperar, con motivo.
+# Generado el 2026-11-16 (AD-123). El gate --verify-raw falla ante cualquier
+# sesión SIN raw que NO esté en esta lista: así se detecta una regresión nueva.
+# fuente	sesion	motivo
+legacy	legacy-2026-10-03	raw_original_inexistente
+legacy	legacy-2026-10-04	raw_original_inexistente
+legacy	legacy-2026-10-05	raw_original_inexistente
+legacy	legacy-2026-10-06	raw_original_inexistente
+legacy	legacy-2026-10-07	raw_original_inexistente
+legacy	legacy-2026-10-08	raw_original_inexistente
+legacy	legacy-2026-10-09	raw_original_inexistente
+legacy	legacy-2026-10-27	raw_original_inexistente
+pi	01a16995-c758-77dd-a877-806782ffca60	ide_purgo_antes_del_espejo
+pi	01a16995-f15d-749a-b22d-54ba7771cedc	ide_purgo_antes_del_espejo
+pi	01a16996-11b5-72b5-be5b-f37562cdc945	ide_purgo_antes_del_espejo
+pi	01a16996-3a91-75e6-853e-0137c9b42861	ide_purgo_antes_del_espejo
+pi	01a16996-bfe4-7449-87f4-7ed0f587795b	ide_purgo_antes_del_espejo
+pi	01a1699d-402f-7585-b9e7-446ec49dd056	ide_purgo_antes_del_espejo
+telegram	telegram:31db5310-4fd5-4fe2-b2e6-0485efe628e7	ide_purgo_antes_del_espejo
+telegram	telegram:a4b56d50-7257-405e-8d0a-8f2abeef3558	ide_purgo_antes_del_espejo
+telegram	telegram:ade94fa0-3399-49d5-9def-93ab574a0758	ide_purgo_antes_del_espejo

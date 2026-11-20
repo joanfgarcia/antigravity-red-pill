@@ -33,7 +33,11 @@ manifest:
     - id: memento
       type: command
       minion: command_runner
-      command: .venv/bin/python scripts/memento_migrate.py
+      # `--backfill-raw`: invariante del Operador (2026-11-16) — toda sesión
+      # registrada debe conservar su raw del IDE para poder re-sintetizarse.
+      # Se repara en cada crónica; si la fuente ya no la sirve, se reconstruye
+      # desde el índice y queda marcada como tal.
+      command: .venv/bin/python scripts/memento_migrate.py --backfill-raw
       on_fail: warn
     # Fan-out por sesión (RFC-JOBDAG-002): `discover` lista el DELTA diario y
     # cada sesión es UN step → el progreso del job avanza por sesión (antes era
@@ -82,6 +86,18 @@ manifest:
       timeout: 5400
       on_fail: warn
       depends_on: [memento-distill]
+    # Reconciliación de huérfanos (2026-11-20, E-97e9d2): re-anotar cambia los
+    # títulos → stems nuevos → puntos nuevos en Qdrant; los viejos quedaban vivos
+    # apuntando a notas podadas. Medido antes de cablearlo: 1.969 puntos muertos
+    # en 8.493 revisados (1.880 work + 89 social). `--reconcile-only` no asciende:
+    # eso ya lo hace su etapa; esto solo cierra el ciclo de las notas reescritas.
+    - id: memento-reconcile
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/memento_ascend.py --reconcile-only
+      timeout: 1800
+      on_fail: warn
+      depends_on: [memento-annotate]
     # Contador del backlog (2026-11-03): lo que el tope dejó fuera de esta noche.
     # Acumulativo por naturaleza — lo que no se procesa sigue pendiente — y
     # visible en el tablón (`memento_backlog`, clase `sed`: escala con el tiempo
@@ -92,4 +108,4 @@ manifest:
       minion: command_runner
       command: .venv/bin/python scripts/report_memento_backlog.py
       on_fail: warn
-      depends_on: [memento-annotate]
+      depends_on: [memento-reconcile]

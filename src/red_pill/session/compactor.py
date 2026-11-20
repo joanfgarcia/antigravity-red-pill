@@ -118,10 +118,7 @@ def _safe_range_end(turns: List[dict], *, start: int, candidate: int) -> int:
 		if isinstance(calls, list) and calls:
 			ids = {str((c or {}).get("id") or "") for c in calls if isinstance(c, dict)}
 			orphan = any(
-				str(t.get("role") or "") == "tool"
-				and str(t.get("tool_call_id") or "") in ids
-				and int(t.get("seq") or 0) > end
-				for t in turns
+				str(t.get("role") or "") == "tool" and str(t.get("tool_call_id") or "") in ids and int(t.get("seq") or 0) > end for t in turns
 			)
 			if orphan:
 				end -= 1
@@ -227,7 +224,10 @@ class Compactor:
 		if end < start:
 			return None
 		selected = [
-			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+			t
+			for t in turns
+			if start <= int(t.get("seq") or 0) <= end
+			and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
 		]
 		if not selected:
 			return None
@@ -267,7 +267,10 @@ class Compactor:
 		mission = str(pending["mission_id"])
 		turns = self.mirror.read_turns(continuity)
 		selected = [
-			t for t in turns if start <= int(t.get("seq") or 0) <= end and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
+			t
+			for t in turns
+			if start <= int(t.get("seq") or 0) <= end
+			and not (str(t.get("source") or "") == "compactor" and str(t.get("source_ref") or "").startswith("compact:"))
 		]
 		if not selected:
 			self.mirror.abort_compaction(compaction_id, reason="empty_range")
@@ -291,9 +294,7 @@ class Compactor:
 		# ahí no hay nada que ganar, pero tampoco se bloquea el turno.
 		if tokens_before >= 512 and tokens_after >= tokens_before:
 			self.mirror.abort_compaction(compaction_id, reason="summary_not_smaller")
-			raise CompactionError(
-				f"el resumen no reduce el contexto ({tokens_before}→{tokens_after} tokens)"
-			)
+			raise CompactionError(f"el resumen no reduce el contexto ({tokens_before}→{tokens_after} tokens)")
 		try:
 			done = self.mirror.complete_compaction(
 				compaction_id,
@@ -442,9 +443,7 @@ class Compactor:
 		existing = None
 		for source in ("script_job", "samantha"):
 			try:
-				existing = qm.find_task_by_payload_key(
-					source=source, key="continuity_id", value=continuity, limit=None
-				)
+				existing = qm.find_task_by_payload_key(source=source, key="continuity_id", value=continuity, limit=None)
 			except Exception:
 				existing = None
 			if existing:

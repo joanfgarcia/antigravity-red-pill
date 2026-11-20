@@ -210,3 +210,63 @@ class TestMCPMemoryActions:
 		# Test Directory Traversal Security Block
 		res_block = await handle_read_workspace_memory({"workspace": "mcp_test", "filename": "../../../etc/passwd"})
 		assert "[ERROR] Security block" in res_block[0].text
+
+
+class TestMCPWorkspaceMemoryErrores:
+	"""El banco de workspaces no puede fallar en silencio (medido 2026-11-18).
+
+	Dos formas de no encontrar el banco, las dos vistas en el log del daemon:
+	el argumento ausente (el handler moría con KeyError('workspace') y el
+	registro solo dejaba `execution failed: 'workspace'`) y el nombre equivocado
+	(`workspace="sharing"` sobre un registro que lo llama `red-pill-sharing`).
+	"""
+
+	@pytest.mark.asyncio
+	@patch("red_pill.core.workspaces.list_workspaces")
+	async def test_sin_workspace_no_revienta_y_dice_que_nombres_existen(self, mock_list):
+		mock_list.return_value = [Workspace(name="red-pill-sharing", root="/tmp/sharing", memory=True)]
+
+		from red_pill.mcp_server import handle_read_workspace_memory
+
+		res = await handle_read_workspace_memory({"filename": "MEMORY.md"})
+
+		assert "[ERROR] Missing 'workspace' argument" in res[0].text
+		# El registro real es la única fuente de nombres: el error los cita.
+		assert "red-pill-sharing" in res[0].text
+
+	@pytest.mark.asyncio
+	@patch("red_pill.core.workspaces.list_workspaces")
+	async def test_sin_workspace_en_list_y_write_tampoco_revienta(self, mock_list):
+		mock_list.return_value = [Workspace(name="red-pill-sharing", root="/tmp/sharing", memory=True)]
+
+		from red_pill.mcp_server import handle_list_workspace_memory, handle_write_workspace_memory
+
+		for res in (
+			await handle_list_workspace_memory({}),
+			await handle_write_workspace_memory({"filename": "MEMORY.md", "content": "x"}),
+		):
+			assert "[ERROR] Missing 'workspace' argument" in res[0].text
+
+	@pytest.mark.asyncio
+	@patch("red_pill.core.workspaces.list_workspaces")
+	@patch("red_pill.core.workspaces.find_workspace", return_value=None)
+	async def test_workspace_desconocido_lista_los_registrados(self, _mock_find, mock_list):
+		mock_list.return_value = [
+			Workspace(name="red-pill-sharing", root="/tmp/sharing", memory=True),
+			Workspace(name="frankenswarm", root="/tmp/frankenswarm", memory=True),
+		]
+
+		from red_pill.mcp_server import handle_read_workspace_memory
+
+		res = await handle_read_workspace_memory({"workspace": "sharing", "filename": "MEMORY.md"})
+
+		assert res[0].text.startswith("[ERROR] Workspace 'sharing' not found in registry.")
+		assert "red-pill-sharing" in res[0].text and "frankenswarm" in res[0].text
+
+	@pytest.mark.asyncio
+	async def test_filename_ausente_no_revienta(self):
+		from red_pill.mcp_server import handle_read_workspace_memory
+
+		res = await handle_read_workspace_memory({"workspace": "red-pill-sharing"})
+
+		assert "[ERROR] Missing 'filename' argument" in res[0].text

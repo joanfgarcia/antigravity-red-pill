@@ -102,14 +102,8 @@ class CognitiveQueueManager:
 					conn.execute(ddl)
 				except sqlite3.OperationalError:
 					pass
-			conn.execute(
-				"CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_continuity "
-				"ON cognitive_tasks(continuity_id, status)"
-			)
-			conn.execute(
-				"CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_parent_mission "
-				"ON cognitive_tasks(parent_mission_id, status)"
-			)
+			conn.execute("CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_continuity ON cognitive_tasks(continuity_id, status)")
+			conn.execute("CREATE INDEX IF NOT EXISTS idx_cognitive_tasks_parent_mission ON cognitive_tasks(parent_mission_id, status)")
 
 			# A4 (2026-10-27): marca de cancelación MONOTÓNICA. Un kill sella el
 			# job con el instante de la orden; ninguna transición del runner puede
@@ -161,9 +155,7 @@ class CognitiveQueueManager:
 				if parent_status == "COMPLETED":
 					initial_status = "PENDING"
 				elif parent_status in ("FRUSTRATED", "CANCELLED"):
-					raise ValueError(
-						f"el padre {parent_task_id} está {parent_status}: el hijo nunca arrancaría (re-encola el padre primero)"
-					)
+					raise ValueError(f"el padre {parent_task_id} está {parent_status}: el hijo nunca arrancaría (re-encola el padre primero)")
 			conn.execute(
 				"""
 				INSERT INTO cognitive_tasks (
@@ -200,9 +192,7 @@ class CognitiveQueueManager:
 				row = conn.execute("SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1").fetchone()
 			return row is not None
 
-	def find_task_by_payload_key(
-		self, source: str, key: str, value: str, *, limit: Optional[int] = 10
-	) -> Optional[Dict[str, Any]]:
+	def find_task_by_payload_key(self, source: str, key: str, value: str, *, limit: Optional[int] = 10) -> Optional[Dict[str, Any]]:
 		"""Find a task by a key in its JSON payload. Used for exclusion checks."""
 		sql = """
 			SELECT id, source, status, payload
@@ -461,10 +451,7 @@ class CognitiveQueueManager:
 				"SELECT status, cancel_requested_at FROM cognitive_tasks WHERE id = ?",
 				(task_id,),
 			).fetchone()
-			if row and (
-				row["cancel_requested_at"] is not None
-				or str(row["status"]) in ("PAUSING", "PAUSED", "FRUSTRATED", "CANCELLED")
-			):
+			if row and (row["cancel_requested_at"] is not None or str(row["status"]) in ("PAUSING", "PAUSED", "FRUSTRATED", "CANCELLED")):
 				conn.execute(
 					"UPDATE cognitive_tasks SET error_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 					(error_msg, task_id),
@@ -706,7 +693,9 @@ class CognitiveQueueManager:
 		Complementa a purge_hygiene (temporal, nocturna): esto es la versión en
 		caliente y dirigida.
 		"""
-		allowed = ("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED", "PAUSED", "BLOCKED") if force else ("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED")
+		allowed = (
+			("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED", "PAUSED", "BLOCKED") if force else ("FRUSTRATED", "COMPLETED", "REVIEW", "CANCELLED")
+		)
 		placeholders = ",".join("?" for _ in allowed)
 		with self._get_connection() as conn:
 			# Auditoría adversarial (2026-09-23): borrar un padre PAUSED/BLOCKED con
@@ -1005,8 +994,7 @@ class CognitiveQueueManager:
 			# A4: reanudar es la ÚNICA puerta que limpia la marca de cancelación.
 			if current_status == "PAUSING":
 				conn.execute(
-					"UPDATE cognitive_tasks SET status = 'PROCESSING', cancel_requested_at = NULL, "
-					"updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					"UPDATE cognitive_tasks SET status = 'PROCESSING', cancel_requested_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 					(task_id,),
 				)
 				return True

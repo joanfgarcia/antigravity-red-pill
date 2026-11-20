@@ -34,6 +34,35 @@ from red_pill.jobs.drivers.dag_manifest import (
 logger = logging.getLogger(__name__)
 
 
+def _fanout_units(stages: List[Dict[str, Any]], paths: List[str]) -> List[str]:
+	"""Unidades (`source:session`) de las hojas de fan-out indicadas.
+
+	El checkpoint guarda RUTAS (`.../memento-distill-4`), que se recalculan cada
+	noche con índices nuevos; el libro de diferidos usa la unidad, que sobrevive
+	al re-índice (D-NB-16). Una hoja sin `_item` es una etapa atómica normal: no
+	hay unidad que anotar.
+	"""
+	from red_pill.core.nightly_deferred import normalize_unit
+
+	units: List[str] = []
+	for leaf_path in paths:
+		node = _find_node_by_path(stages, leaf_path)
+		unit = normalize_unit((node or {}).get("_item"))
+		if unit:
+			units.append(unit)
+	return units
+
+
+def _deferred_first_enabled() -> bool:
+	"""Flag F3.2 (RULE 4). OFF → el driver no escribe ni limpia el libro."""
+	try:
+		import red_pill.config as cfg
+
+		return bool(getattr(cfg, "NIGHTLY_DEFERRED_FIRST_ENABLED", False))
+	except Exception:
+		return False
+
+
 class DagScheduleMixin:
 	"""Scheduling hooks mixed into `DagJobDriver` (methods keep `self` access)."""
 
@@ -371,10 +400,7 @@ class DagScheduleMixin:
 			# degradados no puede sellarse como si nada hubiera pasado.
 			final_soft = dict(checkpoint_data.get("soft_failures") or {})
 			if final_soft:
-				logger.error(
-					f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): "
-					f"{', '.join(sorted(final_soft))}"
-				)
+				logger.error(f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}")
 			final_ckpt = {
 				**checkpoint_data,
 				**identity,
@@ -397,7 +423,8 @@ class DagScheduleMixin:
 				# persistir el skip y la lista congelada en el checkpoint final
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint=final_ckpt,
-				summary="dag complete" + summary_extra
+				summary="dag complete"
+				+ summary_extra
 				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else ""),
 				progress={
 					"current": leaves_done,
@@ -436,6 +463,20 @@ class DagScheduleMixin:
 				fresh = [p for p in new_deferred if p not in seen_deferred]
 				all_deferred = deferred_ids + fresh
 				counter = deferred_budget + len(fresh)
+				# F3.2 (D-NB-16): el libro de diferidos se escribe para que la
+				# próxima noche los ponga PRIMERO. Solo las NUEVAS: una reentrada
+				# del job no puede contar dos veces la misma noche.
+				deferred_units: Dict[str, int] = {}
+				if fresh and _deferred_first_enabled():
+					try:
+						from red_pill.core import nightly_deferred
+
+						units = _fanout_units(stages, fresh)
+						nightly_deferred.record(units, stage=",".join(sorted(set(cut_owners))))
+						libro = nightly_deferred.load()
+						deferred_units = {u: nightly_deferred.nights(libro, u) for u in units if nightly_deferred.nights(libro, u) > 0}
+					except Exception as e:  # noqa: BLE001 — el libro no tumbla la noche
+						logger.debug(f"[DagJob] libro de diferidos no escrito: {e}")
 				new_completed = list(completed)
 				for prefix in closed:
 					if prefix not in new_completed:
@@ -453,6 +494,10 @@ class DagScheduleMixin:
 					"deferred_stage_ids": all_deferred,
 					"deferred_by_budget": counter,
 				}
+				if deferred_units:
+					# Publicado con la unidad y sus noches: cerrar el job no puede
+					# silenciar el backlog (D-NB-07/16).
+					deferred_ckpt["deferred_units"] = deferred_units
 				if checkpoint_data.get("soft_failures"):
 					deferred_ckpt["soft_failures"] = dict(checkpoint_data["soft_failures"])
 				if stage_seconds:
@@ -621,6 +666,15 @@ class DagScheduleMixin:
 			new_results[path] = summary
 			new_flags[path] = "done"
 			new_completed.append(path)
+
+		# F3.2 (D-NB-16): la unidad que se procesó sale del libro de diferidos.
+		if all_tasks and _deferred_first_enabled():
+			try:
+				from red_pill.core import nightly_deferred
+
+				nightly_deferred.clear(_fanout_units(stages, [p for p, _s, failed, _e in all_tasks if not failed]))
+			except Exception as e:  # noqa: BLE001
+				logger.debug(f"[DagJob] libro de diferidos no limpiado: {e}")
 
 		# Propagar completitud de los compuestos: un nodo compuesto se marca done
 		# cuando todas sus hojas descendientes están terminales (done o diferidas

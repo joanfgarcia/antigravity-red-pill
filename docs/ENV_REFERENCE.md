@@ -54,7 +54,7 @@ This document provides a comprehensive list of all parameters available in the `
 | `METABOLISM_STRATEGY`| `LAZY` | Calculation mode: `CLASSIC` run as a loop, `LAZY` calculated at query time. |
 | `METABOLISM_COOLDOWN`| `3600` | Minimum seconds between global erosion cycles. |
 | `ABSENCE_THRESHOLD`| `259200` (3 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
-| `MAX_SINK_TIME` | `2592000` (30 days)| Total max time an engram survives before a `Gran Purge` irrevocably destroys it. |
+| `MAX_SINK_TIME` | `2592000` (30 days)| **DEPRECATED** (RFC-OLV-001 D-07): la Gran Purga automática se retiró; el sumidero es el escalón 0 de la escalera. Solo la purga manual de MCP lo usa (con `ALLOW_PURGE`). |
 | `DECAY_STRATEGY` | `linear` | Mathematical model to apply score reduction (`linear` or `exponential`). |
 | `EROSION_RATE` | `0.01` | How much reinforcement score is removed per cycle. At 0.01, standard memories last ~4 days without reinforcement. |
 | `IMMUNITY_THRESHOLD`| `10.0` | Any memory achieving this reinforcement score becomes un-erasable ("immune"). |
@@ -272,7 +272,7 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_GATE_MIN_SIGNIFICANCE` | `0.5` | **Provisional (Q4 open)**: threshold of the shadow would-ingest decision. |
 | `MEMENTO_AGENTIC_NIGHT_LIMIT` | `30` | Tope de **sesiones** por ciclo nocturno (coste fijo: una llamada de distill + una de annotate por sesión, ~2,6 min de mediana). Medido (82 días): mediana 8/día, media 10,8, p90 20, máx 59. El orden es stale-first (backlog viejo antes que lo de anoche). `0` = sin tope. |
 | `MEMENTO_AGENTIC_NIGHT_MSG_LIMIT` | `3000` | Tope de **mensajes** por ciclo nocturno (coste variable: ~2 s/msg medidos). Se aplica junto al de sesiones y gana el que se cruce primero; la primera sesión entra siempre. 3.000 deja en una noche el 79/81 de los días; el peor (8.731 msgs) cae en 3. `0` = sin tope. |
-| `MEMENTO_ANNOTATE_FROM_RAW` | `False` | **MEM-006 stage switch.** ON: the agentic pass writes `annotate/` (idea-level notes from the RAW, one compression) instead of the legacy `refine/` (re-summaries of distill sections). OFF keeps legacy. |
+| `MEMENTO_ANNOTATE_FROM_RAW` | `False` | **MEM-006 stage switch.** ON: the agentic pass writes `annotate/` (idea-level notes from the RAW, one compression) instead of the legacy `refine/` (re-summaries of distill sections). OFF keeps legacy — but `--phase annotate` **requires** the flag ON: with OFF there is no notes phase (legacy `refine` needs the sections distilled in the same run, i.e. no `--phase`), so the CLI refuses at startup and the runner skips without touching disk (E-97e9d2). |
 | `MEMENTO_ANNOTATE_VOICE_REWRITE` | `False` | Within annotate: rewrite notes that are not first-person (MEM-006 Q8 lever). The identity Bio alone does not fix voice with granite; pilot: 36% → 100% first person. |
 | `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
 | `RP_IDENTITY_BIO` | `""` (→ config dir) | Explicit path to the identity Bio file. Default precedence: `~/.config/red-pill/identity_bio.md` → neutral `identity_bio.template.txt` in the repo. Personal data never lives in the public repo. |
@@ -289,10 +289,11 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_MAX_HUB_INPUT_CHARS` | `8000` | Presupuesto de chars por llamada de hub. Si el prompt no cabe, `synthesize_hub_v2` aplica map-reduce (no trunca). No es el `n_ctx` del modelo. |
 | `SLEEP_HUB_MAP_REDUCE_ENABLED` | `True` | **Deprecated.** El over-budget SIEMPRE se resuelve con map-reduce (lotes → parciales → reducción en árbol); ya no existe el recorte legacy. |
 | `SLEEP_HUB_MAX_CHUNKS_PER_BATCH` | `48` | Tope blando de fragmentos por lote (0 = sin tope; manda el presupuesto de chars). |
-| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `900` | **Target de síntesis** del summary maestro. Si se supera, se reescribe (compaction); si el modelo no baja, se conserva **entero** y se marca `hub_summary_over_budget=true`. Nunca se corta. El número viaja también en el prompt del maestro: el modelo sabe el presupuesto **antes** de escribir. |
+| `SLEEP_HUB_SUMMARY_TARGET_CHARS` | `800` | **Target de síntesis** del summary maestro. Si se supera, se reescribe (compaction); si el modelo no baja, se conserva **entero** y se marca `hub_summary_over_budget=true`. Nunca se corta. El número viaja también en el prompt del maestro: el modelo sabe el presupuesto **antes** de escribir. Bajado de 900 a 800 el 2026-11-19: Granite-4.1-8B se pasa un 16-22 % del objetivo y chocaba con el tope duro de 1000 (ver `observations` en `model_profiles.yaml`). |
+| `SLEEP_HUB_ROOT_TARGET_CHARS` | `700` | Target del **maestro/raíz** (la llamada que resume las partes). La raíz se pasa más que las partes: medido 2026-11-20, con 800 escribió 1035 y chocó con el tope duro 1000; 700 deja margen. El tope duro (`SLEEP_HUB_SUMMARY_HARD_LIMIT`) sigue en 1000. |
 | `SLEEP_HUB_SUMMARY_HARD_LIMIT` | `1000` | Tope duro del summary escrito: por encima no se escribe el hub (se reintenta; el detalle vive en Memento). El margen entre `TARGET` y `HARD_LIMIT` absorbe el desvío normal del modelo sin recortar nada (AD-115: nunca se corta). |
 | `SW_HUB_SYNTH_MAX_REJECTIONS` | `2` | Compuerta de coste: rechazos con el **mismo** `hub_input_hash` antes de que la sesión quede **EN ESPERA** (`waiting`) sin pagar otra síntesis. `0` = sin compuerta (reintento cada ciclo). Los fallos transitorios (proveedor caído) no cuentan. |
-| `SW_HUB_SYNTH_WAIT_RETRY_DAYS` | `7.0` | Caducidad de la **espera**: pasados estos días la sesión merece **un** intento más, y un fallo re-arma la ventana (una síntesis por ventana y sesión). `0` = espera indefinida. La espera se publica como INFO (`hub_synthesis_waiting`) con su fecha; el dolor (`hub_synthesis_failed`) es solo del fallo. Vocabulario completo: `docs/TECHNICAL/DEFERRALS.md`. |
+| `SW_HUB_SYNTH_WAIT_RETRY_DAYS` | `7.0` | Caducidad de la **espera**: pasados estos días la sesión merece **un** intento más, y un fallo re-arma la ventana (una síntesis por ventana y sesión). `0` = espera indefinida. La espera se publica como INFO (`hub_synthesis_waiting`) con su fecha; el dolor (`hub_synthesis_failed`) es solo del fallo. **Latch, no flag de rollout** (su OFF es el defecto previo; AD-120); lectura única en `hub_synthesis.wait_window_days()`. Vocabulario completo: `docs/TECHNICAL/DEFERRALS.md`. |
 | `SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura del summary (síntesis, nunca corte). |
 | `SLEEP_HUB_TEXTURE_MAX_CHARS` | `400` | **Target de síntesis** de la textura (2-3 frases). Si no baja, se conserva entera y se marca `hub_texture_over_target=true`; si supera el tope de metadata, se parte en `texture_parts` sin perder contenido. |
 | `SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS` | `2` | Intentos de reescritura de la textura (síntesis). |
@@ -303,8 +304,11 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_HUB_LARGE_MODEL` | `k2_horizon_7b` | Modelo para llamadas grandes (candidato del perfil `hub`; `thinking: off`). |
 | `SLEEP_HUB_LARGE_PROMPT` | `hub_synthesis_v2_concise.txt` | Prompt del maestro para llamadas grandes (presupuesto 700-900 chars). |
 | `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
-| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
-| `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
+| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | **DEPRECATED** (RFC-OLV-001 D-08). El guard se retiró: la ausencia cuesta 0 en días activos. |
+| `SW_EROSION_DEMOTE_ENABLED` | `False` | **DEPRECATED** (RFC-OLV-001 D-03). El demote de curados se retiró: los curados siguen la escalera. |
+| `SW_FORGETTING_LADDER_MODE` | `off` | Escalera del olvido (RFC-OLV-001): `off` · `dry_run` · `enforce`. Mide en **días activos**. En `enforce`, la primera purga espera a que pasen los días activos desde el arranque (D-16). |
+| `SW_FORGETTING_MAX_PURGES_PER_CYCLE` | `50` | Rampa: máximo de purgas por pasada y colección (0 = sin tope). Se purga primero lo más parado. Sin tope, el día que se agota la gracia D-16 caen 7.657 de golpe. |
+| `SW_BRANCH_REAPER_MODE` | `dry_run` | Reaper de ramas sin hojas (RFC-OLV-001, D-02). Interruptor **independiente**: `off` · `dry_run` · `enforce`. |
 | `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
 | `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |
 | `INTERACTION_MAX_AGE_DAYS` | `30` | Tope duro de edad del buffer: lo no renderizado más viejo se purga (con señal). |
@@ -320,9 +324,9 @@ Plugins 05–10. Each is independently toggleable.
 | `RHIZODB_WASHOUT_GAMMA` | `0.85` | Retención del washout (`a_v ← γ·a_v + (1−γ)·b(s_v)`). γ se atenúa por el tiempo transcurrido desde el último washout de la colección. |
 | `RHIZODB_WASHOUT_REFERENCE_DAYS` | `1.0` | Ventana de referencia de la atenuación (cap): una doble corrida el mismo día no poda dos veces la misma franja temporal. |
 | `RHIZODB_S_MAX` | `365.0` | Techo de estabilidad (días) del término `b(s_v)` del washout. |
-| `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Poda estructural: borra si `a_v` cae por debajo de este valor **y** `s_v < RHIZODB_PRUNE_MAX_STABILITY_DAYS`. |
+| `RHIZODB_PRUNE_MIN_ACTIVATION` | `0.1` | Candidato de poda: desde RFC-OLV-001 **ya no borra**; se registra y decide la escalera. |
 | `RHIZODB_PRUNE_MAX_STABILITY_DAYS` | `5.0` | Umbral de estabilidad (días) de la poda estructural. |
-| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por `erode_curated` (5a/10a). OFF = comportamiento previo a AD-048. |
+| `RHIZODB_WASHOUT_SKIP_CURATED` | `True` | El washout genérico no toca curados (`memento_engram`/`origin=memento`/`hubbed`): su olvido va por la escalera (RFC-OLV-001). OFF = comportamiento previo a AD-048. |
 
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`
@@ -357,6 +361,7 @@ primeros viven en `.env.example`; los otros tres son tunables de `config.py`
 | `MEMENTO_DISTILL_REUSE_ENABLED` | `False` | F2a — reuso incremental por unidad en distill. ON: `distill/_meta.json` persiste por `unit_key` (rango de mensajes) el `content_hash` + `prompt_version`/`engine`/fragmentación y reusa las secciones intactas entre noches en vez de borrar y rehacer. Una sección `degraded` jamás se reusa. OFF: regeneración completa. |
 | `MEMENTO_ANNOTATE_REUSE_ENABLED` | `False` | F2b — reuso incremental por unidad en annotate. ON: `annotate/_meta.json` persiste por `unit_key` el `content_hash` + `annotate_prompt_version`/`engine` + notas por unidad y reusa las unidades intactas sin llamar al modelo. `_partial.json` sigue como checkpoint intra-run. OFF: extracción completa, sin `units` en el meta. |
 | `JOB_COMPOUND_DEADLINE_ENABLED` | `False` | F3 — techo de pared por compuesto en `dag_job`. ON: `control.deadline_minutes` (o `deadline_minutes` por compuesto, clamp `[0,720]`) acota el fan-out de cada compuesto; agotado → `JobDeferred("budget_exhausted")` + `deferred_by_budget` en el checkpoint. Solo corta fan-out; la cola del sueño nunca se difiere. Un compuesto SIN fan-out (el sueño: 16 etapas atómicas) no queda acotado por más que declare minutos. OFF: comportamiento actual exacto. |
+| `NIGHTLY_DEFERRED_FIRST_ENABLED` | `False` | F3.2 — lo diferido por techo vuelve **primero** en el ciclo siguiente: `noches desc · coste asc · stale-first`. ON: el driver anota la unidad (`source:session`) en `state/nightly_deferred.json` al diferir y la limpia al procesarla; la selección la pone delante. El contador vive fuera del job porque cada noche es un job nuevo y el checkpoint no cruza. El desempate por **coste ascendente** evita que el monstruo vuelva a comer la noche entera (la selección corta con `break`: el orden decide quién queda fuera). OFF: el driver no escribe y la selección no lee (orden byte-idéntico). |
 
 Presupuestos de la fase F5 (`MEMENTO_NIGHT_COST_MODEL_ENABLED` ON):
 
@@ -508,6 +513,7 @@ Code-default value shown; override by the field name via env.
 | `CURATED_LIFETIME_MULTIPLIER_WORK` | `1.0  # factor por motor (work=Bayesiano)` |
 | `CURIOSITY_ENGINE_ENABLED` | `True` |
 | `CURIOSITY_PROFILE` | `"balanced"` |
+| `DECLARED_MOOD_ENABLED` | `False` |
 | `DEFAULT_COLOR` | `"gray"` |
 | `DEFAULT_EMOTION` | `"neutral"` |
 | `DUAL_BIND_PROXY_URL` | `"http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)` |
@@ -515,7 +521,6 @@ Code-default value shown; override by the field name via env.
 | `EMERGENCY_CLOUD_OVERRIDE` | `False` |
 | `FLOW_REGISTRY_PATH` | `os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "flow_registry.yaml")` |
 | `GRAPHIFY_RAG_ENABLED` | `True` |
-| `HEDONIC_SET_POINT_COLOR` | `"emerald"` |
 | `ICE_MODE_ENABLED` | `False` |
 | `IDENTITY_DEPTH_HEADLESS` | `"low"` |
 | `IDENTITY_DEPTH_IDE` | `"full"` |

@@ -145,7 +145,6 @@ class OpenCodeBridge(AgentBridge):
 		# hash check in enqueue_memory is the one that actually guarantees it.
 		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
 
-
 	# ── Handshake preamble ────────────────────────────────────────────────
 	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
 	# Tools appear under resource group names: bunker_memory_api, swarm_orchestrator_api.

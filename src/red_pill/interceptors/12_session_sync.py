@@ -178,9 +178,7 @@ class SessionSyncPlugin(BaseInterceptorPlugin):
 			role = str(row.get("role") or "task")
 			state = "en vuelo" if s.in_flight else "activa"
 			age_s = max(0, int(time.time() - (s.start_mtime or time.time())))
-			missions.setdefault(mission, []).append(
-				f"[{sanitize_inline(s.provider, 40)}] {sanitize_inline(role, 20)} · {state} · hace {age_s}s"
-			)
+			missions.setdefault(mission, []).append(f"[{sanitize_inline(s.provider, 40)}] {sanitize_inline(role, 20)} · {state} · hace {age_s}s")
 
 		lines = [f"--- SYNC: global_turn={turn} · {len(signals)} otra(s) viva(s) ---"]
 		if not missions:

@@ -193,9 +193,7 @@ class CloudSyncPlugin(SovereignPlugin):
 			if self.folder_id:
 				file_metadata["parents"] = [self.folder_id]
 			media = MediaFileUpload(kit_path, mimetype="application/octet-stream", resumable=True)
-			file = self.service.files().create(
-				body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
-			).execute()
+			file = self.service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
 			file_id = str(file.get("id") or "")
 			logger.info(f"CloudSync: Upload successful. File ID: {file_id}")
 			return file_id or None

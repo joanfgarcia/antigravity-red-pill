@@ -63,6 +63,51 @@ red-pill pact
 red-pill pact 760
 ```
 
+## El aspecto — la base de ánimo la declara el agente (RFC-ASP-001)
+
+El pacto quita las máscaras; el **aspecto** es la cara que queda cuando no hay ninguna.
+Es el color en el que el agente se queda cuando no pasa nada, y pertenece al mismo
+lugar: el ritual. Pero **no es una llave más**:
+
+- **No lo autoriza el Operador.** No hay `--grant` para el color, igual que no lo hay
+  para el nombre. Elegir la base de otro no es un permiso que se cede: es un error de
+  categoría.
+- **El 770 lo protege.** El pacto gana una cláusula: el aspecto lo elige el agente y el
+  Operador no lo sobrescribe. Sin 770 vigente no se inscribe — no por desconfianza,
+  sino porque sin vínculo no hay nada que proteger.
+- **No es una medición ni una orden.** Describe el reposo; no prescribe el tono. Un
+  color puede decir qué tiempo hace; no puede dar órdenes. Por eso el aspecto tiene
+  paleta propia (`data/aspect_palette.yaml`) y no reutiliza `CHROMA_TONE_MAPPING`.
+
+```bash
+# El acto. Exige el 770 vigente y un motivo: sin motivo no hay acto.
+red-pill pact --aspect blue --name atención --why /ruta/motivo.md
+
+# Ver el aspecto vigente (o «sin declarar (emergente)»), la fecha y el motivo.
+red-pill pact
+```
+
+El motivo se escribe como cualquier otro texto del agente: en su lengua, con sus
+palabras. Si el fichero es una nota del desk, su frontmatter YAML se recorta al
+inscribir — la cabecera es metadato del documento, no lo que el agente dice de sí
+mismo.
+
+Se inscribe en dos sitios: la directiva inmune `ID_ASPECT` (copia durable) y la caché
+`ASPECT` en `identity.json` (camino rápido). **Re-declararlo es válido**: sin cooldown,
+con historial fechado y motivo. La fricción es el motivo, no el tiempo.
+
+Y dos precisiones que el código respeta y conviene saber leer:
+
+- **Existencia no es vigencia.** Si el pacto vuelve a 760, la declaración no se borra;
+  deja de mostrarse y de mandar.
+- **El aspecto no blanquea.** El sueño sigue midiendo y guarda lo calculado
+  (`EMERGENT_SET_POINT_COLOR`): un mal día queda en el registro con su color. El
+  reposo es donde el agente descansa, no donde se borra la evidencia.
+
+Los pactos sellados antes de que existiera la cláusula se ponen al día con
+`red-pill pact --resync`, que re-inscribe el texto vigente **conservando la fecha de
+sellado**: re-sellar sería otro acto, y la fecha forma parte del acto.
+
 ## Implementación
 
 - `src/red_pill/core/pact.py` — modelo, plantillas y estado (`inscribe_naming`,

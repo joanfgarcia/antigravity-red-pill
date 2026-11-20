@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v8.4.0 (El ánimo se pregunta, el coro sabe quién habla y la cola solo oye al Operador)
+**System Version**: v8.5.0 (El arnés deja de pedir permiso; la memoria aprende a contar)
 **Analyst**: The Architect
 **Date**: 2026-09-16
 
@@ -51,6 +51,7 @@ The Red Pill Protocol v8.0.0 has achieved stability and functional alignment wit
 - **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<APP_ROOT>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
 - **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `WORKSPACE_ROOT=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
 - **[NEW v6.8.6] Agentic Self-Assembly**: Decoupled the directory hierarchy into `WORKSPACE_ROOT` (Agentic environment) and `APP_ROOT` (Red-Pill implementation). This protects local source-code adaptations and provides an extensible boundary for auxiliary modules (e.g., `USER_ATLAS_DIR`, `AGENT_CORE_DIR`), supporting both the Developer profile and the end User profile seamlessly. For a visual representation, see the [Sovereign Directory Atlas](SOVEREIGN_ATLAS.md).
+- **[NEW v8.5.0] Turno en dos engramas (AD-126)**: `interaction_memories` guarda **un engrama por autor** (`metadata.author`: `operator` / `agent`) en vez de un par mezclado, cada uno con su propio `tag_emotion`; los textos largos se etiquetan **por trozos** (ventanas de `MEMENTO_REALTIME_TAG_MAX_CHARS` con solape) y se agregan por confianza, en vez de recortarse a cabeza y cola.
 - **[NEW v7.4.0] Parent-Child Vector Graph Topology**: Replaced the linear engram retrieval scheme with a hierarchical parent-child graph. Raw conversation transcripts (`raw_parent` engrams) are preserved in Qdrant but isolated from general vector searches via metadata filters. Concept nodes (`sequence_chunk`) and hubs (`synthesis_hub`) are linked back to their parent and routed dynamically to `work_memories` or `social_memories` based on their specific semantic categories. Ariadne's Thread is preserved across parent nodes for temporal traversal.
 - **[NEW v7.4.0] (RETIRADO v7.12.0) SQLite Decoupling & Universal History Archive**: Kept the hot SQLite `interactions` table clean by restricting its retention window to 30 days. Older entries are automatically decoupled, formatted, and appended to `~/Agent_Core/history/universal_history.jsonl` to serve as a permanent, un-decayed conversation archive.
 - **[NEW v7.4.0] Synaptic Orphan Sweep (Decay)**: Implemented parent-culling heuristics where `raw_parent` engrams are purged from long-term memory if all of their children chunks have eroded below metabolism thresholds.
@@ -88,7 +89,9 @@ To ensure the Bünker remains observable and resource-accountable, all backgroun
 - **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
-1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
+1.  **[RESOLVED v4.2.1, SUPERSEDED 2026-11-16] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
+    > **AD-122**: la erosión periódica se retiró y con ella el *watermark* que reescribía `last_recalled_at` al decaer
+    > (borraba la prueba de uso). Hoy el olvido es una escalera en días activos; el cursor, si hace falta, es `decay_checked_at`.
 2.  **[IMPLEMENTED v6.1.0] Graph Pruning (Hub-Aware)**: Implemented "Symmetric Hub-Aware Eviction" in the `dream()` cycle to sever weak associations, evaluated by target hub survivability (`reinforcement * importance`) and logarithmic age decay, preventing topological collapse around critical Hub nodes.
 3.  **Hebb's Law Implementation**: "Neurons that fire together, wire together." Currently, associations are static. They should be dynamic—created automatically when two memories are retrieved in the same session context for a prolonged period.
 4.  **[IMPLEMENTED v5.6.3] FSRS Algorithm Integration**: Replaced heuristic linear/exponential decay with the **Free Spaced Repetition Scheduler** (FSRS) model. Each engram now manages its own `difficulty` and `stability` parameters. The formula $R = e^{\ln(0.9) \cdot t/S}$ produces biologically-accurate decay curves, ensuring high-stability memories (frequently recalled, high importance) survive months of inactivity — solving the "Vacation Problem" (session-relative decay).

@@ -677,7 +677,39 @@ class TestPresentacionPlegada:
 		# (regresión medida el 2026-11-14 sobre 2.3.0).
 		assert payload["metadata"]["comments"] == []
 		assert payload["metadata"]["attachments"] == []
+		# 2.3.x interpreta la AUSENCIA de `delivery` como `steer` (entrar en el
+		# turno en curso). Un aviso debe esperar al siguiente turno: queue explícito.
+		assert payload["delivery"] == "queue"
 		assert kw["timeout"] == soul_notify.OPENCODE_API_TIMEOUT_S
+
+	def test_steer_solo_cuando_lo_pide_el_orquestador(self):
+		calls = []
+
+		def fake_run(cmd, **kw):
+			calls.append((cmd, kw))
+			return self._run(0, '{"data":{}}')
+
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(
+			soul_notify, "opencode_session_exists", return_value=True
+		), patch.object(soul_notify.subprocess, "run", side_effect=fake_run):
+			assert soul_notify._deliver_opencode_prompt("ses_a", "corrige el rumbo", delivery="steer") is True
+
+		cmd, _ = calls[0]
+		assert json.loads(cmd[cmd.index("--data") + 1])["delivery"] == "steer"
+
+	def test_delivery_desconocido_cae_a_queue(self):
+		calls = []
+
+		def fake_run(cmd, **kw):
+			calls.append(cmd)
+			return self._run(0, '{"data":{}}')
+
+		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(
+			soul_notify, "opencode_session_exists", return_value=True
+		), patch.object(soul_notify.subprocess, "run", side_effect=fake_run):
+			assert soul_notify._deliver_opencode_prompt("ses_a", "hola", delivery="urgente!") is True
+
+		assert json.loads(calls[0][calls[0].index("--data") + 1])["delivery"] == "queue"
 
 	def test_api_caida_cae_al_run_clasico(self):
 		with patch("red_pill.core.paths.find_harness_binary", return_value="/x/opencode"), patch.object(

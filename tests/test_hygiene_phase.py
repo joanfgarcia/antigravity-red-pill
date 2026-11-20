@@ -92,3 +92,28 @@ def test_deliberate_immune_empty_still_reported_not_purged(mm):
 	report = purge_empty_engrams(mm)
 	assert report["work_memories"]["skipped_immune_empty"] == 1
 	assert _get(mm, "work_memories", pid) is not None
+
+
+def test_hygiene_cleans_stale_marker_residue_in_the_same_pass(mm, monkeypatch):
+	"""MET-001: el residuo de una poda (sesión de 1 miembro) muere en hygiene.
+
+	Va aquí y no en consolidation porque es CPU-only e idempotente: aunque la
+	síntesis de hubs se difiera por GPU, el marcador ya no puede quedarse escrito
+	para siempre.
+	"""
+	from red_pill.metabolism.phases.base import SleepContext
+	from red_pill.metabolism.phases.hygiene_phase import HygienePhase
+
+	monkeypatch.setattr(cfg, "SLEEP_PLUGIN_HYGIENE", True)
+	monkeypatch.setattr(cfg, "SW_HYGIENE_PURGE_ENABLED", False)
+	monkeypatch.setattr(cfg, "SW_HUB_MARKER_REPAIR_ENABLED", True)
+	pid = _put(mm, "work_memories", "un turno", node_type="memento_engram", session_id="sesion-solo", hubbed=True, hub_id="hub-fantasma")
+
+	ctx = SleepContext(memory_manager=mm)
+	HygienePhase().execute(ctx)
+
+	payload = _get(mm, "work_memories", pid)
+	assert payload.get("hubbed") is None
+	assert payload.get("hub_id") is None
+	assert payload["content"] == "un turno", "limpiar el marcador no toca memoria"
+	assert ctx.metrics.get("hygiene.markers_cleared") == 1

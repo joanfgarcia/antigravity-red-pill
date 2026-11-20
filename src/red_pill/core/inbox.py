@@ -149,8 +149,7 @@ class MinionInbox:
 					# (no en un SELECT previo), que es lo único que SQLite
 					# serializa bajo el write-lock frente a otro minion simultáneo.
 					cursor.execute(
-						f"INSERT INTO inbox ({columns}) SELECT ?, ?, ?, ?, ?, ?, ? "
-						"WHERE NOT EXISTS (SELECT 1 FROM inbox WHERE event_id = ?)",
+						f"INSERT INTO inbox ({columns}) SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM inbox WHERE event_id = ?)",
 						values + (event_id,),
 					)
 					if cursor.rowcount == 0:
@@ -168,13 +167,7 @@ class MinionInbox:
 		# Un reporte con alma despierta a su dueña por el coro (S2.1+). El JobRunner
 		# ya lo hace en `_report_job` con el aviso completo; los demás minions llegan
 		# aquí. Best-effort: un fallo del aviso no tumba al minion.
-		if (
-			inserted
-			and notify
-			and continuity_id
-			and source != "JobRunner"
-			and os.getenv("REDPILL_INBOX_NOTIFY_DISABLE") != "1"
-		):
+		if inserted and notify and continuity_id and source != "JobRunner" and os.getenv("REDPILL_INBOX_NOTIFY_DISABLE") != "1":
 			try:
 				from red_pill.coro.notify import publish_notice
 

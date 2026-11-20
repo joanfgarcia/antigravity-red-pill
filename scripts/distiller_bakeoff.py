@@ -136,22 +136,10 @@ def score_output(raw: str) -> Dict[str, Any]:
 	}
 
 
-# Candidate → GGUF basename map. Keeps the harness self-contained (no red_pill
-# imports) so it can run under the daemon's CUDA venv for real GPU measurement.
-_KNOWN_GGUF = {
-	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
-	"beck_8b": "Beck-8B-Q4_K_M.gguf",
-	"piaget_8b": "Piaget-8B-Q4_K_M.gguf",
-	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
-	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
-	"samantha": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
-	"phi_mini": "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
-	"llama_32": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-	"gemma_3_4b": "google_gemma-3-4b-it-Q4_K_M.gguf",
-	"mistral_nemo_12b": "Mistral-Nemo-Instruct-2407-Q3_K_M.gguf",
-	"granite_3b": "granite-4.1-3b-Q4_K_M.gguf",
-	"smollm3_3b": "SmolLM3-3B-Q4_K_M.gguf",
-}
+# Catálogo de candidatos: fuente ÚNICA en `model_battle_lib` (perfiles de
+# model_profiles.yaml ⊕ candidatos sin perfil). Antes esta tabla estaba copiada
+# en cuatro scripts y se desincronizaba (2026-11-16).
+from model_battle_lib import KNOWN_GGUF as _KNOWN_GGUF  # noqa: E402
 
 
 def _resolve_model_path(name: str, models_dir: Path) -> Optional[Path]:
@@ -161,11 +149,17 @@ def _resolve_model_path(name: str, models_dir: Path) -> Optional[Path]:
 	return path if path.exists() else None
 
 
-def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_tokens: int = 256) -> List[Dict[str, Any]]:
+def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_tokens: int = 256, task: str = "distill") -> List[Dict[str, Any]]:
 	from llama_cpp import Llama
 
-	logger.info(f"Loading {name} from {model_path} (ngl={n_gpu_layers}, ctx={n_ctx})...")
+	from red_pill.inference.conduct import apply_task_profile
+
+	logger.info(f"Loading {name} from {model_path} (ngl={n_gpu_layers}, ctx={n_ctx}, task={task or '—'})...")
 	llm = Llama(model_path=str(model_path), n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, verbose=False)
+	# Perfil ⊕ tarea, como el daemon: sin esto los modelos con thinking declarado
+	# razonan a pelo y no llegan a formatear el JSON (falso suspenso del modelo).
+	samplers = apply_task_profile(llm, name, task or None)
+	samplers.pop("temperature", None)  # la fija el eval (0.1)
 	results = []
 	for probe in PROMPTS:
 		t0 = time.time()
@@ -174,6 +168,7 @@ def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_to
 				messages=[{"role": "system", "content": _DISTILL_SYSTEM}, {"role": "user", "content": probe["user"]}],
 				temperature=0.1,
 				max_tokens=max_tokens,
+				**samplers,
 			)
 			raw = out["choices"][0]["message"]["content"]
 		except Exception as e:
@@ -199,15 +194,21 @@ def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 	]
 	for name, results in all_results.items():
 		n = len(results) or 1
+		scores = [r.get("score") or {} for r in results]
 		agg = {
-			"json": sum(r["score"]["json_ok"] for r in results),
-			"keys": sum(r["score"]["has_keys"] for r in results),
-			"es": sum(r["score"]["summary_lang"] == "es" for r in results),
-			"nothink": sum(not r["score"]["has_think_tags"] for r in results),
-			"noecho": sum(not r["score"]["echoes_prompt"] for r in results),
-			"emo": sum(r["score"]["emotion_valid"] for r in results),
-			"lat": round(sum(r["score"]["latency_s"] for r in results) / n, 2),
+			"json": sum(bool(s.get("json_ok")) for s in scores),
+			"keys": sum(bool(s.get("has_keys")) for s in scores),
+			"es": sum(s.get("summary_lang") == "es" for s in scores),
+			"nothink": sum(not s.get("has_think_tags") for s in scores),
+			"noecho": sum(not s.get("echoes_prompt") for s in scores),
+			"emo": sum(bool(s.get("emotion_valid")) for s in scores),
+			"lat": round(sum(float(s.get("latency_s") or 0) for s in scores) / n, 2),
 		}
+		# Un modelo que no carga deja una única fila {"probe": "load"} sin score:
+		# se marca como tal en vez de romper el render (KeyError 'latency_s').
+		if len(results) == 1 and results[0].get("probe") == "load":
+			lines.append(f"| {name} | — | — | — | — | — | — | no carga en este runtime |")
+			continue
 		lines.append(
 			f"| {name} | {agg['json']}/{n} | {agg['keys']}/{n} | {agg['es']}/{n} | {agg['nothink']}/{n} | {agg['noecho']}/{n} | {agg['emo']}/{n} | {agg['lat']}s |"
 		)
@@ -233,6 +234,11 @@ def main() -> None:
 	)
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
+	parser.add_argument(
+		"--task",
+		default="distill",
+		help="Tarea cuya conducta se aplica (perfil ⊕ task, como el daemon): 'distill' apaga el thinking. '' = sin conducta (comportamiento antiguo).",
+	)
 	parser.add_argument("--models-dir", default=str(get_models_dir()), help="Directory holding the candidate GGUFs.")
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_BAKEOFF.md")
 	args = parser.parse_args()
@@ -247,7 +253,7 @@ def main() -> None:
 			logger.warning(f"{name}: GGUF not found in {models_dir}, skipping.")
 			continue
 		try:
-			all_results[name] = run_model(name, path, args.n_gpu_layers, args.n_ctx, args.max_tokens)
+			all_results[name] = run_model(name, path, args.n_gpu_layers, args.n_ctx, args.max_tokens, args.task)
 		except Exception as e:
 			# A model that won't even load (e.g. unsupported arch in this llama.cpp) is
 			# itself a finding — record it instead of crashing the whole bake-off.

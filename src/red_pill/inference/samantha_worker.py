@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 # ── Configuration ─────────────────────────────────────────
 SAMANTHA_SOURCE = "samantha"
 WATCHDOG_TIMEOUT = 120  # seconds — if no heartbeat for this long, worker kills us
+# Latido mientras el hilo ESPERA. Sin él, `is_healthy()` medía «hace cuánto que
+# no hay trabajo», no «el hilo responde»: un pulse largo (>120 s sin tareas
+# Samantha) parecía colgado y el watchdog mataba un hilo sano. Medido el
+# 2026-11-18: 13 kills/24 h, siempre `task: None`, todos al final de un
+# despertar (336 s, 402 s, 340 s). Debe quedar cómodamente por debajo del tope.
+IDLE_HEARTBEAT_SECONDS = max(5, WATCHDOG_TIMEOUT // 3)
 DEFAULT_IDLE_TIMEOUT = 60  # seconds — grace period before shutting down ephemeral
 STALE_RECOVERY_SECONDS = 900  # huérfanos PROCESSING del carril → PENDING (disyuntor) a los 15 min
 
@@ -228,11 +234,16 @@ class SamanthaWorker(threading.Thread):
 		logger.info("[SamanthaWorker] Thread started (event-driven, 0 CPU when idle)")
 		while self._running:
 			try:
-				self._wake_event.wait()  # ← SLEEP (0 CPU)
+				# Espera ACOTADA: cada caducidad deja un latido. `is_healthy()` mide
+				# que el hilo responde, no que tenga trabajo; con `wait()` infinito
+				# un idle >WATCHDOG_TIMEOUT se leía como «colgado» (ver constante).
+				woke = self._wake_event.wait(timeout=IDLE_HEARTBEAT_SECONDS)
 				if not self._running:
 					break
-				self._wake_event.clear()
 				self._health_ts = time.time()
+				if not woke:
+					continue
+				self._wake_event.clear()
 				self._drain_cycle()
 			except Exception as e:
 				logger.error(f"[SamanthaWorker] Cycle error: {e}")

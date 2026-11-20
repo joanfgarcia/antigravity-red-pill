@@ -29,18 +29,10 @@ from red_pill.core.paths import get_models_dir
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [FIDELITY] %(message)s")
 logger = logging.getLogger("fidelity")
 
-_KNOWN_GGUF = {
-	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
-	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
-	"piaget_8b": "Piaget-8B-Q4_K_M.gguf",
-	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
-	"phi_mini": "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
-	"llama_32": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-	"gemma_3_4b": "google_gemma-3-4b-it-Q4_K_M.gguf",
-	"mistral_nemo_12b": "Mistral-Nemo-Instruct-2407-Q3_K_M.gguf",
-	"granite_3b": "granite-4.1-3b-Q4_K_M.gguf",
-	"smollm3_3b": "SmolLM3-3B-Q4_K_M.gguf",
-}
+# Catálogo de candidatos: fuente ÚNICA en `model_battle_lib` (perfiles de
+# model_profiles.yaml ⊕ candidatos sin perfil). Antes esta tabla estaba copiada
+# en cuatro scripts y se desincronizaba (2026-11-16).
+from model_battle_lib import KNOWN_GGUF as _KNOWN_GGUF  # noqa: E402
 
 _BASE_PROMPT = (
 	"Distill the interaction into ONLY a valid JSON object with keys: "
@@ -103,11 +95,17 @@ def score_fidelity(summary: str, probe: Dict[str, Any]) -> Dict[str, Any]:
 	return {"user_side": u, "asst_side": a, "both_sides": u and a, "summary": summary}
 
 
-def run(name: str, model_path: Path, ngl: int, n_ctx: int, max_tokens: int) -> Dict[str, List[Dict[str, Any]]]:
+def run(name: str, model_path: Path, ngl: int, n_ctx: int, max_tokens: int, task: str = "distill") -> Dict[str, List[Dict[str, Any]]]:
 	from llama_cpp import Llama
 
-	logger.info(f"Loading {name} (ngl={ngl})...")
+	from red_pill.inference.conduct import apply_task_profile
+
+	logger.info(f"Loading {name} (ngl={ngl}, task={task or '—'})...")
 	llm = Llama(model_path=str(model_path), n_ctx=n_ctx, n_gpu_layers=ngl, verbose=False)
+	# Conducta de producción (perfil ⊕ tarea): `thinking: off` del carril
+	# `distill` se aplica aquí o el modelo razona a pelo y se come el presupuesto.
+	samplers = apply_task_profile(llm, name, task or None)
+	samplers.pop("temperature", None)  # el eval fija la suya (0.1, determinismo)
 	out: Dict[str, List[Dict[str, Any]]] = {"base": [], "tuned": []}
 	for label, sys_prompt in (("base", _BASE_PROMPT), ("tuned", _TUNED_PROMPT)):
 		for probe in PROBES:
@@ -118,6 +116,7 @@ def run(name: str, model_path: Path, ngl: int, n_ctx: int, max_tokens: int) -> D
 					messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_msg}],
 					temperature=0.1,
 					max_tokens=max_tokens,
+					**samplers,
 				)
 				summary = extract_summary(resp["choices"][0]["message"]["content"])
 			except Exception as e:
@@ -163,6 +162,11 @@ def main() -> None:
 	parser.add_argument("--n-gpu-layers", type=int, default=-1, help="-1 GPU / 0 CPU / N hybrid (needs CUDA llama-cpp for GPU).")
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
+	parser.add_argument(
+		"--task",
+		default="distill",
+		help="Tarea cuya conducta se aplica (perfil ⊕ task, como el daemon): 'distill' apaga el thinking. '' = sin conducta (comportamiento antiguo).",
+	)
 	parser.add_argument("--models-dir", default=str(get_models_dir()))
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_FIDELITY.md")
 	args = parser.parse_args()
@@ -178,7 +182,7 @@ def main() -> None:
 			logger.warning(f"{name}: GGUF not found in {models_dir}, skipping.")
 			continue
 		try:
-			results[name] = run(name, path, args.n_gpu_layers, args.n_ctx, args.max_tokens)
+			results[name] = run(name, path, args.n_gpu_layers, args.n_ctx, args.max_tokens, args.task)
 		except Exception as e:
 			logger.error(f"{name}: FAILED — {e}")
 

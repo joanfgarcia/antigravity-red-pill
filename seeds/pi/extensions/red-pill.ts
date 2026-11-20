@@ -4,7 +4,7 @@
 // action `recall`) over a persistent stdio connection, instead of spawning the
 // red-pill CLI every turn. The client is `@earendil-works/pi-mcp` (the standalone
 // MCP client published with Pi, pinned to Pi's version); the injector provisions
-// it under `~/.pi/agent/node_modules`. Identity injection (runWake) and the
+// it under `~/.pi/agent/node_modules`. Identity injection now lives in
 // on-demand tools stay on the CLI for now. The `red-pill` binary is NOT on the
 // PATH of the harness: it lives in the checkout (`.venv/bin/red-pill`) and is
 // invoked via `uv run --no-sync` from the red-pill directory. The
@@ -165,16 +165,6 @@ function rp(...args: string[]) {
 	});
 }
 
-function runWake(mode = "full"): Promise<string> {
-	return execFileAsync(UV, ["run", "--no-sync", "scripts/wake_up_v6.py", "--mode", mode], {
-		timeout: TIMEOUT_MS,
-		maxBuffer: 512 * 1024,
-		cwd: RED_PILL_DIR,
-	}).then(
-		(r) => (r.stdout ?? "").trim(),
-		() => "",
-	);
-}
 
 // ── Persistent MCP client (single process) ──────────────────────────────
 // One stdio connection to RedPill-Kernel shared by every hook. The import is
@@ -240,7 +230,7 @@ async function recall(query: string, collection: string, limit: number): Promise
  * (`continuity_id`) y ata `pi:<session_id> ↔ alma` en session_registry (el resolver
  * Python es el único escritor autoritativo). Solo se invoca en pérdida de contexto
  * (start/modelo/compact), no por turno. NO carga identidad (`is_new_session:false`):
- * la identidad la sirve `runWake`. Best-effort: nunca tira el turno. */
+ * la identidad la sirve `red-pill-context.ts` por el hook. Best-effort: nunca tira el turno. */
 async function handshake(sessionId: string, userPrompt: string): Promise<void> {
 	try {
 		const client = await getMcpClient();
@@ -327,24 +317,21 @@ function assistantTextOf(messages: any[]): string {
 export default function (pi: ExtensionAPI) {
 	if (process.env.RED_PILL_ENABLED === "0") return;
 
-	// ── FULL handshake: identidad completa solo en pérdida de contexto ──
-	// session_start (startup/new/resume/fork), cambio de modelo, post-compactación.
-	let pendingIdentity: string | null = null;
-	let needFull = false;
+	// ── Identidad: YA NO se inyecta aquí ────────────────────────────────
+	// RFC-HARNESS-001 (P4): la identidad la inyecta `red-pill-context.ts` vía
+	// `context` (no persistido). Aquí sólo queda la captura y el relay del turno.
 
-	pi.on("session_start", async () => {
-		pendingIdentity = (await runWake("full")) || null;
-		needFull = !!pendingIdentity;
-	});
 
-	pi.on("model_select", async () => {
-		pendingIdentity = (await runWake("full")) || null;
-		needFull = !!pendingIdentity;
-	});
-
-	pi.on("session_compact", async () => {
-		pendingIdentity = (await runWake("full")) || null;
-		needFull = !!pendingIdentity;
+	// `session_start` / `model_select` / `session_compact`: la identidad la pide
+	// `red-pill-context.ts` al kernel por el hook (P4). Aquí no se arranca ningún
+	// `wake_up_v6`: eran 2,3-2,7 s por evento para un texto que ya nadie inyectaba.
+	//
+	// Lo que NO se retira es el handshake MCP: su trabajo no es inyectar texto,
+	// es atar `pi:<session_id> ↔ alma` en session_registry (paridad Alma, F5).
+	// Sin él, en el modo arnés sin extensión de contexto la sesión no tendría
+	// alma propia. Una vez por sesión y best-effort: coste despreciable.
+	pi.on("session_start", async (_event, ctx) => {
+		void handshake(sessionIdOf(ctx), "");
 	});
 
 	// Close the persistent MCP connection when the session ends.
@@ -388,16 +375,9 @@ export default function (pi: ExtensionAPI) {
 
 		const chunks: string[] = [];
 
-		// FULL solo si hubo pérdida de contexto (inicio / modelo / compactación)
-		if (needFull && pendingIdentity) {
-			chunks.push(`[BÚNKER IDENTIDAD — resync completo]\n${pendingIdentity}`);
-			needFull = false;
-			pendingIdentity = null;
-			// F5: en pérdida de contexto, el handshake MCP emite/recupera el alma y
-			// ata `pi:<session_id> ↔ alma` en session_registry (el resolver Python es
-			// el único escritor autoritativo). El texto de identidad no se inyecta.
-			void handshake(sessionId, prompt);
-		}
+		// Identidad: la sirve `red-pill-context.ts` por el hook (no persistido).
+		// El antiguo `runWake` + mensaje persistido pagaba identidad en cada turno
+		// posterior y se perdía con la compactación: eso es lo que P4 retira.
 
 		// LIGHT siempre: RAG liviano (equivale al pipeline del interceptor)
 		const [work, directives] = await Promise.all([

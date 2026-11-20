@@ -35,6 +35,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	pact_parser.add_argument("--accept", action="store_true", help="770: llave del AGENTE (acepta el covenant)")
 	pact_parser.add_argument("--yes", "--force", action="store_true", help="Bypass the covenant confirmation prompt")
 	pact_parser.add_argument("--identity", default=None, help="Fichero con el engrama de identidad redactado por el agente (lo exige el NOMBRADO)")
+	pact_parser.add_argument("--resync", action="store_true", help="Re-inscribe el pacto vigente con la plantilla actual, conservando su fecha")
+	pact_parser.add_argument("--aspect", default=None, metavar="COLOR", help="Aspecto: inscribe el color de reposo del agente (exige el 770)")
+	pact_parser.add_argument("--name", default=None, help="Aspecto: nombre propio del color (una palabra tuya)")
+	pact_parser.add_argument("--why", default=None, help="Aspecto: fichero con el motivo (obligatorio: sin motivo no hay acto)")
 
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 
@@ -55,9 +59,15 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	search_parser.add_argument("--limit", type=int, default=3)
 	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
-	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
+	erode_parser = subparsers.add_parser("erode", help="B760 erosion (MANUAL, ver RFC-OLV-001)")
 	erode_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	erode_parser.add_argument("--rate", type=float)
+	# Desde RFC-OLV-001 `last_recalled_at` mide USO REAL (ya no lo refresca el
+	# olvido), así que este comando pasó de tocar una fracción a tocar casi todo.
+	# Por eso: en seco por defecto, y hay que pedir el borrado explícitamente.
+	_mode = erode_parser.add_mutually_exclusive_group()
+	_mode.add_argument("--dry-run", action="store_true", help="Contar candidatos sin tocar nada (por defecto)")
+	_mode.add_argument("--apply", action="store_true", help="Aplicar de verdad (borra lo que el motor pida)")
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
 	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
@@ -495,11 +505,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
 	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
 
-	# Fondo declarado por el Operador (RFC-AFE-001 F1): el ánimo que él cuenta.
-	affect_parser = subparsers.add_parser("affect", help="Ánimo declarado por el Operador (RFC-AFE-001)")
+	# Ánimo declarado por el Operador (RFC-AFE-001 F1): el que él cuenta.
+	mood_parser = subparsers.add_parser("mood", help="Ánimo declarado por el Operador (RFC-AFE-001)")
+	mood_parser.add_argument("--set", help="Código: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
+	mood_parser.add_argument("--note", help="Nota breve (máx. 280 chars)")
+	mood_parser.add_argument("--json", action="store_true", help="Salida JSON")
+
+	# Alias deprecado por una release: `affect fondo` → `mood` (LANGUAGE_POLICY §2).
+	affect_parser = subparsers.add_parser("affect", help="[deprecado] usa `red-pill mood`")
+	affect_parser.set_defaults(declared_mood_deprecated=True)
 	affect_sub = affect_parser.add_subparsers(dest="aff_cmd")
-	aff_fondo = affect_sub.add_parser("fondo", help="Ver o declarar el fondo del día")
-	aff_fondo.add_argument("--set", help="Letra: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
+	aff_fondo = affect_sub.add_parser("fondo", help="[deprecado] usa `red-pill mood`")
+	aff_fondo.add_argument("--set", help="Código: B bien · C cansancio · F frustración · T tristeza · X tensión · - sin carga")
 	aff_fondo.add_argument("--note", help="Nota breve (máx. 280 chars)")
 	aff_fondo.add_argument("--json", action="store_true", help="Salida JSON")
 

@@ -88,10 +88,24 @@ def test_cli_main_add(mock_mgr):
 
 @patch("red_pill.cli.MemoryManager")
 def test_cli_main_erode(mock_mgr):
-	"""Test 'red-pill erode work'."""
+	"""RFC-OLV-001: `erode` va en SECO por defecto.
+
+	Al medir `last_recalled_at` el uso real (y no el último refresco del olvido),
+	el filtro pasó de tocar una fracción a tocar casi todo el corpus: aplicarlo
+	sin más sería un borrado masivo disparado por un comando de consola.
+	"""
 	with patch("sys.argv", ["red-pill", "erode", "work"]):
 		main()
-		mock_mgr.return_value.apply_erosion.assert_called_once()
+		mock_mgr.return_value.apply_erosion.assert_not_called()
+	mock_mgr.return_value.count_erosion_candidates.assert_called_once()
+
+
+@patch("red_pill.cli.MemoryManager")
+def test_cli_main_erode_apply_is_explicit(mock_mgr):
+	"""Con `--apply` sí se aplica: el borrado manual es un acto deliberado."""
+	with patch("sys.argv", ["red-pill", "erode", "work", "--apply"]):
+		main()
+	mock_mgr.return_value.apply_erosion.assert_called_once()
 
 
 @patch("red_pill.cli.MemoryManager")

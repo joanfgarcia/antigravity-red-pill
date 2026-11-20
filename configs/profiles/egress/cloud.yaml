@@ -1,0 +1,5 @@
+# `cloud`: puede salir a internet con claves gestionadas por el Operador.
+id: cloud
+network: egress
+secrets: cloud-env
+skills_blocked: []

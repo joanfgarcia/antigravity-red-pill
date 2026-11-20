@@ -2,6 +2,7 @@ import logging
 
 import red_pill.config as cfg
 from red_pill.interceptors.base import BaseInterceptorPlugin
+from red_pill.recall_abstention import passes_injection, similarity
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +30,22 @@ class RagEnrichmentPlugin(BaseInterceptorPlugin):
 
 				manager = MemoryManager()
 				results = []
+				# I-06/C-09: la postura de INYECCIÓN aplica el suelo al presentar.
+				# El umbral efectivo es el más alto de suelo e intención; las
+				# directivas y los inmunes pasan siempre (I-03).
+				floor = float(getattr(cfg, "SW_RECALL_ABSTENTION_FLOOR", 0.38) or 0.0)
+				intent = float(getattr(cfg, "SEMANTIC_INTENT_THRESHOLD", 0.0) or 0.0)
 				for collection in ["directive_memories", "work_memories", "social_memories"]:
 					try:
 						hits = manager.search_and_reinforce(collection, prompt, limit=2, caller="interceptor_02")
-						results.extend(
-							[
-								str(h.payload.get("content", ""))
-								for h in hits
-								if h.payload
-								and h.payload.get("content")
-								and getattr(h, "score", 0.0) >= getattr(cfg, "SEMANTIC_INTENT_THRESHOLD", 0.0)
-							]
-						)
+						for h in hits:
+							payload = h.payload or {}
+							content = payload.get("content")
+							if not content:
+								continue
+							immune = bool(payload.get("immune")) or collection == "directive_memories"
+							if passes_injection(similarity(h), floor=floor, intent_threshold=intent, immune=immune):
+								results.append(str(content))
 					except Exception as e:
 						logger.warning(f"RAG search failed for {collection}: {e}")
 				return results

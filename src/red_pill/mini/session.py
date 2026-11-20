@@ -288,7 +288,7 @@ class MiniSession:
 					tools=tools,
 					temperature=temp,
 					max_tokens=limit_tokens,
-					**( {"timeout": timeout} if timeout is not None else {} ),
+					**({"timeout": timeout} if timeout is not None else {}),
 				)
 			except Exception as e:
 				# Un rechazo por longitud no debe tumbar el turno: se compacta

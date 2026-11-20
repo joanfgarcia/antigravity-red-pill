@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Dict, Optional, Tuple
 
 import red_pill.config as cfg
-from red_pill.identity import get_default_emotion, get_hedonic_set_point, update_identity
+from red_pill.identity import get_aspect, get_default_emotion, get_hedonic_set_point, update_identity
 from red_pill.memory import MemoryManager
 
 logger = logging.getLogger(__name__)
@@ -79,8 +79,20 @@ class IdentityEvaluator:
 
 		dominant_emotion = max(emotion_weights.items(), key=lambda x: x[1])[0]
 
-		# Update persisted identity
+		# Persist the calculated baseline. With a declared aspect in force this is
+		# diagnosis (EMERGENT_SET_POINT_COLOR), not identity: the declaration is not
+		# the sleep cycle's to overwrite (D-02).
 		update_identity(dominant_color, dominant_emotion)
-		logger.info(f"[EVOLUTION] Gravity Point evolved -> Color: {dominant_color.upper()}, Emotion: {dominant_emotion.upper()}")
+		if get_aspect():
+			logger.info(
+				f"[EVOLUTION] Declared aspect in force: calculated {dominant_color.upper()} stored as EMERGENT "
+				f"(emotion {dominant_emotion.upper()}); the declaration is not overwritten."
+			)
+		else:
+			logger.info(f"[EVOLUTION] Gravity Point evolved -> Color: {dominant_color.upper()}, Emotion: {dominant_emotion.upper()}")
 
+		# This method measures; it does not report identity. Returning the declared
+		# aspect here would make the signature repeat the category error the aspect
+		# exists to fix (a measurement mistaken for a declaration). Callers that want
+		# the resting colour ask `identity.get_hedonic_set_point()`.
 		return dominant_color, dominant_emotion

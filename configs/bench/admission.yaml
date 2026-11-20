@@ -1,0 +1,94 @@
+# bench/admission.yaml — puerta de entrada al banco de Dokimé
+#
+# Tres mínimos decididos por el Operador (2026-11-19): español, tooling, multiturno.
+# Medido con `scripts/bench_admission.py` (misma serving: alias `bench`, 16k salvo nota).
+# Un fallo de tools puede ser de PLANTILLA: ver `tools_note`.
+#
+# Formato: perfil de `model_profiles.yaml` → resultado. `apto` = los tres.
+version: 1
+measured_at: "2026-11-19"
+probe: "scripts/bench_admission.py"
+rfc: "RFC-HARNESS-001 · P5"
+
+results:
+  spark_x2_6_4b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  mimo_v26_9b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  qwen35_9b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  granite_4_2_8b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  llama_32:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  qwen3_8b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    evidence: "París · tool_call=leer_fichero · 4712"
+  hermes_8b:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "responde en texto; Hermes se entrenó para function calling → sospecha de plantilla, no de modelo"
+  gemma_3_4b:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "responde en texto pidiendo instrucciones; plantilla sin tools"
+  phi_mini:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "responde en texto; plantilla sin tools"
+  samantha:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "fine-tune de rol; sin marco corto ni responde al encargo"
+  smollm3_3b:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "responde en texto"
+  tiny_aya_global:
+    es: true
+    tools: false
+    multiturn: true
+    apto: false
+    tools_note: "responde en texto; plantilla sin tools"
+  bonsai_2_27b:
+    es: true
+    tools: true
+    multiturn: true
+    apto: true
+    ctx: 8192
+    runtime: "llama_cpp_prism (fork)"
+    evidence: "París · tool_call · 4712 (medido en host a 8k; 16k no entra en 8 GB)"
+    tools_note: "el llama.cpp estándar NO carga este GGUF (failed to read tensor info): necesita el fork prism"

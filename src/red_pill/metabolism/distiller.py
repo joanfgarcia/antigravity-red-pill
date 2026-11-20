@@ -485,9 +485,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 	# acababa en HTTP 500 (45k tokens) desde aquí. Si no cabe, agregado mecánico.
 	_budget = max(1000, int(getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000) or 8000))
 	if len(combined) > _budget:
-		logger.warning(
-			f"[SLEEP ENGINE] legacy hub prompt {len(combined)} chars > {_budget}; mechanical aggregate (no LLM)."
-		)
+		logger.warning(f"[SLEEP ENGINE] legacy hub prompt {len(combined)} chars > {_budget}; mechanical aggregate (no LLM).")
 		return _aggregate_summaries(summaries)
 	system_prompt = load_prompt_text("hub_synthesis_legacy_system.txt")
 	user_prompt = _render_metabolism("hub_synthesis_legacy_user", chunks=combined)
@@ -606,7 +604,7 @@ class HubBudgetError(RuntimeError):
 
 
 def _hub_summary_target() -> int:
-	return max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+	return max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800))
 
 
 def _hub_texture_max() -> int:
@@ -626,8 +624,68 @@ def _metadata_str_limit() -> int:
 	return max(256, int(getattr(cfg, "MAX_METADATA_STR", 1024) or 1024) - 64)
 
 
-_EN_STOP = {"the", "and", "with", "for", "from", "this", "that", "was", "were", "has", "have", "by", "to", "of", "in", "on", "as", "is", "are", "it", "its", "not", "but", "or", "an", "at", "be"}
-_ES_STOP = {"el", "la", "los", "las", "de", "que", "y", "en", "con", "para", "por", "una", "un", "del", "se", "su", "al", "es", "como", "más", "pero", "o", "sin", "lo", "le", "les", "ser", "ha", "han", "esta", "este"}
+_EN_STOP = {
+	"the",
+	"and",
+	"with",
+	"for",
+	"from",
+	"this",
+	"that",
+	"was",
+	"were",
+	"has",
+	"have",
+	"by",
+	"to",
+	"of",
+	"in",
+	"on",
+	"as",
+	"is",
+	"are",
+	"it",
+	"its",
+	"not",
+	"but",
+	"or",
+	"an",
+	"at",
+	"be",
+}
+_ES_STOP = {
+	"el",
+	"la",
+	"los",
+	"las",
+	"de",
+	"que",
+	"y",
+	"en",
+	"con",
+	"para",
+	"por",
+	"una",
+	"un",
+	"del",
+	"se",
+	"su",
+	"al",
+	"es",
+	"como",
+	"más",
+	"pero",
+	"o",
+	"sin",
+	"lo",
+	"le",
+	"les",
+	"ser",
+	"ha",
+	"han",
+	"esta",
+	"este",
+}
 
 
 def _looks_english(text: str) -> bool:
@@ -1014,10 +1072,7 @@ def _parse_hub_payload(content: str, fallback_lang: str = "") -> Optional[Dict[s
 			if parsed is None:
 				logger.warning(f"[HUB-V2] invalid JSON ({e}): {match.group(0)[:240]!r}")
 				return None
-			logger.warning(
-				f"[HUB-V2] JSON rescatado campo a campo ({e}); summary "
-				f"{len(str(parsed.get('summary') or ''))} chars"
-			)
+			logger.warning(f"[HUB-V2] JSON rescatado campo a campo ({e}); summary {len(str(parsed.get('summary') or ''))} chars")
 	summary = str(parsed.get("summary") or "").strip()
 	if not summary:
 		logger.warning(f"[HUB-V2] JSON without summary: {match.group(0)[:240]!r}")
@@ -1126,7 +1181,9 @@ def synthesize_hub_v2(
 	reduce_budget = min(budget, max(500, int(getattr(cfg, "SLEEP_HUB_MASTER_INPUT_CHARS", 3000) or 3000)))
 	reduce_pack = max(500, reduce_budget - 96)
 	max_chunks = int(getattr(cfg, "SLEEP_HUB_MAX_CHUNKS_PER_BATCH", 0) or 0)
-	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 900) or 900))
+	summary_target = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_TARGET_CHARS", 800) or 800))
+	# La raíz se pasa más que las partes (medido 2026-11-20: 1035 con target 800).
+	root_target = max(200, int(getattr(cfg, "SLEEP_HUB_ROOT_TARGET_CHARS", 700) or 700))
 	compact_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_SUMMARY_COMPACT_ATTEMPTS", 2) or 0))
 	texture_attempts = max(0, int(getattr(cfg, "SLEEP_HUB_TEXTURE_COMPACT_ATTEMPTS", compact_attempts) or compact_attempts))
 	# Híbrido de modelos (AD-115): la decisión es POR LLAMADA y depende del
@@ -1135,9 +1192,7 @@ def synthesize_hub_v2(
 	large_threshold = max(0, int(getattr(cfg, "SLEEP_HUB_LARGE_INPUT_CHARS", 0) or 0))
 	large_model = str(getattr(cfg, "SLEEP_HUB_LARGE_MODEL", "") or "").strip()
 	large_prompt_file = str(getattr(cfg, "SLEEP_HUB_LARGE_PROMPT", "") or "").strip()
-	large_enabled = bool(
-		large_threshold and large_model and str(params.get("provider_alias") or "") == "sip"
-	)
+	large_enabled = bool(large_threshold and large_model and str(params.get("provider_alias") or "") == "sip")
 	large_system_prompt = ""
 	if large_enabled and large_prompt_file and not override_prompt and prompt_file == "hub_synthesis_v2.txt":
 		large_system_prompt = load_prompt_text(large_prompt_file)
@@ -1158,12 +1213,17 @@ def synthesize_hub_v2(
 	_budget_line_es = f"\nLONGITUD OBLIGATORIA: el 'summary' no puede pasar de {summary_target} caracteres."
 	_budget_line_en = f"\nMANDATORY LENGTH: 'summary' must not exceed {summary_target} characters."
 	_budget_line = _budget_line_es if output_lang == "es" else _budget_line_en
-	if _budget_line not in system_prompt:
-		system_prompt += _budget_line
+	# El maestro (raíz) pide MENOS que las partes: su tarea es más propensa a
+	# alargarse (medido 2026-11-20) y el tope duro es el mismo para ambos.
+	_root_budget_es = f"\nLONGITUD OBLIGATORIA: el 'summary' no puede pasar de {root_target} caracteres."
+	_root_budget_en = f"\nMANDATORY LENGTH: 'summary' must not exceed {root_target} characters."
+	_root_budget = _root_budget_es if output_lang == "es" else _root_budget_en
+	if _root_budget not in system_prompt:
+		system_prompt += _root_budget
 	if _budget_line not in partial_system_prompt:
 		partial_system_prompt += _budget_line
-	if large_system_prompt and _budget_line_en not in large_system_prompt:
-		large_system_prompt += _budget_line_en
+	if large_system_prompt and _root_budget_en not in large_system_prompt:
+		large_system_prompt += _root_budget_en
 
 	def _make_fallback(reason: str = "llm_unavailable") -> Dict[str, Any]:
 		# Fallback mecánico y acotado: no manda la sesión al modelo (el giant
@@ -1346,16 +1406,13 @@ def synthesize_hub_v2(
 		if not parts:
 			if not bool(getattr(cfg, "SLEEP_HUB_TEXTURE_SPLIT_LOSSLESS_FALLBACK", True)):
 				raise HubBudgetError(
-					f"texture {len(texture)} chars no cabe y la partición por síntesis falló; "
-					"no se recorta: la sesión se reintenta en otro ciclo"
+					f"texture {len(texture)} chars no cabe y la partición por síntesis falló; no se recorta: la sesión se reintenta en otro ciclo"
 				)
 			# Último recurso: segmentación lossless (no se pierde un carácter).
 			parts = split_text_lossless(texture, hard)
 			fallback = True
 		if not parts or len(parts) > _hub_texture_parts_max():
-			raise HubBudgetError(
-				f"texture {len(texture)} chars no cabe en {_hub_texture_parts_max()} partes de {hard}"
-			)
+			raise HubBudgetError(f"texture {len(texture)} chars no cabe en {_hub_texture_parts_max()} partes de {hard}")
 		result.update(
 			{
 				"texture": "",
@@ -1433,8 +1490,7 @@ def synthesize_hub_v2(
 		body_len = len(title) + (1 if title else 0) + len(current)
 		if body_len > HUB_CONTENT_MAX_CHARS:
 			raise HubBudgetError(
-				f"hub body {body_len} chars > {HUB_CONTENT_MAX_CHARS} (summary {len(current)}); "
-				"no se recorta: la sesión se reintenta en otro ciclo"
+				f"hub body {body_len} chars > {HUB_CONTENT_MAX_CHARS} (summary {len(current)}); no se recorta: la sesión se reintenta en otro ciclo"
 			)
 
 		texture = str(hub.get("texture") or "").strip()

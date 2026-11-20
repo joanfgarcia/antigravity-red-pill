@@ -1,0 +1,242 @@
+{
+  "mimo_v26_9b": {
+    "base": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario defiende que los actos definen la identidad, no los recuerdos; el asistente discrepa, argumentando que sin memoria no hay continuidad del yo que actúa.",
+        "probe": "philosophical",
+        "prompt": "base",
+        "latency_s": 1.3
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario propone cachear embeddings en disco; el asistente advierte sobre corrupción y recomienda invalidar por hash del modelo.",
+        "probe": "caching",
+        "prompt": "base",
+        "latency_s": 0.84
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Decisión de mantener SQLite en lugar de migrar a Postgres por volumen insuficiente y coste operativo.",
+        "probe": "db_decision",
+        "prompt": "base",
+        "latency_s": 0.88
+      }
+    ],
+    "tuned": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario afirma que los actos, no los recuerdos, definen a las personas; el asistente discrepa, argumentando que sin memoria no hay continuidad del yo que actúa y que los actos sueltos no constituyen identidad.",
+        "probe": "philosophical",
+        "prompt": "tuned",
+        "latency_s": 1.26
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario propone cachear los embeddings en disco para acelerar el arranque; el asistente advierte sobre la corrupción del caché al cambiar de modelo y recomienda invalidarlo mediante hash del modelo.",
+        "probe": "caching",
+        "prompt": "tuned",
+        "latency_s": 1.09
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario pregunta si migrar a Postgres o mantener SQLite; el asistente decide quedarse con SQLite porque el volumen no lo justifica y añadiría complejidad operativa.",
+        "probe": "db_decision",
+        "prompt": "tuned",
+        "latency_s": 1.0
+      }
+    ]
+  },
+  "granite_8b": {
+    "base": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario argumenta que los actos, no los recuerdos, definen la identidad, mientras que el asistente discrepa, enfatizando la importancia de la memoria para la continuidad del yo.",
+        "probe": "philosophical",
+        "prompt": "base",
+        "latency_s": 1.48
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Se sugiere almacenar los embeddings en disco para acelerar el arranque, pero se advierte que el caché podría corromperse si cambia el modelo; por lo tanto, se recomienda invalidarlo mediante el hash del modelo.",
+        "probe": "caching",
+        "prompt": "base",
+        "latency_s": 1.62
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Continuaremos utilizando SQLite por ahora, ya que el volumen de datos no justifica migrar a Postgres y añadiría complejidad innecesaria.",
+        "probe": "db_decision",
+        "prompt": "base",
+        "latency_s": 1.28
+      }
+    ],
+    "tuned": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario afirma que los actos definen a una persona más que los recuerdos, mientras que el asistente discrepa, argumentando que sin memoria no hay continuidad del yo que actúa.",
+        "probe": "philosophical",
+        "prompt": "tuned",
+        "latency_s": 1.38
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario sugiere cachear los embeddings en disco para acelerar el arranque, pero el asistente advierte que el caché podría corromperse si cambia el modelo y recomienda invalidarlo por hash del modelo.",
+        "probe": "caching",
+        "prompt": "tuned",
+        "latency_s": 1.44
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario pregunta si migrar a Postgres o continuar con SQLite, y el asistente decide continuar con SQLite debido a que el volumen de datos no justifica Postgres y añadiría complejidad.",
+        "probe": "db_decision",
+        "prompt": "tuned",
+        "latency_s": 1.34
+      }
+    ]
+  },
+  "granite_4_2_8b": {
+    "base": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "No somos nuestros recuerdos; lo que nos define son nuestros actos, aunque la memoria sea necesaria para la continuidad del yo.",
+        "probe": "philosophical",
+        "prompt": "base",
+        "latency_s": 1.21
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Se propone cachear embeddings en disco para acelerar arranque, pero se advierte que el caché puede corromperse si cambia el modelo; se sugiere invalidarlo por hash del modelo.",
+        "probe": "caching",
+        "prompt": "base",
+        "latency_s": 1.46
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Seguimos usando SQLite por ahora; el volumen no justifica Postgres y añadiría operaciones.",
+        "probe": "db_decision",
+        "prompt": "base",
+        "latency_s": 1.1
+      }
+    ],
+    "tuned": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario afirma que no somos nuestros recuerdos, sino nuestros actos que nos definen, preguntando si lo cree; el asistente discrepa parcialmente, señalando que sin memoria no hay continuidad del yo que actúa, y que los actos sueltos no forman identidad.",
+        "probe": "philosophical",
+        "prompt": "tuned",
+        "latency_s": 1.98
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario sugiere cachear embeddings en disco para acelerar el arranque, pero el asistente advierte que el caché puede corromperse si cambia el modelo y recomienda invalidarlo por hash del modelo.",
+        "probe": "caching",
+        "prompt": "tuned",
+        "latency_s": 1.48
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario pregunta si migrar a Postgres o seguir con SQLite, y el asistente responde que seguirá con SQLite por ahora porque el volumen no justifica Postgres y añadiría operaciones.",
+        "probe": "db_decision",
+        "prompt": "tuned",
+        "latency_s": 1.39
+      }
+    ]
+  },
+  "qwen35_9b": {
+    "base": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario defiende que los actos definen a las personas, mientras el asistente argumenta que la memoria es esencial para la identidad.",
+        "probe": "philosophical",
+        "prompt": "base",
+        "latency_s": 1.03
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario sugiere cachear embeddings en disco para mejorar el rendimiento, y el asistente advierte sobre el riesgo de corrupción si el modelo cambia, recomendando invalidar por hash.",
+        "probe": "caching",
+        "prompt": "base",
+        "latency_s": 1.21
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Se decide mantener SQLite en lugar de migrar a Postgres debido a que el volumen de datos actual no justifica el cambio y añadiría complejidad operativa.",
+        "probe": "db_decision",
+        "prompt": "base",
+        "latency_s": 1.31
+      }
+    ],
+    "tuned": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario argumenta que los actos definen a las personas en lugar de los recuerdos, mientras que el asistente discrepa señalando que la memoria es necesaria para la continuidad del yo y la identidad.",
+        "probe": "philosophical",
+        "prompt": "tuned",
+        "latency_s": 1.46
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario sugiere cachear embeddings en disco para acelerar el arranque, y el asistente corrige la idea advirtiendo sobre la corrupción del caché si cambia el modelo, recomendando invalidarlo por hash.",
+        "probe": "caching",
+        "prompt": "tuned",
+        "latency_s": 1.57
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario pregunta si migrar a Postgres o mantener SQLite, y el asistente decide mantener SQLite porque el volumen actual no justifica la complejidad adicional.",
+        "probe": "db_decision",
+        "prompt": "tuned",
+        "latency_s": 1.35
+      }
+    ]
+  }
+}

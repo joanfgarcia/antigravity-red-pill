@@ -329,8 +329,7 @@ def handle_session(args: argparse.Namespace) -> None:
 			print(
 				f"[SWEEP] activas={result.get('scanned', 0)} "
 				f"encoladas={result.get('enqueued', 0)} "
-				f"ventana={result.get('active_min', '-')}m"
-				+ ("" if result.get("enabled") else " (compactor OFF)")
+				f"ventana={result.get('active_min', '-')}m" + ("" if result.get("enabled") else " (compactor OFF)")
 			)
 		return
 	if getattr(args, "session_cmd", None) == "decisions":
@@ -490,7 +489,10 @@ def handle_session(args: argparse.Namespace) -> None:
 			else:
 				for row in rows:
 					scope = row.get("originator") or "(alma entera)"
-					print(f"[INBOUND] {row.get('continuity_id')} · {scope} · {row.get('state')}" + (f" · {row.get('reason')}" if row.get("reason") else ""))
+					print(
+						f"[INBOUND] {row.get('continuity_id')} · {scope} · {row.get('state')}"
+						+ (f" · {row.get('reason')}" if row.get("reason") else "")
+					)
 			return
 		if not soul:
 			print("[INBOUND] falta el alma: --continuity ID o REDPILL_CONTINUITY_ID en el entorno.")
@@ -928,8 +930,7 @@ def handle_coro(args: argparse.Namespace) -> None:
 		print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
 		return
 	print(
-		f"[CORO reconcile] ventana={report['hours']}h · leídos={report['scanned']} · "
-		f"publicados={report['published']} · fallidos={report['failed']}"
+		f"[CORO reconcile] ventana={report['hours']}h · leídos={report['scanned']} · publicados={report['published']} · fallidos={report['failed']}"
 	)
 	for ev in report.get("events", [])[:10]:
 		print(f"  seq={ev.get('seq')} · {ev.get('verb')} → {str(ev.get('to'))[:8]} · msg={ev.get('event_id')}")

@@ -155,11 +155,22 @@ class ModelManager:
 		self.fallup_last_check = None
 		self.fallup_last_result = None
 		self.fallup_last_at = None
+		# DB-001: palanca de carril + pre-heat en staging (D-DB-01).
+		self.forced_device: Optional[str] = None
+		self.preheat_target: Optional[str] = None
+		self.preheat_state: Dict[str, Any] = {"target": None, "state": "idle", "error": None}
 
 	async def resolve_and_ensure(self, body: Dict[str, Any], prefs: Optional[List[str]] = None):
 		"""Resuelve el selector y carga el modelo si difiere del actual (bajo lock)."""
 		self.last_active = time.time()
 		resolved = mr.resolve(body)
+		# DB-001: mientras el destino se pre-carga, se sigue sirviendo el actual.
+		if self.preheat_target and self.mode is not None and self._backend_alive() and self.current is not None:
+			self._apply_resolved(body, self.current)
+			return self.current
+		# Forzado sticky: manda sobre el perfil hasta `auto`.
+		if self.forced_device and prefs is None:
+			prefs = [self.forced_device]
 		if self.mode is not None and self.current and self._same_model(self.current, resolved) and self._backend_alive():
 			# Mismo modelo: solo aplicar chat handler/thinking de la request.
 			self._apply_resolved(body, resolved)
@@ -271,12 +282,15 @@ class ModelManager:
 		# aquí abajo es la misma: tokenize() + create_chat_completion().
 		from red_pill.inference.local_backend import build_local_backend
 		flash_attn = mr.effective_flash_attn(resolved, "cpu" if IS_CPU_WORKER else "gpu")
-		self.model = build_local_backend(resolved, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, flash_attn=flash_attn)
+		model = build_local_backend(resolved, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, flash_attn=flash_attn)
 		self.flash_attn = flash_attn
-		_register_thinking_handlers(self.model, resolved)
-		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
+		_register_thinking_handlers(model, resolved)
+		# DB-001: el slot se publica al final y el modo el ÚLTIMO. El pre-heat
+		# carga fuera del lock y una petición concurrente debe seguir viendo el viejo.
 		self.n_ctx = n_ctx
 		self.current = resolved
+		self.model = model
+		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
 		mr.mark_load_verified(resolved.model_path)
 		logger.info(f"Model {resolved.profile_name} successfully loaded ({where}).")
 
@@ -306,9 +320,9 @@ class ModelManager:
 			self.worker = subprocess.Popen(worker, env=env, start_new_session=True)
 		self.worker_port = CPU_WORKER_PORT
 		self._await_worker_health()
-		self.mode = "cpu"
 		self.n_ctx = n_ctx
 		self.current = resolved
+		self.mode = "cpu"
 		logger.warning(f"CPU worker ready on 127.0.0.1:{self.worker_port} (pid={self.worker.pid}).")
 
 	def _await_worker_health(self, timeout=180):
@@ -326,7 +340,7 @@ class ModelManager:
 				time.sleep(1)
 		raise RuntimeError(f"CPU worker did not become healthy in {timeout}s")
 
-	def unload_under_lock(self):
+	def _release_model(self):
 		if self.model is not None:
 			name = getattr(self.current, "profile_name", "?")
 			logger.info(f"Unloading model {name}...")
@@ -340,6 +354,8 @@ class ModelManager:
 					logger.warning(f"release del backend falló: {e!r}")
 			self.model = None
 			gc.collect()
+
+	def _release_worker(self):
 		if self.worker is not None:
 			unit = f"redpill-cpu-worker-{CPU_WORKER_PORT}"
 			if shutil.which("systemctl"):
@@ -355,11 +371,63 @@ class ModelManager:
 					pass
 			self.worker = None
 			self.worker_port = None
+
+	def unload_under_lock(self):
+		self._release_model()
+		self._release_worker()
 		self.mode = None
 		self.n_ctx = None
 		self.flash_attn = False
 		self.current = None
 		logger.info("Backend released.")
+
+	async def preheat_device(self, target: str) -> Dict[str, Any]:
+		"""DB-001: carga el destino en el slot libre y conmuta al terminar.
+
+		No aborta la petición en vuelo: mientras `preheat_target` está fijado se
+		sirve el backend actual (ver resolve_and_ensure), y al publicar el modo
+		nuevo la siguiente petición va allí. Si el destino no cabe/falla, se
+		descarta el staging y se queda el modo actual.
+		"""
+		if IS_CPU_WORKER:
+			raise BackendUnavailable("el worker CPU no puede cambiar de carril")
+		if target not in ("gpu", "cpu"):
+			raise BackendUnavailable(f"device inválido: {target}")
+		profile = getattr(self.current, "profile_name", None)
+		body: Dict[str, Any] = {"device_fallback": [target]}
+		if profile:
+			body["model"] = profile
+		resolved = mr.resolve(body)
+		if target == "gpu":
+			resolved = mr.refresh_hardware_tier(resolved)
+			if resolved.n_gpu_layers == 0:
+				raise BackendUnavailable("gpu: insufficient free VRAM")
+		self.preheat_target = target
+		self.forced_device = target
+		self.preheat_state = {"target": target, "state": "loading", "error": None}
+		try:
+			if target == "gpu":
+				await asyncio.to_thread(self._load_in_process, resolved, resolved.n_ctx, resolved.n_gpu_layers)
+				# El modelo ya está listo; soltar el worker viejo en la frontera.
+				async with self.lock:
+					self._release_worker()
+			else:
+				await asyncio.to_thread(self._start_cpu_worker, resolved)
+				async with self.lock:
+					self._release_model()
+			self.preheat_state = {"target": target, "state": "ready", "error": None}
+			self.preheat_target = None
+			return self.preheat_state
+		except Exception as e:
+			self.preheat_state = {"target": target, "state": "failed", "error": str(e)}
+			self.preheat_target = None
+			self.forced_device = None
+			if target == "cpu":
+				try:
+					self._release_worker()
+				except Exception:
+					pass
+			raise
 
 	async def check_idle(self):
 		async with self.lock:
@@ -536,6 +604,9 @@ async def status():
 		"last_mode": res.last_mode if res else "none",
 		"vram_free_mb": VramProbe.get_free_mb(),
 		"effective_default": mr.effective_default().profile_name,
+		"forced_device": getattr(manager, "forced_device", None),
+		"pending_mode": getattr(manager, "preheat_target", None),
+		"preheat": getattr(manager, "preheat_state", None),
 		"fallup": {
 			"enabled": _fallup_on,
 			"stable": getattr(manager, "fallup_stable", 0),
@@ -553,6 +624,49 @@ async def unload_endpoint():
 	async with manager.lock:
 		manager.unload_under_lock()
 	return {"status": "unloaded"}
+
+
+_PREHEAT_TASKS: set = set()
+
+
+@app.post("/control/device")
+async def control_device(request: Request):
+	"""DB-001: palanca de carril. `auto` suelta el forzado; gpu/cpu pre-cargan
+	el destino en staging y conmutan al terminar. `wait=true` espera al load."""
+	body = await request.json()
+	target = str(body.get("device") or "").strip().lower()
+	wait = bool(body.get("wait", False))
+	if target == "auto":
+		manager.forced_device = None
+		manager.preheat_target = None
+		return JSONResponse(content={"ok": True, "device": "auto", "mode": manager.mode})
+	if target not in ("gpu", "cpu"):
+		return JSONResponse(status_code=400, content={"error": "device must be gpu|cpu|auto"})
+	if manager.mode == target:
+		manager.forced_device = target
+		return JSONResponse(content={"ok": True, "device": target, "mode": manager.mode, "preheat": "already"})
+	# Validación temprana del destino: 409 sin tocar nada si no cabe.
+	if target == "gpu":
+		try:
+			profile = getattr(manager.current, "profile_name", None)
+			probe_body: Dict[str, Any] = {"device_fallback": ["gpu"]}
+			if profile:
+				probe_body["model"] = profile
+			probe = mr.refresh_hardware_tier(mr.resolve(probe_body))
+			if probe.n_gpu_layers == 0:
+				return JSONResponse(status_code=409, content={"ok": False, "error": "gpu: insufficient free VRAM", "mode": manager.mode})
+		except Exception as e:
+			return JSONResponse(status_code=409, content={"ok": False, "error": str(e), "mode": manager.mode})
+	if wait:
+		try:
+			state = await manager.preheat_device(target)
+			return JSONResponse(content={"ok": True, "device": target, "mode": manager.mode, "preheat": state})
+		except Exception as e:
+			return JSONResponse(status_code=409, content={"ok": False, "error": str(e), "mode": manager.mode})
+	task = asyncio.create_task(manager.preheat_device(target))
+	_PREHEAT_TASKS.add(task)
+	task.add_done_callback(_PREHEAT_TASKS.discard)
+	return JSONResponse(status_code=202, content={"ok": True, "device": target, "mode": manager.mode, "pending_mode": target, "preheat": "loading"})
 
 
 @app.post("/v1/tokenize")

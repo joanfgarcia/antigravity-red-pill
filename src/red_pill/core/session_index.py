@@ -627,7 +627,9 @@ def _render_entry(b: Dict[str, Any], active_min: int, now: float, show_mission: 
 		state = f"en vuelo > {active_min} min (¿huérfana?)"
 	else:
 		state = "idle"
-	lines = [f"[{sanitize_inline(b['provider'])}] {sanitize_inline(b['session_id'])} · {sanitize_inline(b.get('origin'))} · {state}{_age(b.get('last_activity'), now)}"]
+	lines = [
+		f"[{sanitize_inline(b['provider'])}] {sanitize_inline(b['session_id'])} · {sanitize_inline(b.get('origin'))} · {state}{_age(b.get('last_activity'), now)}"
+	]
 	detail = []
 	if b.get("project"):
 		others = [x for x in b.get("projects") or [] if x != b["project"]]
@@ -683,9 +685,7 @@ def render_board(board: List[Dict[str, Any]], active_min: Optional[int] = None, 
 
 	live_total = sum(1 for b in board if b.get("active"))
 	recent_total = len(board) - live_total
-	lines = [
-		f"--- SESSION BOARD: {live_total} viva(s) · {recent_total} reciente(s) · {len(missions)} misión(es) ---"
-	]
+	lines = [f"--- SESSION BOARD: {live_total} viva(s) · {recent_total} reciente(s) · {len(missions)} misión(es) ---"]
 	for mission, entries in sorted(missions.items(), key=_order):
 		live = [e for e in entries if e.get("active")]
 		recent = [e for e in entries if not e.get("active")]
