@@ -74,17 +74,44 @@ async def test_light_cuenta_la_telemetria_en_el_kernel(monkeypatch):
 	venía a ahorrar.
 	"""
 	monkeypatch.setattr(routes, "_kernel_telemetry_text", lambda: "OPEN LOOPS: 11 shards OPEN · dolor 7")
+	monkeypatch.setattr(routes, "_clock_line", lambda: "- Ahora: 2026-11-22 00:14 (dom)")
 	res = await routes.handle_context(
 		{"session_id": "ses_test_light", "harness": "opencode", "need": "light", "turn": 2, "model": "m"}
 	)
 	telemetria = [b["text"] for b in res["blocks"] if b["kind"] == "telemetry"]
-	assert telemetria == ["OPEN LOOPS: 11 shards OPEN · dolor 7"]
+	assert telemetria == ["- Ahora: 2026-11-22 00:14 (dom) · OPEN LOOPS: 11 shards OPEN · dolor 7"]
+
+
+@pytest.mark.asyncio
+async def test_light_lleva_el_reloj_del_turno(monkeypatch, tmp_path):
+	"""Sin hora, el agente confunde el domingo de madrugada con el domingo de día.
+
+	El arnés sólo manda la fecha. El reloj del turno (`pulse.time_line`) tiene que
+	viajar en el bloque `telemetry` aunque no haya contadores ni estado del Búnker.
+	"""
+	monkeypatch.setattr(routes, "_kernel_telemetry_text", lambda: "")
+	heartbeat = tmp_path / "pulse.json"
+	heartbeat.write_text(json.dumps({"last_interaction": time.time(), "session_start": time.time()}), encoding="utf-8")
+	monkeypatch.setattr("red_pill.utils.pulse.HEARTBEAT_FILE", str(heartbeat))
+	res = await routes.handle_context(
+		{"session_id": "ses_test_clock", "harness": "opencode", "need": "light", "turn": 2, "model": "m"}
+	)
+	telemetria = [b["text"] for b in res["blocks"] if b["kind"] == "telemetry"]
+	assert telemetria, "el reloj no llegó al agente"
+	assert telemetria[0].startswith("- Ahora: ")
+	assert "turno anterior" in telemetria[0]
+
+
+def test_el_reloj_no_tumba_el_turno_si_falta_el_heartbeat(monkeypatch):
+	monkeypatch.setattr("red_pill.utils.pulse.HEARTBEAT_FILE", "/nonexistent/pulse.json")
+	assert routes._clock_line().startswith("- Ahora: ")
 
 
 @pytest.mark.asyncio
 async def test_light_respeta_los_contadores_si_el_cliente_los_manda(monkeypatch):
 	"""Compatibilidad: un cliente que sí manda números manda él."""
 	monkeypatch.setattr(routes, "_kernel_telemetry_text", lambda: "no debería usarse")
+	monkeypatch.setattr(routes, "_clock_line", lambda: "- Ahora: 2026-11-22 00:14 (dom)")
 	res = await routes.handle_context(
 		{
 			"session_id": "ses_test_light2",

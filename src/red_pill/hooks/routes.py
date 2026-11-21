@@ -204,6 +204,26 @@ def _kernel_telemetry_text() -> str:
 	return " · ".join(parts)
 
 
+def _clock_line() -> str:
+	"""Reloj del turno: hora, delta desde el turno anterior y edad de la sesión.
+
+	El arnés sólo entrega la **fecha** (`Today's date is…`). Con la fecha y sin la
+	hora, un turno a las 00:14 del domingo se lee como "domingo de día" y el agente
+	habla del futuro como si hubiera pasado (pasó el 22-11: pregunté por una comida
+	que aún no se había hecho). Misma fuente y mismo formato que el interceptor de
+	telemetría (`pulse.time_line`): un solo reloj, no dos.
+
+	Best-effort y nunca lanza: sin `pulse.json` la línea se queda en la hora sola,
+	y si ni eso, vacía (el turno sigue sin reloj).
+	"""
+	try:
+		from red_pill.utils.pulse import time_line
+
+		return time_line()
+	except Exception:  # noqa: BLE001 — el reloj no puede tumbar el turno
+		return ""
+
+
 def _wake_text(mode: str, continuity: str) -> str:
 	"""Texto de identidad: el mismo `wake_up_v6` que usa la tool. Bloqueante."""
 	from red_pill.mcp_server import GET_PYTHON, PROJECT_ROOT
@@ -309,6 +329,12 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 			# aquí. Sin esto `light` sólo devolvía el digest del coro y el agente
 			# se enteraba de OPEN LOOPS y del dolor únicamente llamando a la tool.
 			line = _kernel_telemetry_text()
+		# El reloj va delante y viaja con CUALQUIER telemetría (contadores del
+		# arnés o recuento del kernel): no es un contador, es el marco temporal
+		# sin el cual "ayer", "hoy" y "hace dos turnos" se confunden.
+		clock = _clock_line()
+		if clock:
+			line = f"{clock} · {line}" if line else clock
 		if line:
 			blocks.append(block("telemetry", line, origin="telemetry", trusted=True))
 
