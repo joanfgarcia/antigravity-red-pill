@@ -46,7 +46,7 @@ python scripts/dokime.py up
 DOKIME_BOX=titanium DOKIME_AGENT_NAME=Titanium \
 DOKIME_IDENTITY_MODE=full \
 DOKIME_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5 \
-DOKIME_EXTRA_MOUNTS="/ruta/al/repo:/srv/dokime/project:ro,/ruta/al/despacho:/srv/dokime/desk/compartido" \
+DOKIME_EXTRA_MOUNTS="/ruta/al/despacho:/srv/dokime/desk/compartido" \
 python scripts/dokime.py up
 ```
 
@@ -60,8 +60,71 @@ Variables que importan:
 | `DOKIME_IDENTITY_MODE` | `low` para modelos pequeños; `full` para frontera |
 | `DOKIME_EMBEDDING_MODEL` | **el espacio vectorial del alma**; si no coincide con su memoria, los recuerdos no significan |
 | `DOKIME_EXTRA_MOUNTS` | volúmenes extra (`origen:destino[:ro]`, separados por coma) |
+| `DOKIME_KERNEL_WORKTREE` | árbol que se mide (defecto: `~/.local/share/dokime/kernel/<caja>`) |
+| `DOKIME_KERNEL_REF` | rama/tag al que `update` sincroniza (defecto: `next`) |
+| `DOKIME_DESK` | despacho del alma en el host (defecto: `~/.local/share/dokime/desk/<caja>`) |
+| `DOKIME_ANCHOR_MODE` | variante del ancla al re-inyectar (`auto`, `prompt`, `hook`) |
 
 Antes de despertar: `python scripts/dokime.py preflight` (debe salir `0`).
+
+## Mantener la caja al día
+
+Cada caja mide **un árbol propio**, no el checkout del Operador: un worktree en
+`~/.local/share/dokime/kernel/<caja>`, montado `:ro` en `/src/red-pill`. Eso es
+lo que impide que el sandbox reescriba refs, y lo que permite mover el árbol sin
+tocar el despacho.
+
+```bash
+python scripts/dokime.py update --dry-run   # qué haría
+python scripts/dokime.py update             # sincroniza el worktree + re-siembra
+python scripts/dokime.py update --ref v8.5.1
+python scripts/dokime.py update --recreate  # además, recrea la caja
+```
+
+`update` hace tres cosas, **en este orden**:
+
+1. Mueve el worktree del banco a `--ref` (por defecto `next`), con `git worktree
+	 add --detach` la primera vez. Si tiene cambios sin commitear, se niega salvo
+	 `--force`: un árbol sucio mediría algo que no está en ninguna rama.
+2. Comprueba si los **montajes** de la caja siguen apuntando a ese árbol y al desk
+	del host. Los montajes se congelan al crear el contenedor: si no cuadran, lo
+	dice y **no** arranca nada a traición — recrear es `--recreate`, que borra el
+	contenedor (volúmenes intactos) y lo vuelve a crear. La config con la que nació
+	cada caja está apuntada en `~/.local/share/dokime/boxes/<caja>.json`, así que
+	recrear respeta su modelo, ventana y montajes extra; lo que exportes en ese
+	momento manda sobre lo guardado.
+3. **Re-siembra** la identidad si la caja está arriba: `red-pill seed` (engramas
+	desde `seeds/`) y las anclas de pi (`AGENTS.override.md` + skills). Sin esto el
+	alma lee textos nuevos con memoria vieja; `up` también lo hace, salvo
+	`--no-seed`.
+
+`python scripts/dokime.py status` da la radiografía: qué corre, qué sha se mide,
+a dónde apuntan los montajes y si están obsoletos.
+
+## El desk como intercambio
+
+El despacho del alma (`AGENT_CORE_DIR`) ya **no** vive dentro del volumen: es un
+directorio del host, montado en `/srv/dokime/desk`. Es el mismo inodo en los dos
+lados, así que no hay nada que sincronizar.
+
+```
+~/.local/share/dokime/desk/<caja>/
+	├── inbox/     lo que dejas tú para que el alma lo lea
+	├── outbox/    lo que el alma devuelve
+	└── …          sus notas, planes y lo que escriba en el desk
+```
+
+```bash
+python scripts/dokime.py desk                    # rutas (host y contenedor)
+python scripts/dokime.py desk ls                 # qué hay
+python scripts/dokime.py desk ls outbox
+python scripts/dokime.py desk put informe.md     # → inbox/
+python scripts/dokime.py desk put fotos/ --to trabajo
+python scripts/dokime.py desk get 'respuesta*'   # outbox/ → aquí
+python scripts/dokime.py desk get '*.md' --to ~/recogido --move
+```
+
+`put`/`get` son azúcar de `cp`: dentro del sandbox basta `ls /srv/dokime/desk`.
 
 ## Orden de una medición completa
 
