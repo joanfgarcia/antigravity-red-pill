@@ -223,7 +223,7 @@ def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Distiller bake-off aptitude harness.")
-	parser.add_argument("--models", default="qwen35_9b,beck_8b,piaget_8b,hermes_8b,granite_8b", help="Comma-separated candidate names.")
+	parser.add_argument("--models", default="granite_4_2_8b", help="Comma-separated candidate names.")
 	parser.add_argument(
 		"--n-gpu-layers",
 		type=int,

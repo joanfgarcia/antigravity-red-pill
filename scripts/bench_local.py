@@ -104,13 +104,7 @@ def bench_elements() -> list:
 PRIORITY_ROSTER = [
 	"bonsai_2_27b",
 	"granite_4_2_8b",
-	"tiny_aya_water",
-	"qwen3_8b",
-	"qwen35_9b",
-	"smollm3_3b",
-	"hermes_8b",
-	"gemma_3_4b",
-	"llama_32",
+	"mimo_v26_9b",
 ]
 
 EMOTIONS = frozenset({"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"})

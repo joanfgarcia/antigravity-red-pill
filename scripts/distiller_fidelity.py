@@ -158,7 +158,7 @@ def render(results: Dict[str, Dict[str, List[Dict[str, Any]]]]) -> str:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Distiller fidelity (both-sides) eval.")
-	parser.add_argument("--models", default="hermes_8b,granite_8b")
+	parser.add_argument("--models", default="granite_4_2_8b")
 	parser.add_argument("--n-gpu-layers", type=int, default=-1, help="-1 GPU / 0 CPU / N hybrid (needs CUDA llama-cpp for GPU).")
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)

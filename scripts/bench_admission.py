@@ -26,16 +26,8 @@ SPARK = Path(os.getenv("RP_BENCH_MODELS", str(Path.home() / "opt/k2-bench/models
 MODELS = [
 	("spark", SPARK),
 	("mimo", M / "MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf"),
-	("qwen35_9b", M / "Qwen3.5-9B-Q4_K_M.gguf"),
 	("granite42_8b", M / "granite-4.2-8b-Q4_K_M.gguf"),
-	("hermes3_llama8b", M / "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"),
-	("gemma3_4b", M / "google_gemma-3-4b-it-Q4_K_M.gguf"),
-	("phi4_mini", M / "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"),
 	("mistral_7b", M / "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"),
-	("llama32_3b", M / "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
-	("smollm3_3b", M / "SmolLM3-3B-Q4_K_M.gguf"),
-	("qwen3_8b", M / "Qwen3-8B-Q4_K_M.gguf"),
-	("tiny_aya", M / "tiny-aya-global-q4_k_m.gguf"),
 	("bonsai_27b", M / "Ternary-Bonsai-2-27B-PTQ1_0.gguf"),
 ]
 
