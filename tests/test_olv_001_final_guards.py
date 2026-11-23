@@ -245,3 +245,18 @@ def test_clock_is_monotonic_and_atomic(monkeypatch, tmp_path):
 	monkeypatch.setattr(fog, "_mirror_days", lambda after=None: [now])
 	clock = fog.active_day_clock(now)
 	assert clock["epoch"] == 3
+
+
+def test_zero_active_days_index_is_absence_of_data_not_a_verdict():
+	"""D-16 (SHARD-31): `active_days_at_recall=0` es «no escrito», no «día 0».
+
+	`_reinforce_points` solo persiste el campo con epoch > 0; un 0 guardado es un
+	payload anterior al fix o un default. Leerlo como `since = epoch` firmaba un
+	borrado por un uso que sí ocurrió (reloj de 60 días, recuerdo de ayer → delete).
+	"""
+	now = time.time()
+	clock = _clock(60, now, started_epoch=0)
+	fresh = {"recall_count": 0, "active_days_at_recall": 0, "last_recalled_at": now - DAY}
+	assert fog.classify(fresh, "work_memories", clock, now) == "keep"
+	# El índice válido sigue mandando: el recuerdo del primer día activo se cobra.
+	assert fog.classify(dict(fresh, active_days_at_recall=1), "work_memories", clock, now) == "delete"

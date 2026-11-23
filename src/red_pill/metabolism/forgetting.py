@@ -233,7 +233,11 @@ def _since_days(payload: Dict[str, Any], clock: Dict[str, Any], now: float) -> i
 	epoch = int(clock.get("epoch") or 0)
 	days = list(clock.get("days") or [])
 	idx = payload.get("active_days_at_recall")
-	if isinstance(idx, int) and 0 <= idx <= epoch:
+	# D-16: 0 no es «el día activo 0», es «no escrito». `_reinforce_points` solo
+	# persiste el campo con epoch > 0, así que un 0 guardado es un payload previo
+	# al fix o un default: se degrada a la rama legacy en vez de leerlo como
+	# `since = epoch` y firmar un borrado por un uso que sí ocurrió.
+	if isinstance(idx, int) and 0 < idx <= epoch:
 		return epoch - idx
 	last = _ts(payload.get("last_recalled_at")) or _ts(payload.get("created_at")) or now
 	started = clock.get("started_epoch")
