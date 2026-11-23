@@ -27,6 +27,8 @@ def test_rechazo_por_tope_duro_guarda_la_traza_de_compactacion(monkeypatch):
 			"summary": "historia " * 300,
 			"texture": "",
 			"compaction_calls": 2,
+			"summary_compaction_calls": 2,
+			"texture_compaction_calls": 0,
 			"summary_compacted": True,
 		}
 
@@ -37,7 +39,41 @@ def test_rechazo_por_tope_duro_guarda_la_traza_de_compactacion(monkeypatch):
 	detail = marked["m1"]["hub_synth_reject_detail"]
 	assert detail["chars"] > detail["hard"]
 	assert detail["compaction_calls"] == 2
+	assert detail["summary_calls"] == 2
+	assert detail["texture_calls"] == 0
 	assert detail["compacted"] is True
+
+
+def test_rechazo_por_textura_no_culpa_al_summary(monkeypatch):
+	"""COMPACT-TRACE-001: el detalle cita las llamadas del SUMMARY, no el total.
+
+	Un hub con 3 compactaciones de textura y ninguna del summary se leía como
+	«el maestro ignoró la compactación 3 veces». El veredicto debe nombrar el
+	campo que decide: summary_calls=0 ⇒ la compactación del summary no corrió.
+	"""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeMM(client)
+
+	def long_synth(chunks, **kwargs):
+		return {
+			"title": "T",
+			"summary": "historia " * 300,
+			"texture": "textura compactada",
+			"compaction_calls": 3,
+			"summary_compaction_calls": 0,
+			"texture_compaction_calls": 3,
+			"summary_compacted": False,
+		}
+
+	synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=long_synth, affect_fn=lambda c: ("gray", 0.5))
+	detail = client.marked["work_memories"]["m1"]["hub_synth_reject_detail"]
+	assert detail["compaction_calls"] == 3
+	assert detail["summary_calls"] == 0
+	assert detail["texture_calls"] == 3
 
 
 def test_rechazo_sin_compactacion_se_distingue_del_que_la_ignoro(monkeypatch):

@@ -1318,7 +1318,25 @@ def synthesize_hub_v2(
 			logger.warning(f"[HUB-V2] LLM call failed ({e}).")
 			return ""
 
-	compaction_stats = {"calls": 0, "latency_s": 0.0}
+	# El total (`calls`) no dice QUÉ campo se compactó: summary, textura,
+	# partición de textura y reescritura de idioma comparten contador. Un
+	# veredicto de rechazo por summary no puede leerse con ese total (medido
+	# 2026-11-22: `compaction_calls=3` con el summary intacto). Por eso cada
+	# llamada incrementa también su campo.
+	compaction_stats = {
+		"calls": 0,
+		"latency_s": 0.0,
+		"summary_calls": 0,
+		"texture_calls": 0,
+		"texture_split_calls": 0,
+		"language_calls": 0,
+	}
+
+	def _count_compaction(kind: str, elapsed: float) -> None:
+		compaction_stats["calls"] += 1
+		compaction_stats["latency_s"] += elapsed
+		key = f"{kind}_calls"
+		compaction_stats[key] = compaction_stats.get(key, 0) + 1
 
 	def _compact_with(text: str, system_prompt: str, target: int, field: str) -> str:
 		"""Reescribe por SÍNTESIS (nunca recorta) para acercar el texto al target."""
@@ -1327,8 +1345,7 @@ def synthesize_hub_v2(
 		system = system_prompt.replace("{target}", str(target))
 		t0 = time.time()
 		content = _call(system, text).strip()
-		compaction_stats["calls"] += 1
-		compaction_stats["latency_s"] += time.time() - t0
+		_count_compaction(field, time.time() - t0)
 		if not content:
 			return text
 		if content.startswith("{"):
@@ -1350,8 +1367,7 @@ def synthesize_hub_v2(
 		system = texture_split_prompt.replace("{target}", str(target))
 		t0 = time.time()
 		content = _call(system, text).strip()
-		compaction_stats["calls"] += 1
-		compaction_stats["latency_s"] += time.time() - t0
+		_count_compaction("texture_split", time.time() - t0)
 		if not content:
 			return None
 		match = re.search(r"\{[\s\S]*\}", content)
@@ -1435,8 +1451,7 @@ def synthesize_hub_v2(
 		system = language_rewrite_prompt.replace("{target}", str(summary_target))
 		t0 = time.time()
 		content = _call(system, text).strip()
-		compaction_stats["calls"] += 1
-		compaction_stats["latency_s"] += time.time() - t0
+		_count_compaction("language", time.time() - t0)
 		if not content:
 			return text
 		if content.startswith("{"):
@@ -1500,6 +1515,12 @@ def synthesize_hub_v2(
 		hub["truncated"] = False
 		hub["output_chars"] = body_len + texture_len + 1
 		hub["compaction_calls"] = compaction_stats["calls"]
+		# Traza por campo: el total no distingue «el summary se reintentó N
+		# veces» de «las N llamadas fueron de textura» (COMPACT-TRACE-001).
+		hub["summary_compaction_calls"] = compaction_stats["summary_calls"]
+		hub["texture_compaction_calls"] = compaction_stats["texture_calls"]
+		hub["texture_split_calls"] = compaction_stats["texture_split_calls"]
+		hub["language_rewrite_calls"] = compaction_stats["language_calls"]
 		hub["compaction_latency_s"] = round(compaction_stats["latency_s"], 2)
 		# Auditoría del híbrido: modelo/prompt efectivos de la llamada maestra.
 		hub["large_path"] = bool(large_used["flag"])

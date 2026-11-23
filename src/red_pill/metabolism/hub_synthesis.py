@@ -417,21 +417,25 @@ def _synthesize_one(
 	# por síntesis, NO se escribe el hub: se reintenta, no se inyectan 3k chars.
 	hard_limit = max(200, int(getattr(cfg, "SLEEP_HUB_SUMMARY_HARD_LIMIT", 1000) or 1000))
 	if len(body) > hard_limit:
-		# El veredicto necesita su traza: `compaction_calls=0` significa que la
-		# compactación por síntesis no llegó a correr (nada que reintentar igual);
-		# `>0` significa que el maestro la ignoró N veces (medido 2026-11-20:
-		# 1.441 chars contra tope 1.000 tras dos intentos). Sin este dato, el
-		# marcador de rechazo solo dice «no cupo» y la noche siguiente repite.
+		# El veredicto necesita su traza, y el TOTAL no la da: `compaction_calls`
+		# suma summary, textura, partición y reescritura de idioma. Vale
+		# `summary_calls=0` para saber que la compactación del summary no llegó a
+		# correr (nada que reintentar igual) y `>0` para saber que el maestro la
+		# ignoró N veces (medido 2026-11-20: 1.441 chars contra tope 1.000 tras
+		# dos intentos). Sin este dato, el marcador de rechazo solo dice «no cupo».
 		detail = {
 			"chars": len(body),
 			"hard": hard_limit,
 			"compaction_calls": int(hub.get("compaction_calls") or 0),
+			"summary_calls": int(hub.get("summary_compaction_calls") or 0),
+			"texture_calls": int(hub.get("texture_compaction_calls") or 0),
 			"compacted": bool(hub.get("summary_compacted")),
 		}
 		logger.warning(
 			f"[HUBS] summary {len(body)} > hard limit {hard_limit} en {collection}:{session_id} "
 			f"(+{len(body) - hard_limit} chars, {100.0 * (len(body) - hard_limit) / hard_limit:.1f} % sobre el tope; "
-			f"compaction_calls={detail['compaction_calls']}, compacted={detail['compacted']}); "
+			f"summary_calls={detail['summary_calls']}/{detail['compaction_calls']} totales "
+			f"(textura={detail['texture_calls']}), compacted={detail['compacted']}); "
 			"no se escribe (se reintenta; el detalle sigue en Memento)"
 		)
 		return _fail("summary_over_hard_limit", billable=True, detail=detail)
@@ -535,6 +539,11 @@ def _synthesize_one(
 	metadata["hub_texture_split_fallback"] = bool(hub.get("texture_split_fallback", False) or guard_split)
 	metadata["hub_output_chars"] = int(hub.get("output_chars") or 0)
 	metadata["hub_compaction_calls"] = int(hub.get("compaction_calls") or 0)
+	# Traza por campo (COMPACT-TRACE-001): el total suma summary + textura +
+	# partición + idioma; el marcador de rechazo cita el del summary.
+	metadata["hub_summary_compaction_calls"] = int(hub.get("summary_compaction_calls") or 0)
+	metadata["hub_texture_compaction_calls"] = int(hub.get("texture_compaction_calls") or 0)
+	metadata["hub_language_rewrite_calls"] = int(hub.get("language_rewrite_calls") or 0)
 	metadata["hub_compaction_latency_s"] = float(hub.get("compaction_latency_s") or 0.0)
 	metadata["hub_partial_cache_hits"] = int(hub.get("partial_cache_hits") or 0)
 	metadata["hub_partial_cache_total"] = int(hub.get("partial_cache_total") or 0)

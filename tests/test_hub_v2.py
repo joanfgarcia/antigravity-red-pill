@@ -169,7 +169,34 @@ def test_synthesize_hub_v2_compacts_over_budget_summary(monkeypatch):
 	assert hub["summary_compacted"] is True
 	assert hub["summary_over_budget"] is False
 	assert hub["compaction_calls"] == 1
+	assert hub["summary_compaction_calls"] == 1
+	assert hub["texture_compaction_calls"] == 0
 	assert hub["truncated"] is False
+
+
+def test_compaction_counters_separan_summary_de_textura(monkeypatch):
+	"""COMPACT-TRACE-001: el total no dice qué campo se compactó.
+
+	Summary que cabe (no se toca) + textura larga que sí compacta: el hub debe
+	traer `texture_compaction_calls>0` y `summary_compaction_calls=0`. Antes,
+	ambos casos leían `compaction_calls>0` y el veredicto culpaba al summary.
+	"""
+
+	class _TextureProvider:
+		def generate(self, prompt, messages=None, temperature=0.1, **kwargs):
+			system = str((messages or [{}])[0].get("content") or "")
+			if "HUB_TEXTURE_COMPACT" in system:
+				return "textura compacta"
+			if "HUB_SUMMARY_COMPACT" in system:
+				return "resumen compacto"
+			return json.dumps({"title": "T", "summary": "resumen corto que cabe", "texture": "T" * 600, "lang": "es"})
+
+	_patch_custom(monkeypatch, _TextureProvider())
+	hub = synthesize_hub_v2(CHUNKS)
+	assert hub["texture_compacted"] is True
+	assert hub["texture_compaction_calls"] >= 1
+	assert hub["summary_compaction_calls"] == 0
+	assert hub["compaction_calls"] == hub["texture_compaction_calls"] + hub["summary_compaction_calls"]
 
 
 def test_synthesize_hub_v2_keeps_summary_if_compaction_fails(monkeypatch):
