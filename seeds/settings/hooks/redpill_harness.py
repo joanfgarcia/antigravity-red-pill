@@ -50,6 +50,10 @@ FULL_POLL_S = 1.0
 # Claude Code guarda en fichero lo que pase de 10.000 caracteres y deja un extracto.
 MAX_CONTEXT_CHARS = 9500
 END_EVENTS = frozenset({"Stop", "StopFailure"})
+# `SessionStart` sólo deja la identidad (y el aviso si no se resolvió): coro y
+# reloj llegan con el primer `UserPromptSubmit`, más frescos. Inyectarlos aquí los
+# duplicaba en el transcript del turno 1.
+SESSION_START_KINDS = frozenset({"identity", "notice"})
 
 SAFETY_NET = (
 	"[red-pill] El arnés no pudo inyectar la identidad (kernel no disponible). "
@@ -246,7 +250,7 @@ def on_session_start(session_id: str, state: dict, payload: dict) -> str:
 		return _safety_net(state)
 	blocks = _apply(state, res)
 	state["delivery"] = None  # el ack es del turno, no del arranque
-	return render(blocks)
+	return render([b for b in blocks if isinstance(b, dict) and b.get("kind") in SESSION_START_KINDS])
 
 
 def on_prompt(session_id: str, state: dict, payload: dict) -> str:
