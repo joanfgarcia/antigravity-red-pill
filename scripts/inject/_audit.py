@@ -30,6 +30,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 
+from _config_common import env_workspace_root
 from inject_anchor import (
 	ANCHOR_REGISTRY,
 	BLOCK_ANCHORS,
@@ -80,10 +81,12 @@ def _state_dir() -> str:
 
 
 def workspace_roots(workspace: str | None = None) -> list[str]:
-	"""Raíces a revisar: la del ``--workspace`` y todas las del registro."""
+	"""Raíces a revisar: ``--workspace`` (o ``WORKSPACE_ROOT``, la que usa la siembra de
+	Pi para su ``AGENTS.override.md``) y todas las del registro."""
 	roots: list[str] = []
-	if workspace:
-		roots.append(os.path.abspath(_home(workspace)))
+	first = env_workspace_root(workspace)
+	if first and os.path.isdir(first):
+		roots.append(first)
 	registry = _home("~/.config/red-pill/workspaces.yaml")
 	try:
 		import yaml
@@ -328,8 +331,27 @@ def _handshake_variant(content: str) -> str | None:
 	return "?"
 
 
+def expected_anchor_files() -> list[str]:
+	"""Ficheros de anclas que la siembra mantiene para los arneses instalados.
+
+	Los globales, si existe el directorio del IDE; el ``AGENTS.override.md`` de Pi en
+	``WORKSPACE_ROOT``, si Pi está instalado (es donde lo escribe su siembra).
+	"""
+	files = [p for p in (_home(t.path) for t in ANCHOR_REGISTRY if t.path and t.scriptable) if os.path.isdir(os.path.dirname(p))]
+	pi_root = env_workspace_root()
+	if pi_root and os.path.isdir(_home("~/.pi/agent")):
+		files.append(os.path.join(pi_root, "AGENTS.override.md"))
+	return files
+
+
 def _audit_anchors(roots: list[str]) -> list[Finding]:
 	found: list[Finding] = []
+	for path in expected_anchor_files():
+		content = _read(path)
+		missing = [a for a in BLOCK_ANCHORS if content is None or a not in block_names(content)]
+		if missing:
+			what = "no existe" if content is None else "le faltan las anclas " + ", ".join(f"`{a}`" for a in missing)
+			found.append(Finding(WARN, "anchor_missing", _short(path), f"{what}: ese arnés arranca sin esas reglas. Vuelve a sembrar."))
 	global_claude = _home("~/.claude/CLAUDE.md")
 	global_has = bool(block_names(_read(global_claude) or ""))
 	for path in anchor_files(roots):

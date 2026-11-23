@@ -31,6 +31,7 @@ HOOK_SEED = (REPO_ROOT / "seeds" / "anchors" / "sovereign_handshake.hook.md").re
 def home(tmp_path, monkeypatch):
 	monkeypatch.setenv("HOME", str(tmp_path))
 	monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))
+	monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 	return tmp_path
 
 
@@ -181,6 +182,36 @@ def test_script_obsoleto_y_respaldos_en_hooks(home):
 
 def test_maquina_limpia_sin_hallazgos(home):
 	assert audit.audit() == []
+
+
+def _all_anchors() -> str:
+	return "\n".join(_block(a) for a in inject_anchor.BLOCK_ANCHORS) + "\n"
+
+
+def test_override_de_pi_entra_en_la_foto_y_en_la_auditoria(home, monkeypatch):
+	ws = home / "IA"
+	monkeypatch.setenv("WORKSPACE_ROOT", str(ws))
+	(home / ".pi" / "agent").mkdir(parents=True)
+	override = _write(ws / "AGENTS.override.md", _all_anchors() + _block("git_workflow") + "\n")
+	assert str(override) in audit.snapshot()
+	assert "anchor_retired" in _codes(audit.audit())
+	override.write_text(_all_anchors().replace("identity_pact", "otra"), encoding="utf-8")
+	missing = [f for f in audit.audit() if f.code == "anchor_missing"]
+	assert len(missing) == 1 and "identity_pact" in missing[0].message
+
+
+def test_pi_instalado_sin_override_se_avisa(home, monkeypatch):
+	monkeypatch.setenv("WORKSPACE_ROOT", str(home / "IA"))
+	(home / "IA").mkdir()
+	(home / ".pi" / "agent").mkdir(parents=True)
+	missing = [f for f in audit.audit() if f.code == "anchor_missing"]
+	assert len(missing) == 1 and "no existe" in missing[0].message
+
+
+def test_ide_presente_con_anclas_incompletas(home):
+	_write(home / ".claude" / "CLAUDE.md", _block("agent_core") + "\n")
+	missing = [f for f in audit.audit() if f.code == "anchor_missing"]
+	assert len(missing) == 1 and "sovereign_handshake" in missing[0].message
 
 
 # ── Foto antes/después ────────────────────────────────────────────────────────

@@ -228,6 +228,19 @@ def _agent_core_from_registry(home):
 		return None
 
 
+def env_workspace_root(workspace=None):
+	"""Raíz del workspace de los arneses sin `--workspace` propio: `--workspace` → env
+	`WORKSPACE_ROOT` → `.env` → None. Fuente única: la usan la siembra de Pi (escribe
+	`<raíz>/AGENTS.override.md`) y la auditoría (que tiene que fotografiar ese fichero)."""
+	if workspace:
+		return os.path.abspath(os.path.expanduser(workspace))
+	home = os.path.expanduser("~")
+	root = os.environ.get("WORKSPACE_ROOT") or parse_env_file(os.path.join(home, ".config", "red-pill", ".env")).get("WORKSPACE_ROOT")
+	if root:
+		return os.path.abspath(os.path.expanduser(root.strip().strip('"').strip("'").replace("${HOME}", home)))
+	return None
+
+
 def agent_core_vars():
 	"""Resolve ${AGENT_CORE_DIR} (the agent's GLOBAL desk). Source of truth: the workspace registry
 	(~/.config/red-pill/workspaces.yaml:agent_core); falls back to the flat .env for back-compat.

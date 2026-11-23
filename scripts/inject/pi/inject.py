@@ -32,7 +32,7 @@ import sys
 logger = logging.getLogger("inject_pi")
 
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, env_workspace_root, subst  # noqa: E402
 
 # `inject()` respeta `args.dry_run` (ver `_registry.inject_all`).
 SUPPORTS_DRY_RUN = True
@@ -44,23 +44,7 @@ def _pi_agent_dir() -> str:
 
 def _workspace_root(args) -> str | None:
 	"""Workspace root for the Pi anchor override: --workspace → WORKSPACE_ROOT (.env) → None."""
-	ws = getattr(args, "workspace", None)
-	if ws:
-		return os.path.abspath(os.path.expanduser(ws))
-	home = os.path.expanduser("~")
-	root = os.environ.get("WORKSPACE_ROOT")
-	if not root:
-		env_path = os.path.join(home, ".config", "red-pill", ".env")
-		if os.path.exists(env_path):
-			with open(env_path, encoding="utf-8") as f:
-				for raw in f:
-					line = raw.strip()
-					if line.startswith("WORKSPACE_ROOT="):
-						root = line.partition("=")[2].strip().strip('"').strip("'")
-						break
-	if root:
-		return os.path.expanduser(root.replace("${HOME}", home))
-	return None
+	return env_workspace_root(getattr(args, "workspace", None))
 
 
 def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False) -> int:
