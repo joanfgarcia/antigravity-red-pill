@@ -1,0 +1,54 @@
+# Minion ladder — ¿quién debe ser el default de `minion_tool`?
+#
+# Re-evaluación 2026-11-23 (decisión del Operador): el carril de minion tiene
+# como titular a `granite_8b` (4.1). Evidencia previa:
+#   · tool-calling estático (5 probes): 4.1 5/5 · 4.2 4/5 · MiMo 5/5
+#   · bucle real multiturno (2026-11-16): 4.2 2/3 · MiMo 3/3 (4x más rápido)
+#   · escalera de autonomía (2026-09-30): 4.1 7/7 · 4.2 6/7 · MiMo sin medir
+# Falta el e2e de MiMo por la RUTA DE PRODUCCIÓN (`run_local_minion`), que es
+# el gate que el catálogo le pide para dejar de ser candidato (prioridad 11).
+#
+# UN step = UN modelo (element_job, reanudable por elemento). El sandbox es
+# propio por modelo para no mezclar mutaciones. Salida → scratch/benchmarks
+# (git-ignored); la tabla resumen se promueve a docs/BENCHMARKS al revisar.
+source: element_job
+priority: 3
+title: Minion ladder — MiMo 2.6 vs Granite 4.2 vs Granite 4.1 (ruta de producción)
+mission_id: minion-ladder
+elements:
+  - {model: granite_8b}
+  - {model: granite_4_2_8b}
+  - {model: mimo_v26_9b}
+  # 2026-11-23: candidatos a sustituir al 4.1 en el carril. Se saltan P4 (rag)
+  # para no levantar un OracleMinion por modelo; la comparación es por probe.
+  - {model: k2_horizon_7b, only: "P1,P2,P3,P5,P6,P7"}
+  - {model: spark_x2_6_4b, only: "P1,P2,P3,P5,P6,P7"}
+step_command:
+  - sh
+  - -c
+  - |
+    set -u
+    M=$(python3 -c 'import json,os;print(json.loads(os.environ["RP_ELEMENT"])["model"])')
+    ONLY=$(python3 -c 'import json,os;print(json.loads(os.environ["RP_ELEMENT"]).get("only",""))')
+    OUT="$IA_DIR/scratch/benchmarks/minion-ladder"
+    mkdir -p "$OUT"
+    echo "[minion-ladder] modelo=$M only=${ONLY:-todos}"
+    set -- "$IA_DIR/scripts/autonomy_ladder.py" --model "$M" \
+      --sandbox "$IA_DIR/scratch/minion-lab-$M" --out-dir "$OUT"
+    if [ -n "$ONLY" ]; then set -- "$@" --only "$ONLY"; fi
+    "$IA_DIR/.venv/bin/python" "$@"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      echo "[minion-ladder] $M rc=$rc (el modelo no cargó o el daemon no responde)"
+      echo "{\"model\": \"$M\", \"rc\": $rc}" >> "$OUT/failures.jsonl"
+      exit 79
+    fi
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 60
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 16G

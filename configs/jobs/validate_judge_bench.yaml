@@ -1,0 +1,45 @@
+# Juez de `validate` — ¿quién puede sustituir al Granite 4.1?
+#
+# 2026-11-23. El 4.1 es hoy el único 5/5 medido como validador (AD-035) y es su
+# último carril junto a `minion_tool`. Antes de retirarlo hay que ver si el
+# 4.2-8B, K2 o Spark empatan. El banco es READ-ONLY: replica el prompt y el
+# transporte de producción pero NO sella las notas (validate_note sí lo hace y
+# mutaría el corpus entre modelos).
+#
+# Muestra determinista (seed 7, 12 notas pendientes) idéntica para los cuatro.
+# La comparación es de ACUERDO con el baseline 4.1, nota a nota.
+source: element_job
+priority: 3
+title: Validate — 4.2-8B, K2 y Spark contra el 4.1 (juez de notas, read-only)
+mission_id: validate-judge
+elements:
+  - {model: granite_8b}
+  - {model: granite_4_2_8b}
+  - {model: k2_horizon_7b}
+  - {model: spark_x2_6_4b}
+step_command:
+  - sh
+  - -c
+  - |
+    set -u
+    M=$(python3 -c 'import json,os;print(json.loads(os.environ["RP_ELEMENT"])["model"])')
+    OUT="$IA_DIR/scratch/benchmarks/validate"
+    mkdir -p "$OUT"
+    echo "[validate-bench] modelo=$M"
+    "$IA_DIR/.venv/bin/python" "$IA_DIR/scripts/validate_judge_bench.py" \
+      --model "$M" --n 12 --seed 7 --out "$OUT/$M.json"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      echo "[validate-bench] $M rc=$rc"
+      echo "{\"model\": \"$M\", \"rc\": $rc}" >> "$OUT/failures.jsonl"
+      exit 79
+    fi
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 45
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 16G

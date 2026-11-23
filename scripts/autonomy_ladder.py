@@ -52,7 +52,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 DEFAULT_SANDBOX = Path("/tmp/opencode/granite_lab")
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "scratch" / "benchmarks"
 PER_PROBE_TIMEOUT = 180
-MODEL = os.environ.get("MINION_DEFAULT_PROFILE", "granite_8b")
+MODEL = os.environ.get("MINION_DEFAULT_PROFILE", "k2_horizon_7b")
 
 ASK_MARKERS = (
 	"¿",

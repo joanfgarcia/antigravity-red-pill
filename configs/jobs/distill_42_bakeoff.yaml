@@ -1,0 +1,83 @@
+# Distill/refine — ¿Granite 4.2 sustituye al 4.1?
+#
+# Re-evaluación 2026-11-23. Estado previo:
+#   · `distill` ya tiene a bonsái como TITULAR; granite_8b es solo el fallback.
+#   · `refine` tiene a granite_8b (4.1) como titular y al 4.2 como candidato.
+#   · Bake-off 2026-09-17 (AD-032 → AD-033): el 4.2 necesita su receta
+#     (thinking on + temp 1.0 + KV q8 + 12K) y con ella da 4/4 JSON válido y
+#     corrige el género; sin ella fallaba.
+#   · La prueba de FIDELIDAD (both-sides) nunca se corrió con el 4.2.
+#
+# Este job mide DOS configuraciones del 4.2 contra el 4.1, con las mismas
+# probes y la misma conducta que producción:
+#   A) 4.1 `refine`  — baseline (task refine: temp 0.1, thinking off).
+#   B) 4.2 `refine`  — tal como está HOY en task_profiles (thinking off).
+#   C) 4.2 low-effort — `thinking: low` (low_effort=True), el modo de
+#                      razonamiento corto que documenta IBM; 4096 de salida.
+#
+# 📌 Lo que dice la ficha oficial de Granite-4.2-8B (2026-11-23, contrastado):
+#   · `temperature=1.0` y `top_p=0.95` en TODOS los modos y backends.
+#   · `max_new_tokens`: 8192 pensando / 2048 sin pensar. NO hay parámetro
+#     numérico de "thinking budget" en el modelo.
+#   · El control de longitud del razonamiento es CUALITATIVO: `low_effort=True`
+#     añade `{reasoning effort: low}` al turno → cadenas cortas (ejemplo IBM
+#     con max_new_tokens=4096).
+#   · En llama.cpp el tope duro real es `--reasoning-budget N` (como Spark/
+#     Bonsái), pero el perfil de Granite 4.2 NO lo declara: hoy queda abierto.
+#   · `truncate_history_thinking=True` por defecto (no arrastra thinking previo).
+#
+# ⚠️ Medido 2026-11-23: con thinking abierto y tope 1024 el 4.2 saca 1/4 JSON
+# (se come el presupuesto razonando y trunca). Por eso C usa el modo LOW-EFFORT
+# de IBM con 4096, no un tope arbitrario.
+#
+# `task: distill_low` es la conducta de medición declarada en task_profiles.yaml
+# (thinking low + temp 1.0 + 4096); NO es un carril de producción. Las probes
+# son las del distiller.
+#
+# Un step = una configuración (element_job). GPU en proceso (daemon venv CUDA).
+# Salida → scratch/benchmarks (git-ignored).
+source: element_job
+priority: 3
+title: Distill/refine — Granite 4.2 (config actual y receta) contra Granite 4.1
+mission_id: distill-42-bakeoff
+elements:
+  - {model: granite_8b, tag: granite_8b-refine, task: refine, ctx: 4096, max_tokens: 1024}
+  - {model: granite_4_2_8b, tag: granite_42-refine-nothink, task: refine, ctx: 4096, max_tokens: 1024}
+  - {model: granite_4_2_8b, tag: granite_42-low-effort, task: distill_low, ctx: 4096, max_tokens: 4096}
+step_command:
+  - sh
+  - -c
+  - |
+    set -u
+    eval "$(python3 - <<'PY'
+    import json, os, shlex
+    el = json.loads(os.environ["RP_ELEMENT"])
+    for k in ("model", "tag", "task", "ctx", "max_tokens"):
+        print(f"{k.upper()}={shlex.quote(str(el.get(k, '')))}")
+    PY
+    )"
+    OUT="$IA_DIR/scratch/benchmarks/distill-42/$TAG"
+    mkdir -p "$OUT"
+    PY="$HOME/.local/share/red-pill/daemon/.venv/bin/python"
+    export PYTHONPATH="$IA_DIR/src"
+    echo "[distill-42] $MODEL tag=$TAG task='$TASK' ctx=$CTX max=$MAX_TOKENS"
+    "$PY" "$IA_DIR/scripts/distiller_bakeoff.py" \
+      --models "$MODEL" --task "$TASK" --n-gpu-layers -1 \
+      --n-ctx "$CTX" --max-tokens "$MAX_TOKENS" --out "$OUT/bakeoff.md" || rc=1
+    "$PY" "$IA_DIR/scripts/distiller_fidelity.py" \
+      --models "$MODEL" --task "$TASK" --n-gpu-layers -1 \
+      --n-ctx "$CTX" --max-tokens "$MAX_TOKENS" --out "$OUT/fidelity.md" || rc=1
+    if [ "${rc:-0}" -ne 0 ]; then
+      echo "[distill-42] $MODEL/$TAG falló (¿modelo no cargado?)"
+      echo "{\"tag\": \"$TAG\", \"model\": \"$MODEL\"}" >> "$IA_DIR/scratch/benchmarks/distill-42/failures.jsonl"
+      exit 79
+    fi
+skip_exit_code: 79
+progress:
+  mode: single
+control:
+  max_step_minutes: 90
+preflight:
+  vram_unload: true
+  min_free_vram_mb: 7000
+  memory_max: 24G
