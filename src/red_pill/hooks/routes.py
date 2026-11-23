@@ -36,7 +36,7 @@ _CORE_CACHE: Dict[str, Dict[str, Any]] = {}
 _INFLIGHT: set[str] = set()
 
 
-def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
+def _write_bridge(harness: str, session_id: str, workdir: str, project_dir: str = "") -> None:
 	"""Puente del arnés: lo único que el hook sabe y el kernel (cwd=repo) no.
 
 	Sin esto, las llamadas MCP de `pi` no resuelven cuerpo: su identidad sólo
@@ -51,17 +51,19 @@ def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
 		import time as _time
 
 		bridge = state / f"{prov}_session.json"
+		try:
+			prev = json.loads(bridge.read_text(encoding="utf-8"))
+		except (OSError, ValueError, TypeError):
+			prev = None
+		if not isinstance(prev, dict):
+			prev = {}
 		if not workdir:
 			# El contrato (§2) no lleva `workdir`: opencode no lo manda nunca, y
 			# `_write_bridge("")` borraba el bueno que escribe el scribe. El daño
 			# no es cosmético: `open_loops_line()` resuelve el workspace con este
 			# puente, y en el mismo request ya lee el "" — así que cuenta shards
 			# y ramas del workspace de otro arnés (o del cwd del backend).
-			try:
-				prev = json.loads(bridge.read_text(encoding="utf-8"))
-				prev_dir = str(prev.get("workdir") or "") if isinstance(prev, dict) else ""
-			except (OSError, ValueError, TypeError):
-				prev_dir = ""
+			prev_dir = str(prev.get("workdir") or "")
 			if prev_dir and os.path.isdir(prev_dir):
 				workdir = prev_dir
 
@@ -71,6 +73,13 @@ def _write_bridge(harness: str, session_id: str, workdir: str) -> None:
 			"workdir": workdir,
 			"updated_at": _time.time(),
 		}
+		if project_dir:
+			payload["project_dir"] = project_dir
+		elif prev.get("session_id") == session_id and prev.get("project_dir"):
+			# En Claude Code el latido (`redpill_turn_start.py`) escribe este mismo
+			# puente con `project_dir` —de ahí sale la misión— y corre en paralelo
+			# con el hook del arnés. Reescribirlo sin el campo movía la misión.
+			payload["project_dir"] = prev["project_dir"]
 		bridge.write_text(json.dumps(payload), encoding="utf-8")
 	except OSError:
 		pass
@@ -283,7 +292,7 @@ async def handle_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 	hint = "none"
 	originator = str(identity.get("originator") or req.originator)
 	continuity = str(identity.get("continuity_id") or "")
-	_write_bridge(req.harness, req.session_id, str(payload.get("workdir") or ""))
+	_write_bridge(req.harness, req.session_id, str(payload.get("workdir") or ""), str(payload.get("project_dir") or ""))
 
 	if req.need == "full":
 		key = _cache_key(originator, req.model)

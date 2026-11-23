@@ -2,14 +2,10 @@
 version: 0.1.0
 name: wake-callback
 description: >-
-  Lanza un trabajo largo (CI, tests, comando, job agéntico o DAG) y olvídate:
-  el Job Manager lo ejecuta y, al terminar, publica un aviso `notify` en el coro
-  que despierta a tu alma por el canal `soul` de neon-link. No interrumpe el
-  turno en curso: si el cuerpo está ocupado, el aviso queda en cola y se entrega
-  al abrir el siguiente turno. NO uses `nohup`, `&`, ni esperas activas.
-  Actívate con "avísame cuando termine", "callback", "CI", "tarea larga",
-  "despiértame al terminar", "MinionInbox", o cualquier trabajo que deba
-  sobrevivir al turno.
+  Lanza un trabajo largo (CI, tests, comando, job agéntico o DAG) por el Job Manager y
+  recibe un aviso `notify` del coro al terminar, sin `nohup`, `&` ni esperas activas.
+  Actívate con "avísame cuando termine", "callback", "CI", "tarea larga", "despiértame
+  al terminar" o cualquier trabajo que deba sobrevivir al turno.
 ---
 
 # Wake-callback — trabajar y olvidarse (S2.1+)

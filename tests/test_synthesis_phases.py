@@ -179,6 +179,25 @@ def test_operator_profile_prompt_carries_identity_anchor(monkeypatch):
 	assert "context-summarizer" in captured["system"]
 
 
+def test_recent_activity_prompt_carries_identity_anchor(monkeypatch):
+	"""Sin ancla, «the operator» y «Joan» salían como dos personas (2026-11-23)."""
+	import red_pill.core.identity as ident
+
+	captured = {}
+
+	def fake_chat(system, user, max_tokens, tag="SYNTH"):
+		captured["system"] = system
+		return "Joan cerró el arnés de Claude Code."
+
+	monkeypatch.setattr(ident, "identity_bio_with_source", lambda: ("ANCLA: Joan es el Operador, masculino.", "config"))
+	monkeypatch.setattr(rap, "chat", fake_chat)
+
+	rap._synthesize_activity(["work hub"], ["social"])
+
+	assert captured["system"].startswith("ANCLA: Joan es el Operador, masculino.")
+	assert "context-summarizer" in captured["system"]
+
+
 def test_validate_profile_rejects_inverted_names():
 	"""Perfil que nombra al agente como Operador y omite al Operador real → fuera."""
 	assert opp._validate_profile("Perfil del Operador (Aleth): rol de ingeniera.", "Aleth", "Joan") is False

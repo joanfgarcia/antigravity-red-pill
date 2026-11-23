@@ -34,7 +34,8 @@ logger = logging.getLogger("inject_pi")
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, subst  # noqa: E402
 
-ANCHORS = ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]
+# `inject()` respeta `args.dry_run` (ver `_registry.inject_all`).
+SUPPORTS_DRY_RUN = True
 
 
 def _pi_agent_dir() -> str:
@@ -81,7 +82,8 @@ def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False) -> in
 	variables = build_vars(argparse.Namespace(redpill_dir=repo_root, uv_path=getattr(args, "uv_path", None), workspace=workspace))
 	variables.update(agent_core_vars())
 	seeds_dir = os.path.join(repo_root, "seeds", "anchors")
-	return inject_anchor.splice_ide("pi", ANCHORS, seeds_dir, workspace, variables, backup=backup, remove=remove)
+	# Roster único (inject_anchor.BLOCK_ANCHORS): la lista propia de pi se quedó sin `identity_pact`.
+	return inject_anchor.splice_ide("pi", inject_anchor.BLOCK_ANCHORS, seeds_dir, workspace, variables, backup=backup, remove=remove)
 
 
 def _read_seed(path: str) -> str:

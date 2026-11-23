@@ -49,3 +49,48 @@ def test_inject_gemini_target_is_antigravity(tmp_path):
 	inject_mcp.inject(str(target), servers, assert_names={"RedPill-Kernel"})
 	data = json.loads(target.read_text(encoding="utf-8"))
 	assert data["mcpServers"]["RedPill-Kernel"]["env"] == {"REDPILL_HARNESS": "antigravity"}
+
+
+# ── Claude por el proxy del backend compartido (AD-018) ──────────────────────
+
+
+def _vars(tmp_path, shared="true", sock=True):
+	python = tmp_path / "python"
+	python.write_text("#", encoding="utf-8")
+	socket_path = tmp_path / "mcp.sock"
+	if sock:
+		socket_path.write_text("", encoding="utf-8")
+	return {"MCP_SHARED": shared, "PYTHON": str(python), "MCP_SOCKET": str(socket_path), "REDPILL_DIR": "/rp"}
+
+
+def test_backend_compartido_disponible(tmp_path, monkeypatch):
+	monkeypatch.setenv("HOME", str(tmp_path))  # sin unit de systemd
+	assert inject_mcp.shared_backend_available(_vars(tmp_path))
+	assert not inject_mcp.shared_backend_available(_vars(tmp_path, shared="false"))
+	bare = tmp_path / "bare"
+	bare.mkdir()
+	assert not inject_mcp.shared_backend_available(_vars(bare, sock=False))
+	assert not inject_mcp.shared_backend_available({**_vars(tmp_path), "PYTHON": str(tmp_path / "nope")})
+
+
+def test_solo_claude_va_por_el_proxy(tmp_path):
+	direct = {"RedPill-Kernel": {"command": "uv", "args": ["run"]}, "otro": {"command": "x"}}
+	proxy = inject_mcp.redpill_proxy_server(_vars(tmp_path))
+	assert proxy["args"][:2] == ["-m", "red_pill.mcp_proxy"]
+	assert proxy["args"][-2:] == ["--harness", "claude_code"]
+	assert proxy["env"]["PYTHONPATH"] == "/rp/src"
+	for target in ("/h/.claude.json", "/h/.config/Claude/claude_desktop_config.json", "/ws/.mcp.json"):
+		out = inject_mcp.servers_for(target, direct, proxy)
+		assert out["RedPill-Kernel"] is proxy
+		assert out["otro"] is direct["otro"]
+	for target in ("/h/.gemini/config/mcp_config.json", "/h/x/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"):
+		assert inject_mcp.servers_for(target, direct, proxy) is direct
+	assert inject_mcp.servers_for("/h/.claude.json", direct, None) is direct
+
+
+def test_proxy_escrito_lleva_el_arnes(tmp_path):
+	target = tmp_path / ".claude.json"
+	proxy = inject_mcp.redpill_proxy_server(_vars(tmp_path))
+	inject_mcp.inject(str(target), {"RedPill-Kernel": proxy}, assert_names={"RedPill-Kernel"})
+	entry = json.loads(target.read_text(encoding="utf-8"))["mcpServers"]["RedPill-Kernel"]
+	assert entry["env"] == {"PYTHONPATH": "/rp/src", "REDPILL_HARNESS": "claude_code"}

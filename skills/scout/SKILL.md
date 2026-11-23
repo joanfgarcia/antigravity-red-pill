@@ -2,14 +2,9 @@
 name: scout
 version: 1.1.0
 description: >-
-  Analysis and self-discovery skill. Validates implementation plans, scans
-  targets (plans, code, docs, own Forge state) against the project's materialized
-  rules (conventions, AGENTS.md, styleguides, schemas), and generates satellite
-  tasks ("shards") for anything out-of-scope that violates a standard. Each shard is
-  an autonomous task with its own prompt (hallazgo + evidencia + qué hacer),
-  decoupled from the current flow. Dual use: standalone (awakenings, isolated
-  analysis) and as a piece of the Forge composer (plan validation before phase 1;
-  shards execute on individual Forge roles). Activate with "analiza", "scout",
+  Analysis and self-discovery: validates plans and scans plans, code or docs against the
+  project's materialized rules, and spins satellite tasks ("shards") for out-of-scope
+  violations. Standalone or as a Forge piece. Activate with "analiza", "scout",
   "autodescubrimiento", "valida el plan", or during autonomous awakenings.
 ---
 

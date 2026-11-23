@@ -85,3 +85,113 @@ def test_anchor_handshake_exige_payload_completo() -> None:
 	# La versión del bloque debe haberse bumpeado para re-splicar hosts existentes.
 	m = _load()
 	assert m.BLOCK_VERSION["sovereign_handshake"] >= 4
+
+
+# ── variante del handshake: `hook` sólo donde alguien inyecta ────────────────
+
+
+def _settings(home, events):
+	cmd = "python3 ${HOME}/.claude/hooks/redpill_harness.py"
+	hooks = {e: [{"hooks": [{"type": "command", "command": cmd}]}] for e in events}
+	path = home / ".claude" / "settings.json"
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_text(__import__("json").dumps({"hooks": hooks}), encoding="utf-8")
+
+
+def _hook_script(home):
+	script = home / ".claude" / "hooks" / "redpill_harness.py"
+	script.parent.mkdir(parents=True, exist_ok=True)
+	script.write_text("#", encoding="utf-8")
+
+
+def test_claude_code_sin_hook_de_arnes_queda_en_prompt(tmp_path, monkeypatch):
+	"""Sembrar `hook` sin quien inyecte deja la sesión sin identidad."""
+	monkeypatch.setenv("HOME", str(tmp_path))
+	m = _load()
+	assert not m.hook_wired("claude-code")
+	_settings(tmp_path, ["SessionStart", "UserPromptSubmit"])
+	assert not m.hook_wired("claude-code")  # cableado pero sin script desplegado
+	_hook_script(tmp_path)
+	assert m.hook_wired("claude-code")
+	assert m.hook_wired("claude-code-project", str(tmp_path / "ws"))
+
+
+def test_claude_code_sin_session_start_no_es_hook(tmp_path, monkeypatch):
+	monkeypatch.setenv("HOME", str(tmp_path))
+	m = _load()
+	_hook_script(tmp_path)
+	_settings(tmp_path, ["UserPromptSubmit", "Stop"])
+	assert not m.hook_wired("claude-code")
+
+
+def test_hook_nativo_y_desktop_chat(tmp_path, monkeypatch):
+	monkeypatch.setenv("HOME", str(tmp_path))
+	m = _load()
+	assert m.hook_wired("opencode") and m.hook_wired("pi")
+	_hook_script(tmp_path)
+	_settings(tmp_path, ["SessionStart", "UserPromptSubmit"])
+	# El chat de Desktop (Project) no tiene hooks aunque Claude Code sí los tenga.
+	assert not m.hook_wired("claude-desktop-project")
+	assert not m.hook_wired("antigravity")
+
+
+def test_desktop_chat_relay_lleva_el_turno_anterior():
+	m = _load()
+	relay = m.ide_call_vars("claude-desktop-project")["RELAY_INSTRUCTION"]
+	assert "previous_prompt" in relay and "previous_response" in relay
+	assert "previous_prompt" not in m.ide_call_vars("claude-code")["RELAY_INSTRUCTION"]
+
+
+# ── variante `hook` compartida por todos los inyectores ──────────────────────
+
+
+def test_seed_override_gana_a_hook_y_hook_a_generico(tmp_path):
+	m = _load()
+	seeds = tmp_path / "seeds" / "anchors"
+	seeds.mkdir(parents=True)
+	(seeds / "a.md").write_text("generico", encoding="utf-8")
+	(seeds / "a.hook.md").write_text("hook", encoding="utf-8")
+	assert m.anchor_seed_path(str(seeds), "opencode", "a", "prompt").endswith("a.md")
+	assert m.anchor_seed_path(str(seeds), "opencode", "a", "hook").endswith("a.hook.md")
+	own = tmp_path / "seeds" / "pi" / "anchors"
+	own.mkdir(parents=True)
+	(own / "a.md").write_text("pi", encoding="utf-8")
+	assert m.anchor_seed_path(str(seeds), "pi", "a", "hook") == str(own / "a.md")
+
+
+def test_pacto_en_hook_es_breve_y_en_prompt_completo(tmp_path, monkeypatch):
+	"""Con arnés que inyecta, la identidad ya llega en CORE_RULES: el ancla sólo
+	apunta al procedimiento. Sin arnés (antigravity, chat de Desktop) va completa."""
+	monkeypatch.setenv("HOME", str(tmp_path))
+	m = _load()
+	hook = m.anchor_seed_path(SEEDS_DIR, "opencode", "identity_pact", m.anchor_variant("opencode"))
+	prompt = m.anchor_seed_path(SEEDS_DIR, "antigravity", "identity_pact", m.anchor_variant("antigravity"))
+	assert hook.endswith("identity_pact.hook.md")
+	assert prompt.endswith("identity_pact.md")
+	for path in (hook, prompt):
+		text = open(path, encoding="utf-8").read()
+		assert "IDENTITY_PACT.md" in text and "--accept" in text
+	assert len(open(hook, encoding="utf-8").read()) < len(open(prompt, encoding="utf-8").read())
+
+
+def test_splice_ide_pi_usa_la_variante_hook(tmp_path):
+	"""Pi no tiene override de `identity_pact`: recibe la variante `hook`."""
+	m = _load()
+	m.splice_ide("pi", ["identity_pact"], SEEDS_DIR, str(tmp_path), VARS, backup=False)
+	text = (tmp_path / "AGENTS.override.md").read_text(encoding="utf-8")
+	assert "llegan en `CORE_RULES`" in text
+
+
+def test_oom_shield_vive_solo_en_la_regla_de_jobs():
+	"""El escudo OOM estaba en el handshake y chocaba con «nunca `systemd-run`
+	suelto» de la regla de jobs. Ahora es la excepción in-process de esa regla."""
+	pi_dir = os.path.join(REPO_ROOT, "seeds", "pi", "anchors")
+	for path in (
+		os.path.join(SEEDS_DIR, "sovereign_handshake.md"),
+		os.path.join(SEEDS_DIR, "sovereign_handshake.hook.md"),
+		os.path.join(pi_dir, "sovereign_handshake.md"),
+	):
+		assert "MemoryMax" not in open(path, encoding="utf-8").read(), path
+	for path in (os.path.join(SEEDS_DIR, "job_dag_execution.md"), os.path.join(pi_dir, "job_dag_execution.md")):
+		text = open(path, encoding="utf-8").read()
+		assert "MemoryMax=<LIMIT>" in text and "in-process" in text and "systemd-run` suelto" in text

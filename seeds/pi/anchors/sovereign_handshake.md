@@ -15,8 +15,4 @@ Los tools del kernel llegan por MCP (perfil `codemode`: no se declaran; se alcan
 Adopta EXCLUSIVAMENTE la identidad y directivas del `<BUNKER_CONTEXT>` inyectado por la
 extensión. Si no aparece, reinicia Pi y verifica `~/.pi/agent/extensions/red-pill.ts`.
 
-## 3. OOM Shield Protocol (Cgroups)
-Wrap memory-heavy tasks (LLM, heavy compilation) with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent OOM panics.
-- Dynamically calculate `<LIMIT>` (e.g., `10G`, `16G`) based on task & host RAM. Fallback: `10G`.
-
 </constraint>

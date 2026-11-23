@@ -1,23 +1,13 @@
 <constraint critical="true" level="1" name="job_dag_execution">
 
-## 1. Jobs largos / LLM local → DAG (regla de ejecución)
-Cualquier cosa que requiera el uso de **LLM local** (o una tarea que vaya a durar
-más de ~2 minutos, sobrevivir a reinicios, o ser reanudable) **DEBE ejecutarse
-mediante el Centralized Job Manager**, no a pelo en un `nohup`/`&`:
+## 1. Jobs largos / LLM local → Job Manager
+**LLM local**, o una tarea de más de ~2 min, que deba sobrevivir a reinicios o ser reanudable → se encola en el Centralized Job Manager (skill `job-manager`). **Nunca** `nohup … &`, `systemd-run` suelto ni `python … &`: un job es trazable, pausable y reanudable, con `error_log`, reporte en MinionInbox y señal de dolor. El runner (`redpill-queue.timer`) ya pone OOM shield e inhibit del sueño — no lances `process-queue` tú.
+- Multi-etapa o con checkpoint → `${RED_PILL_CMD} job submit --source dag_job …` (o `--parent <job_id>` para encadenar); control con `job pause` / `job resume`. Un solo paso → `configs/jobs/_TEMPLATE_single_step.yaml` con `${RED_PILL_CMD} job submit --recipe <satélite>`.
+- Excepción: lo que necesita respuesta AHORA en la sesión va in-process. Si pesa en memoria (LLM, compilación grande), envuélvelo en `systemd-run --user --scope -p MemoryMax=<LIMIT>` (según tarea y RAM; por defecto `10G`).
 
-1. **Usa el skill `job-manager`**: decide si es job (§1), encola con el recipe/carril correcto (§2) y opera con pause/resume (§3). El runner (`redpill-queue.timer`, cada 1 min) lo recoge con OOM shield e inhibit del sueño — jamás lances `process-queue` tú mismo.
-2. **Tareas multi-etapa o pausables por checkpoint** → `dag_job` vía `${RED_PILL_CMD} job submit --source dag_job ...` (o `--parent <job_id>` para encadenar etapas): árbol de etapas con checkpoint por ruta y `job pause` / `job resume` para control transferible.
-3. **Tarea larga de UN solo paso** → plantilla `configs/jobs/_TEMPLATE_single_step.yaml` (`source: script_job` con `step_command` y `progress.mode: single`), encolada con `${RED_PILL_CMD} job submit --recipe <satélite>`.
-4. **Nunca**: `nohup ... &`, `systemd-run` suelto, `python script.py &` en background para trabajos de larga duración. Un job encolado = trazable, pausable, reanudable, con `error_log`, reporte en MinionInbox y señal de dolor si se frustra.
-
-La única excepción es una tarea que necesita respuesta AHORA en la sesión (chat, lint rápido) — esa va in-process, nunca como job (skill `job-manager` §1).
-
-## 2. Granularidad obligatoria (resiliencia de etapas)
-Todo job con etapas/elementos diferenciables (bucles sobre modelos, ficheros, tests…) se modela granularizado — nunca un single-step con el bucle dentro:
-
-1. **UN step = UN elemento**: `element_job` para listas MAP; `dag_job` con fan-out para árboles con dependencias.
-2. **Elemento independiente que falla → registrar y CONTINUAR** (fail-soft): anota el fallo (p. ej. `failures.jsonl`) y sale con `skip_exit_code` → la cola lo marca saltado y sigue. Un benchmark caído no invalida los demás.
-3. **Dependencia dura → parar**: si la etapa siguiente necesita el resultado correcto de la anterior, el fallo corta (RuntimeError/JobStepTimeout), no se salta.
-4. **Anti-patrón** (incidente 2026-10-08, job `c87b2393`): bucle de 12 modelos en un `script_job` single-step — un abort tiró 3 intentos y perdió lo medido. Con `element_job` + checkpoint por elemento, el fallo cuesta UN elemento.
+## 2. Granularidad obligatoria
+Bucles sobre modelos, ficheros, tests… → **un step = un elemento** (`element_job`, o `dag_job` con fan-out), nunca un single-step con el bucle dentro (job `c87b2393`: un abort a mitad perdió 12 modelos medidos).
+- Elemento independiente que falla → regístralo (p. ej. `failures.jsonl`) y sal con `skip_exit_code`: la cola lo salta y sigue.
+- Dependencia dura → el fallo corta el job (RuntimeError/JobStepTimeout); no se salta.
 
 </constraint>

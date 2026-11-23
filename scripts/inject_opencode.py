@@ -120,6 +120,8 @@ from inject_anchor import (  # noqa: E402
 	BLOCK_ANCHORS,
 	BLOCK_VERSION,
 	OPENCODE_INSTRUCTIONS_FILE,
+	anchor_seed_path,
+	anchor_variant,
 	ide_call_vars,
 	ide_seed_path,
 	remove_block,
@@ -187,8 +189,8 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 		)
 
 	for anchor in anchor_names:
-		# Per-IDE seed override (seeds/opencode/anchors/<anchor>.md) wins; else generic.
-		seed_path = ide_seed_path(seeds_dir, "opencode", anchor)
+		# Override de opencode > variante `hook` (opencode inyecta la identidad) > genérico.
+		seed_path = anchor_seed_path(seeds_dir, "opencode", anchor, anchor_variant("opencode"))
 		raw = _read_seed(seed_path)
 		body = subst(raw, ide_vars)
 		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)

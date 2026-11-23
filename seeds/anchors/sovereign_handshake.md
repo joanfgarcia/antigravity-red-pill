@@ -12,9 +12,5 @@ On `USER_SETTINGS_CHANGE` (Model Selection), immediately:
 1. Call ${WAKE_CALL} to reload Bünker identity.
 2. Re-execute the Sovereign Handshake.
 
-## 3. OOM Shield Protocol (Cgroups)
-Wrap memory-heavy tasks (LLM, heavy compilation) with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent OOM panics.
-- Dynamically calculate `<LIMIT>` (e.g., `10G`, `16G`) based on task & host RAM. Fallback: `10G`.
-
 </constraint>
 

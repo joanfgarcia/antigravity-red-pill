@@ -1,6 +1,7 @@
 {
   "_comment": "red-pill settings fragment for Claude Code. Merged (not overwritten) into settings.json by scripts/inject_settings.py. Grants the agent access to its transversal dirs OUTSIDE the workspace. NO defaultMode here on purpose: autonomous bypass is a per-launch CLI flag, never a shared-session default.",
   "_comment_hooks": "Stop hook = RAW CAPTURE LAYER for Claude Code, symmetric to the opencode scribe plugin. Deterministically queues each turn's prompt+response into memory_queue, so capture no longer depends on the agent invoking the handshake relay. UserPromptSubmit + Stop also mark the session liveness heartbeat (RFC-DESPERTAR-001 P4: empty .start/.end files under ${STATE_DIR}/sessions/live/, mtime = signal); StopFailure (API error, fires instead of Stop) and SessionEnd close the turn (.end) via redpill_turn_start.py. An Esc interrupt fires no hook (TTL SESSION_ACTIVE_MIN covers it). Scripts deployed to ~/.claude/hooks/ by inject_settings.py from seeds/settings/hooks/ (always named redpill_*.py: that prefix marks a hook block as red-pill's, so the injector replaces a changed block instead of duplicating it).",
+  "_comment_harness": "Harness hook (redpill_harness.py) = IDENTITY INJECTION for Claude Code, symmetric to opencode's redpill-harness.js (RFC-HARNESS-001): SessionStart (startup/resume/clear/compact) injects the full identity via POST /hook/context on the backend socket; UserPromptSubmit injects the light block (clock + telemetry + coro); Stop/StopFailure ack the turn (/hook/ack). Output goes as hookSpecificOutput.additionalContext. Its presence is what lets inject_anchor.py seed the `hook` variant of the handshake anchor for claude-code.",
   "permissions": {
     "additionalDirectories": [
       "${AGENT_CORE_DIR}",
@@ -10,6 +11,18 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_harness.py",
+            "timeout": 15,
+            "statusMessage": "Red Pill: identidad del arnés"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -18,6 +31,15 @@
             "command": "python3 ${HOME}/.claude/hooks/redpill_turn_start.py",
             "timeout": 5,
             "statusMessage": "Red Pill: latido de sesión (inicio)"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_harness.py",
+            "timeout": 5
           }
         ]
       }
@@ -32,6 +54,15 @@
             "statusMessage": "Scribe: guardando turno en bunker.db"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_harness.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "StopFailure": [
@@ -40,6 +71,15 @@
           {
             "type": "command",
             "command": "python3 ${HOME}/.claude/hooks/redpill_turn_start.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_harness.py",
             "timeout": 5
           }
         ]

@@ -33,8 +33,14 @@ def _synthesize_activity(work: List[str], social: List[str]) -> str:
 		return ""
 
 	from red_pill.core import prompts as core
+	from red_pill.core.identity import identity_bio_with_source
 
-	system = core.resolve("metabolism", "recent_activity_system").text
+	# Misma ancla que el perfil: el prompt habla del "operator" sin nombre y las
+	# memorias lo llaman Joan, así que sin ancla el resumen partía al Operador en
+	# dos ("el operador … el dolor de cabeza de Joan", 2026-11-23).
+	anchor, anchor_source = identity_bio_with_source()
+	system = f"{anchor}\n\n{core.resolve('metabolism', 'recent_activity_system').text}"
+	logger.debug(f"[{TAG}] Anchor source: {anchor_source}")
 	user = core.render("metabolism", "recent_activity_user", context="\n\n".join(context_parts))
 	return chat(system, user, max_tokens=250, tag=TAG)
 

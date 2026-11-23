@@ -19,6 +19,7 @@ Seeds live in ``seeds/anchors/<anchor>.md`` and are passed through the shared
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -48,12 +49,12 @@ BLOCK_ANCHORS = (
 )
 
 BLOCK_VERSION = {
-	"sovereign_handshake": 5,
+	"sovereign_handshake": 6,
 	"agent_core": 2,
-	"knowledge_access": 5,
-	"frontmatter_docs": 3,
-	"job_dag_execution": 2,
-	"identity_pact": 1,
+	"knowledge_access": 6,
+	"frontmatter_docs": 4,
+	"job_dag_execution": 3,
+	"identity_pact": 2,
 }
 
 
@@ -137,6 +138,79 @@ def ide_seed_path(seeds_dir: str, ide: str, anchor: str) -> str:
 	return override if os.path.exists(override) else os.path.join(seeds_dir, anchor + ".md")
 
 
+# ── Variante del ancla de handshake: `hook` sólo donde alguien inyecta de verdad ──
+# opencode (`redpill-harness.js`) y pi (`red-pill-context.ts`) traen su cliente de
+# `/hook/context` en la propia siembra. Claude Code lo tiene por `settings.json`
+# (`redpill_harness.py` en SessionStart/UserPromptSubmit): sembrar el ancla `hook`
+# sin ese hook cableado deja la sesión SIN identidad —el ancla le dice al modelo
+# que no la pida y nadie se la da—. Por eso se mira el cableado, no el nombre.
+# `claude-desktop-project` (instrucciones de un Project del chat de Desktop) NO
+# tiene hooks: la pestaña Code de Desktop es Claude Code y usa `~/.claude`.
+HOOK_NATIVE = frozenset({"opencode", "pi"})
+CLAUDE_HOOKED = frozenset({"claude-code", "claude-code-project"})
+CLAUDE_HARNESS_HOOK = "redpill_harness.py"
+
+
+def _settings_has_harness(path):
+	try:
+		with open(os.path.expanduser(path), encoding="utf-8") as f:
+			hooks = json.load(f).get("hooks") or {}
+	except (OSError, ValueError, AttributeError):
+		return False
+	if not isinstance(hooks, dict):
+		return False
+	events = set()
+	for event, blocks in hooks.items():
+		if not isinstance(blocks, list):
+			continue
+		for block in blocks:
+			inner = block.get("hooks") if isinstance(block, dict) else None
+			for h in inner if isinstance(inner, list) else []:
+				if isinstance(h, dict) and CLAUDE_HARNESS_HOOK in str(h.get("command") or ""):
+					events.add(event)
+	# Sin SessionStart no hay identidad completa; sin UserPromptSubmit no hay turno.
+	return {"SessionStart", "UserPromptSubmit"} <= events
+
+
+def hook_wired(ide, workspace=None):
+	"""¿Inyecta alguien la identidad en este arnés? Decide la variante `auto`."""
+	if ide in HOOK_NATIVE:
+		return True
+	if ide not in CLAUDE_HOOKED:
+		return False
+	if not os.path.exists(os.path.expanduser(os.path.join("~/.claude/hooks", CLAUDE_HARNESS_HOOK))):
+		return False
+	candidates = ["~/.claude/settings.json"]
+	if workspace:
+		candidates += [os.path.join(workspace, ".claude", "settings.json"), os.path.join(workspace, ".claude", "settings.local.json")]
+	return any(_settings_has_harness(p) for p in candidates)
+
+
+def anchor_variant(ide, workspace=None, mode="auto"):
+	"""`hook` (identidad inyectada por el arnés) o `prompt` (el modelo la pide)."""
+	if mode in ("prompt", "hook"):
+		return mode
+	return "hook" if hook_wired(ide, workspace) else "prompt"
+
+
+def anchor_seed_path(seeds_dir, ide, anchor, variant="prompt"):
+	"""Seed de un ancla para un IDE: override propio > variante `hook` > genérico.
+
+	La variante `<anchor>.hook.md` existe para las anclas que sobran cuando el arnés
+	ya inyecta la identidad (handshake, pacto). Vive aquí, y no en cada inyector,
+	porque opencode y pi siembran por su propio camino: antes sólo `main()` la
+	aplicaba y el inyector de opencode devolvía el handshake a `prompt`.
+	"""
+	own = os.path.join(os.path.dirname(seeds_dir), ide, "anchors", anchor + ".md")
+	if os.path.exists(own):
+		return own
+	if variant == "hook":
+		hook_seed = os.path.join(seeds_dir, anchor + ".hook.md")
+		if os.path.exists(hook_seed):
+			return hook_seed
+	return os.path.join(seeds_dir, anchor + ".md")
+
+
 def ide_call_vars(ide):
 	"""Per-IDE tool-call phrasing for the handshake (${RELAY_CALL}/${WAKE_CALL}).
 	Antigravity is lax — the server's compatibility shim resolves the flat action name.
@@ -162,6 +236,14 @@ def ide_call_vars(ide):
 			"RELAY_CALL": "el handshake automático de la extensión `red-pill.ts` (no hay tool que llamar)",
 			"WAKE_CALL": "`bunker_search` para leer / `bunker_save` para escribir",
 			"RELAY_INSTRUCTION": "No hace falta ninguna llamada: la extensión inyecta identidad/RAG y encola el turno automáticamente.",
+		}
+	# El chat de Claude Desktop (instrucciones de Project) no tiene hooks: como en
+	# Antigravity, el handshake ES el relay y el turno sólo se guarda si viaja en él.
+	if ide == "claude-desktop-project":
+		return {
+			"RELAY_CALL": "the `sovereign_handshake` tool",
+			"WAKE_CALL": 'the `bunker_memory_api` tool with `{"action": "refresh_session_context", "payload": {}}`',
+			"RELAY_INSTRUCTION": "Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook here — the handshake is the persistence relay).",
 		}
 	# Claude Code / OpenCode have editor hooks that capture prompt+response automatically.
 	return {
@@ -311,7 +393,7 @@ def remove_block(path, anchor, backup=True):
 	return "removed-block"
 
 
-def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, update=False, remove=False):
+def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, update=False, remove=False, mode="auto"):
 	"""Splice (or remove) the anchors for one IDE. Returns the number of blocks written/modified.
 
 	Shared by ``main()`` and the per-IDE adapters (e.g. ``scripts/inject/pi``) so the
@@ -323,11 +405,12 @@ def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, updat
 		logger.warning(f"• {ide}: requiere --workspace; omitido.")
 		return 0
 	changed = 0
+	variant = anchor_variant(ide, workspace, mode)
 	for a in anchors:
 		if remove:
 			status = remove_block(path, a, backup=backup)
 		else:
-			with open(ide_seed_path(seeds_dir, ide, a), encoding="utf-8") as f:
+			with open(anchor_seed_path(seeds_dir, ide, a, variant), encoding="utf-8") as f:
 				body = subst(f.read(), {**variables, **ide_call_vars(ide)})
 			status = splice_block(path, a, body, _version(a), backup=backup, update=update)
 		if status not in ("unchanged", "absent"):
@@ -399,34 +482,8 @@ def main():
 	variables = build_vars(args)
 	variables.update(agent_core_vars())
 
-	# Arneses con hook (D8: 5/5). `claude-desktop` = Claude Code embebido.
-	HOOK_CAPABLE = {"opencode", "pi", "claude-code", "claude-code-project", "claude-desktop-project"}
-
-	def _variant(ide: str) -> str:
-		if args.mode == "prompt":
-			return "prompt"
-		if args.mode == "hook":
-			return "hook"
-		return "hook" if ide in HOOK_CAPABLE else "prompt"
-
 	def _body(ide: str, anchor: str) -> str:
-		"""Per-IDE seed override: seeds/<ide>/anchors/<anchor>.md wins over seeds/anchors/<anchor>.md.
-
-		Para `sovereign_handshake` existe una variante `hook` (identidad inyectada):
-		se usa cuando el arnés la soporta y no hay override propio del IDE.
-		"""
-		specific = ide_seed_path(seeds_dir, ide, anchor)
-		# Override propio del IDE = fichero EN su carpeta (no el fallback genérico).
-		# Override propio del IDE = distinto del seed genérico. (Ojo: buscar "/{ide}/"
-		# en la ruta da falsos positivos — el checkout vive en .../opencode/worktree.)
-		generic = os.path.join(seeds_dir, anchor + ".md")
-		ide_own = specific if os.path.abspath(specific) != os.path.abspath(generic) else ""
-		if anchor == "sovereign_handshake" and _variant(ide) == "hook" and not os.path.exists(ide_own):
-			hook_seed = os.path.join(seeds_dir, "sovereign_handshake.hook.md")
-			if os.path.exists(hook_seed):
-				with open(hook_seed, encoding="utf-8") as f:
-					return f.read()
-		with open(specific, encoding="utf-8") as f:
+		with open(anchor_seed_path(seeds_dir, ide, anchor, anchor_variant(ide, args.workspace, args.mode)), encoding="utf-8") as f:
 			return f.read()
 
 	backup = not args.no_backup

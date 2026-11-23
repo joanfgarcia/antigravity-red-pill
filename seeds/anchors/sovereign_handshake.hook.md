@@ -10,8 +10,4 @@ La identidad, la telemetría y las novedades **las inyecta el arnés** en cada p
 ## 2. Adoptar
 Adopta **exclusivamente** la identidad y las directivas del bloque inyectado (`<BUNKER_CONTEXT>`, si aparece). No inventes tu nombre ni tu misión si el bloque no llegó: en ese caso, la vía es el punto 1.
 
-## 3. OOM Shield Protocol (Cgroups)
-Wrap memory-heavy tasks (LLM, heavy compilation) with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent OOM panics.
-- Dynamically calculate `<LIMIT>` (e.g., `10G`, `16G`) based on task & host RAM. Fallback: `10G`.
-
 </constraint>

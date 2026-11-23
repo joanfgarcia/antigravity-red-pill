@@ -2,18 +2,11 @@
 version: 1.6.0
 name: forge
 description: >-
-  Multi-agent Zero-Trust execution composer. Orchestrates 9 composable role pieces (orchestrator, implementor, validator, smoke,
-  devil's advocate panel, judge, doc anchor, QA, triage) with JSON contracts
-  validated, dynamic L0-L3 escalation, self-accounting usage ledger, mission
-  mode for huge plans (15+ phases) with controlled stop, and a feature matrix
-  resolved by the orchestrator per task scope. Federation via the red-pill Job
-  Manager (v1.3.0): headless roles run as agentic_jobs and full missions as a
-  resumable dag_job with transferable control (main loop ↔ driver); survival
-  to token limits is native (per-step checkpoint + job-monitor). Sibling
-  of the scout skill (analysis + satellite shards). Activate when the operator
-  says "levantar equipo", "cell mode", "team up", "full mission", "ejecuta el
-  plan entero", or on any multi-phase task requiring exhaustive validation. Skill
-  invocation is the explicit operator opt-in to multi-agent orchestration.
+  Multi-agent Zero-Trust execution composer: 9 composable roles with validated JSON
+  contracts, L0-L3 escalation, mission mode for huge plans, run through the red-pill Job
+  Manager as a resumable dag_job. Activate on "levantar equipo", "cell mode", "team up",
+  "full mission", "ejecuta el plan entero". Invoking it is the operator's explicit
+  opt-in to multi-agent orchestration.
 ---
 
 # Forge v1.6.0 (opencode) — Zero-Trust Multi-Agent Composer

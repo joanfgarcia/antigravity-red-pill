@@ -2,16 +2,10 @@
 version: 0.1.0
 name: dag
 description: >-
-  Compose and run any mission as a recursive tree of stages through the red-pill
-  dag_job driver (RFC_JOB_DAG v0.7). The meta-substitute of the forge skill:
-  where forge orchestrated a fixed team of roles, dag is the generic composition
-  template — atomic stages (one minion: agent or command) and compound stages
-  (sub_etapas with parallel intent), checkpoint by flattened path, transferable
-  control, GPU probe per stage, fail-safe model validation, MIXED backends per
-  stage (each agentic stage may run on a different harness). forge and sleep are
-  recipes of this tree, not separate drivers. Activate on "componer misión",
-  "misión completa", "árbol de etapas", "dag", "celdas", or any multi-phase task
-  that must run through the red-pill Job Manager as a resumable job.
+  Compose and run any mission as a recursive tree of stages (atomic/compound, parallel,
+  checkpoint per path, per-stage backend and GPU probe) through the red-pill dag_job
+  driver. Activate on "componer misión", "misión completa", "árbol de etapas", "dag",
+  "celdas", or any multi-phase task that must run as a resumable job.
 ---
 
 # Dag v0.1.0 — Mission Composer via dag_job (red-pill piece)

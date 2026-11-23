@@ -2,12 +2,10 @@
 name: context-distiller
 version: 3.0.0
 description: >-
-  Session handoff (v3). Writes the workspace cold-start snapshot to
-  .red-pill/memory/session_snapshot.md (never .agent/), indexes it in MEMORY.md,
-  and records a read-mark in an append-only ledger so a new session knows whether
-  this snapshot version was already consumed. Use on "guarda el contexto /
-  snapshot / handoff / cierra sesión", when context gets heavy, or before
-  switching model/session.
+  Session handoff: writes the cold-start snapshot to
+  .red-pill/memory/session_snapshot.md, indexes it in MEMORY.md and marks it read. Use
+  on "guarda el contexto", "snapshot", "handoff", "cierra sesión", when context gets
+  heavy, or before switching model/session.
 ---
 
 # Context Distiller — session handoff (v3)

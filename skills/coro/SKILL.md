@@ -1,15 +1,10 @@
 ---
 name: coro
 description: >-
-  Hablar con otra sesión (alma) sin perderse en el MinionInbox: `coro_api.send`
-  encola el mensaje en el prompt del destino (queue por defecto) y solo el
-  orquestador puede interrumpir (interrupt=true). Incluye despertarte a ti misma
-  al terminar un job/minion (aviso `notify` + resultado en MinionInbox) en vez de
-  `sleep`, `wait` o polling en bash. Fija el canal correcto, la autonomía una vez
-  el Operador autoriza la coordinación y el presupuesto anti-chat (hop 2, réplica
-  gratis, TTL). Actívate con "habla con tu hermana", "avisa a la otra sesión",
-  "coordinaos", "coro", "mensaje entre sesiones", "minion inbox", "avísame cuando
-  termine" o "despiértame al terminar".
+  Hablar con otra sesión (alma) por `coro_api.send` (cola por defecto; solo el
+  orquestador interrumpe) y despertarte al terminar un job o minion sin `sleep` ni
+  polling. Actívate con "habla con tu hermana", "avisa a la otra sesión", "coordinaos",
+  "coro", "minion inbox", "avísame cuando termine" o "despiértame al terminar".
 ---
 
 # Coro — hablar con otra alma sin secuestrar su turno

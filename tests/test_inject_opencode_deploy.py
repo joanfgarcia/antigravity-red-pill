@@ -194,7 +194,9 @@ def test_agents_md_resuelve_placeholders_relay(adapter, tmp_path) -> None:
 
 	text = open(os.path.join(tmp, "AGENTS.md"), encoding="utf-8").read()
 	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver en AGENTS.md"
-	assert "only `user_prompt`" in text, "frase hook-aware ausente (opencode debe pasar solo user_prompt)"
+	# opencode inyecta la identidad: recibe la variante `hook` (sin relay por turno).
+	assert "lo gestiona el arnés" in text, "variante hook ausente"
+	assert "the `sovereign_handshake` tool" in text, "${RELAY_CALL} sin la frase de opencode"
 	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"
 
 
@@ -232,7 +234,9 @@ def test_inject_opencode_standalone_resuelve_placeholders_relay(tmp_path) -> Non
 
 	text = open(dest, encoding="utf-8").read()
 	assert "${RELAY_" not in text, "placeholders ${RELAY_*} sin resolver (standalone)"
-	assert "only `user_prompt`" in text, "frase hook-aware ausente (standalone)"
+	# opencode inyecta la identidad: recibe la variante `hook` (sin relay por turno).
+	assert "lo gestiona el arnés" in text, "variante hook ausente (standalone)"
+	assert "the `sovereign_handshake` tool" in text, "${RELAY_CALL} sin la frase de opencode (standalone)"
 	assert "no editor hook" not in text, "opencode tiene editor hook: no debe recibir la variante sin hook"
 
 
@@ -489,3 +493,15 @@ def test_falta_un_anchor_aborta_en_vez_de_sembrar_viejo(adapter, tmp_path) -> No
 		adapter._write_instructions(
 			str(tmp_path / "AGENTS.md"), str(seeds), {}, backup=False, update=False
 		)
+
+
+def test_write_instructions_usa_las_variantes_hook(tmp_path) -> None:
+	"""opencode inyecta la identidad: su inyector siembra las variantes `hook`
+	(antes sólo `inject_anchor.main()` las aplicaba y opencode volvía a `prompt`)."""
+	mod = _load_standalone_module()
+	seeds_dir = os.path.join(REPO_ROOT, "seeds", "anchors")
+	dest = os.path.join(str(tmp_path), "AGENTS.md")
+	mod.write_instructions(dest, seeds_dir, {}, backup=False, update=False)
+	text = open(dest, encoding="utf-8").read()
+	assert "lo gestiona el arnés" in text
+	assert "llegan en `CORE_RULES`" in text

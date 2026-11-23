@@ -40,3 +40,16 @@ keeps prompting normally.
 > `bunker_update()`. Part 2 (bypass launch flag) activates when the Claude awakening executor exists
 > — today the Sovereign Pulse autonomous path is `agy`-only (`AUTONOMOUS_AGY_ENABLED` / `IDE_BACKEND`).
 > When a Claude executor is added, it must launch with `--permission-mode bypassPermissions`.
+
+## Hooks (deployed to `~/.claude/hooks/`)
+
+| Script | Events | Role |
+|---|---|---|
+| `redpill_turn_start.py` | `UserPromptSubmit`, `StopFailure`, `SessionEnd` | Session liveness (`.start`/`.end`), harness bridge, board-nudge acks |
+| `redpill_scribe.py` | `Stop` | Raw capture: queues the turn into `memory_queue` |
+| `redpill_harness.py` | `SessionStart`, `UserPromptSubmit`, `Stop`, `StopFailure` | Identity injection via `POST /hook/context` (AD-130): full identity on session start/compaction, light block per turn, `/hook/ack` on stop |
+
+`redpill_harness.py` is what makes the `hook` variant of the handshake anchor true for Claude Code:
+`inject_anchor.py --mode auto` only seeds that variant into `CLAUDE.md` when the script is deployed and
+registered on `SessionStart` + `UserPromptSubmit`. `REDPILL_HARNESS_MODE=off` disables injection (A/B
+baseline; reseed the anchor with `--mode prompt` in that case).

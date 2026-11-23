@@ -95,7 +95,7 @@ def test_inject_despliega_anchor_pi(sandbox_home, adapter):
 	override = ws / "AGENTS.override.md"
 	assert override.exists()
 	text = override.read_text(encoding="utf-8")
-	assert text.count("<!-- REDPILL:BEGIN") == 5
+	assert text.count("<!-- REDPILL:BEGIN") == 6  # roster común, con identity_pact
 	assert "bunker_search" in text
 	assert "AUTOMÁTICO en Pi" in text  # semilla pi gana sobre la genérica
 	assert "call the `sovereign_handshake`" not in text  # no hereda el ancla MCP de Claude
@@ -171,3 +171,16 @@ def test_pi_knowledge_access_tiene_las_mismas_secciones_que_el_generico():
 	assert "${AGENT_CORE_DIR}/planner/design/<family>/" in text
 	# sin puntero colgante: RFC_FLUJO_RFCS solo se cita condicionado a que exista en el desk
 	assert "if your desk carries `planner/design/governance/RFC_FLUJO_RFCS.md`" in text
+
+
+def test_pi_siembra_el_roster_comun_de_anclas(adapter, tmp_path):
+	"""La lista propia de pi se quedó sin `identity_pact` (deriva desde #100)."""
+	import re
+
+	sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
+	import inject_anchor
+
+	adapter._seed_anchor(REPO_ROOT, argparse.Namespace(workspace=str(tmp_path), uv_path=None), backup=False)
+	text = (tmp_path / "AGENTS.override.md").read_text(encoding="utf-8")
+	assert set(re.findall(r"REDPILL:BEGIN (\w+) v=", text)) == set(inject_anchor.BLOCK_ANCHORS)
+	assert "llegan en `CORE_RULES`" in text

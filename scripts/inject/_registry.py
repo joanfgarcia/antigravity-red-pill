@@ -9,6 +9,10 @@ Python module with two entry-points:
 	inject(args: argparse.Namespace) -> int
 		Execute the injection.  Return the number of files modified.
 
+	SUPPORTS_DRY_RUN = True  (optional, in inject.py)
+		The adapter honours ``args.dry_run`` and writes nothing. Adapters without
+		it are SKIPPED on ``--dry-run``: a simulation must never touch live config.
+
 New IDE support = create a directory with detect.py + inject.py.  Zero
 changes to install_neo.sh or upgrade.sh.
 """
@@ -91,9 +95,15 @@ def inject_all(args, adapters: list[IDEAdapter] | None = None) -> int:
 	"""Run inject() on all (or specified) adapters. Total files modified."""
 	if adapters is None:
 		adapters = detect_present(getattr(args, "workspace", None))
+	dry_run = bool(getattr(args, "dry_run", False))
 	total = 0
 	for adapter in adapters:
 		logger.info(f"--- {adapter.name} ---")
+		# Fail-closed: `--dry-run` llegaba a adaptadores que no lo miran y escribían
+		# la config en vivo (reseed del 2026-11-23). Sin soporte declarado, se omiten.
+		if dry_run and not getattr(adapter.inject_mod, "SUPPORTS_DRY_RUN", False):
+			logger.info(f"  dry-run: '{adapter.name}' no sabe simular; omitido sin escribir nada.")
+			continue
 		try:
 			total += adapter.inject_mod.inject(args)
 		except Exception as exc:

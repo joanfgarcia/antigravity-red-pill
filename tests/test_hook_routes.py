@@ -233,3 +233,22 @@ async def test_el_hook_escribe_el_bridge_del_arnes(monkeypatch, tmp_path):
 	# y el kernel lo lee por el canal de confianza
 	entry = mcp_server._harness_bridge("pi")
 	assert entry["originator"] == "pi:ses_pi_bridge"
+
+
+def test_el_puente_conserva_project_dir_de_la_misma_sesion(monkeypatch, tmp_path):
+	"""En Claude Code el latido escribe `project_dir` (la misión) en este puente y
+	corre en paralelo con el hook del arnés: reescribirlo sin el campo movía la misión."""
+	monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	bridge = routes.get_state_dir() / "claude_code_session.json"
+	bridge.parent.mkdir(parents=True, exist_ok=True)
+	bridge.write_text(json.dumps({"provider": "claude_code", "session_id": "s1", "workdir": str(ws), "project_dir": "/p/uno"}), encoding="utf-8")
+	routes._write_bridge("claude-code", "s1", str(ws))
+	assert json.loads(bridge.read_text(encoding="utf-8"))["project_dir"] == "/p/uno"
+	# Otra sesión no hereda el project_dir ajeno.
+	routes._write_bridge("claude-code", "s2", str(ws))
+	assert "project_dir" not in json.loads(bridge.read_text(encoding="utf-8"))
+	# El que manda el hook gana.
+	routes._write_bridge("claude-code", "s2", str(ws), "/p/dos")
+	assert json.loads(bridge.read_text(encoding="utf-8"))["project_dir"] == "/p/dos"

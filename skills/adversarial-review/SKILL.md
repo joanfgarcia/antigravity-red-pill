@@ -2,13 +2,10 @@
 name: adversarial-review
 version: 1.0.0
 description: >-
-  Institutionalizes the multi-round adversarial audit ritual that surfaced real
-  bugs before shipping (the "R5" pattern): cold context, re-executed ground truth,
-  scope = the delta prior rounds did NOT cover, materialized rules first,
-  per-lens Scout findings, [branch]/[pre-existing] classification, remediation by
-  waves, one shard = one commit. Activate with "auditoría adversarial", "revisión
-  adversarial", "ronda N", "zero-trust review", or before/after implementing a
-  branch. Sibling of the scout (finds) and forge (verifies) skills.
+  Multi-round adversarial audit ("R5" pattern): cold context, re-executed ground truth,
+  scope = the delta prior rounds missed, [branch]/[pre-existing] classification, one
+  shard = one commit. Activate with "auditoría adversarial", "revisión adversarial",
+  "ronda N", "zero-trust review", or before/after implementing a branch.
 ---
 
 # Adversarial Review — zero-trust audit ritual

@@ -57,6 +57,49 @@ def redpill_server(uv_path, redpill_dir):
 	}
 
 
+def shared_backend_available(variables):
+	"""¿Hay backend compartido (AD-018) al que un proxy pueda hablar?
+
+	Mismo interruptor que opencode (`REDPILL_MCP_SHARED`, default on) más una
+	comprobación de suelo: el python del venv y el backend instalado (socket vivo o
+	unit de systemd). Sin backend, un proxy deja al IDE sin MCP; el stdio directo
+	sigue funcionando, así que es el fallback honesto.
+	"""
+	if variables.get("MCP_SHARED") != "true":
+		return False
+	python = variables.get("PYTHON") or ""
+	if not python or not os.path.exists(python):
+		return False
+	sock = variables.get("MCP_SOCKET") or ""
+	unit = os.path.expanduser("~/.config/systemd/user/redpill-mcp.service")
+	return bool(sock) and (os.path.exists(sock) or os.path.exists(unit))
+
+
+def redpill_proxy_server(variables):
+	"""Proxy ligero hacia el backend compartido (como `seeds/opencode/settings/v2`).
+
+	Cada pestaña deja de cargar el kernel entero (~650 MB por proceso medido en
+	Desktop) y la identidad la pone el proxy (env/bridge), nunca el modelo.
+	"""
+	redpill_dir = variables.get("REDPILL_DIR") or ""
+	return {
+		"command": variables["PYTHON"],
+		"args": ["-m", "red_pill.mcp_proxy", "--socket", variables["MCP_SOCKET"], "--harness", "claude_code"],
+		"env": {"PYTHONPATH": os.path.join(redpill_dir, "src")},
+	}
+
+
+def servers_for(config_file, servers, proxy_def):
+	"""Servidores para UN destino: los de Claude van por el proxy si hay backend.
+
+	Antigravity y Cline siguen con el stdio directo: su arnés no tiene bridge que
+	el proxy pueda leer, así que no se tocan.
+	"""
+	if proxy_def is None or "RedPill-Kernel" not in servers or _harness_for(config_file) != "claude_code":
+		return servers
+	return {**servers, "RedPill-Kernel": proxy_def}
+
+
 # ── Merge logic: assert some servers, skip-if-exists for the rest ─────────────
 def _harness_for(config_file):
 	"""Arnés que corresponde a una config MCP destino (para `REDPILL_HARNESS`):
@@ -151,7 +194,16 @@ def main():
 		logger.error("No se encontró ninguna config de cliente MCP donde inyectar.")
 		sys.exit(1)
 
-	changed = sum(inject(t, servers, assert_names=assert_names, update=args.update, backup=not args.no_backup) for t in targets)
+	proxy_def = None
+	if args.redpill_dir:
+		if shared_backend_available(variables):
+			proxy_def = redpill_proxy_server(variables)
+		else:
+			logger.info("• MCP compartido no disponible (REDPILL_MCP_SHARED=0 o sin backend): Claude sigue con stdio directo.")
+
+	changed = sum(
+		inject(t, servers_for(t, servers, proxy_def), assert_names=assert_names, update=args.update, backup=not args.no_backup) for t in targets
+	)
 	logger.info(f"Hecho. {changed}/{len(targets)} config(s) modificada(s).")
 
 
