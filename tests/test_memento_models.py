@@ -71,6 +71,15 @@ def test_una_fuente_que_no_sabe_el_modelo_devuelve_vacio():
 	assert _SinModelo().models_of("x") == {}
 
 
+class _ConSinteticos(_SinModelo):
+	def load_canonical(self, conversation_id):
+		return [{"role": "assistant", "model": m} for m in ("claude-opus-5-5", "<synthetic>", "claude-opus-5-5")]
+
+
+def test_los_mensajes_sinteticos_del_arnes_no_cuentan_como_modelo():
+	assert _ConSinteticos().models_of("x") == {"claude-opus-5-5": 2}
+
+
 def test_la_fila_del_indice_dice_quien_hablo():
 	entry = {"created_at": "2026-11-21T20:37:26Z", "dir": "2026-11/opencode/s", "message_count": 83, "models": {"deepseek-v4.1-flash": 57}}
 	assert "· 83 msgs · deepseek-v4.1-flash" in _entry_line("opencode:s", entry, "../")

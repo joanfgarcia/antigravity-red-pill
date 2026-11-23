@@ -110,7 +110,8 @@ class ChronicleSourcePlugin(ABC):
 			return counts
 		for turn in turns:
 			model = turn.get("model")
-			if turn.get("role") == "assistant" and isinstance(model, str) and model:
+			# `<synthetic>`: mensajes que fabrica el arnés (interrupción, error de API), no un modelo.
+			if turn.get("role") == "assistant" and isinstance(model, str) and model and not model.startswith("<"):
 				counts[model] = counts.get(model, 0) + 1
 		return counts
 
