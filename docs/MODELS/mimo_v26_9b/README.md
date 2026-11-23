@@ -19,9 +19,30 @@ README no añade condiciones a la licencia, según el propio autor).
 | Decode | **56,8 tok/s** | mismo run, 53 tokens |
 | Prefill | **107 tok/s** | mismo run |
 | Carga en frío | 2,9–8,7 s | `llama-cpp-python`, ngl=-1 |
-| KV f16 | ≈64 KiB/token (GQA 4) | `config.json` |
+| KV f16 (teórico) | ≈34 KiB/token (GQA 4) | `config.json` — el «64» de antes era el doble |
+| KV `q8_0` medido | **17,0 MiB/1k** (17,4 KiB/token) | `kv_ceiling.py`: 100k → 1.700 MiB |
+| KV `q4_0` medido | **9,0 MiB/1k** (9,2 KiB/token) | `kv_ceiling.py`: 128k → 1.152 MiB |
 
-Cabe con margen: con 8 GB libres el techo práctico ronda 12–16K de contexto.
+## Techo de contexto medido (2026-11-23, RTX 5070 Laptop 8 GB)
+
+`scripts/kv_ceiling.py` — sonda a 16.384, `-fa on`, `-ngl 99`, `-np 1`, y
+**verificación por arranque**: el número es el que el servidor aceptó, no el que
+salió de la cuenta. Presupuesto 7.500 MiB.
+
+| KV | Último que carga | Primero que falla | VRAM en el techo | KV/1k |
+| --- | ---: | ---: | ---: | ---: |
+| `q8_0` | **108.032** | 110.080 | 7.683 MiB | 17,0 MiB |
+| `q4_0` | **172.032** | 180.224 | 7.659 MiB | 9,0 MiB |
+| `f16` | ~52k *(derivado, no medido)* | — | — | 34,0 MiB |
+
+**Corrección de esta ficha:** el «techo práctico ronda 12–16K» era una estimación y
+se quedó **6× corta**. Con KV en `q8_0` caben **108k** manteniendo todo en GPU; en
+`q4_0`, **168k** (el 128k de la prueba de textura deja 1,4 GB de margen).
+
+**Para uso real, dejar aire:** el techo deja la GPU al 94 %. A 96k `q8_0` la VRAM
+queda en 7.419 MiB y a 160k `q4_0` en 7.547; por encima de eso no hay margen para
+un pico de compute. El techo es **físico**: la calidad sostenida a 100k de ventana
+no está medida — eso es otro experimento, no este número.
 
 ## Herramientas — bucle REAL (`scripts/tool_loop_probe.py`)
 
