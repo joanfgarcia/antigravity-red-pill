@@ -987,6 +987,18 @@ def shell(_: argparse.Namespace) -> int:
 	return run([RUNTIME, "exec", "-it", NAME, "bash"]).returncode
 
 
+def chat(args: argparse.Namespace) -> int:
+	"""Sesión interactiva con el alma: la TUI de pi dentro del sandbox.
+
+	`exec` sigue siendo el camino medido (un turno, sin estado); esto es para
+	hablar y mirar. La identidad y las tools llegan por el hook, igual que en
+	batch: no hay una versión "de verdad" más que otra.
+	"""
+	extra = list(getattr(args, "args", None) or [])
+	print(f"Sesión interactiva con {NAME}. Sal con Ctrl-D." + (" Continuando la última." if "-c" in extra else ""))
+	return run([RUNTIME, "exec", "-it", NAME, "pi", *extra]).returncode
+
+
 def net(args: argparse.Namespace) -> int:
 	if args.state == "on":
 		run([RUNTIME, "network", "connect", NET_EGRESS, NAME])
@@ -1180,6 +1192,8 @@ def main() -> int:
 	sub.add_parser("shell")
 	p = sub.add_parser("exec")
 	p.add_argument("prompt", nargs=argparse.REMAINDER)
+	c = sub.add_parser("chat", help="sesión interactiva con el alma (TUI de pi)")
+	c.add_argument("args", nargs=argparse.REMAINDER, help="pasa flags a pi (p.ej. `-c` para continuar)")
 	n = sub.add_parser("net")
 	n.add_argument("state", choices=["on", "off"])
 	sub.add_parser("preflight")
@@ -1203,6 +1217,7 @@ def main() -> int:
 		"down": down,
 		"exec": exec_,
 		"shell": shell,
+		"chat": chat,
 		"net": net,
 		"preflight": preflight,
 		"status": status,
