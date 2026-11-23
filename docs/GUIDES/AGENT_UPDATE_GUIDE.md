@@ -471,8 +471,23 @@ Each detected IDE's instruction file carries the agent's boot protocol via the s
 (e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop,
 `~/.config/opencode/AGENTS.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
 anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
-1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
-    - **Rule 1 — The Sovereign Handshake**: Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).
+0.  **Coexistence — before AND after (AD-132)**: the seed shares these files with other harnesses and
+    with the operator's own config. Before updating, run `uv run python scripts/inject_cli.py --check`
+    (read-only; exit 1 on errors). Every seeding (install, `upgrade.sh`, `red-pill bunker update`) then
+    prints an **ANTES** block (findings + where the copy of the current files went) and a **DESPUÉS**
+    block (changed files with +/−, findings, report path). Read both. The full diff and the pre-update
+    copy live in `$XDG_DATA_HOME/red-pill/state/inject/<ts>/` (`REPORT.md`, `before/` + `index.json`);
+    restore a file from there if another harness broke. Typical findings: a red-pill hook in both user
+    and project `settings.json` (runs twice), a foreign hook on `SessionStart`/`UserPromptSubmit`
+    (may duplicate identity or rules), anchors copied into a project `CLAUDE.md`, the MCP server in two
+    scopes, an anchor in `hook` variant without `redpill_harness.py` wired (session with no identity).
+    The seed prunes only its own leftovers — anchors listed in `inject_anchor.RETIRED_ANCHORS` and
+    `redpill_*.py` hook scripts no longer seeded (retired to `.bak.<ts>`); everything else is reported,
+    never deleted.
+1.  **Review**: Ensure the anchor blocks contain the active rules. The handshake anchor has two variants:
+    `hook` where a harness injects the identity (opencode, pi, Claude Code with `redpill_harness.py`
+    wired) and `prompt` elsewhere (Antigravity, Desktop chat Projects), described below:
+    - **Rule 1 — The Sovereign Handshake** (`prompt` variant): Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 

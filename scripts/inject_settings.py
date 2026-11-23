@@ -22,12 +22,14 @@ operator's interactive session via a shared settings.json.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
 import re
 import shutil
 import sys
+import time
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("settings_injector")
@@ -185,6 +187,38 @@ def resolve_target(args):
 	return os.path.expanduser("~/.claude/settings.json")
 
 
+# Manifiesto de lo desplegado (nombre → sha256). Distingue «lo dejó la siembra
+# anterior» de «lo editó alguien a mano»: lo segundo se respalda antes de pisarlo.
+HOOK_MANIFEST = ".redpill-manifest.json"
+_OWNED_SCRIPT_RE = re.compile(r"^redpill_[\w.-]*\.py$")
+
+
+def _sha(text):
+	return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _read_text(path):
+	with open(path, encoding="utf-8") as f:
+		return f.read()
+
+
+def _load_manifest(dst_dir):
+	try:
+		data = json.loads(_read_text(os.path.join(dst_dir, HOOK_MANIFEST)))
+	except (OSError, ValueError):
+		return {}
+	return data if isinstance(data, dict) else {}
+
+
+def _save_manifest(dst_dir, manifest):
+	path = os.path.join(dst_dir, HOOK_MANIFEST)
+	tmp = path + ".tmp"
+	with open(tmp, "w", encoding="utf-8") as f:
+		json.dump(manifest, f, indent=2, sort_keys=True)
+		f.write("\n")
+	os.replace(tmp, path)
+
+
 def deploy_hook_scripts(seed_dir, *, remove=False):
 	"""Deploy (or remove) hook scripts referenced by the fragment's hooks.
 
@@ -194,31 +228,54 @@ def deploy_hook_scripts(seed_dir, *, remove=False):
 	Idempotent: unchanged files are skipped. This mirrors the opencode
 	injector deploying its scribe plugin; without it the Stop hook in the
 	settings fragment would reference a script that was never installed.
+
+	Convergente: un ``redpill_*.py`` desplegado que ya no está en la semilla se
+	retira (renombrado a ``.bak.<ts>``, no ejecutable, recuperable); antes se
+	quedaba al lado del nuevo. Un script que difiere de lo que la siembra dejó
+	(manifiesto) se editó a mano: se respalda antes de pisarlo y se avisa.
 	"""
 	src_dir = os.path.join(seed_dir, "hooks")
 	if not os.path.isdir(src_dir):
 		return
 	dst_dir = os.path.expanduser("~/.claude/hooks")
-	for fname in sorted(os.listdir(src_dir)):
-		if not fname.endswith(".py"):
-			continue
-		dst = os.path.join(dst_dir, fname)
-		if remove:
+	seeded = sorted(f for f in os.listdir(src_dir) if f.endswith(".py"))
+	if remove:
+		for fname in seeded:
+			dst = os.path.join(dst_dir, fname)
 			if os.path.exists(dst):
 				os.remove(dst)
 				logger.info(f"✓ hook script eliminado: {dst}")
-			continue
-		with open(os.path.join(src_dir, fname), encoding="utf-8") as f:
-			content = f.read()
+		manifest_path = os.path.join(dst_dir, HOOK_MANIFEST)
+		if os.path.exists(manifest_path):
+			os.remove(manifest_path)
+		return
+	os.makedirs(dst_dir, exist_ok=True)
+	manifest = _load_manifest(dst_dir)
+	stamp = time.strftime("%Y%m%d_%H%M%S")
+	for fname in seeded:
+		dst = os.path.join(dst_dir, fname)
+		content = _read_text(os.path.join(src_dir, fname))
 		if os.path.exists(dst):
-			with open(dst, encoding="utf-8") as f:
-				if f.read() == content:
-					continue
-		os.makedirs(dst_dir, exist_ok=True)
+			current = _read_text(dst)
+			if current == content:
+				manifest[fname] = _sha(content)
+				continue
+			if manifest.get(fname) != _sha(current):
+				shutil.copy2(dst, f"{dst}.bak.{stamp}")
+				logger.warning(f"⚠ {dst} no coincide con lo que sembró red-pill (¿editado a mano?): respaldo en {dst}.bak.{stamp}")
 		with open(dst, "w", encoding="utf-8") as f:
 			f.write(content)
 		os.chmod(dst, 0o755)
+		manifest[fname] = _sha(content)
 		logger.info(f"✓ hook script desplegado: {dst}")
+	for fname in sorted(os.listdir(dst_dir)):
+		path = os.path.join(dst_dir, fname)
+		if fname in seeded or not _OWNED_SCRIPT_RE.match(fname) or not os.path.isfile(path):
+			continue
+		os.replace(path, f"{path}.bak.{stamp}")
+		manifest.pop(fname, None)
+		logger.info(f"✓ hook script retirado (ya no está en la semilla): {path} → {path}.bak.{stamp}")
+	_save_manifest(dst_dir, manifest)
 
 
 def main():

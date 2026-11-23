@@ -58,8 +58,40 @@ BLOCK_VERSION = {
 }
 
 
+# Anclas que red-pill sembró y ya no siembra. Sin esta lista su bloque marcado se
+# quedaba para siempre en el fichero del IDE (el `git_workflow` de opencode seguía
+# en AGENTS.md meses después de salir del roster). Sólo se poda lo que está aquí:
+# un bloque REDPILL desconocido puede ser de otro sembrador (p. ej. `desk`), y ese
+# se avisa en la auditoría, no se borra.
+RETIRED_ANCHORS = frozenset({"git_workflow"})
+
+_ANY_BEGIN_RE = re.compile(r"<!-- REDPILL:BEGIN (\S+)(?: v=\d+)? -->")
+
+
 def _version(anchor):
 	return BLOCK_VERSION.get(anchor, 1)
+
+
+def block_names(content):
+	"""Anclas marcadas en `content`, en orden y con repeticiones (para auditar)."""
+	return _ANY_BEGIN_RE.findall(content or "")
+
+
+def prune_retired_blocks(path, backup=True):
+	"""Quita los bloques de anclas retiradas de `path`. Devuelve los nombres podados."""
+	path = os.path.expanduser(path) if path else path
+	if not path or not os.path.exists(path):
+		return []
+	with open(path, encoding="utf-8") as f:
+		content = f.read()
+	pruned = [a for a in dict.fromkeys(block_names(content)) if a in RETIRED_ANCHORS]
+	if not pruned:
+		return []
+	for a in pruned:
+		content = _marker_re(a).sub("", content)
+	content = re.sub(r"\n{3,}", "\n\n", content).strip()
+	_atomic_write(path, content + "\n" if content else "", backup=backup)
+	return pruned
 
 
 # ── IDE → anchor-file registry (everything is merge; no "owner" files) ────────
@@ -416,7 +448,15 @@ def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, updat
 		if status not in ("unchanged", "absent"):
 			changed += 1
 		logger.info(f"✓ {ide}:{a} [{path}] → {status}")
+	if not remove:
+		changed += _log_pruned(ide, path, prune_retired_blocks(path, backup=backup))
 	return changed
+
+
+def _log_pruned(ide, path, pruned):
+	for a in pruned:
+		logger.info(f"✓ {ide}:{a} [{path}] → retirado (ancla fuera del roster)")
+	return len(pruned)
 
 
 def _csv(value):
@@ -532,6 +572,8 @@ def main():
 			if status not in ("unchanged", "absent"):
 				changed += 1
 			logger.info(f"✓ {ide}:{a} [{path}] → {status}")
+		if not args.remove:
+			changed += _log_pruned(ide, path, prune_retired_blocks(path, backup=backup))
 
 	tail = f" · {reminders} recordatorio(s) de pegado manual" if reminders else ""
 	logger.info(f"Hecho. {changed} bloque(s) escrito(s)/modificado(s){tail}.")

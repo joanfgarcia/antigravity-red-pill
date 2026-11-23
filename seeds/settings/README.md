@@ -53,3 +53,8 @@ keeps prompting normally.
 `inject_anchor.py --mode auto` only seeds that variant into `CLAUDE.md` when the script is deployed and
 registered on `SessionStart` + `UserPromptSubmit`. `REDPILL_HARNESS_MODE=off` disables injection (A/B
 baseline; reseed the anchor with `--mode prompt` in that case).
+
+Deployment is convergent (AD-132): `.redpill-manifest.json` records the sha256 of every script the seed
+deployed. A `redpill_*.py` no longer in `seeds/settings/hooks/` is retired to `<name>.bak.<ts>`; a script
+that differs from the manifest (edited by hand) is backed up the same way before being overwritten.
+`scripts/inject_cli.py --check` audits coexistence with other harnesses and configs without writing.

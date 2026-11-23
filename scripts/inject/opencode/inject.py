@@ -123,7 +123,16 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
 	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
-	from inject_anchor import BLOCK_ANCHORS, BLOCK_VERSION, anchor_seed_path, anchor_variant, ide_call_vars, ide_seed_path, splice_block  # noqa: E402
+	from inject_anchor import (  # noqa: E402
+		BLOCK_ANCHORS,
+		BLOCK_VERSION,
+		anchor_seed_path,
+		anchor_variant,
+		ide_call_vars,
+		ide_seed_path,
+		prune_retired_blocks,
+		splice_block,
+	)
 
 	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
 	# Sin esto los `${RELAY_*}` del seed llegaban literales al fichero de instrucciones.
@@ -147,6 +156,9 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 		if status not in ("unchanged",):
 			changed += 1
 		logger.info(f"  opencode:{anchor} → {status}")
+	for anchor in prune_retired_blocks(instructions_path, backup=backup):
+		changed += 1
+		logger.info(f"  opencode:{anchor} → retirado (ancla fuera del roster)")
 	return changed
 
 

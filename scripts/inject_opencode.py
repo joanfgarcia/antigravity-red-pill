@@ -124,6 +124,7 @@ from inject_anchor import (  # noqa: E402
 	anchor_variant,
 	ide_call_vars,
 	ide_seed_path,
+	prune_retired_blocks,
 	remove_block,
 	splice_block,
 )
@@ -197,6 +198,10 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 		if status not in ("unchanged",):
 			changed += 1
 		logger.info(f"✓ opencode:{anchor} [{instructions_path}] → {status}")
+
+	for anchor in prune_retired_blocks(instructions_path, backup=backup):
+		changed += 1
+		logger.info(f"✓ opencode:{anchor} [{instructions_path}] → retirado (ancla fuera del roster)")
 
 	return changed
 
