@@ -59,6 +59,15 @@ async def main():
 	for repo in repos:
 		run_segment(f"repo:{os.path.basename(repo)}", lambda r=repo: auditor.audit_repo(r), SEGMENT_SIGNAL_NAMES["repo"])
 
+	# RFC-OBS-005 §4.5: el veredicto de un paso se firma en la ronda, no repo a
+	# repo. Un repo limpio no puede enterrar el dolor que otro repo de la misma
+	# ronda acaba de emitir. Sin veredicto de algún repo (caído, saltado) no hay
+	# borrado: `close_round` solo evapora si el paso pasó en TODOS.
+	try:
+		auditor.close_round(repos)
+	except Exception as e:
+		logger.error(f"Cierre de ronda falló (no evapora nada): {e}")
+
 	run_segment("runtime", auditor.audit_runtime, SEGMENT_SIGNAL_NAMES["runtime"])
 	run_segment("vitals", auditor.audit_vitals, SEGMENT_SIGNAL_NAMES["vitals"])
 

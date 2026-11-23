@@ -68,7 +68,11 @@ def test_audit_vitals_dispatch_is_report_only(monkeypatch, auditor):
 
 @pytest.fixture
 def auditor():
-	return SentinelAuditor(force=True)
+	auditor = SentinelAuditor(force=True)
+	# Los tests no escriben en el Búnker: un veredicto verde simulado no debe
+	# evaporar señales vivas (el cierre de ronda ahora también evapora).
+	auditor.memory_mgr = MagicMock()
+	return auditor
 
 
 def test_audit_repo_not_found(auditor):

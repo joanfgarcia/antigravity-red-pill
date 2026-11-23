@@ -90,6 +90,12 @@ class SentinelAuditor:
 
 		self.memory_mgr = MemoryManager()
 
+		# Veredicto por paso y por repo dentro de la ronda en curso. Un paso solo
+		# se entierra si PASÓ en todos los repos de la ronda: el pase limpio del
+		# último repo no puede curar el dolor que el primero acaba de emitir.
+		self._round_verdicts: Dict[str, Dict[str, str]] = {}
+		self._round_repos: List[str] = []
+
 	# Directories that never hold auditable code (venvs, caches, vendored trees).
 	_FINGERPRINT_SKIP_DIRS = frozenset(
 		{
@@ -176,6 +182,45 @@ class SentinelAuditor:
 		except Exception as e:
 			self.logger.warning(f"Failed to update auditor cache: {e}")
 
+	def _record_step(self, repo_path: str, step: str, verdict: str) -> None:
+		"""Anota el veredicto de un paso en un repo para la ronda en curso."""
+		self._round_verdicts.setdefault(step, {})[repo_path] = verdict
+		if repo_path not in self._round_repos:
+			self._round_repos.append(repo_path)
+
+	def _maybe_close_round(self, repo_path: str) -> None:
+		"""Cierra la ronda al auditar el último repo declarado (o cada repo suelto)."""
+		if not self.target_repos or repo_path == self.target_repos[-1]:
+			self.close_round(self.target_repos or [repo_path])
+
+	def close_round(self, repos: Optional[List[str]] = None) -> None:
+		"""Entierra cada señal de paso solo si el paso pasó en TODOS los repos.
+
+		`repos` es el alcance de la ronda (los que debían auditarse). Un repo sin
+		veredicto —saltado, caído o inexistente— bloquea la evaporación: sin
+		medida no hay borrado (RFC-OBS-005 §4.5).
+		"""
+		scope = list(repos) if repos is not None else list(self._round_repos)
+		verdicts_by_step = self._round_verdicts
+		if not verdicts_by_step and not self._round_repos:
+			return  # nada medido en esta ronda: no se toca ninguna señal
+		if verdicts_by_step and scope:
+			for step, signal_name in REPO_STEP_SIGNAL_NAMES.items():
+				verdicts = verdicts_by_step.get(step, {})
+				if all(verdicts.get(repo) == "pass" for repo in scope):
+					self.memory_mgr.evaporate_signals(signal_name)
+
+		# La suite no corre en el latido horario: el dolor de tests de una etapa
+		# anterior no debe quedar vivo, pero se barre UNA vez por ronda, no una
+		# vez por repo.
+		import red_pill.config as cfg
+
+		if not cfg.get_config().AUDITOR_RUN_TESTS:
+			self.memory_mgr.evaporate_signals("signal_test_failure")
+
+		self._round_verdicts.clear()
+		self._round_repos.clear()
+
 	def audit_repo(self, repo_path: str) -> AuditReport:
 		"""Run standard sovereign checks on a repository."""
 		report = AuditReport(status="green")
@@ -183,6 +228,7 @@ class SentinelAuditor:
 		if not os.path.exists(repo_path):
 			report.status = "red"
 			report.findings.append(AuditFinding(type="infra", severity=10.0, message=f"Path not found: {repo_path}"))
+			self._maybe_close_round(repo_path)
 			return report
 
 		# --- Differential audit: each step runs only if the code changed since it
@@ -198,6 +244,7 @@ class SentinelAuditor:
 			# RFC-OBS-005 §4.5: un paso saltado conserva su veredicto. Su nombre se
 			# preserva para que la reconciliación no lo tome por huérfano.
 			report.preserved_signals.add(REPO_STEP_SIGNAL_NAMES[step])
+			self._record_step(repo_path, step, "skipped")
 			return False
 
 		# Each step runs only if the code changed since it last COMPLETED on this
@@ -215,8 +262,7 @@ class SentinelAuditor:
 
 		if not cfg.get_config().AUDITOR_RUN_TESTS:
 			self.logger.info(f"Skipping tests for {repo_path} (AUDITOR_RUN_TESTS off)")
-			# A stale "suite timed out" pain from the old always-on step must not linger.
-			self.memory_mgr.evaporate_signals("signal_test_failure")
+			# Se barre UNA vez por ronda en `close_round`, no una vez por repo.
 		elif _due("tests"):
 			self._audit_tests(repo_path, report)
 			self._mark_step(repo_path, "tests", fingerprint)
@@ -228,6 +274,7 @@ class SentinelAuditor:
 		elif report.findings:
 			report.status = "yellow"
 
+		self._maybe_close_round(repo_path)
 		return report
 
 	def _audit_ruff(self, repo_path: str, report: AuditReport) -> None:
@@ -238,15 +285,19 @@ class SentinelAuditor:
 			)
 			if ruff.returncode != 0:
 				report.status = "yellow"
+				self._record_step(repo_path, "ruff", "fail")
 				errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
 				detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
 				report.findings.append(
 					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
 				)
 			else:
-				self.memory_mgr.evaporate_signals("signal_formatting_failure")
+				# El borrado de la señal lo decide la ronda (`close_round`): un repo
+				# limpio no cura el fallo que otro repo de la misma ronda emitió.
+				self._record_step(repo_path, "ruff", "pass")
 		except subprocess.TimeoutExpired as te:
 			report.status = "yellow"
+			self._record_step(repo_path, "ruff", "error")
 			report.findings.append(
 				AuditFinding(
 					type="formatting",
@@ -265,6 +316,7 @@ class SentinelAuditor:
 			)
 			if mypy.returncode != 0:
 				report.status = "yellow"
+				self._record_step(repo_path, "mypy", "fail")
 				repo_name = os.path.basename(repo_path)
 
 				# Parse Mypy output for explicit pain signals
@@ -286,9 +338,10 @@ class SentinelAuditor:
 					AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
 				)
 			else:
-				self.memory_mgr.evaporate_signals("signal_typing_failure")
+				self._record_step(repo_path, "mypy", "pass")
 		except subprocess.TimeoutExpired as te:
 			report.status = "yellow"
+			self._record_step(repo_path, "mypy", "error")
 			report.findings.append(
 				AuditFinding(
 					type="typing",
@@ -312,6 +365,7 @@ class SentinelAuditor:
 			)
 			if pytest.returncode != 0:
 				report.status = "yellow"
+				self._record_step(repo_path, "tests", "fail")
 				failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
 				detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
 				if len(failed_tests) > 5:
@@ -321,9 +375,10 @@ class SentinelAuditor:
 					AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
 				)
 			else:
-				self.memory_mgr.evaporate_signals("signal_test_failure")
+				self._record_step(repo_path, "tests", "pass")
 		except subprocess.TimeoutExpired as te:
 			report.status = "yellow"
+			self._record_step(repo_path, "tests", "error")
 			report.findings.append(
 				AuditFinding(
 					type="test",
@@ -685,3 +740,4 @@ if __name__ == "__main__":
 		res = auditor.audit_repo(repo)
 		auditor.sync_to_thalamus(res)
 		print(f"Audit of {repo}: {res.status} (Intensity: {res.intensity})")
+	auditor.close_round(auditor.target_repos)
