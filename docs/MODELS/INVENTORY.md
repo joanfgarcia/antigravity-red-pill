@@ -173,3 +173,20 @@ El build BitNet sigue en `3rdparty/BitNet-1.58b/`.
 **`npu_gpt_oss_20b*`** — las ocho variantes (`ctx16k`, `low`, `t02_*`, `2phase`)
 eran configuraciones de tuning de FLM; **no hay medidas registradas** de ninguna,
 así que no hay nada que preservar salvo la constancia de que se probaron.
+
+### Pesos purgados el 2026-11-23
+
+- `K2-Horizon-7B-Q4_K_M.gguf` (5,6 G) y `K2-Horizon-3.7B-Q4_K_M.gguf` (3,2 G):
+  quants sin ficha ni uso (el titular del carril es el Q5). Se recuperan del
+  repo de IFM si hiciera falta.
+- **NPU**: `Qwen3.6-35B-A3B-NPU2` (21 G), `Qwen3.5-9B-NPU2` (7,7 G) y
+  `Qwen3-8B-NPU2` (5,6 G). Sus tres fichas (`npu_qwen36_moe_35b`,
+  `npu_qwen35_9b`, `npu_qwen3_large`) se retiran del registro; la medida del
+  bloque 35B queda conservada arriba. El backend `flm` y el provider NPU siguen
+  instalados: solo se han ido los pesos.
+- Embedder inglés antiguo `sentence-transformers/all-MiniLM-L6-v2` (el activo es
+  el ONNX multilingüe de Qdrant).
+
+**Neto: −42,8 G** (274 → 316 G libres). El registro queda con **6 perfiles**,
+todos con pesos: `granite_4_2_8b`, `k2_horizon_7b`, `spark_x2_6_4b(_hub)`,
+`bonsai_2_27b`, `mimo_v26_9b`.
