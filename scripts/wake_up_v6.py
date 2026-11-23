@@ -83,6 +83,39 @@ def check_llm_service_active():
 		return False
 
 
+def _settle_llm_signal(service_active: bool) -> int:
+	"""Emite o cura `local_llm_offline` según el estado REAL del servicio.
+
+	La señal nacía de un solo sentido: el despertar la inyectaba con la unit
+	caída y nadie la evaporaba al volver — sus únicas curas vivían en el ciclo
+	de sueño, en el ritual y en el centinela del SIP, tres caminos que no dicen
+	nada de «la unit arrancó». Resultado medido: un dolor de Int 7 firmado a las
+	08:57 seguía leyéndose a las 20:00 con el servicio `active` desde las 18:00.
+	Una señal que no muere con su causa no es una señal, es un recuerdo.
+
+	Devuelve cuántos puntos borró (0 si no había nada que curar).
+	"""
+	try:
+		project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+		if project_root not in sys.path:
+			sys.path.insert(0, os.path.join(project_root, "src"))
+		from red_pill.memory import MemoryManager
+	except Exception as import_err:
+		print(f"WARN: MemoryManager unavailable: {import_err}", file=sys.stderr)
+		return 0
+	if not service_active:
+		try:
+			MemoryManager().inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="WAKE_UP_V6")
+		except Exception as sig_err:
+			print(f"WARN: Failed to emit pain signal: {sig_err}", file=sys.stderr)
+		return 0
+	try:
+		return MemoryManager().evaporate_signals("local_llm_offline")
+	except Exception as sig_err:
+		print(f"WARN: Failed to evaporate stale signal: {sig_err}", file=sys.stderr)
+		return 0
+
+
 def _directive_is_active(payload: dict) -> bool:
 	"""Vigencia de una directiva: `superseded` ausente/null/'null'/'None' == activa.
 
@@ -467,21 +500,15 @@ def main():
 		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.", file=sys.stderr)
 		sys.exit(1)
 
-	if not check_llm_service_active():
+	_llm_active = check_llm_service_active()
+	if not _llm_active:
 		# Only warn if the systemd service is truly inactive/failed.
 		# This avoids false alarms when the LLM is busy (e.g. sleep cycle).
 		# A stderr: stdout ES el bloque de identidad que se inyecta al modelo. Un
 		# aviso en stdout se colaba en el contexto como si fuera identidad.
 		print("WARN: Background LLM service is not active. Attempting raw initialization.", file=sys.stderr)
-		try:
-			project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-			if project_root not in sys.path:
-				sys.path.insert(0, os.path.join(project_root, "src"))
-			from red_pill.memory import MemoryManager
-
-			MemoryManager().inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="WAKE_UP_V6")
-		except Exception as sig_err:
-			print(f"WARN: Failed to emit pain signal: {sig_err}", file=sys.stderr)
+	# Emitir no basta: si la unit está viva, el dolor viejo se evapora aquí mismo.
+	_settle_llm_signal(_llm_active)
 
 	_sidecar_status = "DEPRECATED (FastEmbed In-Band)"
 

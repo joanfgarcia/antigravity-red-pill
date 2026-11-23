@@ -248,3 +248,55 @@ def test_query_qdrant_excludes_lazarus_phases():
 
 		assert len(results) == 1
 		assert "Core directive [IMMUNE]" in results
+
+
+# ── local_llm_offline: una señal que no muere con su causa no es una señal ──
+
+
+def _fake_mm(monkeypatch):
+	"""MemoryManager falso que registra emisión y cura sin tocar Qdrant."""
+	import red_pill.memory
+
+	mm = MagicMock()
+	mm.evaporate_signals.return_value = 1
+	monkeypatch.setattr(red_pill.memory, "MemoryManager", MagicMock(return_value=mm))
+	return mm
+
+
+def test_llm_signal_se_emite_con_el_servicio_caido(monkeypatch):
+	mm = _fake_mm(monkeypatch)
+	assert wake_up_v6._settle_llm_signal(False) == 0
+	mm.inject_signal.assert_called_once()
+	assert mm.inject_signal.call_args.args[0] == "local_llm_offline"
+	mm.evaporate_signals.assert_not_called()
+
+
+def test_llm_signal_se_cura_cuando_la_unit_esta_viva(monkeypatch):
+	"""El dolor de Int 7 emitido a las 08:57 se evaporaba a las 20:00 solo si el
+	ciclo de sueño o el centinela del SIP corrían: nada miraba «la unit volvió».
+	Con el servicio activo, el despertar cura y no emite."""
+	mm = _fake_mm(monkeypatch)
+	assert wake_up_v6._settle_llm_signal(True) == 1
+	mm.evaporate_signals.assert_called_once_with("local_llm_offline")
+	mm.inject_signal.assert_not_called()
+
+
+def test_llm_signal_cura_es_best_effort(monkeypatch):
+	"""Un Qdrant caído no puede tumbar el despertar: la cura es best-effort."""
+	mm = _fake_mm(monkeypatch)
+	mm.evaporate_signals.side_effect = RuntimeError("qdrant down")
+	assert wake_up_v6._settle_llm_signal(True) == 0
+
+
+def test_main_llama_a_settle_con_el_estado_medido(monkeypatch):
+	"""`main` no decide por su cuenta: pasa a la cura el veredicto de la unit,
+	para que emisión y evaporación no puedan contradecirse."""
+	with patch("sys.argv", ["wake_up_v6.py"]):
+		with patch("wake_up_v6.check_service", side_effect=lambda url, name: True):
+			with patch("wake_up_v6.check_llm_service_active", return_value=True):
+				with patch("wake_up_v6._settle_llm_signal") as mock_settle:
+					with patch("wake_up_v6.query_qdrant", return_value=[]):
+						with patch("wake_up_v6.resolve_pact", return_value="none — sin pacto inscrito"):
+							with patch("wake_up_v6.resolve_persona", return_value=""):
+								wake_up_v6.main()
+	mock_settle.assert_called_once_with(True)
