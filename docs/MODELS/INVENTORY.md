@@ -130,3 +130,46 @@ una noche entera. Carril del destilador: `reasoning off`.
 
 Es el único del elenco con **deixis perfecta y 65K de ventana a la vez**, y el
 candidato más fuerte para sustituir a granite como destilador. **Ficha pendiente.**
+
+---
+
+## Fichas retiradas del registro (2026-11-23)
+
+Regla aplicada: **la información se queda en el repo; la ficha muerta sale del
+registro.** Una ficha que apunta a pesos inexistentes y no aporta medidas ni
+notas solo ensucia `model_profiles.yaml`. Lo que valía se documenta aquí.
+
+| Ficha | Modelo / base | Licencia | Por qué sale | Qué se conserva |
+| --- | --- | --- | --- | --- |
+| `mistral_nemo_12b` | Mistral-Nemo-2407 Q3_K_M | Apache-2.0 | Pesos purgados 2026-10-29; sin carril | Bake-off de prompts y trampa de plantilla (abajo) |
+| `falcon` | Falcon3-10B-Instruct-1.58bit | Apache-2.0 | Pesos no presentes; sin carril | Medidas por backend en `runtimes.yaml → llama_cpp_bitnet.variants` |
+| `coder_heavy` | Qwen2.5-Coder-7B Q4 | Apache-2.0 | Pesos purgados 2026-10-29; contraste sin uso | Solo el motivo y el repo de origen |
+| `coder_light` | Qwen2.5-Coder-1.5B Q4 | Apache-2.0 | Sin pesos, sin notas | — |
+| `telemetry` | BitNet-2B-4T | MIT | Sin pesos, sin carril | — |
+| `npu_qwen3_small` | Qwen3-0.6B-NPU2 | Apache-2.0 | Modelo no instalado | — |
+| `npu_qwen38_27b` | Qwen3.8-27B-NPU2 | Apache-2.0 | Modelo no instalado | Medida NPU del bloque 35B (abajo) |
+| `npu_gpt_oss_20b` + `_ctx16k`, `_low`, `_low16k`, `_t02_lowbig`, `_t02_medbig`, `_t02_lowsmall`, `_2phase` | gpt-oss-20B-NPU2 | Apache-2.0 | Modelo no instalado | Solo los nombres de las variantes probadas |
+| `npu_gemma4_12b` | Gemma4-12B-IT-NPU2 | sin declarar | Modelo no instalado | Capacidad declarada: vision + audio |
+
+### Detalle que valía la pena
+
+**`mistral_nemo_12b`** — bake-off de prompts 2026-08-13: **MODE B 3/3**, sin la
+fuga a primera persona en inglés del MODE A. El GGUF de `mradermacher` trae una
+plantilla Jinja con `selectattr("tool_calls")` que hay que respetar. Para
+reactivarlo: re-descargar `mradermacher/Mistral-Nemo-Instruct-2407-GGUF` (Q3_K_M);
+la ficha que había aquí era la fuente de esta nota.
+
+**`falcon`** — las medidas viven en el registro de runtimes (RFC-HARNESS-003),
+no en la ficha: `llama_cpp_bitnet.variants` → `cuda` 23,0 tok/s · `vulkan_radeon`
+4,83 · `cpu` 12,87 · `npu` **incompatible** (XDNA2 no soporta ternario 1.58-bit).
+El build BitNet sigue en `3rdparty/BitNet-1.58b/`.
+
+**`npu_qwen38_27b` y familia NPU** — nota del barrido 2026-10-08: el bloque
+`Qwen3.6-35B-A3B MoE` (35B totales / 3B activos) ocupa **20,6 GB de RAM** y da
+**14,5-17,6 t/s** de decode tras un re-pull limpio; su uso habitual queda
+**diferido a ampliación a 64/128 GB**. Los tres perfiles NPU que sí tienen pesos
+(`npu_qwen3_large`, `npu_qwen35_9b`, `npu_qwen36_moe_35b`) se mantienen.
+
+**`npu_gpt_oss_20b*`** — las ocho variantes (`ctx16k`, `low`, `t02_*`, `2phase`)
+eran configuraciones de tuning de FLM; **no hay medidas registradas** de ninguna,
+así que no hay nada que preservar salvo la constancia de que se probaron.
