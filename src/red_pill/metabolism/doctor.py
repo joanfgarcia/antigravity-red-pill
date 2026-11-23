@@ -132,14 +132,15 @@ def _check_model_match() -> list:
 				entry = (data.get("data") or [{}])[0]
 				loaded_model = os.path.basename(entry.get("id", ""))
 				resident = entry.get("loaded")
-				if not loaded_model:
-					out.append(("yellow", "No se pudo recuperar el ID del modelo desde la API local."))
-				elif resident is False:
+				if resident is False:
 					# El proxy carga modelos on-demand: "no residente" no es un mismatch,
-					# es el estado normal entre turnos.
+					# es el estado normal entre turnos. Se comprueba ANTES del id: al
+					# arrancar en frío el proxy devuelve `id: ""` y no es un fallo.
 					out.append(
 						("info", f"Perfil configurado: '{profile_name}' ({model_file}); el proxy no tiene modelo residente (carga on-demand).")
 					)
+				elif not loaded_model:
+					out.append(("yellow", "No se pudo recuperar el ID del modelo desde la API local."))
 				elif model_file == loaded_model:
 					out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
 				elif not configured:

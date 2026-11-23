@@ -267,6 +267,28 @@ class TestCheckModelMatch:
 	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
 	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
 	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
+	@patch("red_pill.metabolism.doctor.os.getenv", return_value="samantha")
+	def test_dual_bind_id_vacio_sin_residente_no_es_yellow(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
+		"""Arranque en frío: el proxy devuelve id "" y loaded false; es idle, no fallo.
+
+		Regresión 2026-11-23: tras reiniciar el proxy sin modelo, /v1/models responde
+		`{"id": "", "loaded": false}` y el chequeo marcaba yellow por mirar el id
+		antes que `loaded`. El estado correcto es el mismo "on-demand" de siempre.
+		"""
+		mock_response = MagicMock()
+		mock_response.read.return_value = json.dumps({"data": [{"id": "", "loaded": False}]}).encode()
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry", self._registry()),
+			patch("urllib.request.urlopen", return_value=mock_response),
+		):
+			result = _check_model_match()
+			assert not any(r[0] in ("yellow", "red") for r in result), result
+			assert any("on-demand" in r[1] for r in result), result
+
+	@patch("red_pill.core.llama_identity.child_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.own_llama_pids", return_value=[])
+	@patch("red_pill.core.llama_identity.cmdline", return_value=["python", "run_dual_bind.py"])
+	@patch("red_pill.core.llama_identity.unit_main_pid", return_value=999)
 	@patch("red_pill.metabolism.doctor.os.getenv", return_value=None)
 	def test_perfil_no_declarado_avisa_pero_no_acusa(self, mock_getenv, mock_main, mock_cmdline, mock_own, mock_children):
 		"""Sin MINION_PROFILE comparamos contra un default asumido: yellow, no red."""
