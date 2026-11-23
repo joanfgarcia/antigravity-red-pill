@@ -266,10 +266,87 @@ def _mounts_need_refresh() -> list[str]:
 	return reasons
 
 
+def _host_uid_in(mappings: dict, uid: int) -> int | None:
+	"""Traduce un uid del CONTENEDOR al uid del HOST según el mapa de podman.
+
+	Rootless sin `keep-id`: el root del contenedor es el Operador y el resto cae
+	en los subuids (100000+). En la imagen, `dokime` es uid 1001 — no 1000: el
+	`node:22-slim` ya gastó el 1000 con el usuario `node`.
+	"""
+	if uid == 0:
+		return os.getuid()
+	for entry in mappings.get("uidmap") or []:
+		start = int(entry.get("container_id", 0))
+		size = int(entry.get("size", 0))
+		if start <= uid < start + size:
+			return int(entry.get("host_id", 0)) + (uid - start)
+	return None
+
+
+def _agent_uid_on_host() -> int | None:
+	"""uid del alma traducido al host. `None` si no hay caja viva o no se puede saber."""
+	if not _is_running(NAME):
+		return None
+	out = subprocess.run([RUNTIME, "exec", NAME, "id", "-u"], capture_output=True, text=True, check=False)
+	if out.returncode != 0:
+		return None
+	try:
+		uid = int((out.stdout or "").strip())
+	except ValueError:
+		return None
+	maps = subprocess.run([RUNTIME, "info", "--format", "{{json .Host.IDMappings}}"], capture_output=True, text=True, check=False)
+	try:
+		return _host_uid_in(json.loads(maps.stdout or "{}"), uid)
+	except Exception:  # noqa: BLE001 — sin mapa no se concede nada, no se adivina
+		return None
+
+
+def _grant_desk_acl() -> None:
+	"""Que cada lado pueda REESCRIBIR lo que crea el otro, no sólo crear y borrar.
+
+	`0777` en el directorio permite crear/borrar, pero un `>` sobre un fichero
+	ajeno exige permiso en el fichero. Las entradas ACL por defecto hacen que lo
+	que nazca en el desk —de cualquiera de los dos lados— traiga permiso del otro.
+	"""
+	uid = _agent_uid_on_host()
+	if uid is None or uid == os.getuid():
+		return
+	for path in (DESK_HOST, DESK_HOST / DESK_INBOX, DESK_HOST / DESK_OUTBOX):
+		if not path.is_dir():
+			continue
+		result = subprocess.run(
+			["setfacl", "-m", f"u:{uid}:rwx,d:u:{uid}:rwx,d:u:{os.getuid()}:rwx", str(path)],
+			capture_output=True,
+			text=True,
+			check=False,
+		)
+		if result.returncode != 0:
+			print(
+				f"[dokime] aviso: {path} sin ACL ({result.stderr.strip() or 'setfacl no disponible'}); "
+				"el alma no podrá reescribir en sitio los ficheros del host",
+				file=sys.stderr,
+			)
+			return
+
+
 def _ensure_desk() -> None:
-	"""Crea el despacho del host con sus dos buzones. Idempotente."""
+	"""Crea el despacho del host con sus dos buzones. Idempotente.
+
+	Permisos: en podman rootless el usuario del alma (uid 1001 en la imagen) mapea
+	a OTRO uid del host (`100000 + 1001 - 1`), así que un `0775` del Operador deja
+	al alma sin poder escribir. El desk se abre a `0777` a propósito: es un
+	directorio de intercambio entre dos identidades que no comparten uid. Los
+	ficheros conservan su dueño; cada lado lee todo y crea/borra lo suyo (o lo del
+	otro, que es justo lo que pide un buzón). `_grant_desk_acl` añade lo que falta:
+	que un fichero nacido de un lado se pueda reescribir desde el otro.
+	"""
 	for sub in ("", DESK_INBOX, DESK_OUTBOX):
-		(DESK_HOST / sub).mkdir(parents=True, exist_ok=True)
+		path = DESK_HOST / sub
+		path.mkdir(parents=True, exist_ok=True)
+		try:
+			os.chmod(path, 0o777)
+		except OSError as exc:  # noqa: BLE001 — un chmod imposible se avisa, no se aborta
+			print(f"[dokime] aviso: no se pudo abrir {path} al alma: {exc}", file=sys.stderr)
 
 
 def _box_config() -> dict:
@@ -650,6 +727,8 @@ def up(args: argparse.Namespace) -> int:
 	# verdad está en el contenedor y `_import_box_config` la leerá de allí.
 	if created or BOX_STATE.is_file():
 		_save_box_config()
+	# El desk ya tiene contenedor vivo: se conceden las ACL cruzadas.
+	_grant_desk_acl()
 
 	# Re-siembra: un arranque nunca debe medir semillas de la versión anterior.
 	if getattr(args, "seed", True):
@@ -932,6 +1011,7 @@ def update(args: argparse.Namespace) -> int:
 	"""
 	_ensure_desk()
 	_import_box_config()
+	_grant_desk_acl()
 	print(f"kernel: {KERNEL_WORKTREE} (ref {args.ref})")
 	before, after = _sync_kernel(args.ref, args.fetch, args.force, args.dry_run)
 	if after:
@@ -1015,6 +1095,7 @@ def desk(args: argparse.Namespace) -> int:
 	"sincronizar" nada: el mismo inodo en los dos lados.
 	"""
 	_ensure_desk()
+	_grant_desk_acl()
 	cmd = args.desk_cmd or "path"
 	items = list(args.items or [])
 
@@ -1048,7 +1129,14 @@ def desk(args: argparse.Namespace) -> int:
 			if origin.is_dir():
 				shutil.copytree(origin, target, dirs_exist_ok=True)
 			elif origin.is_file():
-				shutil.copy2(origin, target)
+				if target.is_file():
+					# El destino puede pertenecer al uid mapeado del alma: no se
+					# puede sobrescribir en sitio, pero sí reemplazar (dir 0777).
+					target.unlink()
+				# `copyfile`, no `copy2`: copiar el modo (644) recalcula la máscara
+				# de la ACL heredada y le quita el write al alma — el buzón deja
+				# de ser de ida y vuelta.
+				shutil.copyfile(origin, target)
 			else:
 				print(f"no existe: {origin}", file=sys.stderr)
 				rc = 1
@@ -1073,7 +1161,7 @@ def desk(args: argparse.Namespace) -> int:
 			if hit.is_dir():
 				shutil.copytree(hit, target, dirs_exist_ok=True)
 			else:
-				shutil.copy2(hit, target)
+				shutil.copyfile(hit, target)
 			if args.move:
 				shutil.rmtree(hit) if hit.is_dir() else hit.unlink()
 			print(f"+ {hit} → {target}")

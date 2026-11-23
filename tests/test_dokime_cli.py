@@ -112,6 +112,43 @@ def test_sync_kernel_dry_run_no_escribe_nada(tmp_path, monkeypatch, capsys):
 	assert "[dry-run]" in capsys.readouterr().out
 
 
+def test_desk_put_reemplaza_un_fichero_del_alma(tmp_path, monkeypatch):
+	"""El uid del alma no es el del Operador: sobrescribir en sitio falla, reemplazar no."""
+	dok = _load_dokime()
+	monkeypatch.setattr(dok, "DESK_HOST", tmp_path / "desk")
+	origin = tmp_path / "entrega.md"
+	origin.write_text("v1", encoding="utf-8")
+	assert dok.desk(_args(desk_cmd="put", items=[str(origin)])) == 0
+
+	target = tmp_path / "desk" / dok.DESK_INBOX / "entrega.md"
+	target.chmod(0o444)  # simula fichero ajeno (no escribible en sitio)
+	origin.write_text("v2", encoding="utf-8")
+	assert dok.desk(_args(desk_cmd="put", items=[str(origin)])) == 0
+	assert target.read_text(encoding="utf-8") == "v2"
+
+
+def test_host_uid_in_traduce_el_uid_del_sandbox(monkeypatch):
+	dok = _load_dokime()
+	mappings = {
+		"uidmap": [
+			{"container_id": 0, "host_id": 1000, "size": 1},
+			{"container_id": 1, "host_id": 100000, "size": 65536},
+		]
+	}
+	assert dok._host_uid_in(mappings, 0) == os.getuid()  # root del contenedor = Operador
+	assert dok._host_uid_in(mappings, 1001) == 101000  # el usuario `dokime` de la imagen
+	assert dok._host_uid_in(mappings, 99999) is None  # fuera de todo mapa: no se adivina
+
+
+def test_grant_desk_acl_no_toca_nada_sin_caja_viva(tmp_path, monkeypatch):
+	dok = _load_dokime()
+	monkeypatch.setattr(dok, "DESK_HOST", tmp_path / "desk")
+	monkeypatch.setattr(dok, "_is_running", lambda name: False)
+	dok._ensure_desk()
+	dok._grant_desk_acl()  # no debe ni intentarlo
+	assert (tmp_path / "desk" / dok.DESK_INBOX).is_dir()
+
+
 def test_mounts_need_refresh_no_opina_si_la_caja_no_existe(monkeypatch):
 	dok = _load_dokime()
 	monkeypatch.setattr(dok, "_exists", lambda kind, name: False)
