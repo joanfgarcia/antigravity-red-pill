@@ -129,7 +129,8 @@ una noche entera. Carril del destilador: `reasoning off`.
 | `granite_8b` (titular) | 12/15 | 3/3 | 49.152 |
 
 Es el único del elenco con **deixis perfecta y 65K de ventana a la vez**, y el
-candidato más fuerte para sustituir a granite como destilador. **Ficha pendiente.**
+candidato más fuerte para sustituir a granite como destilador. Ficha:
+[`bonsai_2_27b`](bonsai_2_27b/README.md).
 
 ---
 

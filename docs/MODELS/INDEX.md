@@ -15,10 +15,15 @@ Procedimiento de medición: [`PROCEDURE.md`](PROCEDURE.md)
 | `granite_8b` | Granite-4.1-8B | **Titular** (destilador) | 12.288 (24.576 con KV `q8_0`) | [README](granite_8b/README.md) |
 | `bonsai_2_27b` | Ternary Bonsai 2 27B | **Se queda** — destilador alternativo y lector largo | 65.536 (`q4_0`) | [README](bonsai_2_27b/README.md) |
 | `spark_x2_6_4b` | Spark-X2.6-4B | **Se queda** — lector de contexto largo | **262.144** (`q4_0`), 117K verificados | [README](spark_x2_6_4b/README.md) |
-| `k2_horizon_3_7b` | K2-Horizon-3.7B | **Candidato** | 98.304 (`q4_0`), uso fiable ≤40K | [README](k2_horizon_3_7b/README.md) |
-| `mimo_v26_9b` | MiMo-V2.6-Distill-Qwen-9B | **Candidato** — 3/3 en bucle real de herramientas, el destilador más rápido | 12–16K (8 GB VRAM) | [README](mimo_v26_9b/README.md) |
+| `k2_horizon_7b` | K2-Horizon-7B `Q5_K_M` | **Default** — 15/15 y deixis 3/3: hubs del sueño, ladder de minions y cata de Memento | 45.056 (`q8_0`, medido) | [README](k2_horizon_7b/README.md) |
+| `k2_horizon_3_7b` | K2-Horizon-3.7B | **Candidato** — el pequeño rápido (0,6 s), 98.304 con KV `q4_0` | 98.304 (`q4_0`) | [README](k2_horizon_3_7b/README.md) |
+| `mimo_v26_9b` | MiMo-V2.6-Distill-Qwen-9B | **Candidato** — 3/3 en bucle real de herramientas, el destilador más rápido | 108.032 (`q8_0`) · 172.032 (`q4_0`), techo medido | [README](mimo_v26_9b/README.md) |
 
 Inventario y purgas: [`INVENTORY.md`](INVENTORY.md).
+
+> La columna «Ventana útil» es el **techo físico medido** —lo que el servidor
+> acepta al arrancar—, no la ventana en la que la calidad aguanta. Son dos
+> números distintos y sólo el primero está medido para casi todos.
 
 Regla de nomenclatura: la carpeta lleva el **id del perfil** en
 `model_profiles.yaml`, no el nombre comercial. Así el documento y el runtime hablan

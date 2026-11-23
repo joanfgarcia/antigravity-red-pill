@@ -22,7 +22,17 @@ from pathlib import Path
 IMAGE = "ghcr.io/ggml-org/llama.cpp:server-cuda"
 NAME = "dokime-kvprobe"
 KV_RE = re.compile(r"KV buffer size\s*=\s*([0-9.]+)\s*MiB", re.I)
-MODEL_RE = re.compile(r"model size\s*=\s*([0-9.]+)\s*MiB", re.I)
+# llama.cpp escribe `model buffer size` en `load_tensors`; el patrón viejo
+# (`model size`) no casaba y dejaba `model_mb = 0`, inflando la predicción.
+MODEL_RE = re.compile(r"model(?: buffer)? size\s*=\s*([0-9.]+)\s*MiB", re.I)
+# El modelo se imprime dos veces: el mmap del fichero (CPU) y el buffer en VRAM.
+# Lo que resta de presupuesto es el de la GPU.
+MODEL_CUDA_RE = re.compile(r"CUDA\d+\s+model buffer size\s*=\s*([0-9.]+)\s*MiB", re.I)
+
+
+def _mib(pattern: re.Pattern[str], text: str) -> int:
+	found = pattern.search(text)
+	return int(float(found.group(1))) if found else 0
 
 
 def vram_used_mb() -> int:
@@ -77,6 +87,11 @@ def boot(model: Path, alias: str, ctx: int, kv: str, timeout: int = 180) -> tupl
 		"-np",
 		"1",
 		"--jinja",
+		# Sin `-lv 4` el servidor no imprime los buffers: ni `KV buffer size` ni
+		# `model buffer size`. A verbosidad 3 el log sólo dice que escucha, y el
+		# sondeo se quedaba sin la magnitud que viene a medir.
+		"-lv",
+		"4",
 	]
 	run = subprocess.run(cmd, capture_output=True, text=True, check=False)
 	if run.returncode != 0:
@@ -90,9 +105,9 @@ def boot(model: Path, alias: str, ctx: int, kv: str, timeout: int = 180) -> tupl
 			break
 		logs = subprocess.run(["podman", "logs", NAME], capture_output=True, text=True, check=False)
 		text = (logs.stdout or "") + (logs.stderr or "")
-		if "server is listening" in text:
-			kv_mb = int(float(KV_RE.search(text).group(1))) if KV_RE.search(text) else 0
-			model_mb = int(float(MODEL_RE.search(text).group(1))) if MODEL_RE.search(text) else 0
+		if "server is listening" in text or "listening on http" in text:
+			kv_mb = _mib(KV_RE, text)
+			model_mb = _mib(MODEL_CUDA_RE, text) or _mib(MODEL_RE, text)
 			return True, kv_mb, model_mb, ""
 		if "failed to allocate" in text or "error loading model" in text:
 			return False, 0, 0, "sin VRAM"
@@ -129,16 +144,35 @@ def main() -> int:
 		print(f"{kv:<6} predicho: {pred // 1024}k tokens (margen {room} MiB)")
 
 		best = 0
-		for attempt in (pred, pred - 4096, pred - 8192):
-			if attempt <= 0:
-				continue
-			ok2, kv2, _, why2 = boot(model, args.alias, attempt, kv)
+		if pred <= args.probe_ctx:
+			# La sonda ya cargó: es el suelo verificado.
+			best = args.probe_ctx
+			print(f"{kv:<6} VERIFICADO: carga a {best // 1024}k (la predicción no da para más)")
+		else:
+			# Descenso simulado de 4k (lo de antes) no alcanza cuando la predicción
+			# se pasa: 122k → 118k → 114k sigue lejos de un techo real de 96k y el
+			# informe dice "no" habiendo sitio. Bisección entre la sonda (carga) y
+			# la predicción (falla): converge en ≤4 arranques a 1k de error.
+			lo, hi = args.probe_ctx, pred
+			ok2, kv2, _, why2 = boot(model, args.alias, hi, kv)
 			if ok2:
-				best = attempt
-				used = vram_used_mb()
-				print(f"{kv:<6} VERIFICADO: carga a {attempt // 1024}k (KV {kv2} MiB, VRAM total {used} MiB)")
-				break
-			print(f"{kv:<6} {attempt // 1024}k no entra ({why2})")
+				best = hi
+				print(f"{kv:<6} VERIFICADO: carga a {hi // 1024}k (KV {kv2} MiB, VRAM total {vram_used_mb()} MiB)")
+			else:
+				print(f"{kv:<6} {hi // 1024}k no entra ({why2})")
+				for _ in range(6):
+					mid = ((lo + hi) // 2) // 1024 * 1024
+					if mid <= lo or hi - lo <= 1024:
+						break
+					ok3, kv3, _, why3 = boot(model, args.alias, mid, kv)
+					if ok3:
+						lo = mid
+						print(f"{kv:<6} {mid // 1024}k entra (KV {kv3} MiB, VRAM total {vram_used_mb()} MiB)")
+					else:
+						hi = mid
+						print(f"{kv:<6} {mid // 1024}k no entra ({why3})")
+				best = lo
+				print(f"{kv:<6} VERIFICADO: techo {best // 1024}k (último que carga)" if best else f"{kv:<6} techo por debajo de la sonda")
 		rows.append({"kv": kv, "ctx": best, "kv_mb": kv_mb, "per_1k": round(per_1k, 1), "verdict": "ok" if best else "no"})
 
 	stop()
