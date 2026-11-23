@@ -68,7 +68,13 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 				data = json.loads(raw)
 			except Exception:
 				continue
-			msg_rows.append((message_id, json.dumps({"role": mtype, "time": {"created": time_created}}), time_created))
+			# El modelo viaja con el mensaje como en v1 (`modelID`/`providerID`): sin esto
+			# el raw y el meta de Memento no sabían qué modelo habló (2026-11-23).
+			meta: Dict[str, Any] = {"role": mtype, "time": {"created": time_created}}
+			model = data.get("model")
+			if isinstance(model, dict) and model.get("id"):
+				meta.update({"modelID": model.get("id"), "providerID": model.get("providerID"), "variant": model.get("variant")})
+			msg_rows.append((message_id, json.dumps(meta), time_created))
 			if mtype == "user":
 				part_rows.append((message_id, json.dumps({"type": "text", "text": data.get("text", "") or ""})))
 				continue

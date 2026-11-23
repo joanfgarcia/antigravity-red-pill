@@ -96,6 +96,24 @@ class ChronicleSourcePlugin(ABC):
 			)
 		return turns
 
+	def models_of(self, conversation_id: str) -> Dict[str, int]:
+		"""Modelo → turnos del asistente que lo usaron, en orden de aparición.
+
+		Sale de `load_canonical` (las fuentes que lo sobrescriben traen `model`; el
+		default no lo sabe y devuelve `{}`). Una sesión puede cambiar de modelo a mitad:
+		por eso es un recuento y no un solo valor. Nunca lanza: sin dato, `{}`.
+		"""
+		counts: Dict[str, int] = {}
+		try:
+			turns = self.load_canonical(conversation_id)
+		except Exception:
+			return counts
+		for turn in turns:
+			model = turn.get("model")
+			if turn.get("role") == "assistant" and isinstance(model, str) and model:
+				counts[model] = counts.get(model, 0) + 1
+		return counts
+
 
 def canonical_ts(value: Any) -> float:
 	"""Timestamp a epoch en segundos (ISO o numérico); 0.0 si no es interpretable."""

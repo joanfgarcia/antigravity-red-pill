@@ -1,0 +1,19 @@
+# Reexportación de Memento para que meta.json, el registro y los índices sepan qué
+# modelo habló en cada sesión (AD-133). Un elemento = una fuente: re-renderizar es
+# idempotente (mismo store → mismo index.md), así que un elemento abortado sólo
+# cuesta tiempo y se relanza entero sin perder nada.
+source: element_job
+priority: 3
+title: Memento — reexportación con el modelo de cada sesión (AD-133)
+mission_id: memento-models
+elements:
+  - {"source": "claude_code"}
+  - {"source": "pi"}
+  - {"source": "opencode"}
+step_command: bash -c 'exec uv run python scripts/memento_migrate.py --all --source "$(jq -r .source <<<"$RP_ELEMENT")"'
+defer_exit_code: 77
+pause_exit_code: 78
+preflight:
+  llm_required: false
+control:
+  max_step_minutes: 90

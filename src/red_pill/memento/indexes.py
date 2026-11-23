@@ -20,7 +20,9 @@ def _entry_line(session_id: str, entry: Dict[str, Any], link_prefix: str) -> str
 	if entry.get("has_splits"):
 		marks.append("splits")
 	suffix = f" · {', '.join(marks)}" if marks else ""
-	return f"- {created} — [{session_id}]({link_prefix}{entry['dir']}/memento/index.md) · {entry.get('message_count', 0)} msgs{suffix}"
+	models = entry.get("models")
+	who = f" · {', '.join(models)}" if isinstance(models, dict) and models else ""
+	return f"- {created} — [{session_id}]({link_prefix}{entry['dir']}/memento/index.md) · {entry.get('message_count', 0)} msgs{who}{suffix}"
 
 
 def _sorted_sessions(sessions: Dict[str, Dict[str, Any]]) -> List[Tuple[str, Dict[str, Any]]]:

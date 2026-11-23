@@ -4142,3 +4142,16 @@ en el turno tiene excusa.
 **Alternatives**: (a) podar todo bloque REDPILL fuera del roster — borraría el bloque `desk` y el de cualquier otro sembrador; (b) pedir confirmación interactiva antes de sembrar — rompe las actualizaciones desatendidas y las que lanza un agente; el aviso más la copia `before/` permiten revisar y volver atrás sin bloquear.
 **Rationale / Evidence**: 14 casos en `test_inject_audit.py` (poda de anclas y scripts, respaldo sólo de lo editado a mano, cada hallazgo, máquina limpia sin hallazgos, foto/diff/informe, retención). En el equipo del Operador `--check` encontró el `git_workflow` huérfano de opencode, 6 respaldos en `~/.claude/hooks` y el `SessionStart` propio de `horseback-gunslinger`.
 **Consequences**: quien actualiza ve qué había y qué cambió, y dónde está la copia para volver atrás. Retirar un ancla del roster exige añadirla a `RETIRED_ANCHORS`. `~/.claude.json` sólo se compara en su parte MCP (el resto es estado de la app); su copia de seguridad sigue siendo la de `inject_mcp`.
+
+## [AD-133] Memento registra qué modelo habló en cada sesión, fuera de la cabecera de `index.md`
+**Date**: 2026-11-23
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: El mismo hilo corre sobre modelos distintos según el arnés (DeepSeek en opencode y pi, Opus en Claude Code, locales en el sandbox) y Memento no lo guardaba en ningún sitio: opencode v2 lleva `model {id, providerID, variant}` en cada mensaje del asistente, pero el puente v2 → v1 (`_v2_turns`) sólo copiaba rol y hora; Claude Code y Pi sí lo leían en `load_canonical`, pero ni `meta.json` ni el registro lo recogían.
+**Decision**:
+1. `_v2_turns` conserva `modelID`/`providerID`/`variant` en el mensaje (como v1): `raw.json` ya lo lleva.
+2. `ChronicleSourcePlugin.models_of(cid)`: modelo → turnos del asistente, desde `load_canonical`. Un recuento y no un valor, porque una sesión puede cambiar de modelo a mitad; `{}` si la fuente no lo sabe.
+3. `memento_migrate` lo escribe en `raw/meta.json` (`models`), en el registro (sólo si no está vacío, para no pisar lo que hubiera) y en la fila de `index/<fuente>.md`.
+4. **No** va a la cabecera de `memento/index.md`: las notas ascendidas guardan rangos `#lA-B` sobre ese fichero y el recall híbrido resuelve por línea; una línea más desplazaría todos los rangos de cada sesión re-renderizada.
+**Alternatives**: campo nuevo en la cabecera de `index.md` (más visible) — rompe los rangos existentes salvo que se re-anoten todas las sesiones.
+**Rationale / Evidence**: 5 casos en `test_memento_models.py`. Contra los stores reales: la charla del 21-nov `{deepseek-v4.1-flash: 57}`, la sesión del 17–20 `{deepseek-v4.1-flash: 2221}`, sesiones de Claude Code con cambio de modelo (`claude-fable-5` 95 + `claude-opus-4-8` 661).
+**Consequences**: las sesiones ya exportadas lo ganan con una reexportación (`memento_migrate.py --all --source …`, job `memento_models_reexport`); la base de opencode conserva mensajes desde el 20-jul-2026, lo anterior o lo podado no se recupera.

@@ -258,8 +258,21 @@ def _queue_census() -> Dict[str, int]:
 		return {}
 
 
-def _export_raw(plugin: Any, cid: str, session_id: str, step_count: Optional[int], workspace: Optional[str], session_dir: Path, now: str) -> None:
-	"""Escribe `raw/raw.*` + `raw/meta.json`: la copia de respaldo autocontenida (§4.2)."""
+def _export_raw(
+	plugin: Any,
+	cid: str,
+	session_id: str,
+	step_count: Optional[int],
+	workspace: Optional[str],
+	session_dir: Path,
+	now: str,
+	models: Optional[Dict[str, int]] = None,
+) -> None:
+	"""Escribe `raw/raw.*` + `raw/meta.json`: la copia de respaldo autocontenida (§4.2).
+
+	`models` (modelo → turnos del asistente) dice quién habló: el mismo hilo corre
+	sobre modelos distintos según el arnés, y sin esto no había forma de saberlo.
+	"""
 	import json as _json
 
 	try:
@@ -274,6 +287,7 @@ def _export_raw(plugin: Any, cid: str, session_id: str, step_count: Optional[int
 			"conversation_id": cid,
 			"step_count": step_count,
 			"workspace": workspace,
+			"models": models or {},
 			"exported_at": now,
 		}
 		(raw_dir / "meta.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -538,8 +552,11 @@ def main() -> None:
 			month_override=entry.get("month"),
 		)
 		session_dir = write_session(root, rendered)
+		# Fuera de la cabecera de index.md a propósito: una línea más desplazaría los
+		# rangos `#lA-B` que las notas ascendidas usan para el recall híbrido.
+		models = plugin.models_of(cid)
 		if raw_enabled and not reconstructed:
-			_export_raw(plugin, cid, session_id, step_count, workspace, session_dir, now)
+			_export_raw(plugin, cid, session_id, step_count, workspace, session_dir, now, models)
 		registry.upsert(
 			plugin.name,
 			session_id,
@@ -554,6 +571,8 @@ def main() -> None:
 				"has_splits": rendered.has_splits,
 				"memento_hash": rendered.memento_hash,
 				"reconstructed": reconstructed,
+				# Vacío = la fuente no lo sabe (o falló el store): no pisar lo que hubiera.
+				**({"models": models} if models else {}),
 			},
 		)
 		touched_sources.add(plugin.name)
