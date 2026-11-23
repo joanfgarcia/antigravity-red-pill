@@ -4,35 +4,32 @@ from unittest.mock import MagicMock, patch
 
 
 class TestEdgeEngineInit:
-	def test_model_path_discovered_from_dir(self, tmp_path):
-		"""Lines 36-48: model dir exists with GGUF → model_path set."""
-		model_dir = tmp_path / "models"
-		model_dir.mkdir()
-		(model_dir / "qwen2.5-coder-7b-instruct.gguf").write_bytes(b"fake")
-		with patch("os.getenv", return_value=str(tmp_path)):
+	@patch("red_pill.swarm.agents.edge_engine.get_models_dir")
+	def test_model_path_from_profile(self, mock_get_models_dir, tmp_path):
+		"""El perfil explícito manda (2026-11-23): ya no se elige "el primer .gguf"."""
+		mock_get_models_dir.return_value = tmp_path
+		with patch("red_pill.core.model_registry.ModelRegistry.get_profile", return_value={"model_path": "granite-4.2-8b-Q4_K_M.gguf"}):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 			engine = EdgeEngine()
-		assert engine.model_path is not None
-		assert "qwen2.5-coder-7b" in engine.model_path.lower()
+		assert engine.model_path == str(tmp_path / "granite-4.2-8b-Q4_K_M.gguf")
 
-	def test_fallback_any_gguf(self, tmp_path):
-		"""Lines 45-48: no priority model → any .gguf found."""
-		model_dir = tmp_path / "models"
-		model_dir.mkdir()
-		(model_dir / "other_model.gguf").write_bytes(b"fake")
-		with patch("os.getenv", return_value=str(tmp_path)):
+	@patch("red_pill.swarm.agents.edge_engine.get_models_dir")
+	def test_profile_missing_leaves_none(self, mock_get_models_dir, tmp_path):
+		"""Perfil sin resolución → None (modo extracción), nunca un GGUF al azar."""
+		mock_get_models_dir.return_value = tmp_path
+		(tmp_path / "other_model.gguf").write_bytes(b"fake")
+		with patch("red_pill.core.model_registry.ModelRegistry.get_profile", return_value={}):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 			engine = EdgeEngine()
-		assert engine.model_path is not None
-		assert engine.model_path.endswith(".gguf")
+		assert engine.model_path is None
 
 	@patch("red_pill.swarm.agents.edge_engine.get_models_dir")
 	def test_no_model_dir(self, mock_get_models_dir, tmp_path):
-		"""Lines 36: model dir absent → model_path remains None."""
+		"""Model dir ausente y perfil vacío → model_path None."""
 		mock_get_models_dir.return_value = tmp_path / "fake_xdg"
-		with patch("os.getenv", return_value=str(tmp_path)):
+		with patch("red_pill.core.model_registry.ModelRegistry.get_profile", return_value={}):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 			engine = EdgeEngine()

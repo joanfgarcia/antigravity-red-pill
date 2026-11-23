@@ -202,11 +202,12 @@ def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int =
 		"seed": -1,
 		"stop": ["<|im_end|>", "<|endoftext|>"],
 	}
-	# Solo el hypervisor (8760) entiende el selector; el efímero es llama-server.
+	# Solo el hypervisor (8760) entiende el selector por task; el efímero es un
+	# llama-server de un solo modelo y no necesita el campo `model`. (El
+	# `model: "samantha"` que iba aquí era muerto: el efímero lo ignora y el
+	# perfil se resuelve al arrancarlo, no en la petición.)
 	if port == 8760:
 		payload_dict["task"] = "conversation"
-	else:
-		payload_dict["model"] = "samantha"
 
 	payload = json.dumps(payload_dict).encode("utf-8")
 

@@ -94,7 +94,9 @@ def _check_model_match() -> list:
 
 		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE")
 		configured = bool(profile_name)
-		profile_name = profile_name or "samantha"
+		# 2026-11-23: 'samantha' se retiró del disco. El perfil asumido cuando
+		# no hay env es el titular local de producción (Granite 4.2-8B).
+		profile_name = profile_name or "granite_4_2_8b"
 		model_path = (ModelRegistry.get_profile(profile_name) or {}).get("model_path")
 		if not model_path:
 			out.append(("yellow", f"No se pudo resolver el modelo del perfil '{profile_name}' (revisar model_profiles.yaml)."))

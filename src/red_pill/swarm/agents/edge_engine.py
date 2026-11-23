@@ -40,20 +40,21 @@ class EdgeEngine:
 			if os.path.isdir(candidate):
 				model_dir = candidate
 
-		# Discover model path eagerly (cheap filesystem ops) but defer loading
-		if not model_path and os.path.exists(model_dir):
-			models = os.listdir(model_dir)
-			priority_models = ["qwen2.5-coder-7b", "qwen2.5-coder-1.5b"]
-			for target in priority_models:
-				found = next((m for m in models if target in m.lower() and m.endswith(".gguf")), None)
-				if found:
-					model_path = os.path.join(model_dir, found)
-					break
-			# Fallback to any GGUF
-			if not model_path:
-				found = next((m for m in models if m.endswith(".gguf")), None)
-				if found:
-					model_path = os.path.join(model_dir, found)
+		# Perfil EXPLÍCITO (2026-11-23). Antes se elegía "el primer .gguf del
+		# directorio": con varios modelos en disco el healer podía cargar un 27B
+		# ternario que su runtime no abre. El perfil se puede cambiar por env sin
+		# tocar código; si no existe, el motor queda en modo extracción.
+		if not model_path:
+			profile_name = os.getenv("REDPILL_EDGE_PROFILE", "granite_4_2_8b")
+			try:
+				from red_pill.core.model_registry import ModelRegistry
+
+				profile = ModelRegistry.get_profile(profile_name) or {}
+				mp = str(profile.get("model_path") or "")
+				if mp:
+					model_path = mp if os.path.isabs(mp) else os.path.join(model_dir, mp)
+			except Exception as exc:  # noqa: BLE001
+				logger.warning("EdgeEngine: no se pudo resolver el perfil '%s': %s", profile_name, exc)
 
 		self.model_path = model_path
 

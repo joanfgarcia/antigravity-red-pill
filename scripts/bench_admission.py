@@ -27,7 +27,6 @@ MODELS = [
 	("spark", SPARK),
 	("mimo", M / "MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf"),
 	("granite42_8b", M / "granite-4.2-8b-Q4_K_M.gguf"),
-	("mistral_7b", M / "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"),
 	("bonsai_27b", M / "Ternary-Bonsai-2-27B-PTQ1_0.gguf"),
 ]
 
