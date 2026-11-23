@@ -131,8 +131,12 @@ def finalize_sleep_cycle(ctx: SleepContext, mode: str = "lazy") -> int:
 	try:
 		from red_pill.core.notifier import SovereignNotifier
 
-		SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "local_llm_offline")
 		SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "ariadne_thread_running")
+		# El dolor `local_llm_offline` solo se entierra si este ciclo NO fue el que lo
+		# levantó: un ciclo con los hubs diferidos por falta de LLM no puede borrar la
+		# evidencia de su propio fallo (sería un dolor que se disfraza de calma).
+		if not getattr(ctx, "llm_offline", False):
+			SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "local_llm_offline")
 		# Only clear the deferral alert if consolidation actually ran — i.e. the GPU
 		# had headroom. If it self-deferred, vram_busy stays up until a real cycle.
 		if not ctx.deferred:

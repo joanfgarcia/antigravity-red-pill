@@ -70,6 +70,7 @@ class HubSynthesisPhase(SleepPhase):
 			try:
 				if not EphemeralServer().start(memory_manager):
 					logger.warning("[SLEEP ENGINE] LLM no disponible; hubs/hilo diferidos al próximo ciclo.")
+					ctx.llm_offline = True
 					return
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to start ephemeral server: {e}")

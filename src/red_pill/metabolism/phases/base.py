@@ -39,6 +39,10 @@ class SleepContext:
 	# no participa en decisiones ni en `total_processed`. Clave = nombre de fase.
 	durations: Dict[str, float] = field(default_factory=dict)
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
+	# Un ciclo que no pudo levantar el LLM local lo marca aquí: el finalizador NO
+	# evapora el dolor `local_llm_offline` que ese mismo ciclo acaba de levantar
+	# (si no, los hubs diferidos se vuelven invisibles para el Operador).
+	llm_offline: bool = False
 	# Consolidation drain cutoff (epoch seconds). 0 = unset → the phase captures it
 	# at execute() start. The dag_job sleep recipe pins it at job start (first
 	# step) so a paused/resumed cycle does not slide the window forward.

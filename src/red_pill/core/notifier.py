@@ -60,16 +60,27 @@ class SovereignNotifier:
 		intensity: float = 1.0,
 		signal_type: str = "status",
 		source: str = "SYSTEM",
+		message: str | None = None,
+		diagnosis: str | None = None,
 	) -> None:
-		"""Injects a cognitive signal into the Cortex to notify the AI of a system event."""
+		"""Injects a cognitive signal into the Cortex to notify the AI of a system event.
+
+		`message`/`diagnosis` are optional detail carried with the signal: a pain that
+		says only its name forces the reader to re-measure the whole world to know
+		whether it is real. Both are omitted from the call when not provided, so the
+		payload of existing signals does not change.
+		"""
 		try:
+			extra = {k: v for k, v in (("message", message), ("diagnosis", diagnosis)) if v}
 			memory_manager.inject_signal(
 				signal_name,
 				intensity=intensity,
 				signal_type=signal_type,
 				source=source,
+				**extra,
 			)
-			logger.info(f"[SovereignNotifier] Injected signal: {signal_name}")
+			detail = f" ({diagnosis})" if diagnosis else ""
+			logger.info(f"[SovereignNotifier] Injected signal: {signal_name}{detail}")
 		except Exception as e:
 			logger.error(f"[SovereignNotifier] Failed to inject signal: {e}")
 

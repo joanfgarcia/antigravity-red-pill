@@ -53,6 +53,31 @@ def _check_llm_available() -> bool:
 	return False  # No endpoint configured
 
 
+def _describe_failure(reason: str) -> str:
+	"""Diagnóstico de una línea para el dolor `local_llm_offline`.
+
+	Un dolor que solo lleva su nombre obliga a re-medir el mundo entero para saber
+	si es real (SIP :8080, DOCTOR-001). Esto viaja con la señal: motivo + estado
+	del socket UDS + estado del unit.
+	"""
+	import shutil
+
+	uds = cfg.SIP_SOCKET_PATH
+	parts = [f"motivo={reason}", f"uds={uds}", f"uds_existe={os.path.exists(uds)}"]
+	if shutil.which("systemctl"):
+		try:
+			res = subprocess.run(
+				["systemctl", "--user", "is-active", "redpill-llm.service"],
+				capture_output=True,
+				text=True,
+				timeout=5,
+			)
+			parts.append(f"redpill-llm={res.stdout.strip() or 'unknown'}")
+		except Exception:
+			parts.append("redpill-llm=sin_sonda")
+	return " · ".join(parts)
+
+
 class EphemeralServer:
 	"""
 	Manages the lifecycle of the ephemeral local LLM server used during the sleep
@@ -94,8 +119,19 @@ class EphemeralServer:
 
 		start_sh = str(get_daemon_persistent_dir() / "start.sh")
 		if not os.path.exists(start_sh):
-			logger.error("[EPHEMERAL SERVER] start.sh not found. Aborting.")
-			SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+			diagnosis = _describe_failure(f"start_sh_missing:{start_sh}")
+			logger.error(f"[EPHEMERAL SERVER] start.sh not found. Aborting. {diagnosis}")
+			# El hilo de Ariadna no llegó a tejerse: no dejamos el aviso colgado.
+			SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+			SovereignNotifier.notify_bunker(
+				memory_manager,
+				"local_llm_offline",
+				intensity=7.0,
+				signal_type="pain",
+				source="SLEEP_ENGINE",
+				message="El servidor efímero no arrancó: falta su launcher start.sh.",
+				diagnosis=diagnosis,
+			)
 			return False
 
 		if shutil.which("systemctl"):
@@ -138,7 +174,18 @@ class EphemeralServer:
 		if not self.is_managed_service and self._process is not None:
 			self._process.terminate()
 		SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
+		diagnosis = _describe_failure(f"probe_timeout_60s:{self._process}")
+		logger.error(f"[EPHEMERAL SERVER] {diagnosis}")
 		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+		SovereignNotifier.notify_bunker(
+			memory_manager,
+			"local_llm_offline",
+			intensity=7.0,
+			signal_type="pain",
+			source="SLEEP_ENGINE",
+			message="El servidor efímero no respondió en 60 s tras el arranque.",
+			diagnosis=diagnosis,
+		)
 		return False
 
 	def stop(self, memory_manager, total_processed: int) -> None:
