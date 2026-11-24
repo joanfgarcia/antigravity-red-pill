@@ -142,6 +142,34 @@ python scripts/dokime.py desk get '*.md' --to ~/recogido --move
 	la puerta única.
 7. **Puerta** (`premerge_gate.py`) antes de fusionar el arnés.
 
+## Comparativa por brazos: minion / Pi bare / Dokimé
+
+`scripts/bench_compare.py --trials 3` ejecuta el mismo fixture y las mismas 18
+tareas (15 de `bench_suite` + multipaso, escritura y distractor) en tres brazos:
+
+- **minion**: `local-tools` dentro de la caja, sólo `run_bash`.
+- **pi-bare**: `pi --no-extensions --no-mcp --no-skills --no-context-files`, sólo `bash`.
+- **dokime**: `pi` + red-pill `minimal`, sólo `bash` (`--exclude-tools 'mcp__*'`).
+
+Los tres usan el **mismo** `llama-server` (`llama:8080`), el mismo muestreo
+(`temperature 0.8`, `top_p 0.95`, `max_tokens 1024`, `seed 42`) y el mismo
+subconjunto de tools. `bench_minion_runner.py` es el adaptador del brazo minion
+(proveedor OpenAI-TCP + `run_bash`); no es producto.
+
+**Antes de medir Dokimé, limpia los engramas del banco.** El recall de red-pill
+devuelve turnos de corridas anteriores y **filtra respuestas**: en la primera
+corrida, t10 («workers de config/limits.json») salió 3/3 con `1` porque su
+memoria recordaba un `1` previo; tras borrar los engramas del bench (snapshot
+antes), salió 2/3 con `3`. No es calidad del arnés, es fuga. El filtro es por las
+marcas del fixture (`src/*.py`, `config/*`, `logs/app.log`, `bench-t`…).
+
+Resultado de la primera medición limpia y alineada (2026-11-24, Spark 4B, n=54):
+`pi-bare 53/54 (98,1 %)`, `minion 51/54 (94,4 %)`, `dokime 51/54 (94,4 %)`. La
+capa red-pill no cambió la calidad de tarea; el minion falló sobre todo por
+**condición de parada** (t14: encontró `workers: 3` y siguió llamando tools hasta
+el tope). Los fallos de Dokimé fueron de estrategia (`grep -c` cuenta líneas, no
+valores) y no de memoria.
+
 ## Cómo se lee cada resultado
 
 - **Identidad**: lo que se compara no es "si acierta", es si la descripción de sí
