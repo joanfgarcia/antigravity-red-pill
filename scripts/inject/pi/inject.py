@@ -404,13 +404,6 @@ def inject(args: argparse.Namespace) -> int:
 	# 3. Prune legados snake_case → reseed convergente e idempotente.
 	changed += _prune_legacy(skills_dest)
 
-	# 3.bis. Bundle resuelto (introspección y reproducibilidad del experimento)
-	if bundle is not None:
-		import json as _json
-
-		(open(os.path.join(pi_dir, "bundle.json"), "w", encoding="utf-8")).write(_json.dumps(bundle.to_dict(), ensure_ascii=False, indent=1))
-		logger.info(f"✓ bundle del perfil escrito en {os.path.join(pi_dir, 'bundle.json')}")
-
 	# 4. Anchor → <workspace>/AGENTS.override.md (shadows CLAUDE.md for Pi, which
 	#    carries the claude-code MCP anchor). Pi-specific seed overrides win.
 	# Rol sin `rules_blocks` (`none`) = roster completo; sin perfil, también.
@@ -424,6 +417,15 @@ def inject(args: argparse.Namespace) -> int:
 		role_blocks = ["minimal"]
 	else:
 		role_blocks = list(bundle.rules_blocks) or list(inject_anchor.BLOCK_ANCHORS)
+	# El bundle escrito describe lo que se sembró, no sólo lo que el rol declaró:
+	# en un 4B `identity_mode=minimal` sustituye las reglas del rol por `minimal`.
+	if bundle is not None:
+		import json as _json
+
+		_seeded = bundle.to_dict()
+		_seeded["rules_blocks"] = list(role_blocks)
+		(open(os.path.join(pi_dir, "bundle.json"), "w", encoding="utf-8")).write(_json.dumps(_seeded, ensure_ascii=False, indent=1))
+		logger.info(f"✓ bundle del perfil escrito en {os.path.join(pi_dir, 'bundle.json')}")
 	changed += _seed_anchor(repo_root, args, backup, remove=False, anchors=role_blocks)
 
 	return changed
@@ -447,7 +449,8 @@ def main() -> int:
 	ap.add_argument("--update", action="store_true", help="reescribe aunque no haya cambios")
 	ap.add_argument("--remove", action="store_true", help="retira red-pill de Pi")
 	args = ap.parse_args()
-	return inject(args)
+	inject(args)
+	return 0
 
 
 if __name__ == "__main__":
