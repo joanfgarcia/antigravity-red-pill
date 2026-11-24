@@ -362,6 +362,11 @@ def _box_config() -> dict:
 		"reasoning_budget": LLAMA_REASONING_BUDGET,
 		"parallel": LLAMA_PARALLEL,
 		"identity_mode": os.getenv("DOKIME_IDENTITY_MODE", "minimal"),
+		# `role`: qué reglas/skills se siembran (RFC-HARNESS-001). `none` es la
+		# instalación estándar sin rol; Dokimé nace con `worker` y su identidad mínima.
+		"role": os.getenv("DOKIME_ROLE", "none"),
+		"capability": os.getenv("DOKIME_CAPABILITY", "local-4b-64k"),
+		"egress": os.getenv("DOKIME_EGRESS", "none"),
 		"agent_name": os.getenv("DOKIME_AGENT_NAME", "Dokimé" if BOX == "dokime" else BOX.capitalize()),
 		"embedding_model": os.getenv("DOKIME_EMBEDDING_MODEL") or "",
 		"extra_mounts": os.getenv("DOKIME_EXTRA_MOUNTS") or "",
@@ -417,6 +422,7 @@ def _adopt_box_config() -> None:
 	# entorno del proceso para que el resto del código no sepa de dónde vienen.
 	for key, value in (
 		("DOKIME_IDENTITY_MODE", saved.get("identity_mode")),
+		("DOKIME_ROLE", saved.get("role")),
 		("DOKIME_AGENT_NAME", saved.get("agent_name")),
 		("DOKIME_EMBEDDING_MODEL", saved.get("embedding_model") or None),
 		("DOKIME_EXTRA_MOUNTS", saved.get("extra_mounts") or None),
@@ -462,6 +468,9 @@ def _import_box_config() -> bool:
 		"reasoning_budget": int(flag("--reasoning-budget", LLAMA_REASONING_BUDGET) or LLAMA_REASONING_BUDGET),
 		"parallel": int(flag("-np", LLAMA_PARALLEL) or LLAMA_PARALLEL),
 		"identity_mode": env.get("REDPILL_IDENTITY_MODE", "minimal"),
+		"role": env.get("REDPILL_ROLE", "none"),
+		"capability": env.get("REDPILL_CAPABILITY", "local-4b-64k"),
+		"egress": env.get("REDPILL_EGRESS", "none"),
 		"agent_name": env.get("AGENT_NAME", "Dokimé" if BOX == "dokime" else BOX.capitalize()),
 		"embedding_model": env.get("EMBEDDING_MODEL", ""),
 		"extra_mounts": ",".join(extra),
@@ -541,40 +550,29 @@ def _reseed() -> None:
 	):
 		print("[dokime] aviso: no se pudo fijar la identidad; el alma puede presentarse con la tarjeta vieja", file=sys.stderr)
 
-	# Anclas: por defecto sólo `minimal` (adoptar BUNKER_CONTEXT + tres límites).
-	# Las anclas heredadas se retiran: un 4B no sostiene siete protocolos.
-	print("+ arnés: anclas mínimas de pi (AGENTS.override.md + skills)")
-	_anchor = ["/src/red-pill/scripts/inject_anchor.py", "--ide", "pi", "--workspace", "/srv/dokime"]
-	run(
-		[
-			RUNTIME,
-			"exec",
-			NAME,
-			"/opt/py/bin/python",
-			*_anchor,
-			"--anchor",
-			"agent_core,knowledge_access,frontmatter_docs,job_dag_execution,identity_pact,sovereign_handshake",
-			"--remove",
-		],
-		stdout=subprocess.DEVNULL,
-	)
-	if (
-		run(
-			[
-				RUNTIME,
-				"exec",
-				NAME,
-				"/opt/py/bin/python",
-				*_anchor,
-				"--anchor",
-				os.getenv("DOKIME_ANCHOR_BLOCKS", "minimal"),
-				"--mode",
-				os.getenv("DOKIME_ANCHOR_MODE", "auto"),
-				"--update",
-			]
-		).returncode
-		!= 0
-	):
+	# Anclas: el rol decide el juego (RFC-HARNESS-001). `identity_mode=minimal`
+	# manda por encima del rol —un 4B no sostiene siete protocolos— y `role=none`
+	# es la instalación estándar (roster completo). Se siembra una sola vez con
+	# `--prune-unlisted`: el rol vigente sustituye al anterior, no se acumula.
+	identity_mode = os.getenv("DOKIME_IDENTITY_MODE", "minimal")
+	role = os.getenv("DOKIME_ROLE", "none")
+	blocks: list[str] | None = ["minimal"] if identity_mode == "minimal" else None
+	if blocks is None and role not in ("", "none", "standard"):
+		try:
+			sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+			from red_pill.harness.profile import resolve  # noqa: PLC0415 — import perezoso a propósito
+
+			bundle = resolve(role, os.getenv("DOKIME_CAPABILITY", "local-4b-64k"), os.getenv("DOKIME_EGRESS", "none"))
+			blocks = list(bundle.rules_blocks) or None
+			print(f"+ rol: {bundle.role} × {bundle.capability} × {bundle.egress} → anclas: {', '.join(blocks or ['(roster completo)'])}")
+		except Exception as exc:  # noqa: BLE001 — un perfil inválido no debe tumbar la caja
+			print(f"[dokime] aviso: perfil `{role}` no resuelto ({exc}); se siembra el roster completo", file=sys.stderr)
+	print("+ arnés: anclas de pi (AGENTS.override.md + skills)")
+	_anchor = [RUNTIME, "exec", NAME, "/opt/py/bin/python", "/src/red-pill/scripts/inject_anchor.py", "--ide", "pi", "--workspace", "/srv/dokime"]
+	_cmd = [*_anchor, "--mode", os.getenv("DOKIME_ANCHOR_MODE", "auto"), "--update", "--prune-unlisted"]
+	if blocks:
+		_cmd += ["--anchor", ",".join(blocks)]
+	if run(_cmd).returncode != 0:
 		print("[dokime] aviso: la inyección de anclas falló (revisa el log de arriba)", file=sys.stderr)
 
 
@@ -641,6 +639,11 @@ def up(args: argparse.Namespace) -> int:
 			# Perfil local-9b: identidad mínima (tarjeta + reglas duras). `full`
 			# mete ~4,2k chars de plantilla heredada que un 9B no necesita.
 			f"REDPILL_IDENTITY_MODE={os.getenv('DOKIME_IDENTITY_MODE', 'minimal')}",
+			"-e",
+			# Rol del arnés (RFC-HARNESS-001): qué anclas/skills se siembran. `none`
+			# es la instalación estándar sin rol. No particiona la memoria: Dokimé
+			# sigue siendo Dokimé con cualquier rol.
+			f"REDPILL_ROLE={os.getenv('DOKIME_ROLE', 'none')}",
 			"-e",
 			# El distiller del memento (y cualquier consumidor de llm_endpoint) apunta
 			# al modelo del sandbox, no al de 127.0.0.1:8760 del Operador.

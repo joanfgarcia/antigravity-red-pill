@@ -21,7 +21,7 @@ skills_install:
   - scaffold-sovereign-project
   - telegram-gateway
 rules_blocks:
-  [sovereign_handshake, agent_core, knowledge_access, frontmatter_docs, job_dag_execution, git_workflow, identity_pact]
+  [sovereign_handshake, agent_core, knowledge_access, frontmatter_docs, job_dag_execution, identity_pact]
 boot_card: operator
 limits:
   max_steps: 120

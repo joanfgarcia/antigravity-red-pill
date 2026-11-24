@@ -119,7 +119,7 @@ def _retire_legacy_instructions_file(config_dir: str, backup: bool) -> bool:
 	return True
 
 
-def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool, update: bool) -> int:
+def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool, update: bool, anchors=None) -> int:
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
 	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
@@ -130,9 +130,16 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 		anchor_variant,
 		ide_call_vars,
 		ide_seed_path,
+		prune_blocks_not_in,
 		prune_retired_blocks,
 		splice_block,
 	)
+
+	# `anchors` = `rules_blocks` del perfil cuando lo hay. El destino es UN fichero
+	# compartido por todos los roles del arnés, así que el rol vigente **sustituye**
+	# el juego anterior: sin la poda, las anclas del rol previo quedaban huérfanas.
+	perfil = anchors is not None
+	wanted = list(anchors) if perfil else list(BLOCK_ANCHORS)
 
 	# opencode tiene editor hook → el anchor debe pedir "passing only `user_prompt`".
 	# Sin esto los `${RELAY_*}` del seed llegaban literales al fichero de instrucciones.
@@ -141,24 +148,26 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	# Sin fallback al viejo `instructions/RED_PILL.md` (V1): sembraba la llamada
 	# errónea (`swarm_orchestrator_api → interceptor_rp`) en vez del handshake real.
 	# Un anchor ausente es un árbol incompleto: abortar, no sembrar texto viejo.
-	missing = [
-		ide_seed_path(seeds_dir, "opencode", anchor) for anchor in BLOCK_ANCHORS if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))
-	]
+	missing = [ide_seed_path(seeds_dir, "opencode", anchor) for anchor in wanted if not os.path.exists(ide_seed_path(seeds_dir, "opencode", anchor))]
 	if missing:
 		raise RuntimeError("  Siembra incompleta: faltan seeds de anchor: " + ", ".join(os.path.basename(p) for p in missing))
 
 	changed = 0
-	for anchor in BLOCK_ANCHORS:
+	for anchor in wanted:
 		# Override de opencode > variante `hook` (opencode inyecta la identidad) > genérico.
 		seed_path = anchor_seed_path(seeds_dir, "opencode", anchor, anchor_variant("opencode"))
 		body = subst(_read_seed(seed_path), ide_vars)
-		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
+		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION.get(anchor, 1), backup=backup, update=update)
 		if status not in ("unchanged",):
 			changed += 1
 		logger.info(f"  opencode:{anchor} → {status}")
 	for anchor in prune_retired_blocks(instructions_path, backup=backup):
 		changed += 1
 		logger.info(f"  opencode:{anchor} → retirado (ancla fuera del roster)")
+	if perfil:
+		for anchor in prune_blocks_not_in(instructions_path, wanted, backup=backup):
+			changed += 1
+			logger.info(f"  opencode:{anchor} → retirado (fuera del rol)")
 	return changed
 
 
@@ -486,10 +495,31 @@ def inject(args: argparse.Namespace) -> int:
 	else:
 		logger.warning("  No config seed found for OpenCode %s", info.tier)
 
-	# 2. Instructions
+	# 2. Instructions. `--profile` filtra las anclas por rol (RFC-HARNESS-001):
+	#    sin perfil, roster completo; con perfil, sus `rules_blocks` y poda del resto.
 	instructions_path = os.path.join(config_dir, OPENCODE_INSTRUCTIONS_FILE)
 	seeds_dir = anchor_seeds if os.path.isdir(anchor_seeds) else os.path.join(opencode_seeds, "instructions")
-	changed += _write_instructions(instructions_path, seeds_dir, variables, backup, getattr(args, "update", False))
+	from inject_anchor import BLOCK_ANCHORS, resolve_profile  # noqa: PLC0415
+
+	try:
+		bundle = resolve_profile(getattr(args, "profile", None))
+	except ValueError as exc:
+		logger.error(f"--profile inválido: {exc}")
+		return 0
+	# Un rol sin `rules_blocks` (p. ej. `none`) = roster completo, no "ninguna ancla".
+	role_blocks = None
+	if bundle is not None:
+		role_blocks = list(bundle.rules_blocks) or list(BLOCK_ANCHORS)
+	if bundle is not None:
+		logger.info(f"  perfil {bundle.role} × {bundle.capability} × {bundle.egress} → anclas: {', '.join(role_blocks)}")
+	changed += _write_instructions(
+		instructions_path,
+		seeds_dir,
+		variables,
+		backup,
+		getattr(args, "update", False),
+		anchors=role_blocks,
+	)
 	_retire_legacy_instructions_file(config_dir, backup)
 
 	# 3. Skills (two-layer: generic from sharing/skills/, then IDE-specific overrides)

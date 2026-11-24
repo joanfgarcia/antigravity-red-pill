@@ -12,7 +12,9 @@ skills_install:
   - context-distiller
   - frontmatter
   - knowledge-access
-rules_blocks: [sovereign_handshake, agent_core, knowledge_access, git_workflow]
+# `git_workflow` está retirada (RETIRED_ANCHORS): su texto salió del roster y un
+# `rules_blocks` que la pida aborta la siembra al no encontrar su seed.
+rules_blocks: [sovereign_handshake, agent_core, knowledge_access]
 boot_card: worker
 limits:
   max_steps: 40

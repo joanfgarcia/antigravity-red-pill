@@ -47,12 +47,16 @@ def _workspace_root(args) -> str | None:
 	return env_workspace_root(getattr(args, "workspace", None))
 
 
-def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False) -> int:
+def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False, anchors=None) -> int:
 	"""Splice red-pill anchors into <workspace>/AGENTS.override.md (Pi shadows CLAUDE.md).
 
 	Pi >=0.87 loads AGENTS.override.md INSTEAD of AGENTS.md/CLAUDE.md from that
 	directory, so this shadows the claude-code-project anchor (which speaks MCP)
 	with Pi-specific text (automatic handshake, bunker_search/bunker_save).
+
+	`anchors` = `rules_blocks` del perfil cuando hay uno: el fichero es del
+	workspace (uno por caja), así que el rol vigente manda y las anclas del rol
+	anterior se podan en la misma pasada.
 	"""
 	workspace = _workspace_root(args)
 	if not workspace:
@@ -66,8 +70,19 @@ def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False) -> in
 	variables = build_vars(argparse.Namespace(redpill_dir=repo_root, uv_path=getattr(args, "uv_path", None), workspace=workspace))
 	variables.update(agent_core_vars())
 	seeds_dir = os.path.join(repo_root, "seeds", "anchors")
-	# Roster único (inject_anchor.BLOCK_ANCHORS): la lista propia de pi se quedó sin `identity_pact`.
-	return inject_anchor.splice_ide("pi", inject_anchor.BLOCK_ANCHORS, seeds_dir, workspace, variables, backup=backup, remove=remove)
+	# Roster único (inject_anchor.BLOCK_ANCHORS) o `rules_blocks` del perfil. Sin
+	# perfil, roster completo: la lista propia de pi se quedó sin `identity_pact`.
+	_anchors = list(anchors) if anchors is not None else list(inject_anchor.BLOCK_ANCHORS)
+	return inject_anchor.splice_ide(
+		"pi",
+		_anchors,
+		seeds_dir,
+		workspace,
+		variables,
+		backup=backup,
+		remove=remove,
+		prune=inject_anchor.KNOWN_BLOCKS if anchors is not None else (),
+	)
 
 
 def _read_seed(path: str) -> str:
@@ -397,6 +412,13 @@ def inject(args: argparse.Namespace) -> int:
 
 	# 4. Anchor → <workspace>/AGENTS.override.md (shadows CLAUDE.md for Pi, which
 	#    carries the claude-code MCP anchor). Pi-specific seed overrides win.
-	changed += _seed_anchor(repo_root, args, backup, remove=False)
+	# Rol sin `rules_blocks` (`none`) = roster completo; sin perfil, también.
+	role_blocks = None
+	if bundle is not None:
+		sys.path.insert(0, os.path.join(repo_root, "scripts"))
+		import inject_anchor  # noqa: PLC0415
+
+		role_blocks = list(bundle.rules_blocks) or list(inject_anchor.BLOCK_ANCHORS)
+	changed += _seed_anchor(repo_root, args, backup, remove=False, anchors=role_blocks)
 
 	return changed

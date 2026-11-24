@@ -68,7 +68,32 @@ BLOCK_VERSION = {
 # se avisa en la auditoría, no se borra.
 RETIRED_ANCHORS = frozenset({"git_workflow"})
 
+# Anclas que red-pill conoce y puede podar. Fuera de este conjunto no se toca nada
+# (un bloque desconocido puede ser de otro sembrador, p. ej. el desk).
+KNOWN_BLOCKS = frozenset(BLOCK_ANCHORS) | RETIRED_ANCHORS | frozenset({"minimal"})
+
 _ANY_BEGIN_RE = re.compile(r"<!-- REDPILL:BEGIN (\S+)(?: v=\d+)? -->")
+
+
+def resolve_profile(profile):
+	"""Resuelve `rol:capacidad:egress` → Bundle. `full` (o vacío) → None.
+
+	Vive aquí, y no en cada inyector, para que el contrato de `--profile` sea uno:
+	Pi y opencode leerán el mismo bundle y el rol no dependerá de por dónde entró
+	la siembra.
+	"""
+	spec = str(profile or "").strip()
+	if not spec or spec == "full":
+		return None
+	parts = spec.split(":")
+	if len(parts) != 3:
+		raise ValueError("--profile debe ser `rol:capacidad:egress` (p.ej. worker:local-9b:none) o `full`")
+	import sys as _sys
+
+	_sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+	from red_pill.harness.profile import resolve  # noqa: PLC0415 — import perezoso a propósito
+
+	return resolve(parts[0], parts[1], parts[2])
 
 
 def _version(anchor):
@@ -428,11 +453,27 @@ def remove_block(path, anchor, backup=True):
 	return "removed-block"
 
 
-def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, update=False, remove=False, mode="auto"):
+def splice_ide(
+	ide,
+	anchors,
+	seeds_dir,
+	workspace,
+	variables,
+	backup=True,
+	update=False,
+	remove=False,
+	mode="auto",
+	prune=(),
+	known_blocks=None,
+):
 	"""Splice (or remove) the anchors for one IDE. Returns the number of blocks written/modified.
 
 	Shared by ``main()`` and the per-IDE adapters (e.g. ``scripts/inject/pi``) so the
 	per-IDE seed override + ``ide_call_vars`` resolution lives in exactly one place.
+
+	`prune` son anclas conocidas que NO van en `anchors` y deben salir del fichero.
+	Es lo que hace posible el filtro por rol: opencode sustituye su roster fijo por
+	los `rules_blocks` del bundle y poda el resto en la misma pasada.
 	"""
 	target = REGISTRY_BY_IDE[ide]
 	path = resolve_target_path(target, workspace)
@@ -441,6 +482,13 @@ def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, updat
 		return 0
 	changed = 0
 	variant = anchor_variant(ide, workspace, mode)
+	for a in prune:
+		if a in anchors:
+			continue
+		status = remove_block(path, a, backup=backup)
+		if status not in ("unchanged", "absent"):
+			changed += 1
+		logger.info(f"✓ {ide}:{a} [{path}] → {status} (fuera del rol)")
 	for a in anchors:
 		if remove:
 			status = remove_block(path, a, backup=backup)
@@ -453,7 +501,41 @@ def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, updat
 		logger.info(f"✓ {ide}:{a} [{path}] → {status}")
 	if not remove:
 		changed += _log_pruned(ide, path, prune_retired_blocks(path, backup=backup))
+		if known_blocks is not None:
+			changed += _log_pruned(ide, path, prune_blocks_not_in(path, known_blocks, backup=backup))
 	return changed
+
+
+def prune_blocks_not_in(path, keep, backup=True):
+	"""Poda las anclas conocidas que no están en `keep`. Devuelve las podadas.
+
+	El destino de las anclas es un fichero compartido (un `AGENTS.md` para todos los
+	roles de un arnés no puede tener las reglas de varios a la vez). Por eso sembrar
+	un rol **sustituye** el juego anterior: las que sobran se retiran en la misma
+	pasada en vez de quedar huérfanas.
+	"""
+	path = os.path.expanduser(path)
+	if not os.path.exists(path):
+		return []
+	try:
+		with open(path, encoding="utf-8") as f:
+			present = set(block_names(f.read()))
+	except OSError:
+		return []
+	pruned = [a for a in sorted(present & KNOWN_BLOCKS) if a not in set(keep)]
+	if not pruned:
+		return []
+	with open(path, encoding="utf-8") as f:
+		content = f.read()
+	for a in pruned:
+		content = re.sub(r"\n{3,}", "\n\n", _marker_re(a).sub("", content)).strip()
+	if not content:
+		if backup:
+			shutil.copy2(path, path + ".bak")
+		os.remove(path)
+	else:
+		_atomic_write(path, content + "\n", backup=backup)
+	return pruned
 
 
 def _log_pruned(ide, path, pruned):
@@ -488,6 +570,16 @@ def main():
 		choices=["auto", "prompt", "hook"],
 		help="Variante del block de handshake: `hook` (identidad inyectada por el arnés), `prompt` (el modelo llama a la tool) o `auto` (hook donde el arnés lo soporte).",
 	)
+	parser.add_argument(
+		"--prune-unlisted",
+		action="store_true",
+		help="Retira las anclas conocidas que NO están en --anchor. Para siembras por rol: el destino es un fichero compartido y el rol vigente manda.",
+	)
+	parser.add_argument(
+		"--profile",
+		default=None,
+		help="Perfil `rol:capacidad:egress`: sus `rules_blocks` manda sobre --anchor (sustituye, no suma) y el resto de anclas conocidas se poda.",
+	)
 	parser.add_argument("--print", dest="print_only", action="store_true", help="Print resolved anchor(s) to stdout; touch no files.")
 	parser.add_argument("--remove", action="store_true", help="Remove red-pill anchor block(s) instead of writing.")
 	args = parser.parse_args()
@@ -498,8 +590,21 @@ def main():
 		seeds_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds", "anchors"))
 
 	anchors = _csv(args.anchor)
-	if not anchors:
-		parser.error("--anchor vacío")
+	prune_unlisted = args.prune_unlisted
+	if args.profile:
+		# El perfil manda: `rules_blocks` del rol sustituye la lista de anclas.
+		# Un rol sin `rules_blocks` (p. ej. `none`) significa roster completo, no
+		# "ninguna ancla": es la instalación estándar, no una instalación desnuda.
+		try:
+			bundle = resolve_profile(args.profile)
+		except ValueError as exc:
+			parser.error(str(exc))
+		if bundle is not None:
+			anchors = list(bundle.rules_blocks) or list(BLOCK_ANCHORS)
+			prune_unlisted = True
+			logger.info(f"perfil {bundle.role} × {bundle.capability} × {bundle.egress} → anclas: {', '.join(anchors)}")
+	if not anchors and not args.remove:
+		parser.error("--anchor vacío (¿perfil sin rules_blocks?)")
 	if not args.remove:
 		for a in anchors:
 			seed = os.path.join(seeds_dir, a + ".md")
@@ -577,6 +682,8 @@ def main():
 			logger.info(f"✓ {ide}:{a} [{path}] → {status}")
 		if not args.remove:
 			changed += _log_pruned(ide, path, prune_retired_blocks(path, backup=backup))
+			if prune_unlisted:
+				changed += _log_pruned(ide, path, prune_blocks_not_in(path, anchors, backup=backup))
 
 	tail = f" · {reminders} recordatorio(s) de pegado manual" if reminders else ""
 	logger.info(f"Hecho. {changed} bloque(s) escrito(s)/modificado(s){tail}.")

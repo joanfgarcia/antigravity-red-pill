@@ -195,3 +195,32 @@ def test_oom_shield_vive_solo_en_la_regla_de_jobs():
 	for path in (os.path.join(SEEDS_DIR, "job_dag_execution.md"), os.path.join(pi_dir, "job_dag_execution.md")):
 		text = open(path, encoding="utf-8").read()
 		assert "MemoryMax=<LIMIT>" in text and "in-process" in text and "systemd-run` suelto" in text
+
+
+def test_prune_blocks_not_in_respeta_lo_ajeno(tmp_path):
+	"""El filtro por rol poda las anclas conocidas que sobran, no los bloques de
+	otro sembrador (el desk también escribe en el mismo fichero)."""
+	m = _load()
+	p = tmp_path / "AGENTS.override.md"
+	p.write_text(
+		"# propio\n"
+		"<!-- REDPILL:BEGIN minimal v=1 -->\nminimal\n<!-- REDPILL:END minimal -->\n"
+		"<!-- REDPILL:BEGIN agent_core v=2 -->\ncore\n<!-- REDPILL:END agent_core -->\n"
+		"<!-- REDPILL:BEGIN desk v=1 -->\ndesk\n<!-- REDPILL:END desk -->\n",
+		encoding="utf-8",
+	)
+	pruned = m.prune_blocks_not_in(str(p), ["agent_core"], backup=False)
+	assert pruned == ["minimal"]
+	text = p.read_text(encoding="utf-8")
+	assert "REDPILL:BEGIN agent_core" in text
+	assert "REDPILL:BEGIN desk" in text
+	assert "REDPILL:BEGIN minimal" not in text
+
+
+def test_perfil_sin_rules_blocks_es_roster_completo():
+	"""`none` es la instalación estándar: `rules_blocks: []` significa roster
+	completo, no «ninguna ancla». Si no, el contraste nacería desnudo."""
+	m = _load()
+	bundle = m.resolve_profile("none:local-9b:none")
+	assert bundle is not None
+	assert bundle.rules_blocks == []
