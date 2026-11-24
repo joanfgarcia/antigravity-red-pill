@@ -14,8 +14,9 @@ Brazos
 ------
   minion      bucle del minion, solo `run_bash` (sin capa red-pill)
   pi-bare     pi sin extensiones / MCP / skills / context files
-  dokime      pi con extensiones red-pill (RAG por turno, umbral 0.7)
-  dokime55    ídem con RED_PILL_SCORE_THRESHOLD=0.55 (coste del umbral)
+  dokime      pi con extensiones red-pill (RAG por turno, umbral por defecto)
+  dokime55    ídem con RED_PILL_SCORE_THRESHOLD=0.55 (explícito)
+  dokime70    ídem con RED_PILL_SCORE_THRESHOLD=0.7 (comparar el umbral)
 
 Uso
 ---
@@ -322,6 +323,8 @@ def run_pi(arm: str, prompt: str, model: str, timeout: int) -> tuple[str, str | 
 	]
 	if arm == "dokime55":
 		cmd += ["-e", "RED_PILL_SCORE_THRESHOLD=0.55"]
+	elif arm == "dokime70":
+		cmd += ["-e", "RED_PILL_SCORE_THRESHOLD=0.7"]
 	cmd += [
 		"-w",
 		GUEST,

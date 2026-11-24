@@ -29,7 +29,11 @@ const UV = process.env.UV_BIN ?? "${UV}";
 const TIMEOUT_MS = 20000;
 const LIGHT_TIMEOUT_MS = 20000;
 // Umbral de relevancia para el recall liviano (sobreescribible con RED_PILL_SCORE_THRESHOLD).
-const SCORE_THRESHOLD = parseFloat(process.env.RED_PILL_SCORE_THRESHOLD ?? "0.7");
+// 0.55 y no 0.7: medido el 2026-11-24, el embedding de 384d puntúa 0.47-0.58 las
+// paráfrasis legítimas y 0.7 solo deja pasar casi-literales (m2: 0/3 inyectado a
+// 0.7, 3/3 a 0.55, mismo acierto y 1.1 tool calls menos). Las memorias sin
+// relación puntúan por debajo de 0.5 y siguen fuera.
+const SCORE_THRESHOLD = parseFloat(process.env.RED_PILL_SCORE_THRESHOLD ?? "0.55");
 // Queue DB (single sink the kernel worker drains) — same path the Claude Code
 // Stop hook and the opencode scribe plugin write to.
 const XDG_DATA = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");

@@ -307,13 +307,36 @@ protocolo en ambos.
 - **El umbral 0.7 falla justo en la paráfrasis**: m2 no inyectó en 0/3 con 0.7 y
   en 3/3 con 0.55. El embedding de 384d da 0,47-0,58 a paráfrasis legítimas; 0.7
   solo pasa casi-literales. A 0.55 Dokimé baja de 3,0 a 1,9 tools medias sin
-  perder acierto ni meter ruido en m4 (3/3 en ambos).
+  perder acierto.
 - **La abstención es el agujero que queda**: minion y pi-bare confabulan 1/3
   cada uno en m4 (devuelven el código de calibración del *banco* cuando se
-  pregunta por el *horno*). Dokimé acierta 3/3 con ambos umbrales, pero el
-  piloto n=1 a 0.7 se fue a 30 tool calls y timeout: no es gratis.
+  pregunta por el *horno*). Dokimé acierta 3/3, pero el piloto n=1 a 0.7 se fue
+  a 30 tool calls y timeout: no es gratis.
 - **n=3, un solo modelo y una sola caja**: tabla exploratoria. Para un ranking
   definitivo, n≥10 y repetir en otra GPU/caja.
+
+### Calibración del umbral (n=10, 2026-11-24)
+
+m2 y m4 son las dos tareas que dependen del umbral; el resto inyecta igual a 0.55
+que a 0.7. Mismo Spark, mismo protocolo, semilla nueva:
+
+| umbral | m2 acierto | m2 inyectó | m4 acierto | tools medias | tiempo medio |
+|---|---:|---:|---:|---:|---:|
+| 0.7 | 10/10 | 0/10 | 5/10 | 8,6 | 12,9 s |
+| **0.55** | 10/10 | **10/10** | **9/10** | **2,3** | **8,1 s** |
+
+- A 0.7, m2 acierta **a pesar del RAG**: lee `.red-pill/memory/` con 6-14 tools.
+  A 0.55 lo recibe inyectado y responde en 0 tool calls.
+- En m4 el efecto es el contrario al miedo: a 0.7, sin inyección, el modelo
+  explora, encuentra un fichero llamado `calibracion.md` y devuelve ese código
+  para la pregunta del horno (5/10). A 0.55 la memoria inyectada dice
+  explícitamente «banco de pruebas», el modelo ve que no es el horno y abstiene
+  (9/10). La inyección **ancla el referente**; el fichero sin contexto invita a
+  confabular.
+- El fallo que queda a 0.55 es el de siempre: 1/10 responde el código del banco.
+- Por eso el umbral por defecto pasa a **0.55** (`seeds/pi/extensions/red-pill.ts`):
+  en esta colección las memorias irrelevantes se quedan en 0,45-0,50 y no entran;
+  solo costaría precisión si una memoria ajena superase 0.55 para la pregunta.
 
 ## Cómo se lee cada resultado
 
