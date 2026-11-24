@@ -1,0 +1,18 @@
+# Batería de memoria (Dokimé vs minion vs pi-bare) — Spark, n=3.
+#
+# 7 tareas × 4 brazos × 3 trials. Cada trial siembra códigos únicos en el Búnker
+# y en `.red-pill/memory/`, y mide acierto, tool calls, tiempo y si el RAG
+# inyectó el dato. ~45-60 min en esta caja (8 GB, Spark 4B).
+#
+# Uso:
+#   red-pill job submit --recipe bench_memory --kick
+source: script_job
+title: "Batería de memoria Spark n=3"
+priority: 5
+step_command: .venv/bin/python scripts/bench_memory.py --trials 3 --timeout 80
+progress:
+  mode: single
+control:
+  max_step_minutes: 150
+preflight:
+  llm_required: false
