@@ -390,7 +390,8 @@ def inject(args: argparse.Namespace) -> int:
 	#    (si no, la genérica los re-copia y el reseed no converge).
 	skills_dest = os.path.join(pi_dir, "skills")
 	pi_skills_src = os.path.join(repo_root, "seeds", "pi", "skills")
-	only = set(bundle.skills) if bundle is not None else None
+	# `all_skills` (rol `none`) = no podar: la instalación estándar anuncia todo.
+	only = None if (bundle is None or bundle.all_skills) else set(bundle.skills)
 	changed += _deploy_skills(os.path.join(repo_root, "skills"), skills_dest, variables, backup, skip=_overridden_files(pi_skills_src), only=only)
 	changed += _deploy_skills(pi_skills_src, skills_dest, variables, backup, only=only)
 	if bundle is not None and bundle.skills_library:
@@ -413,12 +414,41 @@ def inject(args: argparse.Namespace) -> int:
 	# 4. Anchor → <workspace>/AGENTS.override.md (shadows CLAUDE.md for Pi, which
 	#    carries the claude-code MCP anchor). Pi-specific seed overrides win.
 	# Rol sin `rules_blocks` (`none`) = roster completo; sin perfil, también.
-	role_blocks = None
-	if bundle is not None:
-		sys.path.insert(0, os.path.join(repo_root, "scripts"))
-		import inject_anchor  # noqa: PLC0415
+	# `identity_mode=minimal` manda sobre el rol: un 4B sólo adopta la tarjeta.
+	sys.path.insert(0, os.path.join(repo_root, "scripts"))
+	import inject_anchor  # noqa: PLC0415
 
+	if bundle is None:
+		role_blocks = list(inject_anchor.BLOCK_ANCHORS)
+	elif bundle.identity_mode == "minimal":
+		role_blocks = ["minimal"]
+	else:
 		role_blocks = list(bundle.rules_blocks) or list(inject_anchor.BLOCK_ANCHORS)
 	changed += _seed_anchor(repo_root, args, backup, remove=False, anchors=role_blocks)
 
 	return changed
+
+
+def main() -> int:
+	"""CLI mínima para sembrar Pi desde dentro de una caja (p. ej. Dokimé/Titanium).
+
+	El adaptador no tenía entrada propia: `inject_cli.py` lo llamaba en el host. El
+	banco vive dentro del contenedor y necesita el mismo camino para skills, anclas
+	y `bundle.json` sin depender del `~/.pi` del Operador.
+	"""
+	import argparse
+
+	repo_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+	ap = argparse.ArgumentParser(description="Siembra Pi (skills, anclas y bundle) en un workspace.")
+	ap.add_argument("--workspace", required=True)
+	ap.add_argument("--profile", default="full", help="`rol:capacidad:egress` o `full`")
+	ap.add_argument("--redpill-dir", default=repo_root)
+	ap.add_argument("--no-backup", action="store_true")
+	ap.add_argument("--update", action="store_true", help="reescribe aunque no haya cambios")
+	ap.add_argument("--remove", action="store_true", help="retira red-pill de Pi")
+	args = ap.parse_args()
+	return inject(args)
+
+
+if __name__ == "__main__":
+	sys.exit(main())

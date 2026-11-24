@@ -9,7 +9,7 @@ from red_pill.harness import profile
 
 def test_las_tres_dimensiones_existen():
 	names = profile.available()
-	assert {"worker", "reviewer", "explorer", "operator"} <= set(names["roles"])
+	assert {"none", "worker", "reviewer", "explorer", "operator"} <= set(names["roles"])
 	assert {"local-9b", "cloud-flash", "cloud-frontier"} <= set(names["capabilities"])
 	assert {"none", "local", "cloud"} <= set(names["egress"])
 
@@ -65,3 +65,12 @@ def test_describe_es_legible():
 	texto = profile.describe(profile.resolve("worker", "local-9b", "none"))
 	assert "worker × local-9b × none" in texto
 	assert "16,384" in texto
+
+
+def test_rol_none_es_la_instalacion_estandar():
+	"""`none` = despertar normal: identidad full, roster completo y todas las
+	skills, sin el presupuesto de un rol acotado."""
+	b = profile.resolve("none", "local-9b", "none")
+	assert b.all_skills is True
+	assert b.identity_mode == "full"
+	assert b.rules_blocks == []

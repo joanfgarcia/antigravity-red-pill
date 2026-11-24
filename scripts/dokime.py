@@ -550,30 +550,31 @@ def _reseed() -> None:
 	):
 		print("[dokime] aviso: no se pudo fijar la identidad; el alma puede presentarse con la tarjeta vieja", file=sys.stderr)
 
-	# Anclas: el rol decide el juego (RFC-HARNESS-001). `identity_mode=minimal`
-	# manda por encima del rol —un 4B no sostiene siete protocolos— y `role=none`
-	# es la instalación estándar (roster completo). Se siembra una sola vez con
-	# `--prune-unlisted`: el rol vigente sustituye al anterior, no se acumula.
-	identity_mode = os.getenv("DOKIME_IDENTITY_MODE", "minimal")
+	# Arnés: el perfil decide skills + anclas + bundle (RFC-HARNESS-001). `none`
+	# es la instalación estándar (roster y skills completos, identidad full); un
+	# rol con capacidad 4B siembra `minimal` porque el perfil lo dice, no un caso
+	# especial de este script. `inject_pi` poda las anclas fuera del rol.
 	role = os.getenv("DOKIME_ROLE", "none")
-	blocks: list[str] | None = ["minimal"] if identity_mode == "minimal" else None
-	if blocks is None and role not in ("", "none", "standard"):
-		try:
-			sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-			from red_pill.harness.profile import resolve  # noqa: PLC0415 — import perezoso a propósito
-
-			bundle = resolve(role, os.getenv("DOKIME_CAPABILITY", "local-4b-64k"), os.getenv("DOKIME_EGRESS", "none"))
-			blocks = list(bundle.rules_blocks) or None
-			print(f"+ rol: {bundle.role} × {bundle.capability} × {bundle.egress} → anclas: {', '.join(blocks or ['(roster completo)'])}")
-		except Exception as exc:  # noqa: BLE001 — un perfil inválido no debe tumbar la caja
-			print(f"[dokime] aviso: perfil `{role}` no resuelto ({exc}); se siembra el roster completo", file=sys.stderr)
-	print("+ arnés: anclas de pi (AGENTS.override.md + skills)")
-	_anchor = [RUNTIME, "exec", NAME, "/opt/py/bin/python", "/src/red-pill/scripts/inject_anchor.py", "--ide", "pi", "--workspace", "/srv/dokime"]
-	_cmd = [*_anchor, "--mode", os.getenv("DOKIME_ANCHOR_MODE", "auto"), "--update", "--prune-unlisted"]
-	if blocks:
-		_cmd += ["--anchor", ",".join(blocks)]
+	capability = os.getenv("DOKIME_CAPABILITY", "local-4b-64k")
+	egress = os.getenv("DOKIME_EGRESS", "none")
+	profile = "full" if role in ("", "none", "standard") else f"{role}:{capability}:{egress}"
+	print(f"+ arnés: perfil {profile} (skills + anclas + bundle)")
+	_cmd = [
+		RUNTIME,
+		"exec",
+		NAME,
+		"/opt/py/bin/python",
+		"/src/red-pill/scripts/inject/pi/inject.py",
+		"--workspace",
+		"/srv/dokime",
+		"--profile",
+		profile,
+		"--redpill-dir",
+		"/src/red-pill",
+		"--update",
+	]
 	if run(_cmd).returncode != 0:
-		print("[dokime] aviso: la inyección de anclas falló (revisa el log de arriba)", file=sys.stderr)
+		print("[dokime] aviso: la siembra del arnés falló (revisa el log de arriba)", file=sys.stderr)
 
 
 def up(args: argparse.Namespace) -> int:

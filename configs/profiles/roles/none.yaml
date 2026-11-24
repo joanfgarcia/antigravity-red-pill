@@ -7,9 +7,15 @@
 # poder revertirlo. También es el brazo de contraste de cualquier A/B de perfiles:
 # mismo árbol, misma caja, sin rol.
 #
-# El modo de identidad lo pone la capacidad (`identity_mode`), no este rol.
+# Este rol sí fija la identidad (`full`): es la instalación estándar. Un rol
+# acotado no la fija y hereda la de la capacidad (p. ej. `minimal` en un 4B).
 id: none
 purpose: "Instalación estándar sin rol: roster y skills completos (despertar normal)."
+# No podar skills: el arnés estándar anuncia todo lo que el árbol trae.
+all_skills: true
+# Identidad completa, como el despertar de Aleth; la capacidad del modelo queda
+# como suelo (p. ej. un 4B sigue pudiendo sembrar con `identity_mode: minimal`).
+identity_mode: full
 skills_install: []
 # Vacío a propósito: la siembra lo lee como "roster completo" (inject_anchor.BLOCK_ANCHORS),
 # no como "ninguna ancla".

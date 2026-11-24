@@ -36,6 +36,8 @@ class Bundle:
 	purpose: str = ""
 	skills: List[str] = field(default_factory=list)
 	skills_library: List[str] = field(default_factory=list)
+	# `all_skills` = no podar: el rol `none` (instalación estándar) anuncia todo.
+	all_skills: bool = False
 	rules_blocks: List[str] = field(default_factory=list)
 	boot_card: str = ""
 	surface: str = "full"
@@ -99,11 +101,14 @@ def resolve(
 		purpose=str(role_d.get("purpose") or ""),
 		skills=skills,
 		skills_library=library,
+		all_skills=bool(role_d.get("all_skills")),
 		rules_blocks=list(role_d.get("rules_blocks") or []),
 		boot_card=str(role_d.get("boot_card") or role),
 		surface=str(cap_d.get("surface") or "full"),
-		identity_mode=str(cap_d.get("identity_mode") or "full"),
-		identity_max_tokens=int(cap_d.get("identity_max_tokens") or 0),
+		# El rol puede fijar la profundidad de identidad (p. ej. `none` = full,
+		# la instalación estándar); si no, manda la capacidad del modelo.
+		identity_mode=str(role_d.get("identity_mode") or cap_d.get("identity_mode") or "full"),
+		identity_max_tokens=int(role_d.get("identity_max_tokens") or cap_d.get("identity_max_tokens") or 0),
 		tools_native=list(cap_d.get("tools_native") or []),
 		limits=limits,
 		window=int(cap_d.get("window") or 0),
