@@ -151,7 +151,7 @@ def reset_fixture() -> None:
 	subprocess.run(["podman", "cp", f"{bench_suite.HOST_FIXTURE}/.", f"{BOX}:{GUEST}"], check=False, capture_output=True)
 
 
-def run_pi(arm: str, prompt: str) -> tuple[str, str | None, float]:
+def run_pi(arm: str, prompt: str, model: str) -> tuple[str, str | None, float]:
 	cmd = ["podman", "exec"]
 	if arm in ("dokime", "dokime-id", "dokime-anchor"):
 		# Sin relay: la propia batería no entra en memoria.
@@ -167,7 +167,7 @@ def run_pi(arm: str, prompt: str) -> tuple[str, str | None, float]:
 		"--provider",
 		"local",
 		"--model",
-		"spark",
+		model,
 		"--mode",
 		"text",
 		"--tools",
@@ -197,7 +197,7 @@ def run_pi(arm: str, prompt: str) -> tuple[str, str | None, float]:
 		return "", "timeout 180s", time.time() - t0
 
 
-def run_minion(prompt: str) -> tuple[str, str | None, float, dict]:
+def run_minion(prompt: str, model: str, profile: str) -> tuple[str, str | None, float, dict]:
 	cmd = [
 		"podman",
 		"exec",
@@ -208,6 +208,10 @@ def run_minion(prompt: str) -> tuple[str, str | None, float, dict]:
 		GUEST,
 		"--prompt",
 		prompt,
+		"--model",
+		profile,
+		"--alias",
+		model,
 	]
 	t0 = time.time()
 	try:
@@ -228,14 +232,14 @@ def read_box_file(path: str) -> str:
 	return out.stdout if out.returncode == 0 else ""
 
 
-def run_one(arm: str, task: dict) -> dict:
+def run_one(arm: str, task: dict, model: str, profile: str) -> dict:
 	reset_fixture()
 	if arm == "minion":
-		answer, error, elapsed, meta = run_minion(task["prompt"])
+		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile)
 		tool_calls = meta.get("tool_calls")
 		used_tools = meta.get("used_tools")
 	else:
-		answer, error, elapsed = run_pi(arm, task["prompt"])
+		answer, error, elapsed = run_pi(arm, task["prompt"], model)
 		tool_calls = None
 		used_tools = None
 	box_file = read_box_file(f"{GUEST}/out.txt") if task["kind"] == "file" else None
@@ -259,6 +263,8 @@ def main() -> int:
 	ap.add_argument("--trials", type=int, default=1)
 	ap.add_argument("--only", default=None, help="ids separados por coma")
 	ap.add_argument("--arms", default="minion,pi-bare,dokime")
+	ap.add_argument("--model", default="spark", help="alias servido por llama-server")
+	ap.add_argument("--profile", default="spark_x2_6_4b", help="perfil de modelo para la conducta del minion")
 	ap.add_argument("--pilot", action="store_true", help="1,2,5 con 1 trial (humo)")
 	args = ap.parse_args()
 
@@ -275,7 +281,7 @@ def main() -> int:
 
 	OUT_DIR.mkdir(parents=True, exist_ok=True)
 	stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-	jsonl = OUT_DIR / f"COMPARE_spark_{stamp}.jsonl"
+	jsonl = OUT_DIR / f"COMPARE_{args.model}_{stamp}.jsonl"
 	rows: list[dict] = []
 	rng = random.Random(42)
 	t0 = time.time()
@@ -286,7 +292,7 @@ def main() -> int:
 				order = arms[:]
 				rng.shuffle(order)
 				for arm in order:
-					row = run_one(arm, task)
+					row = run_one(arm, task, args.model, args.profile)
 					row["trial"] = trial
 					row["order"] = order.index(arm)
 					rows.append(row)
@@ -299,15 +305,15 @@ def main() -> int:
 						flush=True,
 					)
 
-	summary = summarize(rows, tasks, arms, args.trials)
-	md = OUT_DIR / f"COMPARE_spark_{stamp}_SUMMARY.md"
+	summary = summarize(rows, tasks, arms, args.trials, args.model)
+	md = OUT_DIR / f"COMPARE_{args.model}_{stamp}_SUMMARY.md"
 	md.write_text(summary, encoding="utf-8")
 	print(f"\n{summary}\nResultados: {jsonl}\nResumen: {md}\nTiempo total: {time.time() - t0:.0f}s")
 	return 0
 
 
-def summarize(rows: list[dict], tasks: list[dict], arms: list[str], trials: int) -> str:
-	lines = [f"# Comparativa de calidad — Spark 4B — {trials} trial(s)", ""]
+def summarize(rows: list[dict], tasks: list[dict], arms: list[str], trials: int, model: str = "spark") -> str:
+	lines = [f"# Comparativa de calidad — {model} — {trials} trial(s)", ""]
 	lines.append("## Global")
 	lines.append("| brazo | pass | total | pass@1 | tiempo medio |")
 	lines.append("|---|---:|---:|---:|---:|")

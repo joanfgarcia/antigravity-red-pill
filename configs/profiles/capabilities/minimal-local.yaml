@@ -1,0 +1,15 @@
+# Capacidad `minimal-local`: el arnés mínimo para comparar modelos locales.
+#
+# Es el Dokimé que ganó en el 4B (2026-11-24): identidad + ancla `minimal`, sin
+# skills anunciadas (quedan en la biblioteca). Se usa igual en Spark, K2 y MiMo
+# para que el único variable de la comparación sea el modelo.
+id: minimal-local
+window: 16384
+surface: codemode
+identity_mode: minimal
+identity_max_tokens: 700
+skills_budget: 0
+tools_native: [read, write, edit, bash, grep]
+compact_at: 0.65
+kv: q8_0
+notes: "Cross-model: identidad mínima, 0 skills, misma ventana y mismas tools; el modelo es la variable."

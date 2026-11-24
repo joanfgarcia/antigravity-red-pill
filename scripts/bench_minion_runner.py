@@ -25,10 +25,11 @@ def _provider_class():
 	class BenchProvider(BaseInferenceProvider):
 		"""OpenAI-compatible TCP contra el llama-server del sandbox."""
 
-		def __init__(self, host: str = "llama", port: int = 8080, model: str = "spark"):
+		def __init__(self, host: str = "llama", port: int = 8080, model: str = "spark_x2_6_4b", server_model: str = "spark"):
 			self.host = host
 			self.port = port
-			self.model = model
+			self.model = model  # perfil para conducta (tool_format/thinking)
+			self.server_model = server_model  # alias que sirve llama-server
 
 		def generate(self, prompt: str, **kwargs) -> str:
 			return str(self.chat([{"role": "user", "content": prompt}], **kwargs).get("content") or "")
@@ -40,7 +41,7 @@ def _provider_class():
 			# Mismos parámetros que el brazo Pi (`models.json`): el servidor es el
 			# mismo, así que la única diferencia es el arnés.
 			payload = {
-				"model": self.model,
+				"model": self.server_model,
 				"messages": messages,
 				"temperature": 0.8,
 				"top_p": 0.95,
@@ -66,12 +67,12 @@ def _provider_class():
 	return BenchProvider
 
 
-async def _run(cwd: str, prompt: str) -> dict:
+async def _run(cwd: str, prompt: str, model: str, alias: str) -> dict:
 	from red_pill.core.providers import ProviderRegistry
 	from red_pill.swarm.agents import local_minion
 
 	BenchProvider = _provider_class()
-	ProviderRegistry.register_inference_provider("bench", BenchProvider())
+	ProviderRegistry.register_inference_provider("bench", BenchProvider(model=model, server_model=alias))
 
 	# Igualdad de tools: el minion sólo ve `run_bash`; sin MCP, sin read/write.
 	local_minion.TOOLS = [t for t in local_minion.TOOLS if t["function"]["name"] == "run_bash"]
@@ -91,10 +92,12 @@ def main() -> int:
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--cwd", required=True)
 	ap.add_argument("--prompt", required=True)
+	ap.add_argument("--model", default="spark_x2_6_4b", help="perfil de modelo para la conducta del minion")
+	ap.add_argument("--alias", default="spark", help="alias servido por llama-server")
 	args = ap.parse_args()
 	sys.path.insert(0, "/src/red-pill/src")
 	try:
-		print(json.dumps(asyncio.run(_run(args.cwd, args.prompt)), ensure_ascii=False))
+		print(json.dumps(asyncio.run(_run(args.cwd, args.prompt, args.model, args.alias)), ensure_ascii=False))
 	except Exception as exc:  # noqa: BLE001 — el runner reporta, no tumba el bench
 		print(json.dumps({"ok": False, "answer": "", "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
 		return 1
