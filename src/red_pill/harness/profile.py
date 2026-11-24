@@ -86,7 +86,10 @@ def resolve(
 
 	blocked = set(eg_d.get("skills_blocked") or [])
 	wanted = [s for s in (role_d.get("skills_install") or []) if s not in blocked]
-	budget = int(cap_d.get("skills_budget") or len(wanted))
+	# `skills_budget: 0` es un valor, no un hueco: un 4B puede no anunciar ninguna
+	# skill (el banco midió que ancla+skills baja la calidad; ver BENCH_RECIPE).
+	budget = cap_d.get("skills_budget")
+	budget = len(wanted) if budget is None else int(budget)
 	skills = wanted[:budget]
 	library = wanted[budget:]
 

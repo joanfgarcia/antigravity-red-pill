@@ -11,7 +11,10 @@ surface: codemode
 # arranca con la tarjeta de identidad y se añaden reglas cuando se necesiten.
 identity_mode: minimal
 identity_max_tokens: 700
-skills_budget: 3
+# Medido 2026-11-24: con las 3 skills + ancla, Spark bajó a 50 % en t10/t16;
+# identidad+ancla sin skills, 90 %. En un 4B las skills se añaden cuando la
+# tarea las pide, no por defecto.
+skills_budget: 0
 tools_native: [read, write, edit, bash, grep]
 compact_at: 0.65
 kv: q8_0

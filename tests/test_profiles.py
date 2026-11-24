@@ -74,3 +74,12 @@ def test_rol_none_es_la_instalacion_estandar():
 	assert b.all_skills is True
 	assert b.identity_mode == "full"
 	assert b.rules_blocks == []
+
+
+def test_budget_cero_no_anuncia_skills():
+	"""`skills_budget: 0` es un valor, no un hueco: el 4B no anuncia skills y
+	todas quedan en la biblioteca. Medido: ancla+skills bajaba a la mitad la
+	calidad en t10/t16; sin skills, identidad+ancla recuperaba el 90 %."""
+	b = profile.resolve("worker", "local-4b-64k", "none")
+	assert b.skills == []
+	assert b.skills_library, "las skills no desaparecen: quedan en la biblioteca"
