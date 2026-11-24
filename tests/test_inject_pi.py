@@ -184,3 +184,20 @@ def test_pi_siembra_el_roster_comun_de_anclas(adapter, tmp_path):
 	text = (tmp_path / "AGENTS.override.md").read_text(encoding="utf-8")
 	assert set(re.findall(r"REDPILL:BEGIN (\w+) v=", text)) == set(inject_anchor.BLOCK_ANCHORS)
 	assert "llegan en `CORE_RULES`" in text
+
+
+def test_demote_unlisted_skills_solo_toca_lo_sembrado(tmp_path):
+	"""Volver de `standard` a un rol acotado retira del anuncio las skills que
+	sobran, pero nunca un skill propio del Operador (no está en los seeds)."""
+	adapter = _load_adapter()
+	dest = tmp_path / "skills"
+	lib = tmp_path / "library"
+	for name in ("scout", "job-manager", "mio-propio"):
+		(dest / name).mkdir(parents=True)
+		(dest / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+	moved = adapter._demote_unlisted_skills(str(dest), {"job-manager"}, str(lib), REPO_ROOT)
+	assert moved == 1  # scout; `mio-propio` no es de red-pill
+	assert (dest / "job-manager").is_dir()
+	assert (lib / "scout").is_dir()
+	assert (dest / "mio-propio").is_dir()
+	assert not (dest / "scout").exists()

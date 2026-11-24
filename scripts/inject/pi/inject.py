@@ -85,6 +85,46 @@ def _seed_anchor(repo_root: str, args, backup: bool, remove: bool = False, ancho
 	)
 
 
+def _managed_skill_names(repo_root: str) -> set:
+	"""Skills que red-pill siembra (genéricas + override de Pi). Sólo ésas se podan."""
+	names = set()
+	for src in (os.path.join(repo_root, "skills"), os.path.join(repo_root, "seeds", "pi", "skills")):
+		if not os.path.isdir(src):
+			continue
+		for entry in os.listdir(src):
+			if os.path.exists(os.path.join(src, entry, "SKILL.md")):
+				names.add(entry)
+	return names
+
+
+def _demote_unlisted_skills(dest_dir: str, keep: set, library_dir: str, repo_root: str) -> int:
+	"""Mueve a la biblioteca (no anunciada) los skills sembrados que no son del rol.
+
+	`keep` es el set de skills del bundle. El resto de directorios se deja intacto:
+	un skill propio del Operador no está en los seeds y no se toca. Mover, no borrar:
+	sigue consultable y el cambio de rol es reversible.
+	"""
+	if not os.path.isdir(dest_dir):
+		return 0
+	managed = _managed_skill_names(repo_root)
+	moved = 0
+	for entry in sorted(os.listdir(dest_dir)):
+		if entry in keep or entry not in managed:
+			continue
+		src = os.path.join(dest_dir, entry)
+		if not os.path.isdir(src):
+			continue
+		os.makedirs(library_dir, exist_ok=True)
+		dst = os.path.join(library_dir, entry)
+		if os.path.exists(dst):
+			shutil.rmtree(src)
+		else:
+			shutil.move(src, dst)
+		moved += 1
+		logger.info(f"  skill '{entry}' → biblioteca (fuera del rol)")
+	return moved
+
+
 def _read_seed(path: str) -> str:
 	with open(path, encoding="utf-8") as f:
 		return f.read()
@@ -394,6 +434,12 @@ def inject(args: argparse.Namespace) -> int:
 	only = None if (bundle is None or bundle.all_skills) else set(bundle.skills)
 	changed += _deploy_skills(os.path.join(repo_root, "skills"), skills_dest, variables, backup, skip=_overridden_files(pi_skills_src), only=only)
 	changed += _deploy_skills(pi_skills_src, skills_dest, variables, backup, only=only)
+	# Volver de `standard` a un rol acotado tiene que retirar del anuncio las
+	# skills que sobran. Sólo en cajas (`--exclusive-skills`), y sólo skills que
+	# red-pill sembró: un skill propio del Operador no se toca nunca.
+	if only is not None and getattr(args, "exclusive_skills", False):
+		library_dest = os.path.join(pi_dir, "library", "skills")
+		changed += _demote_unlisted_skills(skills_dest, only, library_dest, repo_root)
 	if bundle is not None and bundle.skills_library:
 		# Biblioteca: NO la descubre Pi (no se anuncia), pero está en disco y la
 		# boot card dice dónde. Así el presupuesto no se paga y nada desaparece.
@@ -447,6 +493,11 @@ def main() -> int:
 	ap.add_argument("--redpill-dir", default=repo_root)
 	ap.add_argument("--no-backup", action="store_true")
 	ap.add_argument("--update", action="store_true", help="reescribe aunque no haya cambios")
+	ap.add_argument(
+		"--exclusive-skills",
+		action="store_true",
+		help="mueve a la biblioteca los skills sembrados que no son del rol (sólo cajas; nunca toca skills del Operador)",
+	)
 	ap.add_argument("--remove", action="store_true", help="retira red-pill de Pi")
 	args = ap.parse_args()
 	inject(args)

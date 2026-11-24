@@ -557,7 +557,7 @@ def _reseed() -> None:
 	role = os.getenv("DOKIME_ROLE", "none")
 	capability = os.getenv("DOKIME_CAPABILITY", "local-4b-64k")
 	egress = os.getenv("DOKIME_EGRESS", "none")
-	profile = "full" if role in ("", "none", "standard") else f"{role}:{capability}:{egress}"
+	profile = "full" if role in ("", "standard") else f"{role}:{capability}:{egress}"
 	print(f"+ arnés: perfil {profile} (skills + anclas + bundle)")
 	_cmd = [
 		RUNTIME,
@@ -572,6 +572,7 @@ def _reseed() -> None:
 		"--redpill-dir",
 		"/src/red-pill",
 		"--update",
+		"--exclusive-skills",
 	]
 	if run(_cmd).returncode != 0:
 		print("[dokime] aviso: la siembra del arnés falló (revisa el log de arriba)", file=sys.stderr)
