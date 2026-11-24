@@ -276,16 +276,17 @@ def reset_workspace(codes: dict[str, str]) -> None:
 # ── ejecución de brazos ───────────────────────────────────────────────────
 
 
-def parse_pi_json(raw: str) -> tuple[str, int, str]:
-	"""Devuelve (último texto del assistant, nº de tool calls, contexto inyectado).
+def parse_pi_json(raw: str) -> tuple[str, int, str, list[str]]:
+	"""Devuelve (texto, nº de tool calls, contexto inyectado, comandos).
 
-	El tercer valor es el texto de los mensajes `red-pill` que la extensión
-	inyecta antes del turno: permite separar «el RAG no trajo el dato» de «lo
-	trajo y el modelo lo ignoró».
+	El contexto inyectado separa «el RAG no trajo el dato» de «lo trajo y el
+	modelo lo ignoró». Los comandos permiten auditar de dónde salió un acierto
+	(p. ej. si un brazo desnudo leyó el journal del relay).
 	"""
 	last_text = ""
 	tool_calls = 0
 	injected: list[str] = []
+	commands: list[str] = []
 	for line in raw.splitlines():
 		line = line.strip()
 		if not line:
@@ -308,12 +309,13 @@ def parse_pi_json(raw: str) -> tuple[str, int, str]:
 				continue
 			if block.get("type") == "toolCall":
 				tool_calls += 1
+				commands.append(json.dumps(block.get("arguments") or {}, ensure_ascii=False))
 			elif block.get("type") == "text" and (block.get("text") or "").strip():
 				last_text = block["text"]
-	return last_text.strip(), tool_calls, "\n".join(injected)
+	return last_text.strip(), tool_calls, "\n".join(injected), commands
 
 
-def run_pi(arm: str, prompt: str, model: str, timeout: int) -> tuple[str, str | None, int, str]:
+def run_pi(arm: str, prompt: str, model: str, timeout: int) -> tuple[str, str | None, int, str, list[str]]:
 	cmd = [
 		"podman",
 		"exec",
@@ -343,17 +345,17 @@ def run_pi(arm: str, prompt: str, model: str, timeout: int) -> tuple[str, str | 
 		cmd += ["--exclude-tools", "mcp__*"]
 	try:
 		out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-		answer, tool_calls, injected = parse_pi_json(out.stdout or "")
+		answer, tool_calls, injected, commands = parse_pi_json(out.stdout or "")
 		error = None
 		if out.returncode != 0 and not answer:
 			error = (out.stderr or "").strip()[-200:] or f"rc={out.returncode}"
-		return answer, error, tool_calls, injected
+		return answer, error, tool_calls, injected, commands
 	except subprocess.TimeoutExpired as exc:
 		raw = exc.stdout or ""
 		if isinstance(raw, bytes):
 			raw = raw.decode(errors="replace")
-		answer, tool_calls, injected = parse_pi_json(raw)
-		return answer, f"timeout {timeout}s", tool_calls, injected
+		answer, tool_calls, injected, commands = parse_pi_json(raw)
+		return answer, f"timeout {timeout}s", tool_calls, injected, commands
 
 
 def run_minion(prompt: str, model: str, profile: str, timeout: int) -> tuple[str, str | None, int]:
@@ -467,13 +469,19 @@ def main() -> int:
 				for task in tasks:
 					order = arms[:]
 					rng.shuffle(order)
+					if task["id"] == "m7":
+						# El turno de Dokimé queda escrito en external_turns/ y en la
+						# cola (legible por bash). Si corre antes, el desnudo lee la
+						# respuesta del mismo trial y m7 deja de medir el Búnker.
+						order.sort(key=lambda a: a.startswith("dokime"))
 					for arm in order:
 						start = time.time()
 						injected = ""
+						commands: list[str] = []
 						if arm == "minion":
 							answer, error, tool_calls = run_minion(task["prompt"], args.model, args.profile, args.timeout)
 						else:
-							answer, error, tool_calls, injected = run_pi(arm, task["prompt"], args.model, args.timeout)
+							answer, error, tool_calls, injected, commands = run_pi(arm, task["prompt"], args.model, args.timeout)
 						row = {
 							"arm": arm,
 							"task": task["id"],
@@ -492,6 +500,7 @@ def main() -> int:
 								else bool(task["expect"] and task["expect"] in injected)
 							),
 							"injected_s": len(injected),
+							"commands": commands[:40],
 							"elapsed_s": round(time.time() - start, 2),
 							"order": order.index(arm),
 						}

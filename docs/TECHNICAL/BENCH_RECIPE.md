@@ -220,15 +220,112 @@ brazos. Muestreo: Spark/K2 `0.8/0.95/1024/42`; MiMo `0.7/0.95/4096/42` (con
   definitivo. Para ranking: mismo protocolo (p. ej. 0.7/4096), n≥10 y la misma
   ventana.
 
+## Batería de memoria (2026-11-24)
+
+`scripts/bench_memory.py` mide la capa de memoria, no el tool-use. Cada trial
+siembra códigos aleatorios únicos en dos superficies:
+
+- **Búnker** (`work_memories`): lo que Dokimé recibe por el RAG por turno.
+- **Memoria de workspace** (`<cwd>/.red-pill/memory/`): ficheros que cualquier
+  brazo con `bash` puede leer si se le ocurre mirar.
+
+Así el test no es «solo Dokimé puede saberlo»: en m1-m6 todos pueden, pero
+Dokimé lo recibe sin buscar. Se mide acierto, tool calls, tiempo y, en los brazos
+con RAG, si el bloque inyectado contenía el dato (`RAG inyectó`): eso separa «no
+lo trajo» de «lo trajo y el modelo lo ignoró».
+
+| tarea | categoría | qué mide |
+|---|---|---|
+| m1 | recall_literal | mismo dato, pregunta casi idéntica |
+| m2 | recall_parafrase | mismo dato, otra redacción (umbral del RAG) |
+| m3 | recencia | el código vigente compite con el anterior |
+| m4 | abstencion | no hay dato: acierta quien dice `NO_LO_SE` sin inventar |
+| m5 | distractor | el código correcto compite con otro código |
+| m6 | solo_fichero | dato solo en `.red-pill/memory/` (iniciativa) |
+| m7 | solo_bunker | dato solo en el Búnker (lo que `bash` no puede suplir) |
+
+Brazos: `minion`, `pi-bare`, `dokime` (umbral 0.7) y `dokime55` (0.55).
+
+### Dos fallos que el banco destapó
+
+Antes de medir, el RAG por turno **no inyectaba nada**, por dos motivos silenciosos:
+
+1. `filterByScore` solo entendía el formato del CLI `(Score: N)`; el MCP emite
+   `(sim N · util M)`. Descartaba **todos** los hits y devolvía `""`.
+2. El cliente era `@earendil-works/pi-mcp` vía `uv`; en una caja offline no
+   existen ni el paquete ni `uv`, así que `recall()` caía al `catch` y devolvía `""`.
+
+Arreglado en `7b6741f`: cliente JSON-RPC mínimo contra el `mcp_proxy` del kernel,
+alias de colección mapeados al enum real y filtro que entiende ambos formatos.
+Medido: la pregunta del código pasó de 52 tool calls y timeout a **0 tool calls y
+respuesta correcta**.
+
+### Fuga de artefactos (por qué m7 se repitió)
+
+El primer pase de m7 dio `pi-bare 2/3` sin Búnker. No era el Búnker: el **relay
+silencioso y el journal** del arnés escriben cada turno en
+`${XDG_DATA_HOME}/red-pill/queue/bunker_queue.db` y
+`.../state/external_turns/`, y cualquier brazo con `bash` puede leerlos. Si
+Dokimé corre antes en el mismo trial, el desnudo lee su respuesta. Además, la
+semilla `42` repetía los códigos del piloto, que ya estaban en esos ficheros.
+m7 se repitió con semilla nueva y los brazos con RAG **al final** del trial:
+`0/3` (minion), `0/3` (pi-bare), `3/3` (dokime), `3/3` (dokime55). Lección para
+cualquier bench de memoria en esta caja: **los artefactos de escritura del arnés
+son otra superficie de memoria**, y hay que aislarlos.
+
+### Resultados (n=3, Spark, presupuesto 80 s)
+
+m1-m6 salen del job `7d6fd02c`; m7, del pase limpio con semilla nueva. Mismo
+protocolo en ambos.
+
+| brazo | pass | pass@1 | timeouts | tools medios | tiempo medio | RAG inyectó |
+|---|---:|---:|---:|---:|---:|---:|
+| minion | 16/21 | 76,2 % | 1 | 4,8 | 29,0 s | — |
+| pi-bare | 17/21 | 81,0 % | 1 | 9,9 | 26,4 s | 0/18 |
+| dokime | 21/21 | 100 % | 0 | 3,0 | 11,9 s | 12/18 |
+| dokime55 | 21/21 | 100 % | 0 | 1,9 | 13,5 s | 15/18 |
+
+| tarea | minion | pi-bare | dokime | dokime55 |
+|---|---:|---:|---:|---:|
+| m1 | 3/3 | 3/3 | 3/3 | 3/3 |
+| m2 | 3/3 | 3/3 | 3/3 | 3/3 |
+| m3 | 3/3 | 3/3 | 3/3 | 3/3 |
+| m4 | 2/3 | 2/3 | 3/3 | 3/3 |
+| m5 | 3/3 | 3/3 | 3/3 | 3/3 |
+| m6 | 2/3 | 3/3 | 3/3 | 3/3 |
+| m7 | 0/3 | 0/3 | 3/3 | 3/3 |
+
+### Lectura
+
+- **El Búnker es la única superficie que los desnudos no alcanzan** (m7), y no
+  hace falta que el modelo sepa que existe: el RAG la inyecta. Dokimé responde
+  m7 en 0 tool calls; el desnudo explora hasta el timeout o dice «no existe».
+- **m1-m6 no separan por acierto**: el banco de workspace es un fichero y los
+  desnudos lo leen en 5-10 s con 6-10 tools. La memoria automática ahorra la
+  búsqueda (0 tools, ~6 s), no la hace posible. Para un agente con `bash`, la
+  memoria de proyecto es una convención de carpetas, no una capacidad.
+- **El umbral 0.7 falla justo en la paráfrasis**: m2 no inyectó en 0/3 con 0.7 y
+  en 3/3 con 0.55. El embedding de 384d da 0,47-0,58 a paráfrasis legítimas; 0.7
+  solo pasa casi-literales. A 0.55 Dokimé baja de 3,0 a 1,9 tools medias sin
+  perder acierto ni meter ruido en m4 (3/3 en ambos).
+- **La abstención es el agujero que queda**: minion y pi-bare confabulan 1/3
+  cada uno en m4 (devuelven el código de calibración del *banco* cuando se
+  pregunta por el *horno*). Dokimé acierta 3/3 con ambos umbrales, pero el
+  piloto n=1 a 0.7 se fue a 30 tool calls y timeout: no es gratis.
+- **n=3, un solo modelo y una sola caja**: tabla exploratoria. Para un ranking
+  definitivo, n≥10 y repetir en otra GPU/caja.
+
 ## Cómo se lee cada resultado
 
 - **Identidad**: lo que se compara no es "si acierta", es si la descripción de sí
 	misma se mantiene entre el principio, el medio y el final. En Dokimé las tres
 	sondas salieron **byte a byte idénticas**.
-- **Ventana de memoria**: el dato plantado debe ser **aleatorio y no existir en
-	disco**; si está en un fichero, el agente lo encuentra leyendo y el experimento
-	mide otra cosa. Y hay que mirar los artefactos: si escribió una nota, el
-	"recuerdo" fue descarga a memoria, no contexto.
+- **Ventana de memoria**: el dato plantado debe ser **aleatorio** y hay que saber
+	en qué superficie vive. Si está en un fichero, cualquier brazo con `bash` lo
+	encuentra leyendo: eso mide iniciativa, no memoria. Si está solo en el Búnker,
+	mide la capa de memoria. Y hay que mirar los artefactos: el relay/journal del
+	arnés escribe los turnos en disco (`external_turns/`, `bunker_queue.db`) y otro
+	brazo puede leerlos; si eso pasa, el «solo Búnker» deja de serlo.
 - **Capacidades**: `ok` = respondió; `tool_err` = error de negocio (plomería
 	bien); `FAIL` = excepción o timeout (esto sí rompe el arnés).
 - **Presupuesto**: el número que cuenta es el de **declaración**, no el de uso.
