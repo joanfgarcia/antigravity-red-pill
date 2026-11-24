@@ -134,8 +134,8 @@ def norm(text: str) -> str:
 def grade(task: dict, answer: str, box_file: str | None = None) -> bool:
 	kind, expect, text = task["kind"], norm(task["expect"]), norm(answer)
 	if kind == "number":
-		# Número como token: no vale el «4» de «2.4.1».
-		return bool(re.search(rf"(?<![\d.]){re.escape(expect)}(?![\d.])", text))
+		# Número como token: no vale el «4» de «2.4.1», pero «30.0» es 30.
+		return bool(re.search(rf"(?<![\d.]){re.escape(expect)}(?:[.,]0+)?(?![\d.])", text))
 	if kind == "path":
 		return expect in text
 	if kind == "text":
@@ -197,7 +197,7 @@ def run_pi(arm: str, prompt: str, model: str) -> tuple[str, str | None, float]:
 		return "", "timeout 180s", time.time() - t0
 
 
-def run_minion(prompt: str, model: str, profile: str) -> tuple[str, str | None, float, dict]:
+def run_minion(prompt: str, model: str, profile: str, sampling: dict) -> tuple[str, str | None, float, dict]:
 	cmd = [
 		"podman",
 		"exec",
@@ -212,6 +212,14 @@ def run_minion(prompt: str, model: str, profile: str) -> tuple[str, str | None, 
 		profile,
 		"--alias",
 		model,
+		"--temperature",
+		str(sampling["temperature"]),
+		"--top-p",
+		str(sampling["top_p"]),
+		"--max-tokens",
+		str(sampling["max_tokens"]),
+		"--seed",
+		str(sampling["seed"]),
 	]
 	t0 = time.time()
 	try:
@@ -232,10 +240,10 @@ def read_box_file(path: str) -> str:
 	return out.stdout if out.returncode == 0 else ""
 
 
-def run_one(arm: str, task: dict, model: str, profile: str) -> dict:
+def run_one(arm: str, task: dict, model: str, profile: str, sampling: dict) -> dict:
 	reset_fixture()
 	if arm == "minion":
-		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile)
+		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile, sampling)
 		tool_calls = meta.get("tool_calls")
 		used_tools = meta.get("used_tools")
 	else:
@@ -265,6 +273,10 @@ def main() -> int:
 	ap.add_argument("--arms", default="minion,pi-bare,dokime")
 	ap.add_argument("--model", default="spark", help="alias servido por llama-server")
 	ap.add_argument("--profile", default="spark_x2_6_4b", help="perfil de modelo para la conducta del minion")
+	ap.add_argument("--temperature", type=float, default=0.8)
+	ap.add_argument("--top-p", type=float, default=0.95)
+	ap.add_argument("--max-tokens", type=int, default=1024)
+	ap.add_argument("--seed", type=int, default=42)
 	ap.add_argument("--pilot", action="store_true", help="1,2,5 con 1 trial (humo)")
 	args = ap.parse_args()
 
@@ -292,7 +304,13 @@ def main() -> int:
 				order = arms[:]
 				rng.shuffle(order)
 				for arm in order:
-					row = run_one(arm, task, args.model, args.profile)
+					sampling = {
+						"temperature": args.temperature,
+						"top_p": args.top_p,
+						"max_tokens": args.max_tokens,
+						"seed": args.seed,
+					}
+					row = run_one(arm, task, args.model, args.profile, sampling)
 					row["trial"] = trial
 					row["order"] = order.index(arm)
 					rows.append(row)

@@ -25,11 +25,25 @@ def _provider_class():
 	class BenchProvider(BaseInferenceProvider):
 		"""OpenAI-compatible TCP contra el llama-server del sandbox."""
 
-		def __init__(self, host: str = "llama", port: int = 8080, model: str = "spark_x2_6_4b", server_model: str = "spark"):
+		def __init__(
+			self,
+			host: str = "llama",
+			port: int = 8080,
+			model: str = "spark_x2_6_4b",
+			server_model: str = "spark",
+			temperature: float = 0.8,
+			top_p: float = 0.95,
+			max_tokens: int = 1024,
+			seed: int = 42,
+		):
 			self.host = host
 			self.port = port
 			self.model = model  # perfil para conducta (tool_format/thinking)
 			self.server_model = server_model  # alias que sirve llama-server
+			self.temperature = temperature
+			self.top_p = top_p
+			self.max_tokens = max_tokens
+			self.seed = seed
 
 		def generate(self, prompt: str, **kwargs) -> str:
 			return str(self.chat([{"role": "user", "content": prompt}], **kwargs).get("content") or "")
@@ -43,10 +57,10 @@ def _provider_class():
 			payload = {
 				"model": self.server_model,
 				"messages": messages,
-				"temperature": 0.8,
-				"top_p": 0.95,
-				"max_tokens": 1024,
-				"seed": 42,
+				"temperature": self.temperature,
+				"top_p": self.top_p,
+				"max_tokens": self.max_tokens,
+				"seed": self.seed,
 			}
 			if tools:
 				payload["tools"] = tools
@@ -67,12 +81,12 @@ def _provider_class():
 	return BenchProvider
 
 
-async def _run(cwd: str, prompt: str, model: str, alias: str) -> dict:
+async def _run(cwd: str, prompt: str, model: str, alias: str, sampling: dict) -> dict:
 	from red_pill.core.providers import ProviderRegistry
 	from red_pill.swarm.agents import local_minion
 
 	BenchProvider = _provider_class()
-	ProviderRegistry.register_inference_provider("bench", BenchProvider(model=model, server_model=alias))
+	ProviderRegistry.register_inference_provider("bench", BenchProvider(model=model, server_model=alias, **sampling))
 
 	# Igualdad de tools: el minion sólo ve `run_bash`; sin MCP, sin read/write.
 	local_minion.TOOLS = [t for t in local_minion.TOOLS if t["function"]["name"] == "run_bash"]
@@ -94,10 +108,20 @@ def main() -> int:
 	ap.add_argument("--prompt", required=True)
 	ap.add_argument("--model", default="spark_x2_6_4b", help="perfil de modelo para la conducta del minion")
 	ap.add_argument("--alias", default="spark", help="alias servido por llama-server")
+	ap.add_argument("--temperature", type=float, default=0.8)
+	ap.add_argument("--top-p", type=float, default=0.95)
+	ap.add_argument("--max-tokens", type=int, default=1024)
+	ap.add_argument("--seed", type=int, default=42)
 	args = ap.parse_args()
 	sys.path.insert(0, "/src/red-pill/src")
 	try:
-		print(json.dumps(asyncio.run(_run(args.cwd, args.prompt, args.model, args.alias)), ensure_ascii=False))
+		sampling = {
+			"temperature": args.temperature,
+			"top_p": args.top_p,
+			"max_tokens": args.max_tokens,
+			"seed": args.seed,
+		}
+		print(json.dumps(asyncio.run(_run(args.cwd, args.prompt, args.model, args.alias, sampling)), ensure_ascii=False))
 	except Exception as exc:  # noqa: BLE001 — el runner reporta, no tumba el bench
 		print(json.dumps({"ok": False, "answer": "", "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
 		return 1

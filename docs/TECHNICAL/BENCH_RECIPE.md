@@ -191,6 +191,29 @@ El minion, con el **finalize al tope** (en vez de perder el turno cuando ya tien
 la respuesta en los resultados), sube a 52/54 (96,3 %); su fallo restante es t3
 (confunde `alpha.py` con `gamma.py`).
 
+### Cross-modelo (exploratorio, 2026-11-24)
+
+Mismo `minimal-local` (identidad + ancla, 0 skills), sólo `bash`, 16k, tres
+brazos. Muestreo: Spark/K2 `0.8/0.95/1024/42`; MiMo `0.7/0.95/4096/42` (con
+1024 se rompe: su razonamiento se come la respuesta).
+
+| modelo | minion | pi-bare | dokime |
+|---|---:|---:|---:|
+| Spark 4B | 52/54 (96,3 %) | 54/54 (100 %) | 53/54 (98,1 %) |
+| K2 7B | 48/54 (88,9 %) | 48/54 (88,9 %) | 52/54 (96,3 %) |
+| MiMo 9B | 45/54 (83,3 %) | 33/54 (61,1 %) | 36/54 (66,7 %) |
+
+- La fila de Spark es con `skills_budget: 0`; con las 3 skills daba 51/54 (94,4 %).
+- K2 con la temperatura de su ficha (0.1) baja a `minion 51/54, pi-bare 45/54,
+  dokime 42/54`: esa temperatura está ajustada a anotación, no a tool-use. A 0.8
+  es donde mejor rinde.
+- MiMo con 0.8/1024 daba `42/30/33`: necesita 0.7 y 4096. Aun así, su Pi falla
+  conteos (t7/t13/t15), no escribe en t17 y no supera al 4B en tool-use; el
+  minion (que fuerza el bucle) es su mejor brazo.
+- n=3 y muestreo distinto por modelo: es una tabla exploratoria, no un ranking
+  definitivo. Para ranking: mismo protocolo (p. ej. 0.7/4096), n≥10 y la misma
+  ventana.
+
 ## Cómo se lee cada resultado
 
 - **Identidad**: lo que se compara no es "si acierta", es si la descripción de sí
