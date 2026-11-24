@@ -2,21 +2,21 @@
 //
 // The per-turn RAG goes through the RedPill-Kernel MCP server (`bunker_memory_api`
 // action `recall`) over a persistent stdio connection, instead of spawning the
-// red-pill CLI every turn. The client is `@earendil-works/pi-mcp` (the standalone
-// MCP client published with Pi, pinned to Pi's version); the injector provisions
-// it under `~/.pi/agent/node_modules`. Identity injection now lives in
-// on-demand tools stay on the CLI for now. The `red-pill` binary is NOT on the
-// PATH of the harness: it lives in the checkout (`.venv/bin/red-pill`) and is
-// invoked via `uv run --no-sync` from the red-pill directory. The
-// `${RED_PILL_DIR}` / `${UV}` placeholders are resolved by
-// `scripts/inject/pi/inject.py` at seeding time.
+// red-pill CLI every turn. The client is a minimal JSON-RPC loop over the kernel's
+// `mcp_proxy` (no external npm package: offline boxes had no
+// `@earendil-works/pi-mcp` and the RAG died in silence). Identity injection lives
+// in `red-pill-context.ts`; the on-demand tools stay on the CLI for now. The
+// `red-pill` binary is NOT on the PATH of the harness: it lives in the checkout
+// (`.venv/bin/red-pill`) and is invoked via `uv run --no-sync` from the red-pill
+// directory. The `${RED_PILL_DIR}` / `${UV}` / `${PYTHON}` / `${MCP_SOCKET}`
+// placeholders are resolved by `scripts/inject/pi/inject.py` at seeding time.
 //
 // Skills are NOT exposed here: the injector copies the red-pill skills into
 // `~/.pi/agent/skills/`, which pi auto-discovers (single merged dir, so the
 // IDE-specific override wins and there are no name collisions).
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -130,29 +130,29 @@ function finishExternalTurn(sessionId: string, response: string, status: "comple
 	}
 }
 
-/** Filtra el output de `red-pill search`: conserva solo bullets con (Score: N >= umbral). */
+/** Filtra el output del recall: conserva solo bullets con score >= umbral.
+ *
+ *  Formatos que debe entender:
+ *  - MCP `bunker_memory_api recall` (el que usa el RAG por turno):
+ *    `- [COLOR][Int: 1.0] contenido (sim 0.74 · util 0.00)` y, para inmunes,
+ *    `- […] contenido [IMMUNE · sim 0.74]`.
+ *  - CLI `red-pill search` (legado): `- … (Score: 0.74)`.
+ *
+ *  El parser anterior solo aceptaba `(Score: N)` y descartaba TODOS los hits del
+ *  MCP: el recall devolvía texto, `filterByScore` lo vaciaba y el RAG por turno
+ *  no inyectaba nada (en silencio). Medido 2026-11-24. */
 function filterByScore(output: string): string {
 	const lines = output.split("\n");
 	const kept: string[] = [];
-	let pendingHeader: string | null = null;
+	let header: string | null = null;
 	let headerKept = false;
-	const flushHeader = () => {
-		if (pendingHeader !== null && !headerKept) { /* se descarta si no aporta bullets */ }
-		pendingHeader = null;
-		headerKept = false;
-	};
 	for (const line of lines) {
-		const m = line.match(/\(Score:\s*([0-9.]+)\)/);
-		if (m) {
-			if (parseFloat(m[1]) >= SCORE_THRESHOLD) {
-				if (pendingHeader !== null && !headerKept) { kept.push(pendingHeader); headerKept = true; }
-				kept.push(line);
-			}
-			continue;
-		}
-		if (/^---\s*\[RESULTS/.test(line)) { flushHeader(); pendingHeader = line; continue; }
-		if (pendingHeader !== null) { /* línea sin score dentro de un bloque: se ignora */ continue; }
-		if (line.trim()) kept.push(line);
+		if (/^---\s*\[RESULTS/.test(line)) { header = line; continue; }
+		if (!line.startsWith("- ")) continue; // punteros, no_recall y prosa: fuera
+		const m = line.match(/\(Score:\s*([0-9.]+)\)/) ?? line.match(/sim\s+([0-9.]+)/);
+		if (!m || parseFloat(m[1]) < SCORE_THRESHOLD) continue;
+		if (header !== null && !headerKept) { kept.push(header); headerKept = true; }
+		kept.push(line);
 	}
 	return kept.join("\n").trim();
 }
@@ -166,42 +166,134 @@ function rp(...args: string[]) {
 }
 
 
-// ── Persistent MCP client (single process) ──────────────────────────────
-// One stdio connection to RedPill-Kernel shared by every hook. The import is
-// lazy on purpose: a missing @earendil-works/pi-mcp degrades only the RAG
-// (recall returns ""), instead of breaking the whole bridge at load time.
-// A dropped connection clears the singleton so the next call reconnects lazily.
-type McpClientT = import("@earendil-works/pi-mcp").McpClient;
-let mcpModulePromise: Promise<typeof import("@earendil-works/pi-mcp")> | null = null;
-let mcpClientPromise: Promise<McpClientT> | null = null;
+// ── Persistent MCP client (single process, stdio JSON-RPC) ──────────────
+// One connection to RedPill-Kernel shared by every hook. We speak the minimum
+// of MCP the bridge needs (`initialize` + `tools/call`) over the kernel's
+// `mcp_proxy`, so the extension has no npm dependency. A missing socket falls
+// back to the direct `mcp_server.py`; a dead child clears the singleton and the
+// next turn reconnects. Any failure degrades to "" (never breaks the turn).
+const MCP_SOCKET = "${MCP_SOCKET}";
+const PYTHON_BIN =
+	process.env.RED_PILL_PYTHON ?? (existsSync("${PYTHON}") ? "${PYTHON}" : "/opt/py/bin/python");
 
-function loadMcpModule() {
-	mcpModulePromise ??= import("@earendil-works/pi-mcp");
-	return mcpModulePromise;
+type Pending = { resolve: (value: any) => void; reject: (error: any) => void; timer: ReturnType<typeof setTimeout> };
+let mcpProc: any = null;
+let mcpInit: Promise<void> | null = null;
+let mcpNextId = 1;
+let mcpBuf = "";
+const mcpPending = new Map<number, Pending>();
+
+function mcpDrop() {
+	mcpProc = null;
+	mcpInit = null;
+	for (const [, p] of mcpPending) {
+		clearTimeout(p.timer);
+		p.reject(new Error("mcp proxy closed"));
+	}
+	mcpPending.clear();
 }
 
-function getMcpClient(): Promise<McpClientT> {
-	if (mcpClientPromise) return mcpClientPromise;
-	mcpClientPromise = (async () => {
-		const { McpClient, StdioTransport } = await loadMcpModule();
-		const serverPath = RED_PILL_DIR + "/src/red_pill/mcp_server.py";
-		const client = new McpClient({ name: "red-pill-pi", version: "1.0.0", requestTimeoutMs: LIGHT_TIMEOUT_MS });
-		client.onClose(() => {
-			mcpClientPromise = null;
-		});
-		await client.connect(
-			new StdioTransport({
-				command: UV,
-				args: ["--directory", RED_PILL_DIR, "run", "--no-sync", "python", serverPath],
-				stderr: "pipe",
-			}),
-		);
-		return client;
-	})().catch((e) => {
-		mcpClientPromise = null;
-		throw e;
+function mcpSpawn() {
+	if (mcpProc) return;
+	const args = existsSync(MCP_SOCKET)
+		? ["-m", "red_pill.mcp_proxy", "--socket", MCP_SOCKET]
+		: [join(RED_PILL_DIR, "src", "red_pill", "mcp_server.py")];
+	const proc = spawn(PYTHON_BIN, args, {
+		cwd: RED_PILL_DIR,
+		env: { ...process.env, PYTHONPATH: join(RED_PILL_DIR, "src") },
+		stdio: ["pipe", "pipe", "pipe"],
 	});
-	return mcpClientPromise;
+	mcpProc = proc;
+	mcpBuf = "";
+	proc.stdout.on("data", (chunk: any) => {
+		mcpBuf += chunk.toString();
+		let nl = mcpBuf.indexOf("\n");
+		while (nl >= 0) {
+			const line = mcpBuf.slice(0, nl).trim();
+			mcpBuf = mcpBuf.slice(nl + 1);
+			nl = mcpBuf.indexOf("\n");
+			if (!line) continue;
+			let msg: any;
+			try {
+				msg = JSON.parse(line);
+			} catch {
+				continue;
+			}
+			if (msg?.id == null) continue; // notificación (logging, progress…)
+			const p = mcpPending.get(Number(msg.id));
+			if (!p) continue;
+			mcpPending.delete(Number(msg.id));
+			clearTimeout(p.timer);
+			if (msg.error) p.reject(new Error(String(msg.error?.message ?? "mcp error")));
+			else p.resolve(msg.result);
+		}
+	});
+	proc.stderr.on("data", () => {
+		/* el proxy loguea a stderr: no es un error del turno */
+	});
+	proc.on("exit", mcpDrop);
+	proc.on("error", mcpDrop);
+}
+
+function mcpRequest(method: string, params: any): Promise<any> {
+	mcpSpawn();
+	const proc = mcpProc;
+	return new Promise((resolve, reject) => {
+		if (!proc?.stdin?.writable) {
+			reject(new Error("mcp proxy no disponible"));
+			return;
+		}
+		const id = mcpNextId++;
+		const timer = setTimeout(() => {
+			mcpPending.delete(id);
+			reject(new Error(`mcp ${method} timeout`));
+		}, LIGHT_TIMEOUT_MS);
+		mcpPending.set(id, { resolve, reject, timer });
+		try {
+			proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+		} catch (error) {
+			clearTimeout(timer);
+			mcpPending.delete(id);
+			reject(error);
+		}
+	});
+}
+
+function mcpReady(): Promise<void> {
+	mcpInit ??= (async () => {
+		await mcpRequest("initialize", {
+			protocolVersion: "2024-11-05",
+			capabilities: {},
+			clientInfo: { name: "red-pill-pi", version: "1.0.0" },
+		});
+		mcpProc?.stdin?.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+	})().catch((error) => {
+		mcpInit = null;
+		throw error;
+	});
+	return mcpInit;
+}
+
+function mcpClose() {
+	const proc = mcpProc;
+	mcpDrop();
+	if (!proc) return;
+	try {
+		proc.stdin?.end();
+	} catch {
+		/* noop */
+	}
+	try {
+		proc.kill();
+	} catch {
+		/* noop */
+	}
+}
+
+/** `tools/call` con el contrato MCP: `{ content: [{type:"text", text}], isError? }`. */
+async function mcpCallTool(name: string, args: any): Promise<any> {
+	await mcpReady();
+	return mcpRequest("tools/call", { name, arguments: args });
 }
 
 function mcpResultText(result: { content?: unknown }): string {
@@ -210,16 +302,25 @@ function mcpResultText(result: { content?: unknown }): string {
 	return content.map((c: any) => (c?.type === "text" && typeof c.text === "string" ? c.text : "")).join("");
 }
 
+// El handler de `recall` valida contra el enum de colecciones completas: los
+// alias (`work`, `directive`…) que documenta la tool no pasan por el proxy.
+const COLLECTION_ALIASES: Record<string, string> = {
+	work: "work_memories",
+	social: "social_memories",
+	directive: "directive_memories",
+	story: "story_memories",
+	interaction: "interaction_memories",
+};
+
 async function recall(query: string, collection: string, limit: number): Promise<string> {
 	const clean = query.slice(0, 1500).replace(/\s+/g, " ").trim();
 	if (!clean) return "";
 	try {
-		const client = await getMcpClient();
-		const result = await client.callTool("bunker_memory_api", {
+		const result = await mcpCallTool("bunker_memory_api", {
 			action: "recall",
-			payload: { query: clean, collection, limit },
+			payload: { query: clean, collection: COLLECTION_ALIASES[collection] ?? collection, limit },
 		});
-		if (result.isError) return ""; // server-side validation failure → degrade, don't inject the error
+		if (result?.isError) return ""; // server-side validation failure → degrade, don't inject the error
 		return filterByScore(mcpResultText(result).trim());
 	} catch {
 		return ""; // Búnker caído/offline → degradación silenciosa
@@ -233,8 +334,7 @@ async function recall(query: string, collection: string, limit: number): Promise
  * la identidad la sirve `red-pill-context.ts` por el hook. Best-effort: nunca tira el turno. */
 async function handshake(sessionId: string, userPrompt: string): Promise<void> {
 	try {
-		const client = await getMcpClient();
-		await client.callTool("sovereign_handshake", {
+		await mcpCallTool("sovereign_handshake", {
 			user_prompt: (userPrompt || "(session wake)").slice(0, 1500),
 			mode: "low",
 			is_new_session: false,
@@ -337,14 +437,7 @@ export default function (pi: ExtensionAPI) {
 	// Close the persistent MCP connection when the session ends.
 	pi.on("session_shutdown", async (_event, ctx) => {
 		touchLiveness(sessionIdOf(ctx), "end");
-		if (mcpClientPromise) {
-			try {
-				(await mcpClientPromise).close();
-			} catch {
-				/* noop */
-			}
-			mcpClientPromise = null;
-		}
+		mcpClose();
 	});
 
 	// ── Turno: prompt + respuesta del assistant. El relay va por HOOKS (nunca por

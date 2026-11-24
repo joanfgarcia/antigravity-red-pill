@@ -31,14 +31,17 @@ _EXTERNAL = [
 	"@earendil-works/pi-coding-agent",
 	"--external",
 	"typebox",
-	"--external",
-	"@earendil-works/pi-mcp",
 ]
 
 
 def _substituted(tmp_path: Path) -> Path:
 	src = SEED.read_text(encoding="utf-8")
-	src = src.replace("${RED_PILL_DIR}", str(REPO_ROOT)).replace("${UV}", shutil.which("uv") or "uv")
+	src = (
+		src.replace("${RED_PILL_DIR}", str(REPO_ROOT))
+		.replace("${UV}", shutil.which("uv") or "uv")
+		.replace("${PYTHON}", shutil.which("python3") or "python3")
+		.replace("${MCP_SOCKET}", "/tmp/red-pill-mcp.sock")
+	)
 	out = tmp_path / "red-pill.ts"
 	out.write_text(src, encoding="utf-8")
 	return out
@@ -65,7 +68,7 @@ def test_pi_extension_paridad_alma():
 	src = SEED.read_text(encoding="utf-8")
 	# Handshake MCP con cuerpo compuesto (paridad F5).
 	assert "async function handshake(" in src
-	assert 'callTool("sovereign_handshake"' in src
+	assert 'mcpCallTool("sovereign_handshake"' in src
 	assert "`pi:${sessionId}`" in src
 	assert "void handshake(" in src
 	# No reintroducir el link en el hook ni el tagScan (retirados: un solo escritor).

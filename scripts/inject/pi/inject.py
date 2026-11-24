@@ -2,9 +2,9 @@
 
 The Búnker bridge is a TS extension (`seeds/pi/extensions/red-pill.ts`). Its
 per-turn RAG talks to the RedPill-Kernel MCP server (`bunker_memory_api` action
-`recall`) over a persistent stdio connection using `@earendil-works/pi-mcp`; the
-injector provisions that client under `<pi_dir>/node_modules` (Pi does not put
-it on an extension's resolution path). Identity (wake_up_v6) and the on-demand
+`recall`) over a persistent stdio connection to the kernel's `mcp_proxy`, with a
+minimal JSON-RPC client inside the extension: no npm package and no dependency
+on an extension resolution path. Identity (wake_up_v6) and the on-demand
 tools still use the red-pill CLI via `uv run`. Skills are copied into
 `~/.pi/agent/skills/` (single merged dir: generic `skills/` first, then
 `seeds/pi/skills/` overrides win), which Pi auto-discovers. Legacy snake_case
@@ -297,57 +297,6 @@ def _deploy_extension(pi_dir: str, seed: str, variables: dict, backup: bool) -> 
 	return 1
 
 
-# `@earendil-works/pi-mcp` is the standalone MCP client published with Pi. It is
-# not on an extension's module resolution path, so we provision it into the
-# agent dir. Pinned to Pi's own version for wire-protocol compatibility.
-PI_MCP_PACKAGE = "@earendil-works/pi-mcp"
-PI_MCP_FALLBACK_VERSION = "1.0.2"
-
-
-def _pi_mcp_version() -> str:
-	"""Target pi-mcp version = the running Pi version (best effort)."""
-	import re
-	import subprocess
-
-	for cmd in (["pi", "--version"], ["pi", "-v"]):
-		try:
-			out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-			match = re.match(r"(\d+\.\d+\.\d+)", (out.stdout or "").strip())
-			if match:
-				return match.group(1)
-		except Exception:
-			continue
-	return PI_MCP_FALLBACK_VERSION
-
-
-def _ensure_pi_mcp_client(pi_dir: str) -> int:
-	"""Provision @earendil-works/pi-mcp into <pi_dir>/node_modules so the
-	extension can `import { McpClient }`. Best-effort and idempotent: skips when
-	it already exists or when npm is unavailable (logs a warning). Returns the
-	number of changes."""
-	import subprocess
-
-	pkg_dir = os.path.join(pi_dir, "node_modules", "@earendil-works", "pi-mcp")
-	if os.path.isdir(pkg_dir):
-		logger.info("· pi-mcp client ya provisionado")
-		return 0
-	npm = shutil.which("npm")
-	if not npm:
-		logger.warning(f"⚠ npm no encontrado: la extensión Pi necesita {PI_MCP_PACKAGE}. Instálalo a mano en {pi_dir}")
-		return 0
-	spec = f"{PI_MCP_PACKAGE}@{_pi_mcp_version()}"
-	try:
-		result = subprocess.run([npm, "install", "--prefix", pi_dir, "--no-save", spec], capture_output=True, text=True, timeout=300)
-	except Exception as exc:
-		logger.warning(f"⚠ No se pudo provisionar {spec}: {exc}")
-		return 0
-	if result.returncode != 0:
-		logger.warning(f"⚠ npm install {spec} falló: {(result.stderr or '').strip()[:200]}")
-		return 0
-	logger.info(f"✓ pi-mcp client provisionado → {pkg_dir} ({spec})")
-	return 1
-
-
 def _remove(pi_dir: str, repo_root: str, args) -> int:
 	removed = 0
 	for ext_name in ("red-pill.ts", "red-pill-context.ts"):
@@ -423,7 +372,6 @@ def inject(args: argparse.Namespace) -> int:
 		seed_ext = os.path.join(repo_root, "seeds", "pi", "extensions", ext_name)
 		if os.path.exists(seed_ext):
 			changed += _deploy_extension(pi_dir, seed_ext, variables, backup)
-	changed += _ensure_pi_mcp_client(pi_dir)
 
 	# 2. Skills: genérico primero, override específico-IDE después (gana).
 	#    Los ficheros pisados por el override se SALTAN en la pasada genérica
