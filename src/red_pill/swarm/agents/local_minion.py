@@ -808,6 +808,17 @@ async def run_local_minion(
 		for tc in tool_calls:
 			if tool_calls_made >= MAX_TOOL_CALLS:
 				# Enforced, not just prompted: extra calls in a turn are never run.
+				# Al tope, el modelo ya no puede pedir más tools; si ya tiene
+				# resultados, se le pide la respuesta final sin tools en vez de
+				# tirar el turno (Spark encontraba `workers: 3` y seguía llamando).
+				try:
+					answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results, conduct, nonce))
+				except Exception as exc:  # noqa: BLE001 — el tope no debe convertirse en excepción
+					logger.warning("[local-minion] cap finalize failed: %s", exc)
+					answer = ""
+				if answer:
+					logger.info("[local-minion] cap reached after %d tool(s); finalized from results", tool_calls_made)
+					return _done(True, answer, step)
 				return _done(False, "mala tarde: hit the tool-call cap without finishing", step)
 			fn = tc.get("function", {})
 			name = fn.get("name", "")
@@ -838,4 +849,14 @@ async def run_local_minion(
 		if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
 			return _done(False, "mala tarde: too many consecutive tool errors", step)
 
+	# Se agotaron los turnos (no las llamadas). Mismo criterio: si hay resultados,
+	# pedir la respuesta final sin tools antes de declarar el fallo.
+	try:
+		answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results, conduct, nonce))
+	except Exception as exc:  # noqa: BLE001 — el tope no debe convertirse en excepción
+		logger.warning("[local-minion] iteration-cap finalize failed: %s", exc)
+		answer = ""
+	if answer:
+		logger.info("[local-minion] iteration cap reached; finalized from %d tool(s)", len(tool_results))
+		return _done(True, answer, MAX_TOOL_ITERS)
 	return _done(False, "mala tarde: hit the tool-call cap without finishing", MAX_TOOL_ITERS)

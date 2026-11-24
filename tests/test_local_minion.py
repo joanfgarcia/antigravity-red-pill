@@ -928,3 +928,25 @@ def test_agentic_job_creates_local_tools_with_continuity():
 	assert bridge.continuity_id == "alma-job-tools"
 	assert bridge._context_tokens == 4096
 	assert bridge._history_turns == 9
+
+
+async def test_tope_de_llamadas_finaliza_con_los_resultados(monkeypatch):
+	"""Al tope de tools no se tira el turno: se pide la respuesta final sin tools.
+
+	Regresión del bench 2026-11-24: Spark encontraba `workers: 3` en la 5.ª
+	llamada y seguía pidiendo tools hasta el tope; el turno se perdía con un
+	mensaje de cap aunque la respuesta ya estaba en los resultados.
+	"""
+	many = {
+		"role": "assistant",
+		"content": None,
+		"tool_calls": [
+			{"id": f"c{i}", "function": {"name": "run_bash", "arguments": '{"command": "true"}'}} for i in range(local_minion.MAX_TOOL_CALLS + 3)
+		],
+	}
+	_use_provider(monkeypatch, FakeProvider([many, {"role": "assistant", "content": "3"}]))
+	_fake_shell(monkeypatch, FakeProc(rc=0, out=b"workers: 3\n"))
+	res = await local_minion.run_local_minion("¿cuántos workers?")
+	assert res["ok"] is True
+	assert res["answer"] == "3"
+	assert res["tool_calls"] == local_minion.MAX_TOOL_CALLS
