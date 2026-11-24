@@ -1063,6 +1063,9 @@ def update(args: argparse.Namespace) -> int:
 	otro árbol sería sembrar la versión equivocada.
 	"""
 	_ensure_desk()
+	# La config guardada manda también en `update`: sin esto, la re-siembra caía
+	# al default (`role=none`) y un `update` normal convertía a Dokimé en standard.
+	_adopt_box_config()
 	_import_box_config()
 	_grant_desk_acl()
 	print(f"kernel: {KERNEL_WORKTREE} (ref {args.ref})")
