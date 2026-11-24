@@ -78,6 +78,9 @@ def test_resolve_persona_sin_roleplay(monkeypatch):
 	assert "Name: Prueba" in result
 	assert "OFF (UNMASKED)" in result
 	assert "CYBERPUNK" not in result
+	# Sin skin no hay rol de ficción: un 4B leía `Role: Netrunner` como identidad.
+	assert "Role:" not in result
+	assert "Netrunner" not in result
 
 
 def test_agent_name_desde_config(monkeypatch):

@@ -94,7 +94,8 @@ python scripts/dokime.py update --recreate  # además, recrea la caja
 	recrear respeta su modelo, ventana y montajes extra; lo que exportes en ese
 	momento manda sobre lo guardado.
 3. **Re-siembra** la identidad si la caja está arriba: `red-pill seed` (engramas
-	desde `seeds/`) y las anclas de pi (`AGENTS.override.md` + skills). Sin esto el
+	desde `seeds/`), la tarjeta de `seeds/bootcard/` → `ID_IDENTITY` (`dokime_boot.py`,
+	borra pactos) y las anclas de pi (`AGENTS.override.md` + skills). Sin esto el
 	alma lee textos nuevos con memoria vieja; `up` también lo hace, salvo
 	`--no-seed`.
 

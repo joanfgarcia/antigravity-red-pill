@@ -7,7 +7,9 @@
 id: local-4b-64k
 window: 65536
 surface: codemode
-identity_mode: low
+# Un 4B no sostiene siete protocolos + persona + identidad sin diluirse: se
+# arranca con la tarjeta de identidad y se añaden reglas cuando se necesiten.
+identity_mode: minimal
 identity_max_tokens: 700
 skills_budget: 3
 tools_native: [read, write, edit, bash, grep]

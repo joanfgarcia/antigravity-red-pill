@@ -90,9 +90,9 @@ def _ledger() -> AckLedger:
 
 
 def _identity_mode() -> str:
-	"""Modo de identidad: `low` para modelos pequeños, `full` para grandes."""
+	"""Modo de identidad: `minimal`/`low` para modelos pequeños, `full` para grandes."""
 	mode = os.getenv("REDPILL_IDENTITY_MODE", "").strip().lower()
-	return mode if mode in ("low", "medium", "full") else "full"
+	return mode if mode in ("minimal", "low", "medium", "full") else "full"
 
 
 def generation() -> int:

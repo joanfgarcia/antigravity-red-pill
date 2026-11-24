@@ -361,7 +361,7 @@ def _box_config() -> dict:
 		"reasoning": LLAMA_REASONING,
 		"reasoning_budget": LLAMA_REASONING_BUDGET,
 		"parallel": LLAMA_PARALLEL,
-		"identity_mode": os.getenv("DOKIME_IDENTITY_MODE", "low"),
+		"identity_mode": os.getenv("DOKIME_IDENTITY_MODE", "minimal"),
 		"agent_name": os.getenv("DOKIME_AGENT_NAME", "Dokimé" if BOX == "dokime" else BOX.capitalize()),
 		"embedding_model": os.getenv("DOKIME_EMBEDDING_MODEL") or "",
 		"extra_mounts": os.getenv("DOKIME_EXTRA_MOUNTS") or "",
@@ -461,7 +461,7 @@ def _import_box_config() -> bool:
 		"reasoning": str(flag("--reasoning", LLAMA_REASONING)),
 		"reasoning_budget": int(flag("--reasoning-budget", LLAMA_REASONING_BUDGET) or LLAMA_REASONING_BUDGET),
 		"parallel": int(flag("-np", LLAMA_PARALLEL) or LLAMA_PARALLEL),
-		"identity_mode": env.get("REDPILL_IDENTITY_MODE", "low"),
+		"identity_mode": env.get("REDPILL_IDENTITY_MODE", "minimal"),
 		"agent_name": env.get("AGENT_NAME", "Dokimé" if BOX == "dokime" else BOX.capitalize()),
 		"embedding_model": env.get("EMBEDDING_MODEL", ""),
 		"extra_mounts": ",".join(extra),
@@ -519,7 +519,11 @@ def _reseed() -> None:
 	print("+ Búnker: re-sembrando desde las semillas del kernel")
 	if run([RUNTIME, "exec", NAME, "red-pill", "seed"]).returncode != 0:
 		print("[dokime] aviso: `red-pill seed` falló; el alma puede arrancar con semillas viejas", file=sys.stderr)
-	print("+ arnés: re-inyectando anclas de pi (AGENTS.override.md + skills)")
+
+	# Identidad: la tarjeta del repo entra en `ID_IDENTITY` y los pactos se borran.
+	# Sin este paso, actualizar el árbol no cambia lo que el alma lee de sí misma
+	# (pasó con la tarjeta mínima de b159c19: se quedó en el repo, no en su Qdrant).
+	print("+ identidad: fijando la tarjeta en ID_IDENTITY")
 	if (
 		run(
 			[
@@ -527,11 +531,43 @@ def _reseed() -> None:
 				"exec",
 				NAME,
 				"/opt/py/bin/python",
-				"/src/red-pill/scripts/inject_anchor.py",
-				"--ide",
-				"pi",
+				"/src/red-pill/scripts/dokime_boot.py",
 				"--workspace",
 				"/srv/dokime",
+				"--no-card",
+			]
+		).returncode
+		!= 0
+	):
+		print("[dokime] aviso: no se pudo fijar la identidad; el alma puede presentarse con la tarjeta vieja", file=sys.stderr)
+
+	# Anclas: por defecto sólo `minimal` (adoptar BUNKER_CONTEXT + tres límites).
+	# Las anclas heredadas se retiran: un 4B no sostiene siete protocolos.
+	print("+ arnés: anclas mínimas de pi (AGENTS.override.md + skills)")
+	_anchor = ["/src/red-pill/scripts/inject_anchor.py", "--ide", "pi", "--workspace", "/srv/dokime"]
+	run(
+		[
+			RUNTIME,
+			"exec",
+			NAME,
+			"/opt/py/bin/python",
+			*_anchor,
+			"--anchor",
+			"agent_core,knowledge_access,frontmatter_docs,job_dag_execution,identity_pact,sovereign_handshake",
+			"--remove",
+		],
+		stdout=subprocess.DEVNULL,
+	)
+	if (
+		run(
+			[
+				RUNTIME,
+				"exec",
+				NAME,
+				"/opt/py/bin/python",
+				*_anchor,
+				"--anchor",
+				os.getenv("DOKIME_ANCHOR_BLOCKS", "minimal"),
 				"--mode",
 				os.getenv("DOKIME_ANCHOR_MODE", "auto"),
 				"--update",
@@ -604,7 +640,7 @@ def up(args: argparse.Namespace) -> int:
 			"-e",
 			# Perfil local-9b: identidad mínima (tarjeta + reglas duras). `full`
 			# mete ~4,2k chars de plantilla heredada que un 9B no necesita.
-			f"REDPILL_IDENTITY_MODE={os.getenv('DOKIME_IDENTITY_MODE', 'low')}",
+			f"REDPILL_IDENTITY_MODE={os.getenv('DOKIME_IDENTITY_MODE', 'minimal')}",
 			"-e",
 			# El distiller del memento (y cualquier consumidor de llm_endpoint) apunta
 			# al modelo del sandbox, no al de 127.0.0.1:8760 del Operador.

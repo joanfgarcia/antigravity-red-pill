@@ -358,11 +358,14 @@ def resolve_persona(skin_name: str, suppress_chroma: bool = False) -> str:
 	"""
 	name = (skin_name or "").upper()
 	if not _skins_enabled() or name in ("", "OFF", "NONE", "DEFAULT"):
-		return f"Role: Netrunner\nName: {_agent_name()}\nSkin: OFF (UNMASKED)"
+		# Sin skin no hay rol de ficción. `Netrunner` era el rol por defecto de la
+		# skin cyberpunk y un 4B lo tomaba como identidad literal ("soy el
+		# netrunner"); el rol real lo declara el perfil (bundle), no este bloque.
+		return f"Name: {_agent_name()}\nSkin: OFF (UNMASKED)"
 
 	skins = _load_skins()
 	skin_data = skins.get(skin_name.lower(), {}) if skin_name else {}
-	role = skin_data.get("assistant", "Netrunner")
+	role = skin_data.get("assistant", "")
 	chroma = skin_data.get("chroma", "gray")
 	personality = skin_data.get("personality", "")
 
@@ -379,7 +382,8 @@ def resolve_persona(skin_name: str, suppress_chroma: bool = False) -> str:
 		except Exception:
 			pass
 
-	return f"Role: {role}\nName: {_agent_name()}\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}{personality}"
+	role_line = f"Role: {role}\n" if role else ""
+	return f"{role_line}Name: {_agent_name()}\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}{personality}"
 
 
 def parse_pact(bond_content: str) -> str:
@@ -480,7 +484,10 @@ def _jobs_block(continuity_id: str, queue: Any = None) -> str:
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument(
-		"--mode", choices=["full", "medium", "low"], default="full", help="Identity loading depth: full (IDE), medium (Telegram), or low (AWAKENINGs)"
+		"--mode",
+		choices=["full", "medium", "low", "minimal"],
+		default="full",
+		help="Identity loading depth: full (IDE), medium (Telegram), low (AWAKENINGs) or minimal (identity only)",
 	)
 	parser.add_argument("--continuity-id", default=os.getenv("REDPILL_CONTINUITY_ID", ""), help="Alma para descubrir jobs (RFC-INTEROP-003 S3.3)")
 	args = parser.parse_args()
@@ -526,6 +533,21 @@ def main():
 	afecto_hoy = bool(afecto_block and _fondo_es_de_hoy())
 	persona_injection = resolve_persona(active_skin_name, suppress_chroma=afecto_hoy)
 
+	# ── MINIMAL MODE: identidad y nada más (agentes dedicados) ──
+	# Sin PERSONA, sin PACT y sin directivas: el único texto es la tarjeta de
+	# identidad (`ID_IDENTITY`). Nace para el banco (Dokimé) y para cualquier
+	# agente que se ajuste desde cero; las reglas se añaden cuando se necesitan,
+	# no por defecto.
+	if args.mode == "minimal":
+		_identity = (fetch_point_payload("directive_memories", ID_IDENTITY) or {}).get("content")
+		print("<BUNKER_CONTEXT>")
+		print('<bunker_directives mode="minimal">')
+		if _identity:
+			print(str(_identity).strip())
+		print("</bunker_directives>")
+		print("</BUNKER_CONTEXT>")
+		return
+
 	# ── LOW MODE: Minimal identity for autonomous sessions ──
 	if args.mode == "low":
 		print("<BUNKER_CONTEXT>")
@@ -540,9 +562,10 @@ def main():
 			"ANTI-HALLUCINATION",
 			"SOBERANÍA AGONISTA",
 		]
-		# PERSONA: minimal (role + pact only)
-		_skin_tail = f" | Skin: {active_skin_name}" if active_skin_name not in ("", "OFF") else ""
-		print(f"PERSONA: Role: Netrunner | Name: {_agent_name()}{_skin_tail}")
+		# PERSONA: sólo nombre y skin. `low` es un despertar autónomo: el rol
+		# real lo declara el perfil (bundle), no un residuo de skin cyberpunk.
+		_skin_tail = f"Skin: {active_skin_name}" if active_skin_name not in ("", "OFF") else "Skin: OFF (UNMASKED)"
+		print(f"PERSONA: Name: {_agent_name()} | {_skin_tail}")
 		print(f"PACT: {pact_status}")
 		_identity = (fetch_point_payload("directive_memories", ID_IDENTITY) or {}).get("content")
 		if _identity:

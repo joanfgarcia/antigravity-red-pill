@@ -17,6 +17,11 @@ Tres pasos, y ninguna mentira:
 
 Uso (dentro):
 	python /src/red-pill/scripts/dokime_boot.py [--workspace /srv/dokime/workspace] [--dry-run]
+	python /src/red-pill/scripts/dokime_boot.py --no-card   # sólo el engrama (re-siembra)
+
+`--no-card` existe porque el paso 1 es opcional: en el arnés Pi el texto estático
+vive en `AGENTS.override.md` (ancla `minimal`) y la identidad se inyecta por hook;
+escribir además la tarjeta en el workspace duplicaba el texto en cada turno.
 """
 
 from __future__ import annotations
@@ -71,6 +76,7 @@ def main() -> int:
 	ap = argparse.ArgumentParser(description="Despierta a Dokimé en el sandbox")
 	ap.add_argument("--workspace", default="/srv/dokime/workspace")
 	ap.add_argument("--dry-run", action="store_true")
+	ap.add_argument("--no-card", action="store_true", help="no escribas la tarjeta en el workspace; sólo fija el engrama")
 	ap.add_argument("--force", action="store_true", help="permite ejecutar fuera del sandbox (¡sobrescribe IDENTITY!)")
 	args = ap.parse_args()
 
@@ -95,13 +101,16 @@ def main() -> int:
 		return 3
 	card = card_path.read_text(encoding="utf-8").strip()
 
-	ws = Path(args.workspace)
-	agents = ws / "AGENTS.override.md"
-	print(f"[dokime] boot card → {agents} ({len(card)} chars)")
-	if not args.dry_run:
-		ws.mkdir(parents=True, exist_ok=True)
-		agents.write_text(card + "\n", encoding="utf-8")
-		print("[dokime] escrito")
+	if args.no_card:
+		print(f"[dokime] tarjeta: {len(card)} chars (no se escribe en el workspace)")
+	else:
+		ws = Path(args.workspace)
+		agents = ws / "AGENTS.override.md"
+		print(f"[dokime] boot card → {agents} ({len(card)} chars)")
+		if not args.dry_run:
+			ws.mkdir(parents=True, exist_ok=True)
+			agents.write_text(card + "\n", encoding="utf-8")
+			print("[dokime] escrito")
 
 	# ── identidad y pactos: necesitan su Qdrant sembrado ─────────────────────
 	try:
