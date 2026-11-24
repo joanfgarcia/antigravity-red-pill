@@ -152,9 +152,11 @@ def reset_fixture() -> None:
 
 
 def run_pi(arm: str, prompt: str) -> tuple[str, str | None, float]:
-	cmd = [
-		"podman",
-		"exec",
+	cmd = ["podman", "exec"]
+	if arm in ("dokime", "dokime-id", "dokime-anchor"):
+		# Sin relay: la propia batería no entra en memoria.
+		cmd += ["-e", "RED_PILL_ENABLED=0"]
+	cmd += [
 		"-w",
 		GUEST,
 		BOX,
@@ -173,6 +175,15 @@ def run_pi(arm: str, prompt: str) -> tuple[str, str | None, float]:
 	]
 	if arm == "pi-bare":
 		cmd += ["--no-extensions", "--no-mcp", "--no-skills", "--no-context-files"]
+	elif arm == "pi-skills":
+		# Skills sí, identidad/ancla no: aísla el peso de las skills.
+		cmd += ["--no-extensions", "--no-mcp", "--no-context-files"]
+	elif arm == "dokime-id":
+		# Identidad sí (extensión), skills/ancla no: aísla la tarjeta.
+		cmd += ["--no-skills", "--no-context-files", "--exclude-tools", "mcp__*"]
+	elif arm == "dokime-anchor":
+		# Identidad + ancla (AGENTS.override), skills no: aísla el ancla.
+		cmd += ["--no-skills", "--exclude-tools", "mcp__*"]
 	else:
 		cmd += ["--exclude-tools", "mcp__*"]
 	t0 = time.time()

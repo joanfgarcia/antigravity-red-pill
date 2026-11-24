@@ -163,12 +163,33 @@ memoria recordaba un `1` previo; tras borrar los engramas del bench (snapshot
 antes), salió 2/3 con `3`. No es calidad del arnés, es fuga. El filtro es por las
 marcas del fixture (`src/*.py`, `config/*`, `logs/app.log`, `bench-t`…).
 
-Resultado de la primera medición limpia y alineada (2026-11-24, Spark 4B, n=54):
-`pi-bare 53/54 (98,1 %)`, `minion 51/54 (94,4 %)`, `dokime 51/54 (94,4 %)`. La
-capa red-pill no cambió la calidad de tarea; el minion falló sobre todo por
-**condición de parada** (t14: encontró `workers: 3` y siguió llamando tools hasta
-el tope). Los fallos de Dokimé fueron de estrategia (`grep -c` cuenta líneas, no
-valores) y no de memoria.
+**Primera pasada** (18 tareas, n=3, 2026-11-24): `pi-bare 53/54 (98,1 %)`,
+`minion 51/54 (94,4 %)`, `dokime 51/54 (94,4 %)`. Con n=3 no se separa nada: la
+misma configuración da 11-14/15 según la receta.
+
+**Segunda pasada** (las 4 tareas que discriminan —2, 10, 14, 16—, n=10):
+`pi-bare 39/40 (97,5 %)`, `minion 36/40 (90 %)`, `dokime 29/40 (72,5 %)`.
+Dokimé falla t10 6/10 (`grep -c` cuenta líneas, no el valor `workers: 3`) y t16
+6/10 (cuenta 10/13 en vez de 12). No es memoria: la colección tenía 0 engramas
+de bench antes de la pasada.
+
+**Diagnóstico por piezas** (t10+t16, n=10): `dokime` completo 10/20 (50 %),
+`dokime-id` (identidad sola) 17/20 (85 %), `dokime-anchor` (identidad + ancla,
+sin skills) 18/20 (90 %), `pi-skills` (skills solas) 19/20 (95 %), `pi-bare`
+20/20 (100 %). El culpable es la **combinación ancla + skills**, no la identidad:
+en un 4B el contexto compite y la identidad sola no estorba, pero las skills
+metidas por defecto le empujan a atajos (`grep -c`).
+
+**Fix**: `skills_budget: 0` en `local-4b-64k` (el 0 se respeta; antes era falsy y
+caía a «todas»). El 4B arranca con identidad + ancla `minimal` y **cero skills
+anunciadas**; las skills quedan en la biblioteca y se añaden cuando la tarea las
+pide. Tras el fix, Dokimé 15/20 (75 %): t10 9/10, t16 6/10. t16 sigue siendo
+difícil (contar 12 funciones en 4 ficheros) y tiene varianza; el ancla sin skills
+dio 9/10 en la misma muestra.
+
+El minion, con el **finalize al tope** (en vez de perder el turno cuando ya tiene
+la respuesta en los resultados), sube a 52/54 (96,3 %); su fallo restante es t3
+(confunde `alpha.py` con `gamma.py`).
 
 ## Cómo se lee cada resultado
 
