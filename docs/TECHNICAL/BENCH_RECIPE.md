@@ -210,6 +210,12 @@ brazos. Muestreo: Spark/K2 `0.8/0.95/1024/42`; MiMo `0.7/0.95/4096/42` (con
 - MiMo con 0.8/1024 daba `42/30/33`: necesita 0.7 y 4096. Aun así, su Pi falla
   conteos (t7/t13/t15), no escribe en t17 y no supera al 4B en tool-use; el
   minion (que fuerza el bucle) es su mejor brazo.
+- **No hay MOPD/RL del 9B.** Xiaomi solo publica `Flash-MOPD` (309B, 177,7 GB)
+  y `Pro-MOPD` (1.02T, 573,5 GB), además de los RL de Flash/Pro; el checkpoint
+  RL del 9B que cita el technical report no está en el Hub. En 8 GB no se pueden
+  montar Flash/Pro (ni el Q2 GGUF de Flash, ~126 GB). Para el comportamiento
+  MOPD: API de MiMo, o entrenar el RL del 9B con verl + los 7k entornos
+  (multi-GPU). En local, el 9B SFT es lo que hay.
 - n=3 y muestreo distinto por modelo: es una tabla exploratoria, no un ranking
   definitivo. Para ranking: mismo protocolo (p. ej. 0.7/4096), n≥10 y la misma
   ventana.
