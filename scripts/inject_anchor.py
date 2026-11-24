@@ -39,6 +39,9 @@ from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 # Canonical order + roster: the SINGLE source every deployer imports. `inject_opencode`
 # used to hardcode a different subset (missing `identity_pact`, adding `frontmatter_docs`
 # only there), so each target drifted to a different rule set.
+# `minimal` NO entra en el roster: es un bloque opt-in para perfiles pequeños
+# (p. ej. Dokimé) que arrancan sólo con identidad. Añadirlo aquí lo sembraría en
+# todos los arneses y duplicaría la identidad que ya inyecta el hook.
 BLOCK_ANCHORS = (
 	"sovereign_handshake",
 	"agent_core",
