@@ -65,3 +65,41 @@ def test_jobrunner_no_usa_el_hook_generico(tmp_path):
 			continuity_id="soul-1",
 		)
 	pub.assert_not_called()
+
+
+def test_aviso_lleva_titular_y_no_el_cuerpo_entero(tmp_path):
+	"""Un dossier de 6 fragmentos no debe viajar entero al coro (2026-11-26)."""
+	inbox = _inbox(tmp_path)
+	content = (
+		"ORACLE CONTEXT (raw) — 6 fragmento(s)\n"
+		"query: q\n\n"
+		"## work_memories\n"
+		"- #1 · cos 0.423 · id=9852c213 · 2026-11-10\n  cuerpo largo del engrama"
+	)
+	with patch("red_pill.coro.notify.publish_notice", return_value=True) as pub:
+		inbox.drop_report(
+			event_id="evt-9",
+			source="OracleMinion",
+			status="success",
+			content=content,
+			continuity_id="soul-1",
+		)
+	body = pub.call_args.kwargs["body"]
+	assert "ORACLE CONTEXT (raw)" in body
+	assert "inbox evt-9" in body
+	assert "cos 0.423" not in body
+
+
+def test_aviso_recorta_un_titular_larguisimo(tmp_path):
+	inbox = _inbox(tmp_path)
+	with patch("red_pill.coro.notify.publish_notice", return_value=True) as pub:
+		inbox.drop_report(
+			event_id="evt-10",
+			source="OracleMinion",
+			status="success",
+			content="x" * 500,
+			continuity_id="soul-1",
+		)
+	body = pub.call_args.kwargs["body"]
+	assert "…" in body
+	assert "x" * 500 not in body

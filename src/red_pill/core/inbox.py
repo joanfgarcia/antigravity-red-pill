@@ -171,9 +171,16 @@ class MinionInbox:
 			try:
 				from red_pill.coro.notify import publish_notice
 
+				# El aviso DESPIERTA; el detalle vive en el inbox. Antes se publicaba
+				# `raw_content[:600]`: un dossier de 6 fragmentos llegaba al coro como
+				# un muro de texto (2026-11-26). Ahora va el titular + el event id.
+				headline = next((line.strip() for line in str(raw_content).splitlines() if line.strip()), "")
+				if len(headline) > 180:
+					headline = headline[:179].rstrip() + "…"
+				detail = f" · inbox {event_id}" if event_id else ""
 				publish_notice(
 					continuity_id=str(continuity_id),
-					body=f"[MinionInbox] {source} · {status}: {raw_content[:600]}",
+					body=f"[MinionInbox] {source} · {status}: {headline}{detail}",
 					originator=originator or f"minion:{source}",
 				)
 			except Exception as e:
