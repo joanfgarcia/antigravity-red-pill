@@ -125,7 +125,9 @@ batería más dura (o `bench_memory`, que mide la capa de memoria, no la prosa).
 
 `scripts/bench_hard.py` — 12 tareas en 5 familias, gradación por **estado del
 fixture** (no por la prosa), `n=3`, brazo nulo en cada pasada. Config: `n_ctx`
-32.768, KV `q8_0`, `--reasoning on --reasoning-budget 2048`.
+32.768, KV `q8_0`, `--reasoning on --reasoning-budget 2048`, `max_tokens 2048` ⚠.
+⚠ = el `max_tokens` igualaba el presupuesto de razonamiento y no dejaba margen para
+la respuesta; ver «Corrección del artefacto de d2».
 
 | modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -141,26 +143,65 @@ Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina (don
 | cadena | 8/9 | **9/9** | **9/9** |
 | restricciones | 6/9 | **8/9** | 3/9 |
 | memoria | **8/9** | 7/9 | 6/9 |
-| ventana | **6/6** | 3/6 | 4/6 |
+| ventana | **6/6** | 3/6 ⚠ | 4/6 |
 | recuperación | **3/3** | 2/3 | **3/3** |
 
 - **Gana donde el 4B no llega**: restricciones contadas. `b1` 3/3 con 61–63
   palabras y cierre exacto (Spark escribe 19–45); `b3` 3/3 en «exactamente dos
   frases» (Spark envuelve en JSON o numera la lista). El coding no separa a nadie
   (cadena 9/9 en los dos).
-- **Pierde en ventana**: `d2` (agregar etiquetas en ~19k) **0/3, las tres a 900 s**.
+- **Pierde en ventana** (medido, ver corrección abajo): `d2` (agregar etiquetas
+  en ~19k) **0/3**, las tres cortadas a 900 s por el banco. **No es del modelo**:
+  `max_tokens` (2048) igual al `--reasoning-budget` (2048) deja cero margen para la
+  respuesta. Con 6144 → **3/3**, `TAG-A1`, en 112–147 s (2026-11-26).
 - **Ocho timeouts**, casi todos con prompts de 24–100 tokens: `b1`, `c1`, `c3`,
-  `e1`. No es lentitud de prefill, es cuelgue. Un `e1` consta como pase porque el
-  estado ya era correcto antes del cuelgue.
-- **Se degrada con el uso**: p50 por repetición 46 s → 48 s → **256 s** (5/12
-  por encima de 290 s en la tercera), compatible con throttling térmico del
-  portátil tras ~40 min de carga continua. El orden de las pasadas (Spark → 9B →
-  27B) también le deja la GPU más caliente.
+  `e1`. No es lentitud de prefill, es el mismo tope: el razonamiento de estas
+  tareas mide 1,9k–4,1k tokens y el corte estaba en 2048 (`b1` responde con 1957
+  y 91 de margen: por eso pasa a veces y a veces no).
+- **NO se degrada con el uso** (corregido 2026-11-26): tres pasadas idénticas dan
+  29,1 · 29,0 · 28,9 tok/s con la GPU a 45–48 °C. El p50 46→48→**256 s** del banco
+  no era el silicio, era el contenedor y el tope de tokens.
 
 **Contra la regla pactada** (desplazar a Spark exige ganar ≥2 bloques con margen,
 no regresar el contrato y aceptar por escrito la latencia): gana **sólo
 restricciones** con margen, empata cadena, pierde ventana y recuperación, y su
 latencia es ×3 (no ×2) con el doble de timeouts. **No desplaza a Spark.**
+
+> **Revisión pendiente (2026-11-26)**: el bloque `ventana` —uno de los dos que
+> perdía— estaba penalizado por un artefacto del banco (§ siguiente). Con el tope
+> corregido, `d2` pasa 3/3 y el bloque quedaría 6/6 frente a 4/6 de Spark, es
+> decir, dos bloques con margen. El veredicto **no se cambia aquí**: hace falta
+> re-correr el brazo del 27B con el tope sano antes de re-tomarlo. Lo que sí queda
+> claro es que el motivo para no desplazar a Spark ya no puede ser «pierde
+> ventana»; si acaso, la latencia (p50 ×3) y el contrato.
+
+## Corrección del artefacto de `d2` (2026-11-26)
+
+Síntoma publicado: `d2` 0/3, las tres pasadas a 900 s, y «se degrada con el uso».
+Medido in-process con el servidor del equipo (mismo GGUF, mismo build `b12178`):
+
+| sonda | ajustes | tokens | tok/s | pared | resultado |
+| :--- | :--- | ---: | ---: | ---: | :--- |
+| 3× idénticas | ctx 24576 · T1.0 · cap 512 | 512 | 29,1 · 29,0 · 28,9 | 49/18/18 s | `length`, sin respuesta |
+| `d2` con el cap del banco | ctx 24576 · T0.7 · cap 2048 | 2048 | 28,7 | **103 s** | `length`, sin respuesta |
+| `d2` con margen | ctx 32768 · T1.0 · cap 6144 | 4102 | 18,0 | 262 s | **`TAG-A1`** |
+| `d2` con args del banco, margen | `--reasoning-budget 2048` · cap 6144 · seed 42 | 2054 | 18,2 | 113–147 s | **3/3 `TAG-A1`** |
+
+Causa raíz: **`max_tokens` (2048) = `--reasoning-budget` (2048)**. El modelo
+razona 2048 tokens (6.172 chars), el presupuesto lo cierra justo ahí y ya no queda
+ni un token para la respuesta: `finish_reason: length` y `content` vacío. No hay
+cuelgue ni throttling: el corte llega en 103 s, no en 900.
+
+Datos de contexto que conviene tener:
+- `d2` son **16.825 tokens de prompt** (24k chars ≈ 0,70 tok/char). Con el perfil
+  base (n_ctx 24576, max_tokens 8192) no caben las dos cosas: 16.825 + 8192 =
+  25.017 > 24.576. Para esta clase de tarea, o ctx 32768 o cap ≤ 7.751.
+- Subir el contexto cuesta decodificación: **29–31 tok/s a 24.576** frente a
+  **18,2 tok/s a 32.768** (−40 %), con la misma GPU y el mismo KV `q8_0`.
+- `b1` responde en 1957 de 2048 tokens: el modo «a veces pasa, a veces no» de la
+  tabla es exactamente eso, un margen de 91 tokens.
+- Regla para el banco: con modelos que piensan, `max_tokens` tiene que ser
+  **presupuesto de razonamiento + margen de respuesta**, nunca igual.
 
 ## Peculiaridades de configuración
 - `min_p` debe pasarse explícito (`--min-p 0`): llama.cpp aplica 0.05.
