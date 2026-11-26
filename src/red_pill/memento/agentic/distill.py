@@ -174,6 +174,10 @@ def _distill_unit(
 		else:
 			prompt = prompts.render("distill_user_opening", content=frag_text)
 		raw = transport(prompts.system("distill_user_opening") or "", prompt, runtime.distill_max_tokens())
+		# El motor que MANDA es el de la respuesta: `/v1/models` puede devolver
+		# todavía el modelo anterior (bug 2026-11-26: 2.5 destilando y la nota
+		# sellada como granite). Ver `runtime.served_engine`.
+		engine = runtime.served_engine() or engine
 		if runtime.is_degraded(raw):
 			degraded = True
 		parsed = runtime._extract_json(raw) or {}
@@ -239,7 +243,9 @@ def _refresh_unit(
 
 	nnn, ref = unit.nnn, unit.ref
 	unit_key = unit.key
-	engine = runtime.engine_id()
+	# Un reuso no llama al modelo: el motor que generó las notas es el del
+	# manifest, no lo que el daemon tenga cargado ahora.
+	engine = entry.get("engine") or runtime.engine_id()
 	prompt_version = runtime.distill_prompt_version()
 	sections: List[Dict[str, Any]] = []
 	filenames: List[str] = []
@@ -368,7 +374,7 @@ def _distill_reusing(
 			new_units[unit_key] = {
 				"content_hash": content_hash,
 				"prompt_version": prompt_version,
-				"engine": engine,
+				"engine": new_units[unit_key].get("engine") or engine,
 				"fragment_max_chars": max_chars,
 				"fragment_overlap": overlap,
 				"degraded": False,
@@ -377,6 +383,7 @@ def _distill_reusing(
 		else:
 			unit_sections, filenames, degraded = _distill_unit(distill_dir, unit, session_id, source, transport, max_chars, overlap, reuse_mode=True)
 			sections.extend(unit_sections)
+			engine = runtime.served_engine() or engine
 			new_units[unit_key] = {
 				"content_hash": content_hash,
 				"prompt_version": prompt_version,
@@ -458,7 +465,7 @@ def distill_session(
 		dir_rel,
 		"distill",
 		{
-			"engine": runtime.engine_id(),
+			"engine": runtime.served_engine(),
 			"prompt_version": runtime.distill_prompt_version(),
 			"sections": len(sections),
 			"distilled_at": datetime.now(timezone.utc).isoformat(),

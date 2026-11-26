@@ -654,6 +654,35 @@ def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	assert "distill_prompt_version" in ag and "refine_prompt_version" in ag
 
 
+def test_distill_sella_el_motor_de_la_respuesta_no_el_cacheado(tmp_path, monkeypatch):
+	"""2026-11-26: primer día del carril 2.5. El proceso arranca mientras el daemon
+	aún sirve granite, así que `/v1/models` (cacheado por `engine_id`) mentía y la
+	nota se sellaba como `granite_4_2_8b`. El sello debe salir de la RESPUESTA."""
+	import red_pill.config as cfg
+	from red_pill.memento import agentic
+	from red_pill.memento.agentic import distill_session
+
+	monkeypatch.setattr(cfg, "MEMENTO_DISTILL_REUSE_ENABLED", True)
+	monkeypatch.setattr(agentic.runtime, "engine_id", lambda *a, **k: "granite_4_2_8b")
+	monkeypatch.setattr(agentic.runtime, "distill_prompt_version", lambda: "d123")
+	monkeypatch.setattr(agentic.runtime, "_LAST_SERVED", None)
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	inner = fake_transport()
+
+	def transport(system, user, max_tokens):
+		out = inner(system, user, max_tokens)
+		agentic.runtime._note_served_model("bonsai_25_27b_distill")
+		return out
+
+	distill_session(root, rendered.dir_rel, "opencode:s1", "opencode", transport)
+	text = next((root / rendered.dir_rel / "distill").glob("*.md")).read_text(encoding="utf-8")
+	assert "engine: bonsai_25_27b_distill" in text
+	assert "engine: granite_4_2_8b" not in text
+	meta = json.loads((root / rendered.dir_rel / "distill" / "_meta.json").read_text(encoding="utf-8"))
+	assert all(u["engine"] == "bonsai_25_27b_distill" for u in meta["units"].values())
+
+
 def test_refine_session_multi_idea(tmp_path):
 	"""3 destills que forman 2 ideas → 2 refine (no 3, no 1)."""
 	from red_pill.memento.agentic import REFINE_SOCIAL_SYSTEM, REFINE_WORK_SYSTEM, refine_session
