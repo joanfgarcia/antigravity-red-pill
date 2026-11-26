@@ -186,6 +186,7 @@ Medido in-process con el servidor del equipo (mismo GGUF, mismo build `b12178`):
 | `d2` con el cap del banco | ctx 24576 · T0.7 · cap 2048 | 2048 | 28,7 | **103 s** | `length`, sin respuesta |
 | `d2` con margen | ctx 32768 · T1.0 · cap 6144 | 4102 | 18,0 | 262 s | **`TAG-A1`** |
 | `d2` con args del banco, margen | `--reasoning-budget 2048` · cap 6144 · seed 42 | 2054 | 18,2 | 113–147 s | **3/3 `TAG-A1`** |
+| `d2` por el arnés `minion` (tools) | cap 6144 | — | — | 254 s | 500: tool-call cortado |
 
 Causa raíz: **`max_tokens` (2048) = `--reasoning-budget` (2048)**. El modelo
 razona 2048 tokens (6.172 chars), el presupuesto lo cierra justo ahí y ya no queda
@@ -210,3 +211,23 @@ Datos de contexto que conviene tener:
   (`conduct._SAMPLER_KEYS`) → va como default de servidor.
 - Razonamiento por defecto `xhigh`: sin `max_tokens` generoso, corta a mitad.
 - MTP disponible con el build `b12178` (`--spec-type draft-mtp`, 3 borradores).
+
+### Segundo motivo: el arnés de `d2` (medido 2026-11-26)
+
+Aun con el tope corregido, `d2` **no es medible por el brazo `minion`**. El
+modelo no cuenta en contexto: intenta resolverlo con `run_bash` y un heredoc que
+mete el texto entero en el comando. Con 77.143 caracteres de prompt, el tool-call
+se corta a media cadena y el servidor responde 500:
+
+```
+Failed to parse tool call arguments as JSON: parse error at line 1, column 19321:
+invalid string: missing closing quote; last read: '"grep -o \"TAG-[A-Z0-9]*\" /dev/stdin <<'EOF' | sort | uniq -c'
+```
+
+No es un fallo del servidor ni del parser: es una tarea de conteo en contexto
+ejecutada con un arnés que sólo ofrece `run_bash` (y el texto no está en disco,
+sólo en el prompt). Sin tools, el mismo prompt contesta `TAG-A1` en 4.102 tokens
+(tabla de arriba). Consecuencia para leer la tabla: el bloque `ventana` del brazo
+`minion` mide `d1` (que sí pasa 3/3) y **no** mide `d2` — su hueco es del arnés.
+Para medir el 27B en ventana hay que darle la tarea directa (sin tools), o un
+fixture con el texto en disco.
