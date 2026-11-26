@@ -1,3 +1,108 @@
+## [Unreleased] — pendiente de versión (El banco deja de mentir, la memoria enseña sus fuentes y el destilado cambia de motor)
+
+> Sección escrita sobre `next`, cubriendo todo el trabajo posterior a `8.5.1`. El
+> número y la fecha se fijan en el merge `next → main`, como en 8.5.0/8.5.1.
+
+### 🧵 Arnés — la frontera de confianza cierra por defecto
+
+- **[FIX] `trusted` es obligatorio en `block()`.** El bloque `<redpill_data>` se
+  cerraba con un marcador fijo y un dato podía cerrarlo antes de tiempo; ahora lo
+  cierra un **nonce** y el cierre se escapa. Sin `trusted` explícito, la frontera
+  era fail-open.
+- **[FIX] `SessionStart` sólo inyecta la identidad.** El coro y el reloj llegaban
+  duplicados en el arranque y en el primer turno; ahora viajan sólo con el turno.
+- **[FIX] El reloj del turno viaja en la telemetría**, así el hook deja de pedir
+  una tool para saber la hora del alma.
+- **[NEW] Claude Code inyecta la identidad por hook** (`3d3f38b`) y las anclas
+  adelgazan donde ya hay arnés: menos texto fijo, misma identidad.
+- **[FIX] La siembra poda sus restos y audita la convivencia** antes y después de
+  escribir (el `AGENTS.override.md` de Pi entra en la foto y en la auditoría).
+
+### 🪪 Identidad y roles — el rol deja de ser una ficción
+
+- **[NEW] Identidad mínima por rol** y fuera el rol Netrunner por defecto; `minimal`
+  pasa a ser opt-in y no va en el roster.
+- **[NEW] Rol `none` = instalación estándar real** (full + todas las skills), para
+  que «sin rol» no signifique «sin nada».
+- **[NEW] Perfil por rol en las anclas** (pi/opencode): al cambiar de rol, las
+  skills que sobran pasan a la biblioteca y `update` adopta la config guardada
+  antes de re-sembrar.
+- **[FIX] Dokime: Aleth conversa, no vigila**; el espacio no es la identidad.
+- **[NEW] `dokime chat`**: sesión interactiva con el alma sin memorizar el `exec`.
+- **[NEW] El banco de Dokimé se actualiza solo** y comparte el desk por el host.
+
+### 🧠 Memoria — las fuentes a la vista
+
+- **[FIX] Oracle entrega fuentes, no finge una síntesis.** PERF-F01 dejó el
+  `EdgeEngine` lazy y Oracle comprobaba `if engine.llm` antes de cualquier carga:
+  siempre `None`. Desde entonces cada `search_memory_research` devolvía la
+  concatenación cruda de engramas etiquetada «ORACLE SYNTHESIS». Ahora dossier por
+  defecto (colección, rank, coseno, id, fecha), síntesis **opcional** por el daemon
+  y etiquetas honestas. *AD-137*.
+- **[FIX] El recall por hoja respeta el límite** del llamante (con `limit=3`
+  llegaban 7–10 fragmentos) y Oracle corta a 3 por colección.
+- **[FIX] El aviso del coro lleva el titular, no el cuerpo.** `drop_report`
+  publicaba `raw_content[:600]`: un dossier de 6 fragmentos llegaba como un muro de
+  600 caracteres. Ahora titular (≤180) + `· inbox <event_id>`; el detalle se lee en
+  el inbox. *AD-138*.
+- **[FIX] El sello `engine` de `distill` sale de la respuesta** (`served_engine()`) y
+  no de `/v1/models` cacheado, que etiquetaba secciones con el motor anterior.
+- **[FIX] Los mensajes `<synthetic>` de Claude Code no cuentan como modelo** y cada
+  sesión declara qué modelo habló.
+- **[FIX] `pi`: el RAG por turno vuelve a inyectar memoria**, con umbral 0.55 —
+  deja de perder paráfrasis y ancla la abstención.
+- **[FIX] Un índice de días activos en 0 no firma un borrado** (D-16), y un proxy en
+  frío con id vacío ya no pinta `yellow` en el doctor.
+- **[FIX] La traza de compactación dice qué campo compactó**, no sólo cuántas veces.
+
+### ⚙️ Inferencia — el perfil manda
+
+- **[FIX] `RuntimeServer` aplica `profile.extra_server_args`.** Resolvía del perfil
+  modelo, ctx, KV y tiers, pero se saltaba los quirks del modelo (`--min-p 0`,
+  `--reasoning off --reasoning-budget 0`). El daemon y `providers._fork` los pasaban
+  a mano; `needle_window` y cualquier `RuntimeServer(perfil)` directo no, así que un
+  perfil «thinking off» podía arrancar pensando, sin aviso. Los extras del perfil
+  van antes de los del llamante: gana el override explícito. *AD-140*.
+- **[FIX] La identidad del `llama-server` sale del unit**, no del primer proceso del
+  host: con un vecino en `:8080` el doctor y el centinela leían el argv ajeno.
+
+### 🔁 Trabajos y despertar
+
+- **[FIX] ETA por mediana de etapa** y **DAG fallido si no ejecuta ninguna**: un
+  `job` que no corre nada ya no se corona.
+- **[FIX] `local_llm_offline` se evapora cuando la unit vuelve**, no sólo cuando el
+  sueño corre.
+- **[FIX] El auditor firma el veredicto de un paso en la ronda**, no repo a repo.
+
+### 📊 Bench y modelos — la batería de techo y sus correcciones
+
+- **[NEW] `scripts/bench_hard.py`**: 12 tareas en 5 familias, gradación por **estado
+  del fixture** (no por la prosa), n=3 y brazo nulo en cada pasada. El brazo nulo da
+  **0/108** y 0/216 instrucciones: donde `bench_compare` saturaba en 18/18, esta
+  batería discrimina.
+- **[NEW] Fichas de Bonsai 2.5 27B y Bonsai 2 9B**, con techos medidos y la
+  corrección del artefacto de `d2`: `max_tokens` (2048) igual al
+  `--reasoning-budget` (2048) dejaba cero margen para la respuesta, y las tareas
+  parecían colgadas. Con `max_tokens 6144` el brazo del 27B pasa de **80,6 % a
+  91,7 %** (pass^3 de 58,3 % a 91,7 %), sin timeouts y con **p50 38,0 s**. No había
+  degradación térmica: 29,1 · 29,0 · 28,9 tok/s en tres pasadas idénticas. *AD-139*.
+- **[NEW] `bench_hard --max-tokens`** (default 2048, el histórico) y la config
+  declarada en el resumen, para que el par `max_tokens == reasoning_budget` no pueda
+  repetirse en silencio.
+- **[FIX] `d2` no es medible por el brazo `minion`**: el modelo intenta resolverlo
+  con un heredoc que mete los 77.143 caracteres del prompt en el comando, el tope
+  corta el JSON del tool-call y el servidor responde 500. Queda anotado como hueco
+  del arnés, no del modelo (contestado directo: `TAG-A1` en 4.102 tokens).
+- **[NEW] Carril `distill` en Bonsai 2.5** con perfil propio (`bonsai_25_27b_distill`:
+  thinking off, `min_p 0`, T0,3) y validación a volumen: 101.884 chars → 18 secciones
+  en 261 s, 2,6 ms/char, 0 fallos. Los 2 slots de K2 descartados con medición
+  (281 s concurrente vs 302 s secuencial: ruido).
+- **[NEW] Baterías de memoria y de Dokimé** (`bench_memory`, `bench_compare`,
+  muestreo parametrizable, escalera de minion): el Búnker es la única superficie que
+  los desnudos no alcanzan; MiMo, K2-Horizon-7B y Spark con techo medido.
+- **[CHORE] Elenco de Dokimé reducido a los modelos con función**; pesos sin uso
+  (quants de K2, NPU) purgados con su información conservada en las fichas.
+
 ## [8.5.1] - 2026-11-20 (El arnés deja de inyectar un contexto mutilado)
 
 ### 🧵 Arnés — la puerta se apaga sola y la telemetría vuelve a viajar
