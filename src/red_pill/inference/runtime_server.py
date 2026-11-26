@@ -194,7 +194,13 @@ class RuntimeServer:
 		reasoning_budget = (resolved.get("profile") or {}).get("reasoning_budget")
 		if reasoning_budget:
 			cmd += ["--reasoning-budget", str(int(reasoning_budget))]
-		cmd += self.extra_args
+		# El perfil es la fuente de verdad de las peculiaridades del modelo
+		# (`--min-p 0`, thinking off…): sin esto, un perfil con `--reasoning off`
+		# arrancaba con el thinking encendido si el llamante no repetía los flags
+		# (2026-11-26). Van ANTES de `self.extra_args`: llama.cpp se queda con la
+		# última aparición, así que un override explícito del llamante gana.
+		profile_extras = [str(a) for a in ((resolved.get("profile") or {}).get("extra_server_args") or [])]
+		cmd += profile_extras + self.extra_args
 		return cmd
 
 	def start(self) -> "RuntimeServer":

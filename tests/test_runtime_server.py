@@ -131,6 +131,28 @@ class TestBuildCommand:
 		cmd = srv._build_command(resolved)
 		assert cmd[-2:] == ["--reasoning-budget", "2048"]
 
+	def test_los_extra_server_args_del_perfil_se_aplican(self, mod):
+		"""Un perfil con thinking off no puede arrancar el servidor pensando."""
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		resolved = {
+			"profile": {"extra_server_args": ["--reasoning", "off", "--reasoning-budget", "0", "--min-p", "0"]},
+			"runtime": {}, "server_binary": "/b", "model_path": "/m.gguf",
+		}
+		cmd = srv._build_command(resolved)
+		assert cmd[-6:] == ["--reasoning", "off", "--reasoning-budget", "0", "--min-p", "0"]
+
+	def test_el_override_del_llamante_gana_por_orden(self, mod):
+		"""`extra_args` del llamante va después: llama.cpp se queda con el último."""
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, extra_args=["--reasoning-budget", "2048"])
+		resolved = {
+			"profile": {"extra_server_args": ["--reasoning-budget", "4096"]},
+			"runtime": {}, "server_binary": "/b", "model_path": "/m.gguf",
+		}
+		cmd = srv._build_command(resolved)
+		assert cmd.count("--reasoning-budget") == 2
+		assert cmd[-2:] == ["--reasoning-budget", "2048"]
+		assert cmd.index("--reasoning-budget") < len(cmd) - 2
+
 	def test_profile_reasoning_budget_flag(self, mod):
 		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
 		resolved = {"profile": {"reasoning_budget": 4096}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}
