@@ -14,12 +14,16 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import time
 from pathlib import Path
 
-IMAGE = "ghcr.io/ggml-org/llama.cpp:server-cuda"
+# La imagen manda sobre qué GGUFs puede abrir: Bonsai ternario (PTQ1_0/PQ2_0)
+# exige el fork PrismML, y `K2` su propio runtime. Mismo contrato que
+# `scripts/dokime.py`: `DOKIME_LLAMA_IMAGE` (por defecto, llama.cpp stock CUDA).
+IMAGE = os.getenv("DOKIME_LLAMA_IMAGE", "ghcr.io/ggml-org/llama.cpp:server-cuda")
 NAME = "dokime-kvprobe"
 KV_RE = re.compile(r"KV buffer size\s*=\s*([0-9.]+)\s*MiB", re.I)
 # llama.cpp escribe `model buffer size` en `load_tensors`; el patrón viejo
@@ -119,13 +123,26 @@ def boot(model: Path, alias: str, ctx: int, kv: str, timeout: int = 180) -> tupl
 
 def main() -> int:
 	ap = argparse.ArgumentParser()
-	ap.add_argument("--model", required=True)
+	ap.add_argument("--model", help="ruta al GGUF (o usa --profile)")
+	ap.add_argument("--profile", help="perfil de model_profiles.yaml — evita rutas de usuario en las recetas")
 	ap.add_argument("--alias", default="probe")
 	ap.add_argument("--kv", default="q8_0,q4_0")
 	ap.add_argument("--probe-ctx", type=int, default=16384)
 	ap.add_argument("--budget-mb", type=int, default=7500)
 	args = ap.parse_args()
 
+	if args.profile:
+		import sys
+
+		sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+		from red_pill.core.model_registry import ModelRegistry
+
+		profile = ModelRegistry.get_profile(args.profile) or {}
+		if not profile.get("model_path"):
+			raise SystemExit(f"perfil '{args.profile}' sin model_path en model_profiles.yaml")
+		args.model = str(profile["model_path"])
+	if not args.model:
+		raise SystemExit("falta --model o --profile")
 	model = Path(args.model).expanduser()
 	print(f"modelo: {model.name} ({model.stat().st_size / 1024**3:.2f} GB)")
 	print(f"presupuesto VRAM: {args.budget_mb} MiB · sonda {args.probe_ctx} tokens\n")

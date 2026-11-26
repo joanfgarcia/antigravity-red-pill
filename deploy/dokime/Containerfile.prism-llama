@@ -1,0 +1,29 @@
+# Imagen del servidor de modelos para el sandbox de Dokimé (fork PrismML).
+#
+# POR QUÉ EXISTE: el sandbox vive en `dokime-net` (red `--internal`, sin ruta al
+# host: probados 10.89.1.1, 10.89.2.1, host.containers.internal y 10.0.2.2, todos
+# inalcanzables con podman rootless). El servidor tiene que ser un contenedor
+# hermano. Y el llama.cpp estándar no abre los GGUF ternarios (`PTQ1_0`/`PQ2_0`):
+# hace falta el fork de PrismML.
+#
+# POR QUÉ NO SOBRE `ghcr.io/ggml-org/llama.cpp:server-cuda`: esa imagen trae su
+# propio `libggml-base.so.1` en `/app`, que choca con el `.so.0` del fork, y su
+# CUDA es 12.8 (los binarios del fork enlazan `libcudart.so.13`).
+#
+# POR QUÉ NO CON EL BUILD DEL HOST (`~/opt/llama.cpp-prism`): se compiló con
+# glibc 2.43 y no arranca en esta base (`GLIBC_2.43 not found`).
+#
+# Uso (los binarios son el prebuilt oficial, no se compila nada):
+#   mkdir -p /tmp/prism && tar xzf llama-prism-<tag>-bin-linux-cuda-13.3-x64.tar.gz -C /tmp/prism
+#   podman build -t localhost/prism-llama:<tag> -f deploy/dokime/Containerfile.prism-llama /tmp/prism
+#   DOKIME_LLAMA_IMAGE=localhost/prism-llama:<tag> scripts/dokime.py up --recreate
+#
+# Medido 2026-11-25: `prism-b12178-03ec600` (CUDA 13.3) → `--list-devices` ve la
+# RTX 5070 Laptop desde dentro del contenedor.
+FROM docker.io/nvidia/cuda:13.0.0-runtime-ubuntu24.04
+COPY . /prism
+# libgomp: los binarios del fork traen OpenMP y la base runtime no lo incluye.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+ENV LD_LIBRARY_PATH=/prism
+ENTRYPOINT ["/prism/llama-server"]

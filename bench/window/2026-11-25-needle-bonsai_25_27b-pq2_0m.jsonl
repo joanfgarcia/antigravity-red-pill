@@ -1,0 +1,1 @@
+{"profile": "bonsai_25_27b", "kv": "pq2_0m", "ctx": 112048, "target_tokens": 120000, "chars": 480118, "prompt_tokens": 103253, "ok": true, "expected": "915117", "got": "915117", "latency_s": 378.5}

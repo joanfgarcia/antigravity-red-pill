@@ -1,0 +1,210 @@
+# Familia Bonsai (Prism ML) — techo de contexto real + BENCHSET vs el elenco.
+#
+# Candidatos:
+#   bonsai_25_27b (2.5, 5,93 GB) — el agéntico; base Qwen3.8-27B.
+#   bonsai_2_9b   (2,0 GB)       — base Qwen3.5-9B; 4,5× menos pesos → el KV manda
+#                                  mucho menos: candidato a lector largo y a
+#                                  destilador en volumen.
+# Línea base: k2_horizon_7b y spark_x2_6_4b (los otros dos del elenco con deixis
+# y ventana medidas), re-medidos AQUÍ para que la comparación no dependa de
+# números de sesiones anteriores.
+#
+# Doc de sampling (no es la misma para todos):
+#   27B 2.5 → thinking 1.0/0.95/20/min_p 0/presence 0 · instruct 0.7/0.80/20/0/1.5
+#   9B      → thinking 1.0/0.95/20/min_p 0/presence 1.0 · instruct 0.7/0.80/20/0/1.5
+# `presence_penalty` no viaja por request (`conduct._SAMPLER_KEYS`): va como
+# DEFAULT de servidor en `extra_server_args` de cada perfil.
+#
+# Etapas: una etapa = un modelo (o un tipo de KV). Secuenciales para no pelearse
+# por la VRAM. `on_fail: warn`: un modelo que falle no tumba la batería, pero la
+# cadena de `depends_on` conserva el orden.
+#
+# Uso: red-pill job submit --recipe bonsai_eval
+# Salida: .cell/reports/<job>/<etapa>.json + $RP_TMP_DIR/red-pill/bonsai-eval/*.md
+source: dag_job
+priority: 3
+title: "Bonsai 27B 2.5 + 9B — techo de contexto y BENCHSET vs K2 y Spark"
+mission_id: bonsai-eval
+min_vram_mb: 6500
+control:
+  max_step_minutes: 90
+manifest:
+  workdir: .
+  stages:
+    - id: ctx-25-q8
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_25_27b
+            --alias bonsai25 --kv q8_0 --probe-ctx 16384 --budget-mb 7500
+
+    - id: ctx-25-q4
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-25-q8]
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_25_27b
+            --alias bonsai25 --kv q4_0 --probe-ctx 16384 --budget-mb 7500
+
+    # KV de 2 bits del release b12178 (`pq2_0m`): 22-44% menos que q4_0 según el
+    # changelog. Es la palanca real de ventana en 8 GB y sólo existe en ese build.
+    - id: ctx-25-pq2om
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-25-q4]
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_25_27b
+            --alias bonsai25 --kv pq2_0m --probe-ctx 16384 --budget-mb 7500
+
+    - id: bench-25
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-25-pq2om]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models bonsai_25_27b --matrix --thinking both
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"
+
+    # Carril de destilado del 27B: receta INSTRUCT (temp 0.7 / top_p 0.80 /
+    # min_p 0 / presence 1.5). Es la comparación que decide la noche.
+    - id: bench-25-instruct
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [bench-25]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models bonsai_25_27b_instruct --thinking off
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"
+
+    - id: ctx-9b-q8
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [bench-25-instruct]
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_2_9b
+            --alias bonsai9b --kv q8_0 --probe-ctx 16384 --budget-mb 7500
+
+    - id: ctx-9b-q4
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-9b-q8]
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_2_9b
+            --alias bonsai9b --kv q4_0 --probe-ctx 16384 --budget-mb 7500
+
+    - id: ctx-9b-pq2om
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-9b-q4]
+      command:
+          - sh
+          - -c
+          - >-
+            DOKIME_LLAMA_IMAGE=localhost/prism-llama:b12178-cu13
+            PYTHONPATH=src .venv/bin/python scripts/kv_ceiling.py
+            --profile bonsai_2_9b
+            --alias bonsai9b --kv pq2_0m --probe-ctx 16384 --budget-mb 7500
+
+    - id: bench-9b
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [ctx-9b-pq2om]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models bonsai_2_9b --matrix --thinking both
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"
+
+    - id: bench-9b-instruct
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [bench-9b]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models bonsai_2_9b_instruct --thinking off
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"
+
+    # Elenco de referencia, mismo benchset y misma sesión.
+    - id: bench-k2
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [bench-9b-instruct]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models k2_horizon_7b --matrix --thinking both
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"
+
+    - id: bench-spark
+      type: command
+      minion: command_runner
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [bench-k2]
+      command:
+          - sh
+          - -c
+          - >-
+            PYTHONPATH=src .venv/bin/python scripts/bench_local.py
+            --models spark_x2_6_4b --matrix --thinking both
+            --out "$RP_TMP_DIR/red-pill/bonsai-eval"

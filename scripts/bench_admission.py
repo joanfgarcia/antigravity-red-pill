@@ -28,6 +28,7 @@ MODELS = [
 	("mimo", M / "MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf"),
 	("granite42_8b", M / "granite-4.2-8b-Q4_K_M.gguf"),
 	("bonsai_27b", M / "Ternary-Bonsai-2-27B-PTQ1_0.gguf"),
+	("bonsai25_27b", M / "Ternary-Bonsai-2.5-27B-PTQ1_0.gguf"),
 ]
 
 # Bonsai (27B ternario, 5,6 GB de pesos) no deja sitio para 16k en 8 GB: se baja la
@@ -124,7 +125,9 @@ def serve(model_path: Path) -> bool:
 		f"{model_path}:/models/model.gguf:ro",
 		"--device",
 		"nvidia.com/gpu=all",
-		"ghcr.io/ggml-org/llama.cpp:server-cuda",
+		# Misma indirección que `dokime.py`: el ternario de Bonsai (PTQ1_0/PQ2_0)
+		# sólo lo abre el fork PrismML, así que la imagen también es configurable.
+		os.getenv("DOKIME_LLAMA_IMAGE", "ghcr.io/ggml-org/llama.cpp:server-cuda"),
 		"-m",
 		"/models/model.gguf",
 		"--alias",
