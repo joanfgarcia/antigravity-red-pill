@@ -55,6 +55,23 @@ el límite del arranque en este puesto.
 esa columna está mal, o la medida es de otro binario. Se conserva aquí el `q8_0`
 verificado y **no se publica un techo `q4_0`** hasta re-medirlo.
 
+## Slots (`-np`): 2 no aceleran (medido 2026-11-26)
+
+El servidor va con `-np 1` fijo (`runtime_server.py`). Probado a mano, mismo
+binario y modelo, con `-c` total repartido entre slots:
+
+| | pared (2 sesiones) | por sesión | VRAM pico |
+|---|---:|---:|---:|
+| `-np 1 -c 10240` secuencial | **302 s** (126+176) | 126 / 176 s | 6.575 MiB |
+| `-np 2 -c 20480` concurrente | **281 s** | 281 / 258 s | 7.367 MiB |
+
+**7% de diferencia (ruido)**: la GPU ya estaba saturada (≈33 tok/s) y cada
+petición se ralentiza ~2×. Calidad sin cambios: 30/27 notas frente a 27/29,
+significancia p50 0,80 en ambos, cero vacías y cero truncadas. **Se mantiene
+`-np 1`**. Un slot no es un segundo modelo ni duplica pesos: reparte el contexto
+(`-c` es total, no por slot) y comparte el cómputo. Solo ayudaría si las
+peticiones fueran de E/S o si sobrara capacidad de batch.
+
 ## Benchset — 15/15
 
 Mismo BENCHSET que el resto del elenco (n=3 por probe):

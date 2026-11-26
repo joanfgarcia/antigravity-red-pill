@@ -79,11 +79,31 @@ Conclusiones:
 - La prosa de thinking es la mejor de las medidas (8/8 sin inventar: "revisión
   mensual durante seis semanas" está en la fuente), pero cuesta 4–5×.
 
+### Decisión del Operador (2026-11-26): el carril pasa a 2.5
+
+La medición decía «no cambia nada»; la decisión es alinear producción con el
+modelo nuevo. Se acepta **sin ganancia de calidad esperada** (empate 5–6/8) y con
+la latencia igual. Para que sea seguro no se usa el perfil base, que arranca con
+thinking y sin `--reasoning off`, sino la variante **`bonsai_25_27b_distill`**:
+thinking off, `--min-p 0` explícito, `top_p 0.95`, T0.3 (el 0.7 abría deixis).
+
+Humo de carril (2026-11-26, sesión de 4,5k chars): 19,9 s en caliente, resumen en
+primera persona fiel al original, keywords correctas y 4 notas ascendidas. El
+primer intento sin `RP_LLM_TASK=distill` cayó al modelo por defecto del daemon
+(granite) y escribió un volcado crudo: el carril **exige** la task en el entorno.
+Ese fallo destapó un defecto de trazabilidad: `distill.py` sellaba `engine` con
+`engine_id()` (consulta `/v1/models` cacheada al arrancar) en vez de con el motor
+real de la respuesta; corregido en el mismo commit que esta ficha
+(`served_engine()` + test de regresión).
+
 ## Veredicto
 
-**Candidato para Dokimé** (tool-calling ≈ FP16, 5,9 GB, 112k de ventana con
-`pq2_0m`). **NO para el carril `distill`**: no baja tiempos y abre riesgo de
-deixis/JSON. El titular del sueño no se toca sin una prueba de textura.
+**Titular del carril `distill` desde 2026-11-26** (decisión del Operador). La
+medición no muestra ganancia de calidad —empata 5–6/8 a igual latencia—, pero el
+carril se alinea con el modelo nuevo. Se sirve con la variante
+`bonsai_25_27b_distill` (thinking off, `min_p 0`, T0.3), nunca con el perfil base.
+Y **candidato para Dokimé** (tool-calling ≈ FP16, 5,9 GB, 112k de ventana con
+`pq2_0m`).
 
 ## Sandbox de Dokimé (2026-11-25)
 Con la imagen `localhost/prism-llama:b12178-cu13` (prebuilt `b12178` sobre CUDA 13):

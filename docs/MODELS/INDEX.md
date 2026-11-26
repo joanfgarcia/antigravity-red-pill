@@ -14,7 +14,7 @@ Procedimiento de medición: [`PROCEDURE.md`](PROCEDURE.md)
 | --- | --- | --- | ---: | --- |
 | `granite_8b` | Granite-4.1-8B | **Titular** (destilador) | 12.288 (24.576 con KV `q8_0`) | [README](granite_8b/README.md) |
 | `bonsai_2_27b` | Ternary Bonsai 2 27B | **Se queda** — destilador alternativo y lector largo | 65.536 (`q4_0`) | [README](bonsai_2_27b/README.md) |
-| `bonsai_25_27b` | Ternary Bonsai 2.5 27B | **Candidato** — agéntico (tool-calling ≈ FP16) y lector largo; **no** para destilar; en `bench_hard` no desplaza a Spark (×3 latencia, 8 timeouts) | **112.032** (`pq2_0m`), 43k `q8_0` | [README](bonsai_2_5_27b/README.md) |
+| `bonsai_25_27b` | Ternary Bonsai 2.5 27B | **Titular de `distill`** desde 2026-11-26 (empata calidad con 2.0); agéntico (tool-calling ≈ FP16) y lector largo; en `bench_hard` no desplaza a Spark (×3 latencia, 8 timeouts) | **112.032** (`pq2_0m`), 43k `q8_0` | [README](bonsai_2_5_27b/README.md) |
 | `bonsai_2_9b` | Ternary Bonsai 2 9B | **Candidato** — gana `bench_hard` (86,1%, 9 s, 0 timeouts); lector de ventana completa (262K); no destila | **299.190** (`q8_0`) — tope del modelo 262.144 | [README](bonsai_2_9b/README.md) |
 | `spark_x2_6_4b` | Spark-X2.6-4B | **Se queda** — lector de contexto largo | **262.144** (`q4_0`), 117K verificados | [README](spark_x2_6_4b/README.md) |
 | `k2_horizon_7b` | K2-Horizon-7B `Q5_K_M` | **Default** — 15/15 y deixis 3/3: hubs del sueño, ladder de minions y cata de Memento | 45.056 (`q8_0`, medido) | [README](k2_horizon_7b/README.md) |
