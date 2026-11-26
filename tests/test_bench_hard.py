@@ -151,3 +151,45 @@ def test_cada_tarea_tiene_prompt_y_comprobaciones(tid):
 	assert task["prompt"].strip()
 	assert task["checks"]
 	assert all("id" in c and "kind" in c for c in task["checks"])
+
+
+def _fake_podman(monkeypatch):
+	"""Captura el argv del runner y devuelve una línea JSON como la real."""
+	captured = {}
+
+	class _R:
+		returncode = 0
+		stdout = '{"ok": true, "answer": "TAG-A1"}\n'
+		stderr = ""
+
+	def _run(cmd, **kw):
+		captured["cmd"] = cmd
+		return _R()
+
+	monkeypatch.setattr(bh.subprocess, "run", _run)
+	return captured
+
+
+def test_el_tope_de_tokens_viaja_al_runner(monkeypatch):
+	"""AD-139: con modelos que piensan, el cap debe superar el presupuesto."""
+	captured = _fake_podman(monkeypatch)
+	answer, err, _elapsed, _meta = bh.run_minion("p", "bonsai25", "bonsai_25_27b", 900, 6144)
+	assert err is None and "TAG-A1" in answer
+	cmd = captured["cmd"]
+	assert cmd[cmd.index("--max-tokens") + 1] == "6144"
+
+
+def test_el_tope_por_defecto_es_el_publicado(monkeypatch):
+	captured = _fake_podman(monkeypatch)
+	bh.run_minion("p", "bonsai25", "bonsai_25_27b", 900)
+	cmd = captured["cmd"]
+	assert cmd[cmd.index("--max-tokens") + 1] == "2048"
+
+
+def test_el_resumen_declara_la_config():
+	rows = [
+		{"model": "m", "arm": "a", "task": "a1", "family": "cadena", "trial": 1, "pass": True,
+		"instruction_ok": 1, "instruction_total": 1, "elapsed_s": 1.0, "checks": [], "answer": ""},
+	]
+	md = bh.summarize(rows, [TASKS["a1"]], trials=1, config={"max_tokens": 6144, "timeout_s": 300})
+	assert "`max_tokens=6144`" in md and "`timeout_s=300`" in md

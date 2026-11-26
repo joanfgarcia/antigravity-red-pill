@@ -623,11 +623,13 @@ def run_pi(prompt: str, model: str, timeout: int) -> tuple[str, str | None, floa
 		return "", f"timeout {timeout}s", time.time() - t0
 
 
-def run_minion(prompt: str, model: str, profile: str, timeout: int) -> tuple[str, str | None, float, dict]:
+def run_minion(
+	prompt: str, model: str, profile: str, timeout: int, max_tokens: int = 2048
+) -> tuple[str, str | None, float, dict]:
 	cmd = [
 		"podman", "exec", BOX, "/opt/py/bin/python", RUNNER,
 		"--cwd", GUEST, "--prompt", prompt, "--model", profile, "--alias", model,
-		"--temperature", "0.7", "--top-p", "0.9", "--max-tokens", "2048", "--seed", "42",
+		"--temperature", "0.7", "--top-p", "0.9", "--max-tokens", str(max_tokens), "--seed", "42",
 	]
 	t0 = time.time()
 	try:
@@ -652,13 +654,15 @@ def post_checks(task: dict) -> dict[str, bool]:
 	return results
 
 
-def run_one(arm: str, task: dict, model: str, profile: str, default_timeout: int = 420) -> dict:
+def run_one(
+	arm: str, task: dict, model: str, profile: str, default_timeout: int = 420, max_tokens: int = 2048
+) -> dict:
 	reset_box_fixture(task)
 	timeout = task.get("timeout", default_timeout)
 	if arm == "null":
 		answer, error, elapsed, meta = "", None, 0.0, {}
 	elif arm == "minion":
-		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile, timeout)
+		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile, timeout, max_tokens)
 	else:
 		answer, error, elapsed = run_pi(task["prompt"], model, timeout)
 		meta = {}
@@ -692,10 +696,12 @@ def _pass_k(rows: list[dict], arm: str, task_id: str, k: int) -> float:
 	return 1.0 if c >= k else 0.0
 
 
-def summarize(rows: list[dict], tasks: list[dict], trials: int) -> str:
+def summarize(rows: list[dict], tasks: list[dict], trials: int, config: dict | None = None) -> str:
 	models = sorted({r["model"] for r in rows}) or ["—"]
 	arms = sorted({r["arm"] for r in rows})
 	lines = [f"# Batería de techo — {', '.join(models)} — {trials} trial(s)", ""]
+	if config:
+		lines += ["Config: " + " · ".join(f"`{k}={v}`" for k, v in config.items()), ""]
 
 	lines += ["## Global", "| modelo | brazo | tareas | pass^1 | pass^k | instrucción | p50 | p95 |", "|---|---|---:|---:|---:|---:|---:|---:|"]
 	for model in models:
@@ -761,6 +767,12 @@ def main() -> int:
 	ap.add_argument("--arms", default="dokime,null")
 	ap.add_argument("--trials", type=int, default=1)
 	ap.add_argument("--timeout", type=int, default=420, help="segundos por tarea (d1/d2 ya piden 900)")
+	ap.add_argument(
+		"--max-tokens", type=int, default=2048,
+		help="tope de generación por completion. Con modelos que piensan DEBE superar el "
+		"presupuesto de razonamiento del servidor: si son iguales, no queda margen para "
+		"la respuesta y la tarea parece colgada (AD-139)",
+	)
 	ap.add_argument("--only", default=None, help="ids separados por coma")
 	ap.add_argument("--list", action="store_true")
 	ap.add_argument("--dry-run", action="store_true", help="valida tareas y brazo nulo sin caja")
@@ -808,7 +820,7 @@ def main() -> int:
 		for trial in range(1, args.trials + 1):
 			for task in tasks:
 				for arm in arms:
-					row = run_one(arm, task, args.model, args.profile, args.timeout)
+					row = run_one(arm, task, args.model, args.profile, args.timeout, args.max_tokens)
 					row["trial"] = trial
 					rows.append(row)
 					fh.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -819,7 +831,10 @@ def main() -> int:
 						flush=True,
 					)
 
-	summary = summarize(rows, tasks, args.trials)
+	summary = summarize(
+		rows, tasks, args.trials,
+		config={"max_tokens": args.max_tokens, "timeout_s": args.timeout, "arms": args.arms},
+	)
 	md = OUT_DIR / f"BENCHHARD_{args.model}_{stamp}_SUMMARY.md"
 	md.write_text(summary, encoding="utf-8")
 	print(f"\n{summary}\nResultados: {jsonl}\nResumen: {md}\nTiempo total: {time.time() - t0:.0f}s")
