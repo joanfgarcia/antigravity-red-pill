@@ -4209,3 +4209,12 @@ en el turno tiene excusa.
 **Alternatives**: (a) arreglar solo el lazy-load — habría cargado un segundo GGUF en el backend MCP con riesgo de OOM junto al sueño; (b) mantener la síntesis por defecto con el daemon — sigue siendo redundante para un consumidor que ya es un LLM y oculta las fuentes; (c) devolver todo lo que saque el recall — el dossier dejaba de tener tamaño predecible.
 **Rationale / Evidence**: prueba real por el socket tras reiniciar `redpill-mcp`: inbox `cd1428e2` con `ORACLE CONTEXT (raw) — 6 fragmento(s)` (3+3), ids y fechas, GPU a 48 MiB (sin carga in-process). `tests/test_swarm_agents.py` cubre modo crudo, síntesis opcional, fallo del daemon, formato y recorte; `tests/test_memory_leaf_limit.py` fija el contrato del límite. 121 tests en verde.
 **Consequences**: desaparecen las «noticias fantasma» del inbox; el dossier deja ver la calidad del recall (por ejemplo, una consulta de sueño devuelve primero una nota de NB-001 por la pata keyword: ahora visible, no disfrazada de síntesis). La síntesis queda como modo explícito para minions con ventana corta. Si el recall híbrido sigue primando coincidencias de palabra sobre semántica, es el siguiente ajuste (no este).
+
+## [AD-138] El aviso del coro despierta con el titular; el detalle se lee en el inbox
+**Date**: 2026-11-26
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: `MinionInbox.drop_report` publicaba `raw_content[:600]` como `notify` al alma. Con el dossier de Oracle, un aviso de 6 fragmentos llegaba al coro como un muro de 600 caracteres (hilo E-1661d4) y se leía como un mensaje del sistema. El aviso nació para despertar, no para transportar el informe.
+**Decision**: el cuerpo del `notify` es el **primer renglón** del informe (≤180 chars, con elipsis) + `· inbox <event_id>`. El contenido íntegro permanece en la fila del inbox. `JobRunner` sigue excluido del hook genérico porque emite su propio aviso.
+**Alternatives**: (a) `notify=False` para Oracle — el alma no se enteraría; (b) un aviso con el título del hilo — se pierde el event id; (c) seguir con 600 chars — el ruido que motivó el cambio.
+**Rationale / Evidence**: hilo `E-16a5eb` tras el cambio: 92 chars, `[MinionInbox] OracleMinion · success: ORACLE CONTEXT (raw) — 6 fragmento(s) · inbox 8c1ceb45`; la fila del inbox conserva 4.346 chars. 70 tests de inbox/coro en verde.
+**Consequences**: el coro deja de ser un canal de lectura; el aviso dice qué llegó y dónde. Los informes largos (dossier, logs) se consultan en el inbox con su `event_id`.
