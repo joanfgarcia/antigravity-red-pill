@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -193,3 +194,22 @@ def test_el_resumen_declara_la_config():
 	]
 	md = bh.summarize(rows, [TASKS["a1"]], trials=1, config={"max_tokens": 6144, "timeout_s": 300})
 	assert "`max_tokens=6144`" in md and "`timeout_s=300`" in md
+
+
+def test_el_brazo_pi_declara_su_tope(monkeypatch):
+	"""`models.json` no está en el repo: sin escribirlo, Pi usa 16.384 por defecto."""
+	captured = {}
+
+	class _R:
+		returncode = 0
+
+	def _run(cmd, **kw):
+		captured["cmd"], captured["input"] = cmd, kw.get("input")
+		return _R()
+
+	monkeypatch.setattr(bh.subprocess, "run", _run)
+	bh.write_pi_models("bonsai25", 16384)
+	cfg = json.loads(captured["input"])
+	assert cfg["providers"]["local"]["models"][0]["maxTokens"] == 16384
+	assert cfg["providers"]["local"]["models"][0]["id"] == "bonsai25"
+	assert bh.PI_MODELS in " ".join(captured["cmd"])

@@ -606,6 +606,33 @@ def collect_state(task: dict) -> dict[str, str]:
 # ── ejecución ─────────────────────────────────────────────────────────────
 
 
+PI_MODELS = "/srv/dokime/home/.pi/agent/models.json"
+
+
+def write_pi_models(model: str, max_tokens: int) -> None:
+	"""Declara el modelo en la Pi de la caja con un tope **explícito**.
+
+	`models.json` no vive en el repo y su esquema pone `maxTokens: 16384` por
+	defecto: sin esta escritura, el tope del brazo Pi cambia solo y la corrida no es
+	reproducible. Medido 2026-11-26: la tabla publicada del 27B corrió con 16.384.
+	"""
+	cfg = {
+		"$schema": "https://pi.dev/schemas/models.schema.json",
+		"providers": {
+			"local": {
+				"baseUrl": "http://llama:8080/v1",
+				"api": "openai-completions",
+				"apiKey": "dokime",
+				"models": [{"id": model, "name": f"sandbox {model}", "maxTokens": int(max_tokens)}],
+			}
+		},
+	}
+	subprocess.run(
+		["podman", "exec", "-i", BOX, "sh", "-lc", f"mkdir -p $(dirname {PI_MODELS}) && cat > {PI_MODELS}"],
+		input=json.dumps(cfg), text=True, check=True, capture_output=True,
+	)
+
+
 def run_pi(prompt: str, model: str, timeout: int) -> tuple[str, str | None, float]:
 	cmd = [
 		"podman", "exec", "-e", "RED_PILL_ENABLED=0", "-w", GUEST, BOX,
@@ -664,6 +691,7 @@ def run_one(
 	elif arm == "minion":
 		answer, error, elapsed, meta = run_minion(task["prompt"], model, profile, timeout, max_tokens)
 	else:
+		write_pi_models(model, max_tokens)
 		answer, error, elapsed = run_pi(task["prompt"], model, timeout)
 		meta = {}
 	state = collect_state(task)
