@@ -323,7 +323,8 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				checkpoint = outcome.new_checkpoint
 				# La media móvil de duración alimenta a la vez el ETA y la cota del
 				# siguiente step: se mide aquí para que ningún driver la reimplemente.
-				progress = update_step_ema(outcome.progress, time.time() - started)
+				# `previous`: sin él la EMA nunca suaviza (cada step trae dict limpio)
+				progress = update_step_ema(outcome.progress, time.time() - started, previous=progress)
 				# R4: el checkpoint se persiste inmediatamente tras el step
 				cog_queue.save_checkpoint(job_id, checkpoint, progress)
 
@@ -339,6 +340,13 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 						except Exception as term_err:
 							logger.warning(f"Job {job_id} on_terminal failed after kill-before-complete: {term_err}")
 						_report_job(job_id, task, "killed", "interrumpido por el Operador")
+						break
+					if getattr(outcome, "failed", False):
+						# Recorrido completo pero sin ejecutar nada (todas las etapas
+						# degradadas): no es éxito. Ver NOTE_2026-11-25_dag-etapas-degradadas.
+						detail = outcome.summary or "todas las etapas degradadas"
+						cog_queue.mark_failed(job_id, detail)
+						_report_job(job_id, task, "failed", detail)
 						break
 					cog_queue.mark_completed(job_id)
 					final = cog_queue.get_task(job_id)

@@ -108,6 +108,19 @@ def _iter_leaves(stages: List[Dict[str, Any]], prefix: str = ""):
 			yield path, s
 
 
+def _all_leaves_degraded(stages: List[Dict[str, Any]], soft_failures: Dict[str, Any]) -> bool:
+	"""¿El job terminó SIN ejecutar nada? Todas las hojas quedaron degradadas.
+
+	`on_fail: warn` convierte un fallo en «skip marcado», y si eso pasa en TODAS
+	las etapas el job se sellaba como `success` (caso `07fca254`: 12/12
+	degradadas). Ver `.red-pill/memory/NOTE_2026-11-25_dag-etapas-degradadas.md`.
+	"""
+	if not soft_failures:
+		return False
+	leaves = {path for path, _ in _iter_leaves(stages)}
+	return bool(leaves) and leaves <= set(soft_failures)
+
+
 def _flatten_ids(stages: List[Dict[str, Any]], prefix: str = "") -> List[str]:
 	"""Todos los ids aplanados por ruta (incluidos compuestos), orden DFS."""
 	out: List[str] = []

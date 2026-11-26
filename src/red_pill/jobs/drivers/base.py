@@ -63,6 +63,9 @@ class StepOutcome:
 	progress: Optional[Dict[str, Any]] = None  # { current, total, percent, ... }
 	concurrency: Optional[Dict[str, Any]] = None  # informativo: {parallel_stages, max_parallel_level, actually_parallel}
 	pause_requested: bool = False  # el driver pidió pausa a mitad de step (el checkpoint ya incluye lo completado)
+	# El step terminó su recorrido pero NO hizo el trabajo: ninguna etapa ejecutada
+	# (todas degradadas por on_fail=warn). El runner lo sella como fallo, no éxito.
+	failed: bool = False
 
 
 class JobDeferred(Exception):
@@ -287,20 +290,42 @@ def compute_step_timeout(payload: Dict[str, Any], progress: Optional[Dict[str, A
 	return int(bound * (2 ** max(0, int(attempts))))
 
 
-def update_step_ema(progress: Optional[Dict[str, Any]], elapsed_s: float) -> Dict[str, Any]:
+def update_step_ema(
+	progress: Optional[Dict[str, Any]], elapsed_s: float, previous: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
 	"""Mezcla la duración observada del step en el progreso (media móvil + ETA).
 
 	La EMA alimenta dos cosas a la vez: la cota de timeout del siguiente step y
 	el ETA de los jobs con total conocido. Se calcula en el runner para que
 	ningún driver tenga que reimplementarla.
+
+	`previous` es el progreso del step ANTERIOR: sin él la EMA nunca suaviza
+	(cada step entrega un dict limpio y `step_seconds_ema` acaba siendo el último
+	valor). El ETA puede venir decidido por el driver con
+	`eta_seconds_override` (None = «no hay número honesto»): el DAG lo usa para no
+	extrapolar lotes de fan-out. Ver
+	`.red-pill/memory/NOTE_2026-11-25_eta-job-manager.md`.
 	"""
 	import red_pill.config as cfg
 
 	merged = dict(progress or {})
-	previous = merged.get("step_seconds_ema")
+	# El dict del step manda; si no trae EMA, se hereda la del step anterior.
+	if merged.get("step_seconds_ema") is None and previous:
+		inherited = previous.get("step_seconds_ema")
+		if inherited is not None:
+			merged["step_seconds_ema"] = inherited
+	previous_ema = merged.get("step_seconds_ema")
 	alpha = float(cfg.JOB_STEP_EMA_ALPHA)
 	merged["step_seconds_last"] = round(elapsed_s, 1)
-	merged["step_seconds_ema"] = round(elapsed_s if not previous else alpha * elapsed_s + (1 - alpha) * float(previous), 1)
+	merged["step_seconds_ema"] = round(elapsed_s if not previous_ema else alpha * elapsed_s + (1 - alpha) * float(previous_ema), 1)
+
+	override = merged.pop("eta_seconds_override", "absent")
+	if override != "absent":
+		if override is None:
+			merged.pop("eta_seconds", None)
+		else:
+			merged["eta_seconds"] = int(override)
+		return merged
 
 	current, total = merged.get("current"), merged.get("total")
 	if isinstance(current, (int, float)) and isinstance(total, (int, float)) and total > current:

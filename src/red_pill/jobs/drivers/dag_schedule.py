@@ -21,6 +21,7 @@ from red_pill.jobs.drivers.dag_manifest import (
 	_MAX_CONCURRENCY_DEFAULT,
 	_MAX_PARALLEL_LEVEL_DEFAULT,
 	_TYPE_COMPOUND,
+	_all_leaves_degraded,
 	_count_leaves,
 	_find_node_by_path,
 	_flatten_ids,
@@ -162,6 +163,47 @@ class DagScheduleMixin:
 		if parent:
 			identity["parent_mission_id"] = str(parent)
 		return identity
+
+	def _eta_override(self, stages: List[Dict[str, Any]], completed: List[str], deferred_set: set, payload: Dict[str, Any]) -> Optional[int]:
+		"""ETA honesto para el runner (`None` = «no hay número honesto»).
+
+		Suma la mediana histórica de las hojas que faltan, medida por etapa en
+		`core.progress.stage_duration_medians`. Durante un fan-out no se da número:
+		un ítem puede ser un lote de N sesiones y el trabajo interior es invisible
+		— así el ciclo `6028d497` anunció 9 h 46 min para un ciclo de ~1 h.
+		Ver `.red-pill/memory/NOTE_2026-11-25_eta-job-manager.md`.
+		"""
+		from red_pill.core.progress import stage_duration_medians
+
+		leaf_paths = [path for path, _ in _iter_leaves(stages)]
+		remaining = [p for p in leaf_paths if p not in completed and p not in deferred_set]
+		if not remaining:
+			return 0
+		fields = _stage_fields(stages, completed)
+		try:
+			total_items = int(fields.get("stage_total") or 0)
+			done_items = int(fields.get("stage_current") or 0)
+		except (TypeError, ValueError):
+			total_items, done_items = 0, 0
+		if total_items > 1 and done_items < total_items:
+			return None
+
+		medians = stage_duration_medians(str(payload.get("mission_id") or ""))
+		known = [float(v) for v in medians.values() if v]
+		fallback = float(sum(known) / len(known)) if known else None
+		estimate = 0.0
+		unknown = 0
+		for path in remaining:
+			value = medians.get(path)
+			if value:
+				estimate += float(value)
+			else:
+				unknown += 1
+		if unknown:
+			if fallback is None:
+				return None
+			estimate += unknown * fallback
+		return int(round(estimate))
 
 	def _publish_stage_events(
 		self,
@@ -398,6 +440,15 @@ class DagScheduleMixin:
 			self._publish_stage_events(payload, identity, before_completed, list(completed), done=True)
 			# Deuda acumulada de on_fail=warn: un job "completo" con ítems
 			# degradados no puede sellarse como si nada hubiera pasado.
+			#
+			# ⚠️ DEFECTO CONOCIDO (2026-11-25, job `07fca254`): si TODAS las etapas
+			# quedan degradadas —no se ejecutó nada— el resumen dice "12 etapa(s)
+			# degradada(s)" pero el estado sigue siendo `success`, sin motivo ni
+			# evidencia (el detalle vive en .cell/reports, keyeado por etapa y no
+			# por job, así que se pisa entre ejecuciones). Arreglo acordado en
+			# `.red-pill/memory/NOTE_2026-11-25_dag-etapas-degradadas.md`:
+			# 100% degradado → `failed`; parcial → `degraded`; guardar por etapa
+			# returncode + cola de stdout/stderr; reports namespaced por job.
 			final_soft = dict(checkpoint_data.get("soft_failures") or {})
 			if final_soft:
 				logger.error(f"[DagJob] {self.short_id} completa con {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}")
@@ -417,20 +468,25 @@ class DagScheduleMixin:
 			summary_extra = ""
 			if deferred_ids:
 				summary_extra = f" · {deferred_budget} instancia(s) de fan-out diferida(s) por el techo"
+			# Un job donde NINGUNA hoja se ejecutó no es un éxito degradado: es un
+			# fallo. Antes se sellaba `success` y la cola lo daba por bueno.
+			all_degraded = _all_leaves_degraded(stages, final_soft)
 			return StepOutcome(
 				completed=True,
+				failed=all_degraded,
 				# el árbol ya no incluye las plantillas skipped (lista vacía):
 				# persistir el skip y la lista congelada en el checkpoint final
 				# para que el estado sea consistente con lo ejecutado.
 				new_checkpoint=final_ckpt,
-				summary="dag complete"
+				summary=("dag fallido: ninguna etapa se ejecutó — " + f"{len(final_soft)} degradada(s)" if all_degraded else "dag complete"
 				+ summary_extra
-				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else ""),
+				+ (f" · {len(final_soft)} etapa(s) degradada(s): {', '.join(sorted(final_soft))}" if final_soft else "")),
 				progress={
 					"current": leaves_done,
 					"total": total_leaves,
 					"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
 					**_stage_fields(stages, completed),
+					"eta_seconds_override": 0,
 				},
 				concurrency={
 					"parallel_groups": 0,
@@ -710,6 +766,13 @@ class DagScheduleMixin:
 		)
 
 		done = leaves_done >= total_leaves
+		# Historial por etapa (el ETA honesto suma la mediana de las que faltan).
+		try:
+			from red_pill.core.progress import record_stage_durations
+
+			record_stage_durations(str(payload.get("mission_id") or ""), dict(self._telemetry_stage))
+		except Exception:  # noqa: BLE001 — telemetría best-effort
+			pass
 		stage_seconds.update(self._telemetry_stage)
 		item_seconds.update(self._telemetry_item)
 		checkpoint = {
@@ -749,18 +812,25 @@ class DagScheduleMixin:
 			done=done and not paused,
 			blocked=failed_paths,
 		)
+		# Mismo criterio que en el cierre temprano: si al terminar no se ejecutó
+		# NINGUNA hoja, el job es un fallo y no un «éxito degradado».
+		all_degraded = done and not paused and _all_leaves_degraded(stages, new_soft)
 		return StepOutcome(
 			completed=done and not paused,
+			failed=all_degraded,
 			new_checkpoint=checkpoint,
-			summary=f"dag {leaves_done}/{total_leaves}"
+			summary=("dag fallido: ninguna etapa se ejecutó — " + f"{len(new_soft)} degradada(s)" if all_degraded else f"dag {leaves_done}/{total_leaves}"
 			+ (f" · {deferred_budget} instancia(s) de fan-out diferida(s) por el techo" if deferred_ids and done else "")
 			+ (" (pausado a mitad de step)" if paused else "")
-			+ (f" · {len(new_soft)} etapa(s) degradada(s) (on_fail=warn)" if new_soft else ""),
+			+ (f" · {len(new_soft)} etapa(s) degradada(s) (on_fail=warn)" if new_soft else "")),
 			progress={
 				"current": leaves_done,
 				"total": total_leaves,
 				"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
 				**_stage_fields(stages, new_completed),
+				# None = durante un fan-out no hay número honesto (el trabajo
+				# interior es invisible); el runner lo respeta y no lo inventa.
+				"eta_seconds_override": self._eta_override(stages, new_completed, deferred_set, payload),
 			},
 			concurrency={
 				"parallel_groups": parallel_groups,

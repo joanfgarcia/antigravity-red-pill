@@ -60,6 +60,70 @@ def read_job_progress(job_id: str) -> Optional[Dict[str, Any]]:
 	return None
 
 
+# ── Historial de duración por etapa (para el ETA del dag_job) ──────────────
+# El ETA ingenua (`etapas restantes × último step`) miente cuando el último step
+# fue un lote de fan-out de 28 min y las etapas que quedan son rituales de 3 s
+# (job 6028d497: 9 h 46 min anunciadas para un ciclo de ~1 h). Aquí se guarda la
+# duración observada de CADA hoja, por misión, y el ETA suma la mediana de las
+# que faltan. Ver `.red-pill/memory/NOTE_2026-11-25_eta-job-manager.md`.
+STAGE_STATS_FILE = "job_stage_stats.json"
+STAGE_STATS_HISTORY = 15
+
+
+def _stage_stats_path() -> Path:
+	from red_pill.core.paths import get_state_dir
+
+	return get_state_dir() / STAGE_STATS_FILE
+
+
+def _read_stage_stats() -> Dict[str, Dict[str, list]]:
+	try:
+		path = _stage_stats_path()
+		if path.is_file():
+			data = json.loads(path.read_text(encoding="utf-8"))
+			if isinstance(data, dict):
+				return data
+	except Exception:
+		pass
+	return {}
+
+
+def record_stage_durations(mission_id: str, durations: Dict[str, float], limit: int = STAGE_STATS_HISTORY) -> None:
+	"""Anota la duración observada de cada etapa ejecutada (best-effort, no rompe)."""
+	if not mission_id or not durations:
+		return
+	try:
+		data = _read_stage_stats()
+		bucket = data.setdefault(str(mission_id), {})
+		for stage_path, seconds in durations.items():
+			try:
+				value = round(float(seconds), 2)
+			except (TypeError, ValueError):
+				continue
+			if value <= 0:
+				continue
+			series = list(bucket.get(str(stage_path)) or [])
+			series.append(value)
+			bucket[str(stage_path)] = series[-limit:]
+		atomic_write_text(_stage_stats_path(), json.dumps(data, ensure_ascii=False))
+	except Exception:
+		pass
+
+
+def stage_duration_medians(mission_id: str) -> Dict[str, float]:
+	"""Mediana por etapa observada en ejecuciones anteriores de la misma misión."""
+	import statistics
+
+	bucket = (_read_stage_stats().get(str(mission_id)) or {}) if mission_id else {}
+	out: Dict[str, float] = {}
+	for stage_path, series in bucket.items():
+		values = [float(v) for v in (series or []) if isinstance(v, (int, float)) and v > 0]
+		if values:
+			out[str(stage_path)] = float(statistics.median(values))
+	return out
+
+
+
 def job_progress_age_s(job_id: str) -> Optional[float]:
 	"""Segundos desde el último latido del fichero (None si no existe o no se puede leer).
 
