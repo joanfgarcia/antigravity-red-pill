@@ -875,7 +875,10 @@ class MemoryManager:
 			if leaf_routed:
 				use_hybrid = use_mmr = use_hub_index = False
 		if leaf_routed:
-			results = leaf_routed
+			# El enrutado por hoja busca con holgura (limit*6) para agregar hojas a
+			# su raíz, pero el contrato del llamante sigue siendo `limit`. Sin este
+			# corte se devolvían 7-10 fragmentos con limit=3 (Oracle, 2026-11-26).
+			results = leaf_routed[:limit]
 		else:
 			try:
 				results = self.client.query_points(
