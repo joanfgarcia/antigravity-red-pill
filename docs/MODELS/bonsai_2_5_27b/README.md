@@ -229,14 +229,6 @@ Datos de contexto que conviene tener:
 - Regla para el banco: con modelos que piensan, `max_tokens` tiene que ser
   **presupuesto de razonamiento + margen de respuesta**, nunca igual.
 
-## Peculiaridades de configuración
-- `min_p` debe pasarse explícito (`--min-p 0`): llama.cpp aplica 0.05.
-- Muestreo por modo: thinking `1.0/0.95/20/min_p 0/presence 0`; instruct
-  `0.7/0.80/20/min_p 0/presence 1.5`. `presence_penalty` no viaja por request
-  (`conduct._SAMPLER_KEYS`) → va como default de servidor.
-- Razonamiento por defecto `xhigh`: sin `max_tokens` generoso, corta a mitad.
-- MTP disponible con el build `b12178` (`--spec-type draft-mtp`, 3 borradores).
-
 ### Segundo motivo: el arnés de `d2` (medido 2026-11-26)
 
 Aun con el tope corregido, `d2` **no es medible por el brazo `minion`**. El
@@ -256,3 +248,33 @@ sólo en el prompt). Sin tools, el mismo prompt contesta `TAG-A1` en 4.102 token
 `minion` mide `d1` (que sí pasa 3/3) y **no** mide `d2` — su hueco es del arnés.
 Para medir el 27B en ventana hay que darle la tarea directa (sin tools), o un
 fixture con el texto en disco.
+
+## Peculiaridades de configuración
+- `min_p` debe pasarse explícito (`--min-p 0`): llama.cpp aplica 0.05.
+- Muestreo por modo: thinking `1.0/0.95/20/min_p 0/presence 0`; instruct
+  `0.7/0.80/20/min_p 0/presence 1.5`. `presence_penalty` no viaja por request
+  (`conduct._SAMPLER_KEYS`) → va como default de servidor.
+- Razonamiento por defecto `xhigh`: sin `max_tokens` generoso, corta a mitad.
+- MTP disponible con el build `b12178` (`--spec-type draft-mtp`, 3 borradores).
+
+### El tope de tokens y el carril de `distill` (2026-11-26)
+
+La regla `max_tokens > presupuesto de razonamiento` sólo existe **cuando el modelo
+piensa**. El carril de destilado no piensa: el daemon lo arranca con
+`--reasoning off --reasoning-budget 0` (journal 2026-11-26 14:35:34), así que sus
+2.048 tokens son todos para la sección y la desigualdad se cumple sola. Sus números
+no cambian: 101.884 chars → 18 secciones en 261 s, 2,6 ms/char, 0 degradadas.
+
+Lo que **sí** le afectaba es el fallo de AD-140: un servidor que no aplicaba
+`profile.extra_server_args` servía el perfil con el thinking encendido, y entonces
+los 2.048 tokens se iban en razonamiento y `content` volvía vacío — medido con este
+mismo perfil antes del arreglo: 2.817 y 5.853 chars de `reasoning_content`,
+`finish_reason: length`, cero contenido. Una sección vacía no falla: se escribe
+vacía o se descarta.
+
+Auditoría de los `task_profiles` (2026-11-26): `distill`, `annotate`, `refine`,
+`validate` y `minion_tool` van con thinking off y tope 1.024–2.048; `distill_low`
+(low, 4.096) y `conversation` (low) tienen margen; `hub` declara `on` en la task
+pero el modelo lo sobreescribe a off. Ningún carril de producción queda expuesto.
+`annotation_phases.py:36` ya grita «el modelo puede gastarlo pensando» cuando ve un
+array JSON sin cerrar: es el mismo fallo, visto al final en vez de al principio.
