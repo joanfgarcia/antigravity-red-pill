@@ -132,19 +132,35 @@ la respuesta; ver «Corrección del artefacto de d2».
 | modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Bonsai 2 9B (ctx 65k, budget 2048) | **86,1%** | 66,7% | **90%** | **9,0 s** | **61,5 s** | 0 |
-| **Bonsai 2.5 27B** | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | **8** |
+| Bonsai 2.5 27B (cap 2048 ⚠) | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | **8** |
+| **Bonsai 2.5 27B** (re-run, cap 6144) | **91,7%** | **91,7%** | **92%** | **38,0 s** | 334,8 s | **0** |
 | Spark-X2.6-4B (referencia) | 69,4% | 66,7% | 75% | 27,3 s | 457,2 s | 4 |
 
 Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina (donde
 `bench_compare` saturaba en 18/18).
 
-| familia | 9B | **2.5 27B** | Spark |
-| --- | ---: | ---: | ---: |
-| cadena | 8/9 | **9/9** | **9/9** |
-| restricciones | 6/9 | **8/9** | 3/9 |
-| memoria | **8/9** | 7/9 | 6/9 |
-| ventana | **6/6** | 3/6 ⚠ | 4/6 |
-| recuperación | **3/3** | 2/3 | **3/3** |
+| familia | 9B | 2.5 27B (cap 2048) | **2.5 27B (cap 6144)** | Spark |
+| --- | ---: | ---: | ---: | ---: |
+| cadena | 8/9 | 9/9 | **9/9** | **9/9** |
+| restricciones | 6/9 | 8/9 | **9/9** | 3/9 |
+| memoria | 8/9 | 7/9 | **9/9** | 6/9 |
+| ventana | 6/6 | 3/6 ⚠ | 3/6 ⚠ (d1 3/3) | 4/6 |
+| recuperación | **3/3** | 2/3 | **3/3** | **3/3** |
+
+### Re-medición con el tope sano (2026-11-26)
+
+Mismo servidor (prism `b12178`, ctx 32.768, KV `q8_0`, `--reasoning-budget 2048`),
+mismo fixture y mismo `--timeout 300`; **sólo** cambia `max_tokens 2048 → 6144`.
+2.078 s de pared (34,6 min) frente a 106 min de reloj de tareas del brazo anterior.
+
+- **33/36**: todo pasa 3/3 menos `d2`, que es el hueco del arnés (500 del tool-call).
+- Los timeouts de la tercera repetición **desaparecen**: `b1` 46–88 s, `c1` 16–21 s,
+  `c3` 48–80 s, `e1` 25–54 s (antes: 300 s, y `e1` 152 s en la primera). No era
+  degradación térmica: era el tope cortando el razonamiento.
+- Por tarea (3 pasadas): a1 12,6–16,6 · a2 10,1–10,7 · a3 13,4–13,9 · b1 46,7–87,9
+  · b2 32,3–51,4 · b3 10,5–13,5 · c1 16,2–20,8 · c2 37,6–41,8 · c3 47,7–80,4 ·
+  d1 42,5–43,6 · e1 25,4–54,2 · d2 261–384 (500).
+- `pass^3` salta de 58,3 % a **91,7 %**: el modelo «inestable» era el cap.
 
 - **Gana donde el 4B no llega**: restricciones contadas. `b1` 3/3 con 61–63
   palabras y cierre exacto (Spark escribe 19–45); `b3` 3/3 en «exactamente dos
@@ -163,17 +179,26 @@ Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina (don
   no era el silicio, era el contenedor y el tope de tokens.
 
 **Contra la regla pactada** (desplazar a Spark exige ganar ≥2 bloques con margen,
-no regresar el contrato y aceptar por escrito la latencia): gana **sólo
-restricciones** con margen, empata cadena, pierde ventana y recuperación, y su
-latencia es ×3 (no ×2) con el doble de timeouts. **No desplaza a Spark.**
+no regresar el contrato y aceptar por escrito la latencia): leído el brazo con el
+tope sano, el 27B **no regresa ningún bloque** —33/36, todo 3/3 menos el hueco de
+`d2`— y gana restricciones (9/9 vs 3/9) y memoria (9/9 vs 6/9), empata cadena y
+recuperación. La latencia ya no es ×3: **p50 ×1,4** (38,0 vs 27,3 s) y **p95 mejor**
+(334,8 vs 457,2 s), con 0 timeouts frente a 4. Sobre el papel eso **sí** cumpliría
+la regla.
 
-> **Revisión pendiente (2026-11-26)**: el bloque `ventana` —uno de los dos que
-> perdía— estaba penalizado por un artefacto del banco (§ siguiente). Con el tope
-> corregido, `d2` pasa 3/3 y el bloque quedaría 6/6 frente a 4/6 de Spark, es
-> decir, dos bloques con margen. El veredicto **no se cambia aquí**: hace falta
-> re-correr el brazo del 27B con el tope sano antes de re-tomarlo. Lo que sí queda
-> claro es que el motivo para no desplazar a Spark ya no puede ser «pierde
-> ventana»; si acaso, la latencia (p50 ×3) y el contrato.
+Lo que falta: los números de Spark y del 9B son de **otra corrida** (GPU con
+inquilinos, cap 2048), así que la comparación pareada no está hecha. Para re-tomar
+el veredicto hay que re-correr sus dos brazos con el mismo `max_tokens 6144`.
+Mientras eso no pase, el veredicto anterior queda **suspendido**, no ratificado: se
+apoyaba en un artefacto del banco.
+
+> **Re-medido (2026-11-26, cap sano)**: 33/36 → **91,7% pass^1 y 91,7% pass^3**,
+> p50 38,0 s, p95 334,8 s, **cero timeouts**. Todo pasa 3/3 menos `d2`, que no es
+> medible por este arnés (§ corrección). El motivo para no desplazar a Spark ya no
+> puede ser «peor calidad»: en el mismo arnés, el 27B saca 12 puntos más de pass^1
+> que el 9B y 22 más que Spark, con p50 ×1,4 de Spark y p95 mejor. Pero **la tabla
+> no es comparable entre corridas** (9B y Spark vienen de la corrida contaminada):
+> para re-tomar el veredicto hay que re-correr sus dos brazos con el mismo tope.
 
 ## Corrección del artefacto de `d2` (2026-11-26)
 
