@@ -27,7 +27,7 @@ from red_pill.soul import SoulManager
 from red_pill.swarm.agents.agent import AgentMinion
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
-from red_pill.swarm.agents.oracle import OracleMinion
+from red_pill.swarm.agents.oracle import OracleMinion, render_report
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report, sentinel
@@ -374,6 +374,10 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 				"type": "string",
 				"description": "Solo si hay varias sesiones en el workspace: el `leg=` de tu tag `<session …/>`, para que el aviso de fin de research llegue a tu alma.",
 			},
+			"synthesize": {
+				"type": "boolean",
+				"description": "Opcional (default false): añade un resumen lossy por el daemon. Por defecto se entrega el dossier en crudo (fuentes, score e id).",
+			},
 		},
 		"required": ["query"],
 	},
@@ -398,9 +402,11 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			oracle = OracleMinion()
 			if collections:
 				oracle.collections = collections
-			results = await GruOrchestrator().deploy_swarm(query, [oracle], trace=False)
+			results = await GruOrchestrator().deploy_swarm(
+				query, [oracle], trace=False, synthesize=bool(arguments.get("synthesize", False))
+			)
 			res = results[0]
-			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
+			content = render_report(res.result) if res.status == "success" else f"Research Failed: {res.error}"
 
 			def _deliver_report():
 				MinionInbox().drop_report(

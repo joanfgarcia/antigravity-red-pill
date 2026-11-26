@@ -140,11 +140,11 @@ class TestSmithMinion:
 
 
 class TestOracleMinion:
-	"""
-	Isolated tests for OracleMinion:
-	- Returns synthesis from EdgeEngine when LLM available
-	- Falls back to concatenated fragments when no LLM
-	- Handles empty Qdrant results gracefully
+	"""Oracle entrega FUENTES (dossier), no una síntesis fingida.
+
+	Regresión 2026-11-26: `if engine.llm` se evaluaba antes del lazy-load, así que
+	Oracle siempre devolvía la concatenación cruda etiquetada como «ORACLE
+	SYNTHESIS». Ahora el modo es explícito y la síntesis es opcional (daemon).
 	"""
 
 	@pytest.fixture
@@ -153,70 +153,113 @@ class TestOracleMinion:
 
 		return OracleMinion()
 
-	def _mock_memory_hit(self, content):
+	def _hit(self, content, title="Nota", score=0.9, point_id="abc12345"):
 		hit = MagicMock()
-		hit.payload = {"content": content}
+		hit.payload = {"content": content, "title": title}
+		hit.score = score
+		hit.id = point_id
 		return hit
 
-	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
 	@patch("red_pill.memory.MemoryManager")
-	def test_synthesis_without_llm(self, mock_mm_cls, mock_engine_cls, oracle):
-		"""Without LLM, Oracle returns raw concatenated memory fragments."""
+	def test_raw_por_defecto_devuelve_fuentes(self, mock_mm_cls, oracle):
 		mock_mm = MagicMock()
-		mock_mm.search_and_reinforce.return_value = [self._mock_memory_hit("The Bünker is sovereign."), self._mock_memory_hit("770 pact endures.")]
+		mock_mm.search_and_reinforce.side_effect = [
+			[self._hit("El Búnker es soberano.", "Soberanía")],
+			[self._hit("El pacto 770 sigue vivo.", "Pacto")],
+		]
 		mock_mm_cls.return_value = mock_mm
-		mock_engine = MagicMock()
-		mock_engine.llm = None
-		mock_engine_cls.return_value = mock_engine
-		result = run(oracle.execute("identity query"))
-		assert result["status"] == "success"
-		assert "The Bünker is sovereign." in result["synthesis"]
-		assert result["source_count"] > 0
+		result = run(oracle.execute("identidad"))
+		assert result["mode"] == "raw"
+		assert result["synthesis"] is None
+		assert result["source_count"] == 2
+		assert [h["collection"] for h in result["hits"]] == ["work_memories", "social_memories"]
+		assert result["hits"][0]["title"] == "Soberanía"
 
-	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
 	@patch("red_pill.memory.MemoryManager")
-	def test_synthesis_with_llm(self, mock_mm_cls, mock_engine_cls, oracle):
-		"""When LLM is available, Oracle calls engine.synthesize()."""
+	def test_synthesize_opcional_usa_el_daemon(self, mock_mm_cls, oracle, monkeypatch):
 		mock_mm = MagicMock()
-		mock_mm.search_and_reinforce.return_value = [self._mock_memory_hit("Some context fragment")]
+		mock_mm.search_and_reinforce.return_value = [self._hit("fragmento")]
 		mock_mm_cls.return_value = mock_mm
-		mock_engine = MagicMock()
-		mock_engine.llm = MagicMock()
-		mock_engine.synthesize.return_value = "Synthesized answer from LLM"
-		mock_engine_cls.return_value = mock_engine
-		result = run(oracle.execute("What is the 770 pact?"))
-		assert result["status"] == "success"
-		assert result["synthesis"] == "Synthesized answer from LLM"
-		mock_engine.synthesize.assert_called_once()
+		llamadas = []
 
-	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
+		def fake(background, query, timeout=60):
+			llamadas.append((background, query))
+			return "Resumen del daemon"
+
+		monkeypatch.setattr("red_pill.swarm.agents.oracle._synthesize_with_daemon", fake)
+		result = run(oracle.execute("pregunta", synthesize=True))
+		assert result["mode"] == "synthesized"
+		assert result["synthesis"] == "Resumen del daemon"
+		assert llamadas and llamadas[0][1] == "pregunta"
+
 	@patch("red_pill.memory.MemoryManager")
-	def test_empty_memory_fallback(self, mock_mm_cls, mock_engine_cls, oracle):
-		"""With no memory hits and no LLM, Oracle returns the no-context message."""
+	def test_si_el_daemon_falla_se_entrega_crudo(self, mock_mm_cls, oracle, monkeypatch):
+		mock_mm = MagicMock()
+		mock_mm.search_and_reinforce.return_value = [self._hit("fragmento")]
+		mock_mm_cls.return_value = mock_mm
+		monkeypatch.setattr("red_pill.swarm.agents.oracle._synthesize_with_daemon", lambda *a, **k: None)
+		result = run(oracle.execute("pregunta", synthesize=True))
+		assert result["mode"] == "raw"
+		assert result["synthesis"] is None
+
+	@patch("red_pill.memory.MemoryManager")
+	def test_dossier_recorta_a_tres_por_coleccion(self, mock_mm_cls, oracle):
+		"""La cascada evocativa añade puntos más allá del limit; el dossier no."""
+		mock_mm = MagicMock()
+		mock_mm.search_and_reinforce.return_value = [self._hit(f"nota {i}") for i in range(7)]
+		mock_mm_cls.return_value = mock_mm
+		result = run(oracle.execute("q"))
+		assert result["source_count"] == 6  # 3 work + 3 social, pese a 7 por colección
+
+	@patch("red_pill.memory.MemoryManager")
+	def test_sin_hits_no_inventa_contexto(self, mock_mm_cls, oracle):
+		from red_pill.swarm.agents.oracle import render_report
+
 		mock_mm = MagicMock()
 		mock_mm.search_and_reinforce.return_value = []
 		mock_mm_cls.return_value = mock_mm
-		mock_engine = MagicMock()
-		mock_engine.llm = None
-		mock_engine_cls.return_value = mock_engine
-		result = run(oracle.execute("unknown query"))
-		assert result["status"] == "success"
+		result = run(oracle.execute("desconocido"))
 		assert result["source_count"] == 0
-		assert "No se encontró" in result["synthesis"]
+		assert "Sin resultados" in render_report(result)
 
-	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
-	@patch("red_pill.memory.MemoryManager")
-	def test_result_schema(self, mock_mm_cls, mock_engine_cls, oracle):
-		"""Oracle result always has status, synthesis, source_count."""
-		mock_mm = MagicMock()
-		mock_mm.search_and_reinforce.return_value = []
-		mock_mm_cls.return_value = mock_mm
-		mock_engine = MagicMock()
-		mock_engine.llm = None
-		mock_engine_cls.return_value = mock_engine
-		result = run(oracle.execute("test"))
-		for key in ["status", "synthesis", "source_count"]:
-			assert key in result, f"Missing key: {key}"
+	def test_render_raw_agrupa_por_coleccion_y_cita_ids(self):
+		from red_pill.swarm.agents.oracle import render_report
+
+		result = {
+			"mode": "raw",
+			"query": "q",
+			"hits": [
+				{"collection": "work_memories", "score": 0.663, "title": "Nota A", "point_id": "7438d580-xxxx", "content": "cuerpo A"},
+				{"collection": "social_memories", "score": 0.4, "title": "Nota B", "point_id": "14244a8a", "content": "cuerpo B"},
+			],
+		}
+		text = render_report(result)
+		assert text.startswith("ORACLE CONTEXT (raw)")
+		assert "## work_memories" in text and "## social_memories" in text
+		assert "id=7438d580" in text and "0.663" in text
+		assert "ORACLE SYNTHESIS" not in text
+
+	def test_render_sintetizado_marca_lossy_y_lista_fuentes(self):
+		from red_pill.swarm.agents.oracle import render_report
+
+		result = {
+			"mode": "synthesized",
+			"query": "q",
+			"synthesis": "Resumen breve",
+			"hits": [{"collection": "work_memories", "score": 0.9, "title": "Nota A", "point_id": "abc12345", "content": "x"}],
+		}
+		text = render_report(result)
+		assert text.startswith("ORACLE SYNTHESIS (lossy)")
+		assert "Resumen breve" in text
+		assert "Fuentes:" in text and "id=abc12345" in text
+
+	def test_render_recorta_cuerpos_largos(self):
+		from red_pill.swarm.agents.oracle import render_report
+
+		result = {"mode": "raw", "query": "q", "hits": [{"collection": "work_memories", "score": 0.9, "title": "L", "point_id": "p", "content": "x" * 900}]}
+		text = render_report(result, max_chars=100)
+		assert "x" * 100 + "…" in text
+		assert "x" * 900 not in text
 
 
 class TestCompressorMinion:
