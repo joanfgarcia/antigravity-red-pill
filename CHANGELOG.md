@@ -80,19 +80,24 @@
   del fixture** (no por la prosa), n=3 y brazo nulo en cada pasada. El brazo nulo da
   **0/108** y 0/216 instrucciones: donde `bench_compare` saturaba en 18/18, esta
   batería discrimina.
-- **[NEW] Fichas de Bonsai 2.5 27B y Bonsai 2 9B**, con techos medidos y la
-  corrección del artefacto de `d2`: `max_tokens` (2048) igual al
-  `--reasoning-budget` (2048) dejaba cero margen para la respuesta, y las tareas
-  parecían colgadas. Con `max_tokens 6144` el brazo del 27B pasa de **80,6 % a
-  91,7 %** (pass^3 de 58,3 % a 91,7 %), sin timeouts y con **p50 38,0 s**. No había
-  degradación térmica: 29,1 · 29,0 · 28,9 tok/s en tres pasadas idénticas. *AD-139*.
+- **[NEW] Fichas de Bonsai 2.5 27B y Bonsai 2 9B**, con techos medidos. Dos
+  hallazgos del banco: (a) **el tope de generación necesita margen** sobre el
+  razonamiento —con `max_tokens` igual al presupuesto, `content` vuelve vacío y la
+  tarea parece colgada—, medido in-process y con la regla escrita en la ficha;
+  (b) **`bench_hard` tiene dos brazos que no se pueden restar**: `dokime` ejecuta
+  la CLI de Pi y `minion` ejecuta `local_minion`, con el `max_tokens` viniendo de
+  sitios distintos. Medido limpio en el brazo `minion` y con el mismo servidor
+  para los tres: **27B 91,7 %** (p50 38,0 s) · 9B 72,2 % (7,9 s) · Spark 63,9 %
+  (8,2 s), cero timeouts. No hay degradación térmica: 29,1 · 29,0 · 28,9 tok/s en
+  tres pasadas idénticas. *AD-139 (mecanismo, con corrección) / AD-141 (retirada)*.
 - **[NEW] `bench_hard --max-tokens`** (default 2048, el histórico) y la config
   declarada en el resumen, para que el par `max_tokens == reasoning_budget` no pueda
   repetirse en silencio.
-- **[FIX] `d2` no es medible por el brazo `minion`**: el modelo intenta resolverlo
-  con un heredoc que mete los 77.143 caracteres del prompt en el comando, el tope
-  corta el JSON del tool-call y el servidor responde 500. Queda anotado como hueco
-  del arnés, no del modelo (contestado directo: `TAG-A1` en 4.102 tokens).
+- **[FIX] `d2` en el brazo `minion`**: el 27B intenta resolverlo con un heredoc que
+  mete los 77.143 caracteres del prompt en el comando; el tope corta el JSON del
+  tool-call y el servidor responde 500. El 9B, en el mismo arnés, pasa `d2` 6/6
+  contestando en contexto: es una diferencia de **estrategia**, no de capacidad
+  (el 27B contesta `TAG-A1` en 4.102 tokens cuando se le da la tarea directa).
 - **[NEW] Carril `distill` en Bonsai 2.5** con perfil propio (`bonsai_25_27b_distill`:
   thinking off, `min_p 0`, T0,3) y validación a volumen: 101.884 chars → 18 secciones
   en 261 s, 2,6 ms/char, 0 fallos. Los 2 slots de K2 descartados con medición

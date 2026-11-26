@@ -4233,6 +4233,16 @@ en el turno tiene excusa.
 **Rationale / Evidence**: cuatro sondas (`RuntimeServer`, mismo GGUF y build `b12178`): 512 tokens con cap 512 → `length` sin respuesta (y 29 tok/s estables ×3); cap 2048 con T0.7 (ajustes del banco) → 103 s, `length`, sin respuesta; cap 6144 → `TAG-A1` en 4.102 tokens y 262 s; args del banco + cap 6144 → 3/3. Tareas cortas: `b1` responde en **1957/2048** (91 de margen: explica el «a veces pasa»), `e1` se queda en 2048 sin respuesta, `c1` responde en 302.
 **Consequences**: la ficha del 27B pasa a decir la verdad medida; queda una nota de revisión sobre el bloque `ventana` del veredicto. Dato de coste para elegir contexto: **29–31 tok/s a 24.576** vs **18,2 tok/s a 32.768** (−40 %) con el mismo KV `q8_0`, y `d2` son 16.825 tokens de prompt (con n_ctx 24.576 y max_tokens 8.192 no caben: 25.017 > 24.576). Hallazgo lateral: `RuntimeServer._build_command` no aplica `profile.extra_server_args` (el daemon y `providers` los pasan explícitamente; `needle_window` no) — latente, sin arreglar aquí.
 
+**Corrección (2026-11-26, mismo día)**: el punto 1 —«el banco lanzaba
+`max_tokens=2048` con `--reasoning-budget=2048`»— describe un par que existe en
+`run_minion` y en el perfil base, **no** el de la tabla publicada. Aquella tabla es
+el brazo `dokime`, que ejecuta la CLI de Pi y no pasa por el `--max-tokens` de
+`bench_hard`: su tope sale del `models.json` de la caja, que hoy no declara ninguno
+y sólo lista `spark`. Consecuencia: el `d2` 0/3 a 900 s **no queda explicado** por
+este AD. Lo que sigue probado es el **mecanismo** (cap sin margen tras el
+razonamiento → `content` vacío, medido in-process) y que el 27B resuelve `d2`
+cuando lo tiene. La atribución del síntoma publicado queda abierta; ver AD-141.
+
 ## [AD-140] El perfil manda: `RuntimeServer` aplica `profile.extra_server_args`
 **Date**: 2026-11-26
 **Status**: ACCEPTED & IMPLEMENTED.
@@ -4247,10 +4257,20 @@ en el turno tiene excusa.
 
 ## [AD-141] Re-medido el 27B con el tope sano: 91,7 % y cero timeouts
 **Date**: 2026-11-26
-**Status**: ACCEPTED & IMPLEMENTED (medición); veredicto frente a Spark **suspendido**.
+**Status**: REFUTADA — el brazo no era el mismo (corrección del 2026-11-26, mismo día).
 **Context**: AD-139 demostró que el `d2` del 27B fallaba por `max_tokens` igual al presupuesto de razonamiento, no por el modelo. Faltaba re-correr el brazo entero con el tope sano para saber cuánto del 80,6 % publicado era artefacto.
 **Decision**: se re-corre el brazo `minion` del 27B con **una sola variable cambiada**: `max_tokens 2048 → 6144`. Mismo servidor (prism `b12178`, ctx 32.768, KV `q8_0`, `--reasoning-budget 2048`), mismo fixture, mismo `--timeout 300`, n=3, mismo brazo nulo.
 **Result**: **33/36 = 91,7 % pass^1 y 91,7 % pass^3** (antes 80,6 % y 58,3 %), instrucción 66/72 (92 %), **p50 38,0 s** (antes 83,0), **p95 334,8 s** (antes 900,1), **0 timeouts** (antes 8). Pared total 2.078 s frente a 106 min de reloj de tareas. Todo pasa 3/3 **menos `d2`**, que no es medible por este arnés (500 del tool-call, AD-139). Los timeouts de la tercera repetición (`b1`, `c1`, `c3`, `e1` a 300 s) desaparecen: eran el cap cortando el razonamiento, no degradación.
 **Alternatives**: (a) dar por bueno el 80,6 % — es lo que decía la ficha y era un artefacto; (b) cambiar también el `--reasoning-budget` — habría mezclado dos variables y no habría respuesta para «cuánto era el tope»; (c) medir solo `d2` — deja sin explicar los 5 timeouts de la tercera pasada.
 **Rationale / Evidence**: `scratch/benchmarks/BENCHHARD_bonsai25_20261126-165145{,_SUMMARY.md}` (2.078 s, 72 filas, brazo nulo 0/36 → batería válida). El fallo de `d2` es `HTTP 500 Failed to parse tool call arguments` en las tres pasadas, con 261–384 s: el modelo intenta un heredoc con los 77.143 caracteres del prompt y el tope corta el JSON.
 **Consequences**: el 27B deja de ser «el modelo inestable» del banco: es el que más pasa y el que peor latencia tiene. **El veredicto «no desplaza a Spark» queda suspendido, no ratificado**: los números de Spark (69,4 %) y del 9B (86,1 %) son de la corrida anterior —GPU con inquilinos y cap 2048—, así que la comparación pareada no existe. Re-tomarlo exige re-correr esos dos brazos con el mismo `max_tokens 6144`. Sobre el papel, con estos números, el 27B cumpliría la regla pactada (2 bloques con margen, sin regresión, p50 ×1,4 y p95 mejor), pero no se decide con mesas de distintas corridas.
+
+**Corrección (2026-11-26, mismo día, horas después)**: **este AD no se sostiene**. `run_one` enruta `minion` a `run_minion` (local_minion, sólo `run_bash`) y **todo lo demás** —incluido `dokime`— a `run_pi` (la CLI de Pi). Las tres corridas publicadas son `dokime` (jsonl: `"arm": "dokime"`); la que llamé «re-medición» es `minion`. Por tanto el delta **no es una variable**: cambian el arnés y el tope a la vez, y el `--max-tokens` que añadí sólo afecta al brazo `minion` (el de Pi toma el suyo de `models.json`).
+
+Lo que sí queda medido y es válido:
+- El **brazo `minion`**, limpio y con el mismo servidor para los tres: 27B **91,7 %** (p50 38,0 s), 9B 72,2 % (7,9 s), Spark 63,9 % (8,2 s), cero timeouts los tres. Es una comparación nueva y coherente, no una re-medición de la publicada.
+- El **mecanismo** del tope (AD-139): cap sin margen tras el razonamiento → `finish_reason: length` y `content` vacío.
+- Que el 27B **sabe** resolver `d2` (3/3 directo, 4.102 tokens) y que en el brazo `minion` elige un heredoc que no cabe (500 del tool-call); el 9B, en el mismo arnés, pasa `d2` 6/6.
+
+Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saberlo hay que re-correr el brazo `dokime` con los tres modelos y un `models.json` versionado (id + `max_tokens` explícito). Hasta entonces el veredicto «no desplaza a Spark» sigue suspendido y sin base comparable. Lección para el próximo: **verificar qué brazo produjo la tabla antes de «re-correrla»**; el nombre del fichero dice el modelo, no el arnés.
+

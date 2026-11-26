@@ -124,81 +124,72 @@ batería más dura (o `bench_memory`, que mide la capa de memoria, no la prosa).
 ## Batería de techo (`bench_hard`, 2026-11-26)
 
 `scripts/bench_hard.py` — 12 tareas en 5 familias, gradación por **estado del
-fixture** (no por la prosa), `n=3`, brazo nulo en cada pasada. Config: `n_ctx`
-32.768, KV `q8_0`, `--reasoning on --reasoning-budget 2048`, `max_tokens 2048` ⚠.
-⚠ = el `max_tokens` igualaba el presupuesto de razonamiento y no dejaba margen para
-la respuesta; ver «Corrección del artefacto de d2».
+fixture** (no por la prosa), `n=3`, brazo nulo en cada pasada.
+
+**Hay dos brazos y no son intercambiables** (`run_one`, `bench_hard.py`):
+
+| brazo | qué ejecuta | de dónde sale `max_tokens` |
+| :--- | :--- | :--- |
+| `dokime` | la CLI de **Pi** dentro de la caja (texto, `--tools bash`, sin MCP) | del `models.json` de Pi: **no** lo pone `bench_hard` |
+| `minion` | `local_minion` con **sólo** `run_bash` | de `bench_hard --max-tokens` |
+
+Por eso las dos tablas van separadas: **no se pueden restar**. Todo lo publicado
+el 25-nov es `dokime`; todo lo medido el 26-nov es `minion`.
+
+### Brazo `dokime` (Pi) — publicado el 2026-11-25
+
+Servidor: `n_ctx` 32.768 (27B) / 65.536 (9B y Spark), KV `q8_0`, `--reasoning on
+--reasoning-budget 2048` (Spark 256). `max_tokens`: el que tenga Pi en su
+`models.json`; hoy ese fichero no declara ninguno y sólo lista `spark`, así que
+**esta corrida no es reproducible desde el repo** (ver «Atribución corregida»).
 
 | modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Bonsai 2 9B (ctx 65k, budget 2048) | **86,1%** | 66,7% | **90%** | **9,0 s** | **61,5 s** | 0 |
-| Bonsai 2.5 27B (cap 2048 ⚠) | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | **8** |
-| **Bonsai 2.5 27B** (re-run, cap 6144) | **91,7%** | **91,7%** | **92%** | **38,0 s** | 334,8 s | **0** |
-| Spark-X2.6-4B (referencia) | 69,4% | 66,7% | 75% | 27,3 s | 457,2 s | 4 |
+| **Bonsai 2 9B** | **86,1%** | 66,7% | **90%** | **9,0 s** | **61,5 s** | 0 |
+| Bonsai 2.5 27B | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | **8** |
+| Spark-X2.6-4B | 69,4% | 66,7% | 75% | 27,3 s | 457,2 s | 4 |
 
 Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina (donde
 `bench_compare` saturaba en 18/18).
 
-| familia | 9B | 2.5 27B (cap 2048) | **2.5 27B (cap 6144)** | Spark |
-| --- | ---: | ---: | ---: | ---: |
-| cadena | 8/9 | 9/9 | **9/9** | **9/9** |
-| restricciones | 6/9 | 8/9 | **9/9** | 3/9 |
-| memoria | 8/9 | 7/9 | **9/9** | 6/9 |
-| ventana | 6/6 | 3/6 ⚠ | 3/6 ⚠ (d1 3/3) | 4/6 |
-| recuperación | **3/3** | 2/3 | **3/3** | **3/3** |
+| familia | 9B | 2.5 27B | Spark |
+| --- | ---: | ---: | ---: |
+| cadena | 8/9 | 9/9 | 9/9 |
+| restricciones | 6/9 | 8/9 | 3/9 |
+| memoria | 8/9 | 7/9 | 6/9 |
+| ventana | 6/6 | 3/6 | 4/6 |
+| recuperación | 3/3 | 2/3 | 3/3 |
 
-### Re-medición con el tope sano (2026-11-26)
+### Brazo `minion` (`local_minion`) — medido el 2026-11-26
 
-Mismo servidor (prism `b12178`, ctx 32.768, KV `q8_0`, `--reasoning-budget 2048`),
-mismo fixture y mismo `--timeout 300`; **sólo** cambia `max_tokens 2048 → 6144`.
-2.078 s de pared (34,6 min) frente a 106 min de reloj de tareas del brazo anterior.
+Mismo servidor prism `b12178` para los tres, contexto y presupuesto de cada modelo,
+la misma caja, el mismo fixture y `--timeout 300`; `--max-tokens 6144`.
 
-- **33/36**: todo pasa 3/3 menos `d2`, que es el hueco del arnés (500 del tool-call).
-- Los timeouts de la tercera repetición **desaparecen**: `b1` 46–88 s, `c1` 16–21 s,
-  `c3` 48–80 s, `e1` 25–54 s (antes: 300 s, y `e1` 152 s en la primera). No era
-  degradación térmica: era el tope cortando el razonamiento.
-- Por tarea (3 pasadas): a1 12,6–16,6 · a2 10,1–10,7 · a3 13,4–13,9 · b1 46,7–87,9
-  · b2 32,3–51,4 · b3 10,5–13,5 · c1 16,2–20,8 · c2 37,6–41,8 · c3 47,7–80,4 ·
-  d1 42,5–43,6 · e1 25,4–54,2 · d2 261–384 (500).
-- `pass^3` salta de 58,3 % a **91,7 %**: el modelo «inestable» era el cap.
+| modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Bonsai 2.5 27B** | **91,7%** | **91,7%** | **92%** | 38,0 s | 334,8 s | 0 |
+| Bonsai 2 9B | 72,2% | 41,7% | 83% | **7,9 s** | **39,2 s** | 0 |
+| Spark-X2.6-4B | 63,9% | 58,3% | 72% | 8,2 s | 37,4 s | 0 |
 
-- **Gana donde el 4B no llega**: restricciones contadas. `b1` 3/3 con 61–63
-  palabras y cierre exacto (Spark escribe 19–45); `b3` 3/3 en «exactamente dos
-  frases» (Spark envuelve en JSON o numera la lista). El coding no separa a nadie
-  (cadena 9/9 en los dos).
-- **Pierde en ventana** (medido, ver corrección abajo): `d2` (agregar etiquetas
-  en ~19k) **0/3**, las tres cortadas a 900 s por el banco. **No es del modelo**:
-  `max_tokens` (2048) igual al `--reasoning-budget` (2048) deja cero margen para la
-  respuesta. Con 6144 → **3/3**, `TAG-A1`, en 112–147 s (2026-11-26).
-- **Ocho timeouts**, casi todos con prompts de 24–100 tokens: `b1`, `c1`, `c3`,
-  `e1`. No es lentitud de prefill, es el mismo tope: el razonamiento de estas
-  tareas mide 1,9k–4,1k tokens y el corte estaba en 2048 (`b1` responde con 1957
-  y 91 de margen: por eso pasa a veces y a veces no).
-- **NO se degrada con el uso** (corregido 2026-11-26): tres pasadas idénticas dan
-  29,1 · 29,0 · 28,9 tok/s con la GPU a 45–48 °C. El p50 46→48→**256 s** del banco
-  no era el silicio, era el contenedor y el tope de tokens.
+| familia | 27B | 9B | Spark |
+| --- | ---: | ---: | ---: |
+| cadena | 9/9 | 7/9 | 9/9 |
+| restricciones | 9/9 | 6/9 | 1/9 |
+| memoria | 9/9 | 5/9 | 9/9 |
+| ventana | 3/6 | **6/6** | 4/6 |
+| recuperación | 3/3 | 2/3 | 0/3 |
 
-**Contra la regla pactada** (desplazar a Spark exige ganar ≥2 bloques con margen,
-no regresar el contrato y aceptar por escrito la latencia): leído el brazo con el
-tope sano, el 27B **no regresa ningún bloque** —33/36, todo 3/3 menos el hueco de
-`d2`— y gana restricciones (9/9 vs 3/9) y memoria (9/9 vs 6/9), empata cadena y
-recuperación. La latencia ya no es ×3: **p50 ×1,4** (38,0 vs 27,3 s) y **p95 mejor**
-(334,8 vs 457,2 s), con 0 timeouts frente a 4. Sobre el papel eso **sí** cumpliría
-la regla.
-
-Lo que falta: los números de Spark y del 9B son de **otra corrida** (GPU con
-inquilinos, cap 2048), así que la comparación pareada no está hecha. Para re-tomar
-el veredicto hay que re-correr sus dos brazos con el mismo `max_tokens 6144`.
-Mientras eso no pase, el veredicto anterior queda **suspendido**, no ratificado: se
-apoyaba en un artefacto del banco.
-
-> **Re-medido (2026-11-26, cap sano)**: 33/36 → **91,7% pass^1 y 91,7% pass^3**,
-> p50 38,0 s, p95 334,8 s, **cero timeouts**. Todo pasa 3/3 menos `d2`, que no es
-> medible por este arnés (§ corrección). El motivo para no desplazar a Spark ya no
-> puede ser «peor calidad»: en el mismo arnés, el 27B saca 12 puntos más de pass^1
-> que el 9B y 22 más que Spark, con p50 ×1,4 de Spark y p95 mejor. Pero **la tabla
-> no es comparable entre corridas** (9B y Spark vienen de la corrida contaminada):
-> para re-tomar el veredicto hay que re-correr sus dos brazos con el mismo tope.
+- Los tres con **cero timeouts**. Pared total: 2.078 s (27B) · 1.120 s (9B) · 434 s
+  (Spark).
+- El 27B es el que más pasa y el más lento: p50 ×4,8 del 9B.
+- `d2` en este brazo: el 27B falla 3/3 con un 500 (heredoc, ver abajo), el 9B pasa
+  **6/6** contestando en contexto y Spark falla 2/3 con un tool-call mal formado.
+  Es una diferencia de **estrategia**, no de capacidad: el 27B sabe contar
+  (3/3 directo, sin tools), pero elige un camino que no cabe en la ventana.
+- El 9B baja aquí respecto del brazo Pi (86,1 → 72,2) y Spark también (69,4 →
+  63,9): **no es el tope**, es el arnés. Sus fallos son de política y formato
+  (cuenta mal `funcs`, contesta el puerto equivocado, inventa un código, envuelve
+  el JSON en vallas), no de presupuesto.
 
 ## Corrección del artefacto de `d2` (2026-11-26)
 
@@ -213,10 +204,20 @@ Medido in-process con el servidor del equipo (mismo GGUF, mismo build `b12178`):
 | `d2` con args del banco, margen | `--reasoning-budget 2048` · cap 6144 · seed 42 | 2054 | 18,2 | 113–147 s | **3/3 `TAG-A1`** |
 | `d2` por el arnés `minion` (tools) | cap 6144 | — | — | 254 s | 500: tool-call cortado |
 
-Causa raíz: **`max_tokens` (2048) = `--reasoning-budget` (2048)**. El modelo
-razona 2048 tokens (6.172 chars), el presupuesto lo cierra justo ahí y ya no queda
-ni un token para la respuesta: `finish_reason: length` y `content` vacío. No hay
-cuelgue ni throttling: el corte llega en 103 s, no en 900.
+**Mecanismo** (medido in-process, mismo GGUF y build): si el tope de generación no
+deja sitio **después** del razonamiento, el modelo no llega a contestar —
+`finish_reason: length`, `content` vacío y la traza se lo come todo. Con el
+presupuesto a 2048 y el cap a 2048 el margen es **cero**; con cap 6144 el
+presupuesto cierra el razonamiento en 2.048 y la respuesta sale (2.054 tokens,
+`TAG-A1`). Sin presupuesto declarado la regla es la misma con el nombre cambiado:
+el cap tiene que superar el razonamiento **natural** del modelo (en `d2`, 4,1k).
+
+**Atribución — corregida el mismo día**: ese par `2048/2048` vive en `run_minion`
+y en el perfil base, **no** en la tabla publicada. La tabla del 25-nov es el brazo
+`dokime` (Pi), que no pasa por el `--max-tokens` de `bench_hard`. Así que el `d2`
+0/3 a 900 s **no queda explicado** por este mecanismo: su causa está en la
+configuración de Pi, que no está en el repo. Lo que sí queda probado es (a) el
+mecanismo, y (b) que el 27B **sabe** resolver `d2` cuando tiene margen.
 
 Datos de contexto que conviene tener:
 - `d2` son **16.825 tokens de prompt** (24k chars ≈ 0,70 tok/char). Con el perfil
@@ -224,17 +225,18 @@ Datos de contexto que conviene tener:
   25.017 > 24.576. Para esta clase de tarea, o ctx 32768 o cap ≤ 7.751.
 - Subir el contexto cuesta decodificación: **29–31 tok/s a 24.576** frente a
   **18,2 tok/s a 32.768** (−40 %), con la misma GPU y el mismo KV `q8_0`.
-- `b1` responde en 1957 de 2048 tokens: el modo «a veces pasa, a veces no» de la
-  tabla es exactamente eso, un margen de 91 tokens.
-- Regla para el banco: con modelos que piensan, `max_tokens` tiene que ser
-  **presupuesto de razonamiento + margen de respuesta**, nunca igual.
+- `b1` responde en 1957 de 2048 tokens: el «a veces pasa» de la tabla publicada es
+  exactamente eso, un margen de 91 tokens.
+- Regla: `max_tokens` = **presupuesto de razonamiento + margen de respuesta**,
+  nunca igual; y si el modelo no declara presupuesto, por encima de su
+  razonamiento natural.
 
-### Segundo motivo: el arnés de `d2` (medido 2026-11-26)
+### Segundo motivo (brazo `minion`): el arnés de `d2`
 
-Aun con el tope corregido, `d2` **no es medible por el brazo `minion`**. El
-modelo no cuenta en contexto: intenta resolverlo con `run_bash` y un heredoc que
-mete el texto entero en el comando. Con 77.143 caracteres de prompt, el tool-call
-se corta a media cadena y el servidor responde 500:
+En el brazo `minion` el modelo no cuenta en contexto: intenta resolverlo con
+`run_bash` y un heredoc que mete el texto entero en el comando. Con 77.143
+caracteres de prompt, el tool-call se corta a media cadena y el servidor responde
+500:
 
 ```
 Failed to parse tool call arguments as JSON: parse error at line 1, column 19321:
@@ -243,11 +245,25 @@ invalid string: missing closing quote; last read: '"grep -o \"TAG-[A-Z0-9]*\" /d
 
 No es un fallo del servidor ni del parser: es una tarea de conteo en contexto
 ejecutada con un arnés que sólo ofrece `run_bash` (y el texto no está en disco,
-sólo en el prompt). Sin tools, el mismo prompt contesta `TAG-A1` en 4.102 tokens
-(tabla de arriba). Consecuencia para leer la tabla: el bloque `ventana` del brazo
-`minion` mide `d1` (que sí pasa 3/3) y **no** mide `d2` — su hueco es del arnés.
-Para medir el 27B en ventana hay que darle la tarea directa (sin tools), o un
-fixture con el texto en disco.
+sólo en el prompt). Ojo: el **9B pasa ese mismo `d2` 6/6** contestando en
+contexto, así que aquí hay una diferencia real de **estrategia**, no de capacidad
+—el 27B contesta `TAG-A1` en 4.102 tokens cuando se le da la tarea directa, sin
+tools—. En el brazo `minion`, el bloque `ventana` mide `d1` (3/3) y `d2` mide la
+tendencia a resolver por shell.
+
+## Qué queda del veredicto
+
+- El veredicto publicado («no desplaza a Spark») se apoyaba en el brazo `dokime`:
+  9B primero, 27B con 8 timeouts y p50 83 s. **Sigue suspendido**, ahora por dos
+  motivos: su corrida no es reproducible desde el repo (`models.json` sin
+  `max_tokens` y sólo `spark` declarado) y el brazo `minion` —medido limpio— ordena
+  distinto (27B > 9B > Spark).
+- Lo único afirmable hoy: en el brazo `minion`, con el mismo servidor y el mismo
+  tope, el 27B pasa más que los otros dos y es 4–5× más lento (p50 38,0 s frente a
+  7,9 y 8,2). En el brazo `dokime` no hay comparación válida.
+- Para cerrarlo: re-correr `dokime` con los tres modelos y un `models.json`
+  **versionado** (id + `max_tokens` explícito), y decidir con esa tabla. Mientras
+  tanto, «no desplaza a Spark» no se ratifica ni se revoca.
 
 ## Peculiaridades de configuración
 - `min_p` debe pasarse explícito (`--min-p 0`): llama.cpp aplica 0.05.
