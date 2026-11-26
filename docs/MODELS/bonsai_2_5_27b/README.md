@@ -136,29 +136,51 @@ fixture** (no por la prosa), `n=3`, brazo nulo en cada pasada.
 Por eso las dos tablas van separadas: **no se pueden restar**. Todo lo publicado
 el 25-nov es `dokime`; todo lo medido el 26-nov es `minion`.
 
-### Brazo `dokime` (Pi) — publicado el 2026-11-25
+### Brazo `dokime` (Pi) — medido el 2026-11-26 con config explícita
 
-Servidor: `n_ctx` 32.768 (27B) / 65.536 (9B y Spark), KV `q8_0`, `--reasoning on
---reasoning-budget 2048` (Spark 256). `max_tokens`: el que tenga Pi en su
-`models.json`; hoy ese fichero no declara ninguno y sólo lista `spark`, así que
-**esta corrida no es reproducible desde el repo** (ver «Atribución corregida»).
+Mismo brazo que lo publicado, pero con el `models.json` de la caja escrito por el
+propio banco (`maxTokens: 16384` explícito), GPU libre al arrancar y los tres
+modelos seguidos. Servidor: prism `b12178`, ctx 32.768 (27B) / 65.536 (9B y
+Spark), KV `q8_0`, `--reasoning-budget 2048` (Spark 256), `--timeout 300`.
 
 | modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| **Bonsai 2 9B** | **86,1%** | 66,7% | **90%** | **9,0 s** | **61,5 s** | 0 |
-| Bonsai 2.5 27B | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | **8** |
-| Spark-X2.6-4B | 69,4% | 66,7% | 75% | 27,3 s | 457,2 s | 4 |
+| **Bonsai 2.5 27B** | **91,7%** | **83,3%** | **92%** | 27,3 s | 633,1 s | 2 |
+| Bonsai 2 9B | 86,1% | 75,0% | 89% | 24,2 s | **41,2 s** | 0 |
+| Spark-X2.6-4B | 86,1% | 75,0% | 90% | **21,9 s** | 354,5 s | 2 |
 
-Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina (donde
-`bench_compare` saturaba en 18/18).
-
-| familia | 9B | 2.5 27B | Spark |
+| familia | 27B | 9B | Spark |
 | --- | ---: | ---: | ---: |
-| cadena | 8/9 | 9/9 | 9/9 |
-| restricciones | 6/9 | 8/9 | 3/9 |
-| memoria | 8/9 | 7/9 | 6/9 |
-| ventana | 6/6 | 3/6 | 4/6 |
-| recuperación | 3/3 | 2/3 | 3/3 |
+| cadena | **9/9** | 8/9 | **9/9** |
+| restricciones | **9/9** | 7/9 | 6/9 |
+| memoria | 7/9 | 7/9 | 7/9 |
+| ventana | 5/6 | **6/6** | **6/6** |
+| recuperación | **3/3** | **3/3** | **3/3** |
+
+- **`d2` en este brazo**: 27B **2/3** (300 s y 633 s; la tercera se queda vacía a
+  los 633 s), 9B **3/3** en 20–34 s, Spark **3/3** (una a 663 s). El 27B sabe
+  hacerlo con 16k de tope; lo que no tiene es prisa.
+- Los timeouts que quedan son de `c3` (27B y Spark) y `e1` (Spark), todos a 300 s.
+- Ninguno de los tres se despega: 27B +5,6 puntos sobre los otros dos, con p50
+  ×1,25 y peor cola. La diferencia cae dentro del ruido de la máquina (abajo).
+
+### Lo publicado el 2026-11-25 — no comparable
+
+Misma tabla, misma máquina, otra corrida. Se conserva como historia, no como vara:
+cada brazo se midió en un estado distinto de la máquina.
+
+| modelo | pass^1 | pass^3 | p50 | timeouts |
+| --- | ---: | ---: | ---: | ---: |
+| Bonsai 2 9B | **86,1%** | 66,7% | **9,0 s** | 0 |
+| Bonsai 2.5 27B | 80,6% | 58,3% | 83,0 s | **8** |
+| Spark-X2.6-4B | 69,4% | 66,7% | 27,3 s | 4 |
+
+**Por qué no se puede restar**: con el mismo binario y el mismo modelo, el p50 del
+9B fue **9,0 s** entonces y **24,2 s** ahora (×2,7), y el del 27B **83,0 s** contra
+**27,3 s** (×3). Un factor 3 entre corridas idénticas se come cualquier diferencia
+de calidad de 5 puntos. En la corrida publicada el 27B fue el último de los tres
+(tras ~2 h de carga) y se llevó 7 timeouts a 300 s; el 9B, el primero, ninguno.
+**El orden de los brazos confunde modelo con estado de la máquina.**
 
 ### Brazo `minion` (`local_minion`) — medido el 2026-11-26
 
@@ -215,9 +237,12 @@ el cap tiene que superar el razonamiento **natural** del modelo (en `d2`, 4,1k).
 **Atribución — corregida el mismo día**: ese par `2048/2048` vive en `run_minion`
 y en el perfil base, **no** en la tabla publicada. La tabla del 25-nov es el brazo
 `dokime` (Pi), que no pasa por el `--max-tokens` de `bench_hard`. Así que el `d2`
-0/3 a 900 s **no queda explicado** por este mecanismo: su causa está en la
-configuración de Pi, que no está en el repo. Lo que sí queda probado es (a) el
-mecanismo, y (b) que el 27B **sabe** resolver `d2` cuando tiene margen.
+0/3 a 900 s **no queda explicado** por este mecanismo: Pi pedía hasta 16.384 tokens
+(el default de su esquema) y la máquina iba ~3× más lenta (p50 83 s), de modo que
+cada vuelta del bucle de agente costaba 150–250 s de prefill y los 900 s llegaban a
+las cuatro vueltas. En la corrida limpia, con el mismo tope, `d2` pasa **2/3**
+(300 s y 633 s). Lo que queda probado: (a) el mecanismo del tope, y (b) que el 27B
+**sabe** resolver `d2` cuando la máquina y el tope se lo permiten.
 
 Datos de contexto que conviene tener:
 - `d2` son **16.825 tokens de prompt** (24k chars ≈ 0,70 tok/char). Con el perfil
@@ -253,17 +278,19 @@ tendencia a resolver por shell.
 
 ## Qué queda del veredicto
 
-- El veredicto publicado («no desplaza a Spark») se apoyaba en el brazo `dokime`:
-  9B primero, 27B con 8 timeouts y p50 83 s. **Sigue suspendido**, ahora por dos
-  motivos: su corrida no es reproducible desde el repo (`models.json` sin
-  `max_tokens` y sólo `spark` declarado) y el brazo `minion` —medido limpio— ordena
-  distinto (27B > 9B > Spark).
-- Lo único afirmable hoy: en el brazo `minion`, con el mismo servidor y el mismo
-  tope, el 27B pasa más que los otros dos y es 4–5× más lento (p50 38,0 s frente a
-  7,9 y 8,2). En el brazo `dokime` no hay comparación válida.
-- Para cerrarlo: re-correr `dokime` con los tres modelos y un `models.json`
-  **versionado** (id + `max_tokens` explícito), y decidir con esa tabla. Mientras
-  tanto, «no desplaza a Spark» no se ratifica ni se revoca.
+- Con la configuración documentada y la GPU libre, los tres modelos quedan a menos
+  de 6 puntos: **27B 91,7 % (pass^3 83,3) · 9B 86,1 % (75,0) · Spark 86,1 %
+  (75,0)**. El 27B es el más consistente y el más lento (p50 ×1,25 del 9B, p95 ×15).
+- **La tabla publicada no sirve como vara**: el mismo 9B, con el mismo binario,
+  pasó de 9,0 a 24,2 s de p50 entre corridas, y el 27B de 83,0 a 27,3. La
+  diferencia entre modelos es del tamaño del ruido del orden de las corridas.
+- Por tanto «no desplaza a Spark» **no se ratifica ni se revoca**: se retira como
+  conclusión medida. Lo que hay es un empate técnico en calidad con tres perfiles
+  de latencia, y un banco que hoy no puede separarlos.
+- Para poder decidir hace falta cambiar el diseño del banco, no el modelo:
+  **intercalar** los tres brazos por tarea/trial (en vez de un modelo por corrida),
+  registrar la temperatura y el estado de la GPU por pasada, y repetir con la
+  máquina en frío. Con eso, la diferencia de 5 puntos se podrá atribuir o descartar.
 
 ## Peculiaridades de configuración
 - `min_p` debe pasarse explícito (`--min-p 0`): llama.cpp aplica 0.05.

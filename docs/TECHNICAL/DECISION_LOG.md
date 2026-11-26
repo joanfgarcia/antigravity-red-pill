@@ -4274,3 +4274,19 @@ Lo que sí queda medido y es válido:
 
 Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saberlo hay que re-correr el brazo `dokime` con los tres modelos y un `models.json` versionado (id + `max_tokens` explícito). Hasta entonces el veredicto «no desplaza a Spark» sigue suspendido y sin base comparable. Lección para el próximo: **verificar qué brazo produjo la tabla antes de «re-correrla»**; el nombre del fichero dice el modelo, no el arnés.
 
+
+## [AD-142] La tabla del banco no es una vara: el orden de las corridas pesa más que el modelo
+**Date**: 2026-11-26
+**Status**: ACCEPTED & IMPLEMENTED (medición y corrección de método).
+**Context**: AD-141 se retiró por confundir brazos. Quedaba por ver qué explicaba la tabla publicada. Se re-corre el brazo **`dokime`** (Pi) de los tres modelos con la configuración **documentada y escrita por el banco**: `models.json` con `maxTokens: 16384` explícito (`write_pi_models`), prism `b12178`, ctx 32.768/65.536, KV `q8_0`, `--reasoning-budget 2048` (Spark 256), `--timeout 300`, GPU libre al arrancar.
+**Result**:
+| modelo | pass^1 publicado | pass^1 limpio | p50 publicado | p50 limpio | timeouts (pub → limpio) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 27B | 80,6 % | **91,7 %** (33/36) | 83,0 s | **27,3 s** | 8 → 2 |
+| 9B | 86,1 % | **86,1 %** (31/36) | **9,0 s** | **24,2 s** | 0 → 0 |
+| Spark | 69,4 % | **86,1 %** (31/36) | 27,3 s | **21,9 s** | 4 → 2 |
+`d2` en el brazo Pi limpio: 27B **2/3** (300 s y 633 s), 9B 3/3 (20–34 s), Spark 3/3 (una a 663 s). Todos los fallos publicados del 27B eran timeouts de 300 s; en la corrida limpia quedan dos `c3`.
+**Decision**: la tabla publicada **se retira como vara de comparación**. Con el mismo binario y el mismo modelo, el p50 varía **×2,7 en el 9B** (9,0 → 24,2 s) y **×3 en el 27B** (83,0 → 27,3 s) entre corridas. Un factor 3 se come cualquier diferencia de 5 puntos, y en la corrida publicada el 27B fue el último (tras ~2 h de carga) mientras el 9B fue el primero. El orden confunde modelo con estado de la máquina.
+**Alternatives**: (a) quedarse con la tabla limpia y decidir — también es una sola ordenación, ahora favoreciendo al 27B por ir primero; (b) repetir hasta que coincidan — sin controlar el estado, es cara y ciega; (c) promediar las dos — mezcla estados distintos sin medirlos.
+**Rationale / Evidence**: `scratch/benchmarks/BENCHHARD_{bonsai25_20261126-182447,bonsai9_20261126-192715,spark_20261126-194201}` frente a las del 25-nov; las listas de fallo coinciden en tarea y comprobación, cambia el tiempo. 9B: mismos 31/36 con p50 ×2,7 → la varianza es del entorno, no del modelo.
+**Consequences**: el veredicto «no desplaza a Spark» **se retira como conclusión medida** (ni se ratifica ni se revoca): lo que hay es empate técnico en calidad (91,7 / 86,1 / 86,1) con tres perfiles de latencia. Para decidir hace falta cambiar el diseño: **intercalar** los brazos por tarea y trial, registrar temperatura y estado de la GPU por pasada, y repetir en frío. Eso es trabajo del banco, no del modelo.

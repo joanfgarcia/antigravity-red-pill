@@ -79,7 +79,10 @@
 - **[NEW] `scripts/bench_hard.py`**: 12 tareas en 5 familias, gradación por **estado
   del fixture** (no por la prosa), n=3 y brazo nulo en cada pasada. El brazo nulo da
   **0/108** y 0/216 instrucciones: donde `bench_compare` saturaba en 18/18, esta
-  batería discrimina.
+  batería discrimina. Dos brazos (`dokime` = CLI de Pi, `minion` = local_minion) que
+  **no se pueden restar**; el brazo Pi declara ahora su `maxTokens` en
+  `models.json` porque el esquema pone 16.384 por defecto y la corrida publicada no
+  era reproducible.
 - **[NEW] Fichas de Bonsai 2.5 27B y Bonsai 2 9B**, con techos medidos. Dos
   hallazgos del banco: (a) **el tope de generación necesita margen** sobre el
   razonamiento —con `max_tokens` igual al presupuesto, `content` vuelve vacío y la
@@ -89,7 +92,13 @@
   sitios distintos. Medido limpio en el brazo `minion` y con el mismo servidor
   para los tres: **27B 91,7 %** (p50 38,0 s) · 9B 72,2 % (7,9 s) · Spark 63,9 %
   (8,2 s), cero timeouts. No hay degradación térmica: 29,1 · 29,0 · 28,9 tok/s en
-  tres pasadas idénticas. *AD-139 (mecanismo, con corrección) / AD-141 (retirada)*.
+  tres pasadas idénticas.
+- **[FIX] La tabla del banco no es una vara**: con el mismo binario y modelo, el p50
+  varía ×2,7 (9B: 9,0 → 24,2 s) y ×3 (27B: 83,0 → 27,3 s) entre corridas; en la
+  publicada el 27B iba último tras dos horas de carga. Con config documentada y GPU
+  libre los tres quedan 27B **91,7 %** · 9B **86,1 %** · Spark **86,1 %**, y el
+  veredicto frente a Spark se retira como conclusión medida. *AD-139 (mecanismo) /
+  AD-141 (retirada) / AD-142 (método)*.
 - **[NEW] `bench_hard --max-tokens`** (default 2048, el histórico) y la config
   declarada en el resumen, para que el par `max_tokens == reasoning_budget` no pueda
   repetirse en silencio.

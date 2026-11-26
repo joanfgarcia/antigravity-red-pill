@@ -72,7 +72,7 @@ pasada. Config: `n_ctx` 65.536, KV `q8_0`, `--reasoning on --reasoning-budget 20
 | modelo | pass^1 | pass^3 | instrucción | p50 | p95 | timeouts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | **Bonsai 2 9B** | **86,1%** | 66,7% | **90%** | **9,0 s** | **61,5 s** | **0** |
-| Bonsai 2.5 27B (ctx 32k, budget 2048) | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | 8 |
+| Bonsai 2.5 27B (ver ficha, dos brazos) | 80,6% | 58,3% | 81% | 83,0 s | 900,1 s | 8 |
 | Spark-X2.6-4B (referencia) | 69,4% | 66,7% | 75% | 27,3 s | 457,2 s | 4 |
 
 Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina.
@@ -85,8 +85,13 @@ Brazo nulo: **0/108 pass y 0/216 instrucciones** → la batería discrimina.
 | ventana | **6/6** | 3/6 | 4/6 |
 | recuperación | **3/3** | 2/3 | **3/3** |
 
-- **Gana la batería**: mejor pass^1, mejor instrucción y **cero timeouts**, a 9 s
-  de p50. `d2` (agregar etiquetas en ~19k) **3/3** frente al 0/3 del 27B.
+- **En esa corrida** era el mejor: 86,1 %, mejor instrucción y cero timeouts, a 9 s
+  de p50. `d2` (agregar etiquetas en ~19k) **3/3** en 20–34 s.
+- **Pero esa corrida no es una vara**: el mismo 9B, mismo binario y misma config,
+  dio **24,2 s** de p50 en la corrida pareada del 26-nov —×2,7—. En ella los tres
+  quedan 27B 91,7 % · **9B 86,1 %** · Spark 86,1 %, con `d2` 3/3 para el 9B. El
+  orden de los brazos se come la diferencia; ver la ficha del 27B, «Qué queda del
+  veredicto».
 - Sus fallos son de **política y formato**, no de capacidad: `c2` contestó el
   código viejo (`K7-1990`) 1/3; `a3` una vez describió el fichero en prosa en vez
   de escribirlo; `b2` 1/3 envolvió el JSON en texto; `b1` 2/3 (57 palabras una vez,
