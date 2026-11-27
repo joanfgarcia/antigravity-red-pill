@@ -4407,3 +4407,24 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - Presupuesto medido: el pase de títulos cuesta **~5-8 min por sesión grande** (~0,8 min por sesión media), ~6-8 % del annotate.
 
 **Pendiente**: re-medir el dedup P1-A sin la señal del título (hoy usa `texto + título`; con el título vacío la contención cambia) y validar la calidad del re-titulado masivo del corpus existente.
+
+## [AD-149] Slots paralelos por perfil (`num_parallel`) y concurrencia de títulos
+**Date**: 2026-11-27
+**Status**: IMPLEMENTADO (medido en servidor manual; el daemon aplica el cambio al reiniciarse).
+**Context**: el Operador preguntó si lanzar dos instancias del mismo modelo y repartir batches hace la inferencia en paralelo. No es la forma: dos instancias duplican pesos y compiten por el mismo ancho de banda. La forma correcta es **un servidor con N slots** (`-np N`): una copia de pesos, KV total repartido y decode batcheado. `-np` era un `1` hardcodeado en `RuntimeServer._build_command`.
+**Implementación**: `num_parallel` por perfil (`hardware_affinity.num_parallel`, default 1) → `-np N`; `MEMENTO_TITLES_CONCURRENCY` (4) envía 4 batches de títulos en vuelo con `ThreadPoolExecutor`, checkpoint en el hilo principal. `bonsai_2_9b` queda con `num_parallel: 4`.
+**Medición (servidor manual, Bonsai 2-9B, 4 batches × 12 notas, `-c 32768`, q8_0)**:
+
+| Slots | VRAM | 4 batches concurrentes | Speedup vs secuencial |
+|---:|---:|---:|---:|
+| 1 | 2.834 MB | 11,0 s | 1,24× |
+| 2 | 2.868 MB | 6,4 s | 2,12× |
+| **4** | **2.960 MB** | **5,0 s** | **2,58×** |
+| 6 | 3.076 MB | 5,0 s | 2,64× |
+| 8 | 3.172 MB | 4,5 s | 2,88× |
+| 12 | 3.408 MB | 19,9 s (12 batches) | — (173 tok/s) |
+
+- VRAM por slot: **~50 MB**; los pesos (1,9 GB) y el KV total (`-c`) no se multiplican. Con 4 slots, cada uno recibe 8k de contexto; suficiente para batches de 12 notas (~2k).
+- A partir de 4 slots la ganancia se aplana (ancho de banda); 8/12 solo reducen el contexto por slot. **4 es el punto dulce** para títulos.
+- `-np` es argumento de arranque: **no se cambia en caliente**, cuesta lo mismo que un cambio de modelo (unload/load). Como la fase de títulos ya cambia de modelo, el cambio va en ese mismo arranque.
+**Consequences**: el pase de títulos baja de 5–8 min a **~2–3 min** por sesión grande; +130 MB de VRAM. El daemon actual sigue con el código viejo (`-np 1`) hasta que se reinicie; la concurrencia de peticiones se encola (sin romper nada) hasta entonces.

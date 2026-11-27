@@ -62,6 +62,11 @@
   La instrucción pide ≤80; se aceptan **hasta 120 sin truncar** y por encima de
   120 salta `TitleTooLongError` (fallo visible, nunca recorte). Medido en la
   sesión: máximo 115 chars, 69 >80, 8 >100, 0 >120.
+- **[NEW] Slots paralelos por perfil (`num_parallel`) y 4 batches de títulos en
+  vuelo.** `-np` deja de estar hardcodeado; Bonsai 2-9B sube a 4 slots (8k por
+  slot) y el pase de títulos lanza 4 batches concurrentes. Medido: **2,6×**
+  sobre secuencial (5,0 s vs 13,2 s para 4 batches), +130 MB de VRAM; más de 4
+  slots no mejora. *AD-149*.
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.

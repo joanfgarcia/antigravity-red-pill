@@ -980,6 +980,9 @@ class RedPillConfig(BaseSettings):
 	# Operador abre a 120: Bonsai devuelve 80-100 y recortar perdía información.
 	# No se trunca: si pasa de 120 se rechaza y se reintenta.
 	MEMENTO_TITLES_MAX_CHARS: int = 120
+	# Batches de títulos en vuelo (AD-149). Con el modelo en 4 slots, 4 batches
+	# concurrentes dan 2,6x sobre secuencial; más no mejora (ancho de banda).
+	MEMENTO_TITLES_CONCURRENCY: int = 4
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.

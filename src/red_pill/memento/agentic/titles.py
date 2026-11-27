@@ -50,6 +50,12 @@ def max_title_chars() -> int:
 	return max(20, int(getattr(cfg, "MEMENTO_TITLES_MAX_CHARS", 120) or 120))
 
 
+def titles_concurrency() -> int:
+	import red_pill.config as cfg
+
+	return max(1, int(getattr(cfg, "MEMENTO_TITLES_CONCURRENCY", 4) or 4))
+
+
 def title_batch_size() -> int:
 	import red_pill.config as cfg
 
@@ -229,15 +235,30 @@ def run_titles(
 		pending.append(note)
 
 	bs = title_batch_size()
-	for start in range(0, len(pending), bs):
-		batch = pending[start : start + bs]
-		titles = _call_batch(transport, batch)
+	batches = [pending[start : start + bs] for start in range(0, len(pending), bs)]
+	conc = min(titles_concurrency(), max(1, len(batches)))
+
+	def _absorb(batch, titles):
 		for i, note in enumerate(batch):
 			if i in titles:
 				note["title"] = titles[i]
 				stored[note["path"].name] = {"hash": note["hash"], "title": titles[i]}
 		checkpoint["titles"] = stored
 		_save_checkpoint(annotate_dir, checkpoint)
+
+	if conc <= 1:
+		for batch in batches:
+			_absorb(batch, _call_batch(transport, batch))
+	else:
+		# AD-149: 4 batches en vuelo contra un servidor con `-np 4`. El server
+		# comparte pesos y batchea el decode; el checkpoint se escribe en el hilo
+		# principal, así que no hay carrera en disco.
+		from concurrent.futures import ThreadPoolExecutor, as_completed
+
+		with ThreadPoolExecutor(max_workers=conc) as ex:
+			futs = {ex.submit(_call_batch, transport, batch): batch for batch in batches}
+			for fut in as_completed(futs):
+				_absorb(futs[fut], fut.result())
 
 	titled = 0
 	missing = 0

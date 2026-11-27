@@ -136,3 +136,31 @@ def test_titulo_de_mas_de_120_es_fallo_duro():
 	""">120 no se trunca ni se descarta en silencio: error explícito."""
 	with pytest.raises(titles.TitleTooLongError):
 		titles._parse_titles(json.dumps([{"i": 0, "title": "y" * 121}]))
+
+
+def test_batches_concurrentes(tmp_path, monkeypatch):
+	"""AD-149: con concurrencia 2, dos batches se solapan."""
+	import threading
+	import time
+
+	monkeypatch.setattr(cfg, "MEMENTO_TITLES_CONCURRENCY", 2)
+	monkeypatch.setattr(cfg, "MEMENTO_TITLES_BATCH", 1)
+	d = _dir(tmp_path)
+	for i in range(2):
+		_note(d, f"001-n{i}.md", f"Nota número {i} sobre el presupuesto.")
+	active = 0
+	max_active = 0
+	lock = threading.Lock()
+
+	def transport(system, user, max_tokens):
+		nonlocal active, max_active
+		with lock:
+			active += 1
+			max_active = max(max_active, active)
+		time.sleep(0.15)
+		with lock:
+			active -= 1
+		return json.dumps([{"i": 0, "title": "Presupuesto mensual"}])
+
+	titles.run_titles(tmp_path, "2026-09/opencode/s1", "opencode:s1", "opencode", transport)
+	assert max_active >= 2

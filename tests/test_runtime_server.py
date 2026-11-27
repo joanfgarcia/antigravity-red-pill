@@ -118,6 +118,14 @@ class TestBuildCommand:
 		assert cmd[cmd.index("-ngl") + 1] == "-1"
 		assert "9999" in cmd
 
+	def test_num_parallel_desde_hardware_affinity(self, mod, monkeypatch):
+		"""AD-149: `-np` sale del perfil (default 1)."""
+		monkeypatch.setattr(_FakeModelRegistry, "hardware", {"n_ctx": 16384, "n_gpu_layers": -1, "num_parallel": 3})
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999)
+		resolved = {"profile": {}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}
+		cmd = srv._build_command(resolved)
+		assert cmd[cmd.index("-np") + 1] == "3"
+
 	def test_kv_type_adds_cache_flags(self, mod):
 		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, kv_type="q8_0")
 		resolved = {"profile": {}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}

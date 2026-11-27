@@ -170,6 +170,15 @@ class RuntimeServer:
 		hw = ModelRegistry.get_resolved_hardware_affinity(self.profile_name)
 		n_ctx = int(self.ctx or hw.get("n_ctx") or (resolved["profile"].get("hardware_affinity") or {}).get("n_ctx") or 8192)
 		ngl = int(hw.get("n_gpu_layers", -1))
+		# Slots de decodificación en paralelo (AD-149). Con `-np N` el servidor
+		# mantiene UNA copia de los pesos y reparte el contexto total entre N
+		# secuencias (`-c` es total: cada slot recibe c/N). Default 1 (AD-049,
+		# 8 GB); un perfil de títulos puede subirlo si el KV y los buffers caben.
+		num_parallel = int(
+			hw.get("num_parallel")
+			or (resolved.get("profile") or {}).get("num_parallel")
+			or 1
+		)
 		cmd = [
 			resolved["server_binary"],
 			"-m",
@@ -181,7 +190,7 @@ class RuntimeServer:
 			"-c",
 			str(n_ctx),
 			"-np",
-			"1",  # 8 GB VRAM: un slot (AD-049 quirks)
+			str(max(1, num_parallel)),
 			"--host",
 			self.host,
 			"--port",
