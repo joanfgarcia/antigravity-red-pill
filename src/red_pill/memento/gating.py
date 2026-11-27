@@ -196,27 +196,32 @@ def manifest_delta(old_manifest: Optional[Dict[str, Any]], new_manifest: Dict[st
 	return delta
 
 
-def _notes_near_dups(annotate_dir: Path, threshold: float) -> int:
-	"""Pares near-dup entre las notas FINALES de la sesión (mismo cómputo que la métrica)."""
-	from .agentic.annotation_quality import _tokens
+def _notes_collapsible(annotate_dir: Path, threshold: float) -> int:
+	"""(notas, colapsables) de las notas FINALES de la sesión con la política vigente.
 
-	texts: List[str] = []
+	Lee el cuerpo con `parse_refine` (no con un split ingenuo: con un doble
+	frontmatter el YAML entraba como texto y 34 notas corruptas generaban ~390
+	pares falsos, AD-151) y cuenta lo que el dedup borraría de verdad — una nota
+	colapsable, no un par: un par residual no es trabajo pendiente y exigirlo a 0
+	convertía el gate en insatisfacible (AD-152).
+	"""
+	from red_pill.memento.ascension import parse_refine
+
+	from .agentic.annotation_quality import collapsible_notes
+
+	items: List[Dict[str, Any]] = []
 	for path in sorted(annotate_dir.glob("*.md")):
 		try:
-			raw = path.read_text(encoding="utf-8", errors="replace")
+			_fm, body = parse_refine(path.read_text(encoding="utf-8", errors="replace"))
 		except OSError:
 			continue
-		parts = raw.split("\n---\n", 1)
-		body = parts[1] if len(parts) == 2 else raw
-		texts.append(" ".join(body.split()))
-	toks = [_tokens(t) for t in texts]
-	pairs = 0
-	for i in range(len(toks)):
-		for j in range(i + 1, len(toks)):
-			a, b = toks[i], toks[j]
-			if a and b and len(a & b) / min(len(a), len(b)) > threshold:
-				pairs += 1
-	return pairs
+		if body.lstrip().startswith("---"):
+			logger.warning(f"dedup: {path.name} con doble frontmatter, fuera del cómputo (reparar antes)")
+			continue
+		text = " ".join(body.split())
+		if text:
+			items.append({"text": text})
+	return collapsible_notes(items, threshold)
 
 
 def _component_action(
@@ -249,9 +254,10 @@ def _component_action(
 		return "skip", "scopes sin efecto en esta sesión"
 	if component == "dedup_policy":
 		threshold = float((components.get("dedup_policy") or {}).get("threshold") or 0.6)
-		if _notes_near_dups(annotate_dir, threshold) > 0:
-			return "process", "dedup: near-dups residuales al umbral vigente"
-		return "skip", "dedup sin near-dups residuales"
+		collapsible = _notes_collapsible(annotate_dir, threshold)
+		if collapsible > 0:
+			return "process", f"dedup: {collapsible} nota(s) que el dedup colapsaría al umbral vigente"
+		return "skip", "dedup en punto fijo: 0 notas colapsables"
 	if component in ("dual_score", "thresholds"):
 		return "rescore", "scorer/umbrales: re-puntuar sin re-extraer"
 	return "process", f"delta desconocido: {component}"
@@ -398,6 +404,11 @@ def _annotations_from_disk(annotate_dir: Path) -> List[Dict[str, Any]]:
 		try:
 			fm, body = parse_refine(path.read_text(encoding="utf-8", errors="replace"))
 		except Exception:
+			continue
+		if body.lstrip().startswith("---"):
+			# Doble frontmatter (AD-151): el YAML entraría como texto y falsearía
+			# los pares near-dup. Esas notas no ascienden; se dejan fuera.
+			logger.warning(f"métricas: {path.name} con doble frontmatter, fuera del cómputo")
 			continue
 		item: Dict[str, Any] = {"title": str(fm.get("title") or ""), "text": " ".join(body.split())}
 		for key in ("work_score", "social_score"):

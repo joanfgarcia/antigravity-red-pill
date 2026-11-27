@@ -912,7 +912,11 @@ class RedPillConfig(BaseSettings):
 	# toca ({dir, action}); OFF → frescura binaria legacy por prompt_version.
 	MEMENTO_ANNOTATE_GATE: bool = False
 	# Umbral efectivo de dedup P1-A (MEM-010 F2, fuente única): lo usa el dedup
-	# de anotaciones y la métrica `near_dups` del gating.
+	# de anotaciones y la métrica `near_dups` del gating. 0,60 se queda (AD-152,
+	# 2026-11-28, 983 notas reales): el ruido de 0,60 NO venía del umbral sino de
+	# la contención sobre notas cortas; con masa mínima de 12 tokens compartidos
+	# (annotation_quality._NEAR_DUP_MIN_SHARED) colapsa 1 nota y es un duplicado
+	# REAL (el mismo hecho contado dos veces). Sin esa masa: 5 colapsos falsos.
 	MEMENTO_ANNOTATE_DEDUP_THRESHOLD: float = 0.6
 	# Zona muerta del routing dual (annotate): margen mínimo sobre el gate para
 	# enrutar; por debajo → `unstable` (no asciende, queda en el árbol).

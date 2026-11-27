@@ -72,6 +72,54 @@ def _tokens(text: str) -> set:
 	return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
 
 
+# Mínimo de tokens compartidos para declarar near-dup. La contención sobre notas
+# cortas dispara con vocabulario compartido (AD-152: a t=0,60 y 949 notas reales,
+# TODOS los colapsos eran notas distintas de 14-23 tokens que hablaban del mismo
+# tema; 12 tokens compartidos quita esos falsos positivos sin perder duplicados
+# reales, que rondan 15+ tokens en común).
+_NEAR_DUP_MIN_SHARED = 12
+
+
+def _note_text(a: Dict[str, Any]) -> str:
+	return str(a.get("text") or "")
+
+
+def _near_dup(a: set, b: set, threshold: float) -> bool:
+	"""Contención sobre el conjunto menor, con masa mínima de tokens (AD-152).
+
+	Misma función para el dedup, la métrica y el gate: si divergen, el gate pide
+	lo que el dedup nunca deja de dejar (el 392 de near_dups de 2026-11-28).
+	"""
+	if not a or not b:
+		return False
+	inter = len(a & b)
+	if inter < _NEAR_DUP_MIN_SHARED:
+		return False
+	return inter / min(len(a), len(b)) > threshold
+
+
+def near_dup_pairs(texts: List[str], threshold: float) -> int:
+	"""Pares near-dup en un conjunto de textos (medida diagnóstica, no de trabajo)."""
+	toks = [_tokens(t) for t in texts]
+	pairs = 0
+	for i in range(len(toks)):
+		for j in range(i + 1, len(toks)):
+			if _near_dup(toks[i], toks[j], threshold):
+				pairs += 1
+	return pairs
+
+
+def collapsible_notes(annotations: List[Dict[str, Any]], threshold: float) -> int:
+	"""Notas que el dedup colapsaría (la unidad de trabajo del P1-A).
+
+	Un par residual no es trabajo pendiente: dos notas distintas pueden compartir
+	vocabulario y una nota puede aparecer en varios pares. Esta cuenta es
+	exactamente lo que un pase de dedup eliminaría, así que `0` es el punto fijo
+	alcanzable que el gate puede exigir.
+	"""
+	return len(annotations) - len(dedup_annotations(annotations, threshold))
+
+
 def _rank(a: Dict[str, Any]) -> Tuple[int, float, int]:
 	flags = a.get("flags") or []
 	voice_ok = 0 if "voice" in flags else 1
@@ -83,17 +131,15 @@ def _rank(a: Dict[str, Any]) -> Tuple[int, float, int]:
 
 
 def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: float) -> Dict[str, Any]:
-	"""Métricas de calidad de una sesión anotada (deterministas, sin IO)."""
-	texts = [str(a.get("text") or "") for a in annotations]
+	"""Métricas de calidad de una sesión anotada (deterministas, sin IO).
+
+	`near_dups` es diagnóstico (pares) y `dedup_collapsible` es la señal del gate
+	(notas que el dedup borraría con esta misma política). Ambos salen de la
+	misma señal —el texto, sin título— y de la misma función `_near_dup`.
+	"""
+	texts = [_note_text(a) for a in annotations]
 	n = len(texts)
 	lens = [len(t) for t in texts]
-	toks = [_tokens(t + " " + str(a.get("title") or "")) for t, a in zip(texts, annotations)]
-	near_dups = 0
-	for i in range(len(toks)):
-		for j in range(i + 1, len(toks)):
-			a, b = toks[i], toks[j]
-			if a and b and len(a & b) / min(len(a), len(b)) > dedup_threshold:
-				near_dups += 1
 	margins = [
 		abs(float(a.get("work_score", 0.0) or 0.0) - float(a.get("social_score", 0.0) or 0.0))
 		for a in annotations
@@ -103,7 +149,8 @@ def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: 
 		"notas": n,
 		"pct_gt_600": round(100 * sum(1 for x in lens if x > 600) / max(1, n), 1),
 		"pct_primera_persona": round(100 * sum(1 for t in texts if is_first_person(t)) / max(1, n), 1),
-		"near_dups": near_dups,
+		"near_dups": near_dup_pairs(texts, dedup_threshold),
+		"dedup_collapsible": collapsible_notes([{"text": t} for t in texts], dedup_threshold),
 		"dedup_threshold": float(dedup_threshold),
 		"min_margin": round(min(margins), 3) if margins else None,
 		"bio_leaks": sum(1 for t in texts if any(p.search(t) for p in _BIO_LEAK_PATTERNS)),
@@ -113,6 +160,9 @@ def compute_note_metrics(annotations: List[Dict[str, Any]], *, dedup_threshold: 
 def dedup_annotations(annotations: List[Dict[str, Any]], threshold: float = 0.6) -> List[Dict[str, Any]]:
 	"""P1-A: colapsa duplicados exactos (hash normalizado) y near-dups (tokens).
 
+	La señal es SOLO el texto (AD-152): el título llega vacío en annotate y en el
+	resto lo escribe otro prompt, así que no dice nada sobre si dos notas son el
+	mismo hecho; además dos notas distintas sobre el mismo tema comparten título.
 	Conserva la mejor variante: 1ª persona > significance > longitud. Los gemelos
 	work/social del mismo evento se funden aquí.
 	"""
@@ -120,12 +170,12 @@ def dedup_annotations(annotations: List[Dict[str, Any]], threshold: float = 0.6)
 	kept_tokens: List[set] = []
 	seen: set = set()
 	for a in sorted(annotations, key=_rank, reverse=True):
-		text = str(a.get("text") or "")
+		text = _note_text(a)
 		h = hashlib.sha256(_normalize(text).encode("utf-8")).hexdigest()
 		if h in seen:
 			continue
-		t = _tokens(text + " " + str(a.get("title") or ""))
-		if any(t and kt and len(t & kt) / min(len(t), len(kt)) > threshold for kt in kept_tokens):
+		t = _tokens(text)
+		if any(_near_dup(t, kt, threshold) for kt in kept_tokens):
 			continue
 		seen.add(h)
 		kept.append(a)

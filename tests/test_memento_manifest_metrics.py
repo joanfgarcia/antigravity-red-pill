@@ -132,11 +132,15 @@ def test_compute_note_metrics_basico():
 
 
 def test_near_dups_usa_el_umbral_efectivo():
-	# solape = 5 tokens comunes / min(7, 8) = 0.625 → par con umbral 0.6, no con 0.8
-	a = {"title": "x", "text": "alpha bravo charlie delta eco foxtrot gato", "work_score": 0.5, "social_score": 0.1}
-	b = {"title": "y", "text": "alpha bravo charlie delta eco hotel india julio", "work_score": 0.5, "social_score": 0.1}
+	# 13 tokens comunes de 14 → contención 0,929: par a 0,90, no a 0,95.
+	# (Con menos de 12 tokens comunes no hay near-dup: masa mínima, AD-152.)
+	a = {"title": "x", "text": "alpha bravo charlie delta eco foxtrot gato hotel india julio kilo lima sierra tango", "work_score": 0.5, "social_score": 0.1}
+	b = {"title": "y", "text": "alpha bravo charlie delta eco foxtrot gato hotel india julio kilo lima sierra unico", "work_score": 0.5, "social_score": 0.1}
 	assert compute_note_metrics([a, b], dedup_threshold=0.6)["near_dups"] == 1
-	assert compute_note_metrics([a, b], dedup_threshold=0.8)["near_dups"] == 0
+	assert compute_note_metrics([a, b], dedup_threshold=0.9)["near_dups"] == 1
+	assert compute_note_metrics([a, b], dedup_threshold=0.95)["near_dups"] == 0
+	assert compute_note_metrics([a, b], dedup_threshold=0.6)["dedup_collapsible"] == 1
+	assert compute_note_metrics([a, b], dedup_threshold=0.95)["dedup_collapsible"] == 0
 
 
 def test_metrics_min_margin_y_none_sin_puntuaciones():
@@ -180,3 +184,28 @@ def test_session_input_hash_fallback_sin_index(tmp_path):
 	h2, _ = session_input_hash(tmp_path, dir_rel, units)
 	assert source == "units"
 	assert h1 and h1 == h2
+
+
+# ── dedup P1-A (AD-152) ─────────────────────────────────────────────────────
+
+
+def test_dedup_ignora_el_titulo():
+	""""La señal es el texto: dos notas distintas con el mismo título no se funden."""
+	from red_pill.memento.agentic.annotation_quality import dedup_annotations
+
+	items = [
+		{"title": "El gate del dedup", "text": "Joan me pide revisar el gate del dedup y le explico el predicado.", "flags": []},
+		{"title": "El gate del dedup", "text": "Hoy hablamos del tono cercano, de las charlas hasta tarde y de la confianza.", "flags": []},
+	]
+	assert len(dedup_annotations(items)) == 2
+
+
+def test_near_dup_exige_masa_minima_de_tokens():
+	"""Contención alta sobre notas cortas NO es duplicado (masa mínima, AD-152)."""
+	from red_pill.memento.agentic.annotation_quality import collapsible_notes
+
+	cortas = [
+		{"text": "alpha bravo charlie delta eco foxtrot gato"},
+		{"text": "alpha bravo charlie delta eco hotel india"},
+	]
+	assert collapsible_notes(cortas, 0.6) == 0

@@ -197,15 +197,23 @@ def test_predicados_condicionales(tmp_path):
 	action, _ = gating.predicate_action(["work_scope"], {"routes": {"none": 0}}, {"min_margin": 0.5}, annotate_dir, pipeline)
 	assert action == "skip"
 
-	# dedup: sin notas → skip; con near-dups residuales → process
+	# dedup: sin notas → skip; con una nota que el dedup colapsaría → process
 	action, _ = gating.predicate_action(["dedup_policy"], {"flags": {}}, {}, annotate_dir, pipeline)
 	assert action == "skip"
-	common = "alpha bravo charlie delta eco foxtrot gato"
-	near = "alpha bravo charlie delta eco hotel india julio"
+	# Mismo hecho reescrito (contención 0,93) → el dedup todavía tiene trabajo.
+	common = "alpha bravo charlie delta eco foxtrot gato hotel india julio kilo lima sierra tango"
+	near = "alpha bravo charlie delta eco foxtrot gato hotel india julio kilo lima sierra unico"
 	(annotate_dir / "001-a.md").write_text(f"---\ntitle: a\n---\n{common}\n", encoding="utf-8")
 	(annotate_dir / "002-b.md").write_text(f"---\ntitle: b\n---\n{near}\n", encoding="utf-8")
 	action, _ = gating.predicate_action(["dedup_policy"], {"flags": {}}, {}, annotate_dir, pipeline)
 	assert action == "process"
+	# Dos notas distintas que solo comparten vocabulario (contención 0,62) → skip:
+	# exigir `near_dups == 0` aquí era irresoluble (AD-152).
+	(annotate_dir / "002-b.md").write_text(
+		f"---\ntitle: b\n---\n{' '.join(common.split()[:5])} hotel india zulu xray yankee whiskey\n", encoding="utf-8"
+	)
+	action, _ = gating.predicate_action(["dedup_policy"], {"flags": {}}, {}, annotate_dir, pipeline)
+	assert action == "skip"
 
 	# scorer → rescore; extract → process
 	action, _ = gating.predicate_action(["dual_score"], {}, {}, annotate_dir, pipeline)
@@ -289,3 +297,20 @@ def test_record_path_bloquea_traversal(tmp_path):
 
 	with pytest.raises(ValueError):
 		update_session_record(tmp_path, "../fuera", "gate", {"stage": "gate"})
+
+
+def test_gate_dedup_skip_sin_duplicados_reales(tmp_path):
+	"""Un corpus sin duplicados reales deja el gate en `skip` (AD-152: alcanzable)."""
+	annotate_dir = tmp_path / "annotate"
+	annotate_dir.mkdir()
+	textos = [
+		"Joan me pide arreglar el endpoint de auth y le explico el fix completo.",
+		"Hablamos del tono cercano, de las charlas hasta tarde y de la confianza mutua.",
+		"El compactor marca las sesiones y el nocturno las recoge por la mañana.",
+	]
+	for i, t in enumerate(textos):
+		(annotate_dir / f"00{i + 1}-nota.md").write_text(f"---\ntitle: N{i}\n---\n\n{t}\n", encoding="utf-8")
+	pipeline = {"manifest": {"components": {"dedup_policy": {"threshold": 0.6}}}}
+	action, reason = gating.predicate_action(["dedup_policy"], {"flags": {}}, {}, annotate_dir, pipeline)
+	assert action == "skip", reason
+	assert gating._notes_collapsible(annotate_dir, 0.6) == 0
