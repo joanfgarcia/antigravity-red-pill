@@ -40,6 +40,15 @@
   reintenta una vez con un 50 % más de margen; si vuelve a cortarse, el pase
   **aborta sin tocar disco** — también cuando el array cierra por casualidad
   (antes se perdían ideas con un warning). *AD-144*.
+- **[FIX] annotate trocea en partes similares y deja de recortar en silencio.**
+  El A/B con K2 (AD-146) midió que el p99 (24,1k chars) no cabe a 10.240 y que a
+  16.384 no termina dentro del watchdog: **0 notas en ambos brazos**. Ahora cada
+  split se parte en `ceil(chars/8000)` trozos de tamaño similar (9000 → 4500+4500,
+  no 8000+1000), con corte en cabecera de turno. Medido: p99 → 4 trozos de
+  5,8–6,4k, 29 notas, 0 errores, 272 s. El tope de prompt sale del contexto y
+  **falla con `PromptTooLongError`** en vez de recortar a 20k; un truncado
+  recuperado por el reintento ya no aborta el pase. Coste: 2 llamadas más por
+  split >8k. *AD-146*.
 - **[FIX] Oracle entrega fuentes, no finge una síntesis.** PERF-F01 dejó el
   `EdgeEngine` lazy y Oracle comprobaba `if engine.llm` antes de cualquier carga:
   siempre `None`. Desde entonces cada `search_memory_research` devolvía la

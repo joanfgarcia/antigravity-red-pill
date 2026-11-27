@@ -53,19 +53,20 @@ n_ctx_min = ceil(chars_unidad_max / ratio) + max_tokens_salida + 512
 | Carril | Unidad máxima real | Salida | `n_ctx_min` | Estado |
 |---|---:|---:|---:|---|
 | `distill` | 8.000 chars (`MEMENTO_FRAGMENT_MAX_CHARS`) | 2.048 | **5.760 → 6.144** | Cumple el titular (K2 distill a 24.576; Granite a 10.240) |
-| `annotate` **troceado a 8.000** | 8.000 chars | 4.096 | **6.144** | Cumpliría K2 a 10.240 |
-| `annotate` **sin trocear (hoy)** | 20.000 chars (tope de `_fit_prompt`) | 4.096 | **12.608 → 12.800** | **K2 a 10.240 NO cumple**: el p99 (24,1k) se recorta en silencio |
+| `annotate` **troceado (vigente, AD-146)** | 8.000 chars (`MEMENTO_ANNOTATE_CHUNK_CHARS`) | 4.096 | **6.144** | **K2 a 10.240 cumple y está medido** (§5): 29 notas en el p99, 0 errores |
+| `annotate` **sin trocear (alternativa)** | 24.107 chars (p99 real) | 4.096 | **12.800** | **No basta con caber**: K2 a 16.384 no completa el p99 (timeout >180 s) |
 
-> Consecuencia escrita: hoy `annotate` no puede admitir un modelo con `n_ctx`
-> 10.240 si se mantiene el contrato de splits enteros. O se trocea a 8.000 (la
-> estrategia que ya usa `distill`) o el perfil del juez sube a `n_ctx` ≥ 12.800.
-> Cualquier candidato nuevo se evalúa contra la opción vigente.
+> Consecuencia escrita: `annotate` trocea en partes similares de ≤8.000 (no
+> 8000+1000). La alternativa de subir el contexto no está prohibida por la
+> fórmula, pero **sí por la medición**: caber no es destilar bien, y a 16.384 el
+> p99 real no termina dentro del watchdog. Cualquier candidato nuevo se evalúa
+> contra la opción vigente y con la tabla A/B de §2.
 
 > **Y en ambos casos hay que medir la calidad al contexto elegido.** Subir el
-> `n_ctx` de K2 a 16.384 es una *hipótesis*, no un arreglo: antes hay que
-> comprobar que K2 sigue anotando igual de bien con la unidad real a ese
-> contexto. Lo mismo vale para trocear a 8.000: hay que medir que los fragmentos
-> más pequeños no pierden ideas ni cambian la voz.
+> `n_ctx` de K2 a 16.384 se midió el 2026-11-27 y **no sirve** para el p99 (ver
+> §5): no basta con que la unidad quepa. Trocear a 8.000 también se midió: el
+> p99 produce 29 notas, 0 errores y las mismas ideas que el split entero en
+> p50/p90, sin la duplicación work→social que inflaba el conteo del split entero.
 
 ### Cómo se mide «produce memoria de calidad a ese contexto»
 
@@ -123,8 +124,9 @@ No basta con una corrida ni con un fixture corto. Protocolo mínimo:
 3. **Contrato y calidad**:
    - distill: `scripts/distiller_fidelity.py` (ambos lados, fidelidad) y
      `scripts/distiller_bakeoff.py` (formato/JSON) con el prompt del carril.
-   - annotate: `PYTHONPATH=src .venv/bin/python scripts/bench_annotate.py
-     --repetitions 3` (fixture fijo, detecta truncados y JSON inválido).
+   - annotate: `PYTHONPATH=src .venv/bin/python scripts/annotate_context_ab.py`
+     (unidades reales p50/p90/p99, A/B de contexto, N=3; §5) y
+     `scripts/bench_annotate.py --repetitions 3` para el coste/contrato.
 4. **Peor caso end-to-end**: una unidad real del p99 (por chars) por el pipeline
    de producción (`memento_agentic --phase <fase> --target <sesión>`), con la GPU
    libre, midiendo `finish_reason`, secciones/notas y tiempo.
@@ -141,11 +143,25 @@ No basta con una corrida ni con un fixture corto. Protocolo mínimo:
 | Carril | Titular | Contexto de producción | Medido |
 |---|---|---:|---|
 | distill | `bonsai_25_27b_distill` | 24.576 (tier 7,4 GB) | 2,6 ms/char (101.884 chars → 18 secciones en 261 s), 0 degradadas |
-| annotate | `k2_horizon_7b` | 10.240 | ~800 tokens de salida por split de 16,6k; 2 llamadas/split; **no cubre el p99 de 24,1k** |
+| annotate | `k2_horizon_7b` + trozos ≤8.000 | 10.240 | p99 24,1k → 4 trozos (5,8–6,4k), 29 notas, 196–297 s/unidad, 0 errores |
 
-> K2 a 12.800 o 16.384 **no está medido**: por el contrato, hoy no es admisible
-> para annotate sin trocear. Subir el contexto exige la tabla A/B de §2; hasta
-> entonces es una hipótesis, no un titular.
+### A/B/C de annotate (2026-11-27, K2, N=3, unidades reales)
+
+Unidades p50/p90/p99 de chars del árbol (12.224 / 14.321 / 24.107). Notas por
+unidad = work + social + todos los trozos (mediana de 3 reps).
+
+| Brazo | p50 | p90 | **p99** |
+|---|---:|---:|---:|
+| A · K2 a 10.240 | 19 notas · 66 s · 0 err | 11 · 66 s · 0 err | **0 · 6/6 `PromptTooLongError`** |
+| B · K2 a 16.384 | 12 · 63 s · 0 err | 12 · 115 s · 0 err | **0 · 6/6 `ReadTimeout`** (360 s/unidad) |
+| C · K2 a 10.240 + trozos | 13 · 71 s · 0 err | 15 · 86 s · 0 err | **29 · 272 s · 0 err** |
+
+Lectura: A no puede servir el p99 (el prompt completo son 29.194 chars); B
+tampoco (el prompt completo + 4.061 de salida no termina en 180 s y el servidor
+de un solo slot encola el resto); C es la única que completa las tres. En
+p50/p90 el conteo de A está inflado por duplicación work→social (el dedup P1-A
+la colapsa en producción); el contenido es el mismo. Detalle y decisión en
+**AD-146**.
 
 ## 6. Si no cumple
 
@@ -159,8 +175,8 @@ El motivo del rechazo se escribe en su ficha. «Carga y responde» no es un crit
 ## 7. Cuándo se repite
 
 - Versión nueva del modelo (aunque sea el mismo nombre).
-- Cambio de `MEMENTO_FRAGMENT_MAX_CHARS`, del tope de annotate, del prompt o de
-  `thinking`.
+- Cambio de `MEMENTO_FRAGMENT_MAX_CHARS`, de `MEMENTO_ANNOTATE_CHUNK_CHARS`, del
+  tope de annotate, del prompt o de `thinking`.
 - Cambio de `n_ctx` del perfil o del tier de VRAM aplicado.
 
 ## 8. Qué no cubre

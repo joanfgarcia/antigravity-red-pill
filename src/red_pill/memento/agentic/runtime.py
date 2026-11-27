@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from . import prompts
@@ -68,7 +69,11 @@ def annotate_prompt_version() -> str:
 	"""
 	work_scope, social_scope = annotate_scopes()
 	view = fragment_view_settings()
-	extra = {"view": "|".join(view)} if view[0] != "raw" else None
+	# El troceo entra en la huella: cambiar el tope de annotate cambia las
+	# unidades que ve el modelo, así que las notas viejas dejan de ser reusables.
+	extra = {"chunk": str(annotate_chunk_chars())}
+	if view[0] != "raw":
+		extra["view"] = "|".join(view)
 	combined = annotate_combined_prompt_id()
 	combined_static = {combined: {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}} if combined else {}
 	combined_extra = {"annotate_extract": "single"} if combined else {}
@@ -89,7 +94,7 @@ def annotate_prompt_version() -> str:
 				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
 				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
 			},
-			extra={**(extra or {}), "annotate_set": "v3", **combined_extra},
+			extra={**extra, "annotate_set": "v3", **combined_extra},
 		)
 	if voice_v2_enabled():
 		extract_ids = [combined] if combined else ["annotate_work_user_v2", "annotate_social_user_v2"]
@@ -108,7 +113,7 @@ def annotate_prompt_version() -> str:
 				"voice_rewrite_user_v2": {"identity": prompts.IDENTITY_BIO},
 				"dual_score_user_v2": {"work_scope": work_scope, "social_scope": social_scope},
 			},
-			extra={**(extra or {}), **combined_extra},
+			extra={**extra, **combined_extra},
 		)
 	extract_ids = [combined] if combined else ["annotate_work_user", "annotate_social_user"]
 	extract_static = (
@@ -125,7 +130,7 @@ def annotate_prompt_version() -> str:
 			**extract_static,
 			"voice_rewrite_user": {"identity": prompts.IDENTITY_BIO},
 		},
-		extra={**(extra or {}), **combined_extra},
+		extra={**extra, **combined_extra},
 	)
 
 
@@ -200,6 +205,41 @@ def runtime_profile_name() -> str:
 		return ""
 
 
+def _resolved_for_task(task: str):
+	"""Perfil que sirve `task`, honrando `RP_LLM_MODEL` si el job lo fija.
+
+	2026-11-27: `annotate_max_tokens` y `annotate_prompt_set` resolvían solo la
+	task. Con un job que fija otro modelo (el A/B de contexto, o un carril con
+	titular sustituido), el presupuesto de salida y la variante de prompt se
+	calculaban para el perfil por defecto. Si el modelo fijado no es candidato
+	de la tarea se vuelve a la task (comportamiento histórico), para no romper
+	jobs que fijan un modelo auxiliar.
+	"""
+	from red_pill.core import model_runtime as mr
+
+	body: Dict[str, Any] = {"task": task}
+	model = os.getenv("RP_LLM_MODEL", "").strip()
+	if model:
+		body["model"] = model
+	try:
+		return mr.resolve(body)
+	except Exception:
+		if model:
+			return mr.resolve({"task": task})
+		raise
+
+
+def annotate_chunk_chars() -> int:
+	"""Tope de chars por trozo de annotate (`MEMENTO_ANNOTATE_CHUNK_CHARS`).
+
+	0 o negativo desactiva el troceo (split entero). El pase trocea con
+	`fragments.balanced_chunks`, que reparte en partes similares.
+	"""
+	import red_pill.config as cfg
+
+	return int(getattr(cfg, "MEMENTO_ANNOTATE_CHUNK_CHARS", 8000) or 0)
+
+
 def annotate_max_tokens(default: int = 1024, chars: int | None = None) -> int:
 	"""Presupuesto de salida de la extracción de notas, según la task `annotate`.
 
@@ -217,9 +257,7 @@ def annotate_max_tokens(default: int = 1024, chars: int | None = None) -> int:
 	chars; el margen cubre unidades densas (muchas ideas cortas).
 	"""
 	try:
-		from red_pill.core import model_runtime as mr
-
-		resolved = mr.resolve({"task": "annotate"})
+		resolved = _resolved_for_task("annotate")
 		base = int(getattr(resolved, "max_tokens", 0) or 0) or default
 		ctx = int(getattr(resolved, "n_ctx", 0) or 0)
 	except Exception:
@@ -285,9 +323,7 @@ def annotate_prompt_set() -> str:
 		return "v2"
 	if raw in ("", "auto"):
 		try:
-			from red_pill.core import model_runtime as mr
-
-			resolved = mr.resolve({"task": "annotate"})
+			resolved = _resolved_for_task("annotate")
 			setc = (getattr(resolved, "annotate_prompt_set", None) or "").strip().lower()
 			if setc in ("v3", "v2", "v1", ""):
 				if setc:
@@ -580,18 +616,76 @@ def model_prompt_budget() -> int:
 	return int(n_ctx - 4096)
 
 
+MEMENTO_PROMPT_CHARS_PER_TOKEN = 3.5
+"""Ratio de planificación chars/token del prompt (medido 3,7 en K2 con plantilla).
+
+Se aplica al recorte de seguridad del prompt: con un `n_ctx` conocido, el tope de
+chars debe salir del contexto, no de una constante de 20.000. 3,5 deja margen
+para tokenizadores peores sin recortar unidades que sí caben.
+"""
+
+
+def _prompt_char_cap(max_tokens: int) -> int:
+	"""Chars máximos de prompt para el contexto del modelo que sirve la tarea.
+
+	2026-11-27: el tope era un `20000` clavado. Con annotate, el split p99
+	(24.107 chars) se recortaba en silencio **aunque el perfil tuviera contexto
+	para él** (16.384): el A/B medía el recorte, no el contexto. Con `n_ctx`
+	resoluble, el tope = `(n_ctx − max_tokens − 512) * 3,5`; sin `n_ctx` (o sin
+	task declarada) se conserva el 20.000 histórico.
+	"""
+	llm = _llm_env()
+	task = llm["task"]
+	if not task:
+		return 20000
+	try:
+		resolved = _resolved_for_task(task)
+		n_ctx = int(getattr(resolved, "n_ctx", 0) or 0)
+	except Exception:
+		n_ctx = 0
+	if n_ctx <= 0:
+		return 20000
+	return max(4000, int((n_ctx - int(max_tokens) - 512) * MEMENTO_PROMPT_CHARS_PER_TOKEN))
+
+
+_LAST_PROMPT_CAPPED = False
+
+
 def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
-	"""Cap superior de seguridad: recorta solo prompts claramente excesivos.
-	El ajuste fino lo hace el reintento adaptativo de `http_transport` (la ratio
-	chars/token varía 1-4, ningún presupuesto fijo es seguro)."""
+	"""Cap de seguridad del prompt; marca `last_prompt_capped()` si recorta.
+
+	El ajuste fino sigue siendo el reintento adaptativo de `http_transport`
+	(la ratio chars/token varía 1-4). Pero un recorte aquí NO es cosmético: el
+	modelo ve una fracción de la unidad. El consumidor (annotate) lo consulta y
+	aborta en vez de anotar una unidad incompleta como si estuviera entera.
+	"""
+	global _LAST_PROMPT_CAPPED
 	if len(user) <= hard_cap:
 		return user
+	_LAST_PROMPT_CAPPED = True
 	cut = user[:hard_cap]
 	cut = cut[: cut.rfind(" ")] if " " in cut else cut
 	return cut + "\n[... truncado por presupuesto de contexto]"
 
 
+def last_prompt_capped() -> bool:
+	"""True si el prompt de la última llamada se recortó por el tope de contexto."""
+	return _LAST_PROMPT_CAPPED
+
+
 _LAST_TRUNCATED = False
+_LAST_CALL_STATS: Dict[str, Any] = {}
+
+
+def last_call_stats() -> Dict[str, Any]:
+	"""Telemetría de la ÚLTIMA llamada de `http_transport`.
+
+	Para medir admisión (contexto/tokens/finish_reason) sin replicar el
+	transporte en cada banco: `model` pedido, modelo servido, `finish_reason`,
+	`prompt_tokens`/`completion_tokens` (del `usage` o de `timings`), `attempts`,
+	`prompt_cuts` (recortes por 500) y `elapsed_s`. Se reinicia en cada llamada.
+	"""
+	return dict(_LAST_CALL_STATS)
 
 
 def last_truncated() -> bool:
@@ -605,8 +699,19 @@ def last_truncated() -> bool:
 
 
 def _reset_truncated() -> None:
-	global _LAST_TRUNCATED
+	global _LAST_TRUNCATED, _LAST_PROMPT_CAPPED
 	_LAST_TRUNCATED = False
+	_LAST_PROMPT_CAPPED = False
+
+
+class PromptTooLongError(RuntimeError):
+	"""El prompt no cabe en el contexto del modelo y recortarlo perdería la unidad.
+
+	2026-11-27: antes se recortaba a 20.000 chars en silencio y el pase anotaba
+	una fracción como si fuera el split entero. Un prompt que no cabe es una
+	unidad mal servida: se trocea (annotate) o se sube `n_ctx`, nunca se anota
+	a medias.
+	"""
 
 
 def http_transport(system: str, user: str, max_tokens: int, temperature: float = 0.1) -> str:
@@ -633,9 +738,29 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 
 	_reset_truncated()
 	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
-	attempt_user = _fit_prompt(user)
 	budget = int(max_tokens)
+	cap = _prompt_char_cap(budget)
+	attempt_user = _fit_prompt(user, hard_cap=cap)
+	if _LAST_PROMPT_CAPPED:
+		# Nunca enviar una unidad recortada como si estuviera entera: el pase
+		# anotaría una fracción y la sellaría como completa. Fallar aquí ahorra
+		# además una generación larga que ya se sabe inválida.
+		raise PromptTooLongError(
+			f"prompt de {len(user)} chars no cabe en el contexto del modelo "
+			f"(tope {cap} chars para max_tokens={budget}): trocear la unidad o subir n_ctx "
+			f"(MODEL_ADMISSION.md)."
+		)
 	llm = _llm_env()
+	global _LAST_CALL_STATS
+	_LAST_CALL_STATS = {
+		"model_requested": llm["model"] or None,
+		"max_tokens": budget,
+		"chars_sent": len(attempt_user),
+		"prompt_capped": _LAST_PROMPT_CAPPED,
+		"attempts": 0,
+		"prompt_cuts": 0,
+		"started": time.monotonic(),
+	}
 	payload: Dict[str, Any] = {
 		"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
 		"temperature": temperature,
@@ -659,6 +784,7 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		payload.setdefault("chat_template_kwargs", {})["enable_thinking"] = False
 	truncated = False
 	for _attempt in range(4):
+		_LAST_CALL_STATS["attempts"] = _attempt + 1
 		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
 		if response.status_code == 500 and len(attempt_user) > 1500:
 			# Probable exceso de contexto: recortar y reintentar.
@@ -666,6 +792,8 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 			logger.warning(f"LLM 500 (posible contexto) — recortando prompt {len(attempt_user)}→{new_len} chars y reintentando")
 			attempt_user = attempt_user[:new_len]
 			payload["messages"][1]["content"] = attempt_user
+			_LAST_CALL_STATS["prompt_cuts"] += 1
+			_LAST_CALL_STATS["chars_sent"] = len(attempt_user)
 			truncated = True
 			continue
 		response.raise_for_status()
@@ -683,13 +811,17 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 				f"{_timings.get('predicted_n', 0)} tok"
 			)
 		_choice = (_body.get("choices") or [{}])[0]
-		if _choice.get("finish_reason") == "length":
+		# El flag refleja el ÚLTIMO intento, no la historia: si el reintento con
+		# más margen termina en `stop`, la respuesta es completa y el pase NO debe
+		# abortar (bug destapado por el A/B del 27-11: truncados recuperados se
+		# contaban como fallo).
+		global _LAST_TRUNCATED
+		_LAST_TRUNCATED = _choice.get("finish_reason") == "length"
+		if _LAST_TRUNCATED:
 			# 2026-10-30: K2 con 1024 tokens truncaba el array a medias → el parser
 			# no encontraba el cierre y la sesión salía con 0 notas. Parecía "no hay
 			# nada que anotar" y era presupuesto. Nunca silencioso.
 			# 2026-11-27: antes de aceptar el corte, un reintento con más margen.
-			global _LAST_TRUNCATED
-			_LAST_TRUNCATED = True
 			if _attempt == 0:
 				bigger = int(budget * 1.5)
 				logger.warning(
@@ -704,6 +836,18 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 				"— sin margen: el pase decidirá (annotate aborta sin tocar disco)"
 			)
 		content = str(_choice.get("message", {}).get("content") or "").strip()
+		_usage = _body.get("usage") or {}
+		_LAST_CALL_STATS.update(
+			{
+				"served_model": _body.get("model"),
+				"finish_reason": _choice.get("finish_reason"),
+				"max_tokens": budget,
+				"prompt_tokens": _usage.get("prompt_tokens") or _timings.get("prompt_n"),
+				"completion_tokens": _usage.get("completion_tokens") or _timings.get("predicted_n"),
+				"elapsed_s": round(time.monotonic() - _LAST_CALL_STATS["started"], 2),
+				"degraded_prompt": truncated,
+			}
+		)
 		if truncated:
 			# Marca inequívoca (D-NB-03): el modelo vio solo una fracción del
 			# prompt; el consumidor (distill) debe sellar la sección `degraded`.

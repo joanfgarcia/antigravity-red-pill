@@ -226,10 +226,12 @@ def test_prompt_fingerprints_estables(monkeypatch):
 	import red_pill.config as cfg
 
 	monkeypatch.setattr(cfg, "MEMENTO_PROMPT_LANGUAGE", "auto")
+	# El troceo de annotate entra en la huella (AD-146): fijarlo para hermetismo.
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_CHUNK_CHARS", 8000, raising=False)
 
 	assert distill_prompt_version() == "p1:6d34dbc21450c9b69a62ee5ae751c4e4c6f977d98b14337d92909648344434ef"
 	assert refine_prompt_version() == "p1:0564c498e16d632b908cffd9b9540bba8550851630fb0fcbf2ef19ba6f0164c1"
-	assert annotate_prompt_version() == "p1:36199c3def5f91450052f7eabc24b5c2531f99fee98681292610afaa8abd5b8b"  # v1 + TEST-BIO-FIXED + auto
+	assert annotate_prompt_version() == "p1:6e3804b5b007511d69a52f08b5d5a1797b1425681ff5d4aa3cc516f6b779fcca"  # v1 + TEST-BIO-FIXED + auto + chunk=8000
 	assert validate_prompt_version() == "p1:215b61acd8f43ff41693940e06dd68cc0ca65341edc49560b4830d524b93e8f4"
 
 

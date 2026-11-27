@@ -4332,3 +4332,27 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 **Consequences**: el próximo candidato se evalúa con el tamaño real y en GPU, no con un fixture de juguete, y el veredicto queda en su ficha. El **gate automático** (doctor/preflight que rechace un perfil con `n_ctx < n_ctx_min`) queda pendiente; hoy el contrato es humano y verificable con los instrumentos citados.
 
 **Corrección (2026-11-27, mismo día)**: el Operador afina el contrato — **no basta con que K2 quepa a ≥12.800; tiene que destilar bien a ese contexto**. Un modelo puede cargar a más contexto y empeorar (atención diluida, KV más larga, más ruido) sin un solo truncado. La admisión queda con **dos puertas obligatorias**: (a) cabe (`n_ctx ≥ n_ctx_min`) y (b) **produce memoria de calidad a ese contexto**, medida A/B (contexto vigente vs candidato, N=3) con unidades reales p50/p90/p99: contrato válido, 0 truncados, cobertura de ideas/notas, work/social, 1ª persona sin deixis y 0 invenciones en una muestra de 5 notas. Subir K2 a 16.384 es una **hipótesis hasta que exista esa tabla**; hoy no es admisible para annotate sin trocear.
+
+## [AD-146] annotate trocea en partes similares: medido, subir el contexto no sirve
+**Date**: 2026-11-27
+**Status**: ACCEPTED & IMPLEMENTED.
+**Context**: tras AD-145 el Operador pidió medir, no suponer: K2 tenía que **destilar bien a ≥12.800**, no solo caber. Se corrió un A/B/C con el extractor real de annotate (prompts v3, transporte y presupuesto de producción, GPU, desk pausado) sobre **unidades reales** del árbol: p50 12.224, p90 14.321 y **p99 24.107 chars**, N=3 repeticiones × 2 prompts (work + social). Brazos: **A** K2 a 10.240 · **B** K2 a 16.384 · **C** K2 a 10.240 con el split troceado a ≤8.000 en partes similares. Instrumento: `scripts/annotate_context_ab.py` (queda como banco reproducible de admisión).
+**Result (medianas de 3 reps; notas por unidad = work + social + todos los trozos)**:
+
+| Unidad | A (10.240) | B (16.384) | C (trozos ≤8k) |
+|---|---:|---:|---:|
+| p50 (12.224) | 19 notas · 66 s · 0 err | 12 · 63 s · 0 err | 13 · 71 s · 0 err |
+| p90 (14.321) | 11 notas · 66 s · 0 err | 12 · 115 s · 0 err | 15 · 86 s · 0 err |
+| **p99 (24.107)** | **0 · 6/6 `PromptTooLongError`** | **0 · 6/6 `ReadTimeout` (360 s/unidad)** | **29 notas · 272 s · 0 err** |
+
+- A no puede servir el p99: el prompt completo son 29.194 chars y el hueco del contexto (10.240 − salida) no llega. Antes se recortaba a 20.000 en silencio (ver AD-145); ahora falla visible.
+- B **tampoco**: con el prompt completo (≈7.800 tokens) + 4.061 de salida, la primera llamada no terminó en el watchdog de 180 s y las siguientes (servidor de un solo slot) quedaron encoladas y expiraron. 360 s por unidad y cero notas.
+- C completa las tres unidades sin errores, con JSON cerrado (`finish_reason=stop`) y notas coherentes (revisadas a mano: sin invenciones; mismas ideas que A en p50/p90, sin la duplicación work→social que inflaba el conteo de A). Tamaños reales del p99: 5.793 / 6.355 / 5.870 / 6.089 chars (desviación máx. 8 %).
+**Decision**:
+1. `annotate` trocea cada split con `fragments.balanced_chunks`: `k = ceil(chars / MEMENTO_ANNOTATE_CHUNK_CHARS)` trozos que apuntan a `chars/k`, corte en cabecera de turno (`## `) lo más cerca posible del ideal, **ninguno > 8.000 y sin residual** (9000 → 4500+4500, no 8000+1000).
+2. K2 se queda a **10.240**; el perfil `k2_horizon_7b_ctx16` del experimento se retira. Subir contexto no compra calidad y rompe el watchdog.
+3. El tope de prompt de `http_transport` sale del contexto (`(n_ctx − max_tokens − 512) × 3,5`) y **lanza `PromptTooLongError`** en vez de recortar en silencio.
+4. El flag de truncado refleja el **último intento**: si el reintento con +50 % termina en `stop`, el pase no aborta (antes un truncado recuperado contaba como fallo).
+5. El troceo entra en `annotate_prompt_version` (`chunk=8000`): cambiar el tope invalida el reuso y obliga a re-anotar. Es intencional.
+**Alternatives**: (a) subir K2 a 16.384 — medido: no completa el p99 y cuesta +75 % en p90 sin ganar notas; (b) trocear con solape de mensajes — duplica ideas y llamadas; el corte ya cae en cabecera de turno y el dedup P1-A absorbe solapes si algún día se añaden; (c) mantener el split entero y subir el watchdog — alarga el pase y no arregla la cola de splits >20k.
+**Consequences**: el coste de annotate **se duplica** en el 86 % de splits (>8.000 chars): 2 trozos × 2 prompts = 4 llamadas por split. Con el techo de 40 min del nocturno eso aprieta; el siguiente lever es la fusión work+social en una llamada (`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`, ya implementada y probada) o subir el techo, no volver al split entero. El corpus queda stale por el cambio de firma y se re-anota en las próximas noches.

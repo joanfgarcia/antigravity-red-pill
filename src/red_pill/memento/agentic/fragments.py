@@ -88,6 +88,55 @@ _TURN_RE = re.compile(r"^(## .+ — )(Usuario|Asistente|Tool|Peer|None)\s*$")
 FRAGMENT_VIEWS = ("raw", "actors", "pairs")
 
 
+def balanced_chunks(text: str, max_chars: int) -> List[str]:
+	"""Trocea en partes de tamaño SIMILAR (no 8000 + 1000), ninguna > max_chars.
+
+	Para `annotate`, cuyas unidades son los splits de `memento/` (p50 12,2k,
+	p99 24,1k chars): k = ceil(n / max_chars) trozos que apuntan a n/k chars. El
+	corte se busca en una ventana alrededor del punto ideal, **eligiendo el corte
+	semántico más cercano** (cabecera de turno `\n## `, luego párrafo `\n\n`,
+	luego línea y por último espacio). Nunca parte una palabra, nunca supera
+	`max_chars` y nunca deja un trozo residual diminuto.
+
+	No solapa: dos trozos contiguos no repiten texto. El dedup P1-A del pase
+	absorbe cualquier idea repetida entre trozos.
+	"""
+	import math
+
+	n = len(text)
+	if max_chars <= 0 or n <= max_chars:
+		return [text]
+	k = max(1, math.ceil(n / max_chars))
+	target = n / k
+	cuts = [0]
+	for i in range(1, k):
+		ideal = int(round(i * target))
+		margin = max(32, int(target * 0.15))
+		# El trozo i no puede pasar de max_chars ni dejar una cola imposible.
+		lo = max(cuts[-1] + 1, ideal - margin, n - (k - i) * max_chars)
+		hi = min(n - 1, ideal + margin, cuts[-1] + max_chars)
+		if hi < lo:
+			lo = hi = max(cuts[-1] + 1, min(ideal, cuts[-1] + max_chars))
+		window = text[lo:hi]
+		best = -1
+		for marker in ("\n## ", "\n\n", "\n", " "):
+			hits = []
+			pos = window.find(marker)
+			while pos >= 0:
+				hits.append(lo + pos + (len(marker) if marker != "\n\n" else 2))
+				pos = window.find(marker, pos + 1)
+			if hits:
+				best = min(hits, key=lambda p: abs(p - ideal))
+				if marker == "\n## ":
+					best -= 1  # conservar "## " al inicio del trozo
+				break
+		if best <= cuts[-1] or best > cuts[-1] + max_chars or best >= n:
+			best = min(max(ideal, lo), hi)
+		cuts.append(best)
+	cuts.append(n)
+	return [text[cuts[i] : cuts[i + 1]] for i in range(len(cuts) - 1)]
+
+
 def fragment_view(content: str, mode: str = "raw", operator: str = "Operador", agent: str = "Agente") -> str:
 	"""Vista del fragmento que ve el LLM de annotate (el árbol no cambia).
 

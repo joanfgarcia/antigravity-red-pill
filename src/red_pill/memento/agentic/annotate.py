@@ -50,7 +50,7 @@ from .annotation_state import (
 	_save_partial,
 	_scrub_idea,
 )
-from .fragments import _frontmatter_block, fragment_view, slugify_title, work_units
+from .fragments import _frontmatter_block, balanced_chunks, fragment_view, slugify_title, work_units
 
 logger = logging.getLogger(__name__)
 
@@ -225,12 +225,17 @@ def annotate_session(
 			if reuse_enabled:
 				extract_tr, degraded_flag = _track_degraded(transport)
 			view_mode, operator_label, agent_label = runtime.fragment_view_settings()
-			for idea in _extract(extract_tr, fragment_view(content, view_mode, operator_label, agent_label)):
-				idea = _scrub_idea(idea)
-				idea["split_ref"] = ref
-				idea["nnn"] = nnn
-				idea["flags"] = quality_flags(idea["text"])
-				ideas.append(idea)
+			# Troceo balanceado (2026-11-27, AD-146): un split p99 (24,1k chars) no
+			# cabe ni a 10.240 ni completa en <180 s a 16.384; en trozos de tamaño
+			# similar (≤8.000) sí. `0` desactiva y conserva el split entero.
+			view = fragment_view(content, view_mode, operator_label, agent_label)
+			for chunk in balanced_chunks(view, runtime.annotate_chunk_chars()):
+				for idea in _extract(extract_tr, chunk):
+					idea = _scrub_idea(idea)
+					idea["split_ref"] = ref
+					idea["nnn"] = nnn
+					idea["flags"] = quality_flags(idea["text"])
+					ideas.append(idea)
 			fresh_splits[key] = {
 				"nnn": nnn,
 				"split_ref": ref,

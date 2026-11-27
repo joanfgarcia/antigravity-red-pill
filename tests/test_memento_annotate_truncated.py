@@ -131,3 +131,47 @@ def test_annotate_max_tokens_crece_con_el_fragmento(monkeypatch):
 	# Un fragmento enorme no puede pedir más que el hueco del contexto (10.240).
 	assert runtime.annotate_max_tokens(chars=20000) <= 4096
 	assert runtime.annotate_max_tokens(chars=0) == 2048
+
+
+def test_prompt_que_no_cabe_falla_antes_de_llamar(monkeypatch):
+	"""2026-11-27: el tope de prompt sale del contexto del modelo.
+
+	Si la unidad no cabe, se falla con `PromptTooLongError` ANTES de generar: el
+	pase no puede anotar una fracción como si fuera el split entero (lo que hacía
+	el recorte silencioso a 20.000 chars), y no se gasta una generación que ya se
+	sabe inválida.
+	"""
+	import requests
+
+	monkeypatch.setattr(runtime, "_prompt_char_cap", lambda _mt: 100)
+	monkeypatch.setattr(requests, "post", lambda *a, **k: pytest.fail("no debió llamar al LLM"))
+
+	with pytest.raises(runtime.PromptTooLongError):
+		runtime.http_transport("system", "x" * 500, max_tokens=2048)
+
+
+def test_annotate_max_tokens_usa_el_modelo_fijado_por_el_job(monkeypatch):
+	"""El presupuesto se calcula con el contexto del modelo que sirve la task.
+
+	Antes resolvía sólo la task: un job que fija otro perfil (A/B de contexto)
+	calculaba el hueco con el n_ctx del titular.
+	"""
+	from red_pill.core import model_runtime as mr
+
+	class _Resolved:
+		max_tokens = 2048
+
+		def __init__(self, n_ctx):
+			self.n_ctx = n_ctx
+
+	seen = {}
+
+	def _resolve(selector):
+		seen.update(selector)
+		return _Resolved(16384 if selector.get("model") == "k2_ctx16" else 10240)
+
+	monkeypatch.setattr(mr, "resolve", _resolve)
+	monkeypatch.setenv("RP_LLM_MODEL", "k2_ctx16")
+
+	assert runtime.annotate_max_tokens(chars=20000) > 2048
+	assert seen.get("model") == "k2_ctx16"

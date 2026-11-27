@@ -955,6 +955,12 @@ class RedPillConfig(BaseSettings):
 	# fijo: crece con el tamaño del split (p50 12,2k chars, p99 24,1k) y se recorta
 	# al hueco real del contexto del modelo juez. Este es el máximo duro.
 	MEMENTO_ANNOTATE_MAX_TOKENS_CEILING: int = 4096
+	# Troceo de annotate (2026-11-27). Sus unidades son los splits de `memento/`
+	# (p50 12,2k chars, p90 14,3k, p99 24,1k): con 8000 el modelo cabe holgado y
+	# la fórmula deja de depender del contexto del titular. Los trozos son de
+	# tamaño SIMILAR (ceil(chars/8000)), no 8000 + residual. 0 = desactivado
+	# (split entero; solo válido con n_ctx ≥ 12.800 y calidad medida).
+	MEMENTO_ANNOTATE_CHUNK_CHARS: int = 8000
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.
