@@ -123,3 +123,12 @@ def test_anonimiza_texto_hash(tmp_path):
 	"""El checkpoint usa el hash del cuerpo: si el texto cambia, se re-titula."""
 	assert titles._text_hash("hola") == titles._text_hash(" hola ")
 	assert titles._text_hash("hola") != titles._text_hash("hola.")
+
+
+def test_titulo_largo_se_recorta_no_se_descarta():
+	"""Bonsai devuelve títulos de 80-100 chars; se recortan, no se tiran."""
+	long = "Joan exige implementar la Fase 4 antes de cablear el nightly por coherencia del sistema completo"
+	raw = json.dumps([{"i": 0, "title": long}])
+	parsed = titles._parse_titles(raw)
+	assert 0 in parsed and len(parsed[0]) <= titles.MAX_TITLE
+	assert not parsed[0].endswith(" ")

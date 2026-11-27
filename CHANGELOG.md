@@ -59,6 +59,8 @@
   935 notas en ~7,5 min. Reanudable por `text_hash`, renombrado en bloque y
   `title_version` en el frontmatter. Matriz: tiny-aya-water 3,9 s/batch
   (alternativa); Spark 4B falla el JSON. *AD-148*.
+  Los títulos de 80–100 chars se **recortan** a 80 en frontera de palabra (no se
+  descartan): era la causa de 33 notas sin título en la primera pasada.
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.

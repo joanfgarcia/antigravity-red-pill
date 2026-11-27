@@ -104,8 +104,15 @@ def _parse_titles(raw: str) -> Dict[int, str]:
 			continue
 		title = str(row.get("title") or "").strip()
 		title = re.sub(r"\s+", " ", title)
+		# Bonsai 2-9B se pasa del límite con frecuencia (medido 2026-11-27: 12
+		# títulos de 80-100 chars → el validador los tiraba y la nota quedaba sin
+		# título). El contenido es bueno: se recorta a 80 en frontera de palabra
+		# en vez de descartarlo. Las aperturas prohibidas sí se rechazan.
+		if len(title) > MAX_TITLE:
+			cut = title[: MAX_TITLE + 1]
+			title = cut[: cut.rfind(" ")].rstrip(" ,;:-") if " " in cut else cut[:MAX_TITLE]
 		if _valid_title(title):
-			out[i] = title[:MAX_TITLE]
+			out[i] = title
 	return out
 
 

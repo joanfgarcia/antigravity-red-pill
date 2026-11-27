@@ -4402,6 +4402,7 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - Prompts v3 de annotate sin la sección TITLE ni el campo `title` (~25-30 % más cortos); la nota nace con título provisional y `title_version: ""`.
 - `MEMENTO_TITLES_BATCH=12`; tarea `titles` con `bonsai_2_9b`.
 - Checkpoint `_titles.json` por `text_hash`, renombrado con contador anti-colisión, re-titulado si cambia el texto o la versión.
+- **Títulos largos se recortan, no se descartan** (28-11): Bonsai 2-9B devolvía títulos de 80–100 chars; el validador los tiraba y dejaba 33 notas sin título. Ahora se recortan a 80 en frontera de palabra; las aperturas prohibidas (“me pide/cuenta…”) sí se rechazan y se reintentan.
 - Presupuesto: `chronicle.deadline_minutes` 85 → **180**; `nightly.max_step_minutes` 420 → **600**; `annotate.timeout` 5400 → **7200**.
 - Presupuesto medido: el pase de títulos cuesta **~5-8 min por sesión grande** (~0,8 min por sesión media), ~6-8 % del annotate.
 
