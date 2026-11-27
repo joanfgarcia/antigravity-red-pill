@@ -49,6 +49,10 @@
   **falla con `PromptTooLongError`** en vez de recortar a 20k; un truncado
   recuperado por el reintento ya no aborta el pase. Coste: 2 llamadas más por
   split >8k. *AD-146*.
+- **[FIX] Dos notas del mismo split con el mismo título ya no se pisan.** El
+  escritor usaba `NNN-<slug>.md` sin contador: la segunda sobrescribía la
+  primera. Medido en la sesión f839399b: **986 anotaciones → 983 ficheros**.
+  Ahora la colisión añade `-2`, `-3`… y no se pierde ninguna. *AD-148*.
 - **[FIX] K2 entraba en bucle al anotar: `repeat_penalty` y fusión estable.**
   En contenido denso repetía la misma idea hasta agotar el presupuesto (`{` ×24,
   `"relics": 3` ×22 en 4.096 tokens); no era falta de salida. Con

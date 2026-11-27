@@ -345,6 +345,14 @@ def annotate_session(
 		]
 		refine_fm = _frontmatter_block(fm_fields)
 		name = f"{a['nnn']}-{slug}.md"
+		# Dos notas del MISMO split pueden slugificar igual (mismo título): sin
+		# contador la segunda sobrescribe la primera y se pierde en silencio.
+		# Medido 2026-11-27 en la sesión f839399b: 986 anotaciones → 983 ficheros.
+		if name in written:
+			k = 2
+			while f"{a['nnn']}-{slug}-{k}.md" in written:
+				k += 1
+			name = f"{a['nnn']}-{slug}-{k}.md"
 		(annotate_dir / name).write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
 		written.add(name)
 		if reuse_enabled and entry == "extract":

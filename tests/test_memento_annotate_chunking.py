@@ -99,3 +99,38 @@ def test_annotate_extrae_una_vez_por_trozo(tmp_path, monkeypatch):
 	assert len(work_calls) == len(chunks), f"{len(work_calls)} llamadas para {len(chunks)} trozos"
 	ideas = _annotations_from_notes(tmp_path / dir_rel / "annotate", _contract(False))
 	assert ideas is not None and len(ideas) == len(chunks)
+
+
+def test_notas_con_el_mismo_titulo_no_se_pisan(tmp_path, monkeypatch):
+	"""Dos notas del mismo split con el mismo título no pueden sobrescribirse.
+
+	2026-11-27: la sesión f839399b produjo 986 anotaciones y solo 983 ficheros;
+	tres notas se perdieron porque `NNN-<slug>.md` colisionaba dentro del split.
+	"""
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_CHUNK_CHARS", 0)
+	dir_rel = "2026-09/opencode/s1"
+	memento = tmp_path / dir_rel / "memento"
+	memento.mkdir(parents=True)
+	(memento / "001-split.md").write_text(
+		"> [!ref] memento/index.md#l1-20\nJoan me pide dos cosas distintas en el mismo turno.\n", encoding="utf-8"
+	)
+
+	def transport(system, user, max_tokens):
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(
+				[
+					{"title": "Mismo título", "text": "El presupuesto mensual subió por la calefacción.", "significance": 0.9, "relics": []},
+					{"title": "Mismo título", "text": "La luna llena altera las mareas del puerto.", "significance": 0.9, "relics": []},
+				]
+			)
+		if system == ANNOTATE_SOCIAL_SYSTEM:
+			return "[]"
+		if system == DUAL_SCORE_SYSTEM:
+			return json.dumps([{"i": 0, "work_score": 0.9, "social_score": 0.1}, {"i": 1, "work_score": 0.9, "social_score": 0.1}])
+		return "[]"
+
+	annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", transport)
+
+	files = sorted((tmp_path / dir_rel / "annotate").glob("*.md"))
+	assert len(files) == 2, [f.name for f in files]
+	assert files[0].name.endswith("-2.md") or files[1].name.endswith("-2.md")
