@@ -96,6 +96,15 @@
 
 ### 📊 Bench y modelos — la batería de techo y sus correcciones
 
+- **[NEW] Contrato de admisión por carril** (`docs/TECHNICAL/COGNITIVE/MODEL_ADMISSION.md`):
+  un candidato a `distill`/`annotate` se mide con el **tamaño de unidad real**, a su
+  contexto de producción y en GPU. `n_ctx` mínimo derivado (6.144 en distill; 12.800
+  en annotate sin trocear), 0 truncados en el peor caso y **calidad medida a ese
+  contexto** (A/B, N=3, unidades reales): caber no es destilar bien. Veredicto
+  escrito en la ficha. Con el contrato aplicado, K2 **no** es admisible para
+  annotate sin trocear a 10.240, y subirlo a 16.384 es una hipótesis hasta medir.
+  *AD-145*.
+
 - **[NEW] `scripts/bench_hard.py`**: 12 tareas en 5 familias, gradación por **estado
   del fixture** (no por la prosa), n=3 y brazo nulo en cada pasada. El brazo nulo da
   **0/108** y 0/216 instrucciones: donde `bench_compare` saturaba en 18/18, esta

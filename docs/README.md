@@ -41,6 +41,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [STAGE_CLAIMS.md](TECHNICAL/STAGE_CLAIMS.md) | Fase 4 contract: federated stage locks (claim key, atomicity, soul ownership, TTL) |
 | [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
+| [MODEL_ADMISSION.md](TECHNICAL/COGNITIVE/MODEL_ADMISSION.md) | Admisión de modelos por carril (distill/annotate): contexto mínimo, memoria, contrato y calidad con el tamaño de unidad real |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
 | [LAYA_ROUTER_BAKEOFF_F1.md](TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md) | AD-039: bake-off del router System One (Laya) — evidencia F1, PARKED |
