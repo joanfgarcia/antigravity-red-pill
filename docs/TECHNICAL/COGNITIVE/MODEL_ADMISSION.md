@@ -140,6 +140,53 @@ un título ≤80 chars. No lee el raw ni el destilado; no extrae hechos.
 Un título sin sellar (`title_version` vacío) **no asciende**: el gate vive en
 `ascension.py` (`no_title`).
 
+### Calibración de slots (`num_parallel`) — receta por hardware
+
+No hay un número universal: `num_parallel` depende del **modelo** (pesos + KV),
+del **contexto** que necesite la tarea y del **ancho de banda** de la GPU. Cada
+agente debe correr la receta al instalarse/actualizarse y **repetirla al cambiar
+de modelo o de contexto**; el resultado se aplica al perfil y a la tarea.
+
+```bash
+# 1) desk pausado (libera VRAM); el script descarga el modelo del daemon
+PYTHONPATH=src .venv/bin/python scripts/calibrate_slots.py \
+    --profile <perfil> --ctx <contexto total> --max-slots 8
+# 2) aplicar
+#    hardware_affinity.num_parallel: N
+#    MEMENTO_TITLES_CONCURRENCY=N
+```
+
+El script levanta el servidor con `-np 1,2,4,6,8`, lanza 4 batches sintéticos de
+títulos **en concurrente**, mide tiempo/tokens/VRAM y recomienda el primer slot
+donde la ganancia marginal cae por debajo del 10 %. `--dry-run` valida el plan
+sin GPU; `--apply` escribe `num_parallel` en el perfil (con backup); `--json-out`
+deja el detalle.
+
+**Medido en este equipo (2026-11-27, Bonsai 2-9B, ctx 32768, 4 batches)**:
+
+| Slots | VRAM (delta) | 4 batches | Speedup |
+|---:|---:|---:|---:|
+| 1 | 2.683 MB | 26,4 s | 1,0× |
+| 2 | 2.717 MB | 16,5 s | 1,6× |
+| **4** | **2.809 MB** | **11,2 s** | **2,36×** |
+| 6 | 2.925 MB | 11,2 s | 2,36× |
+| 8 | 3.021 MB | 11,1 s | 2,37× |
+
+Recomendado **4** (8k de contexto por slot). A partir de ahí el ancho de banda
+manda; más slots solo recortan el contexto por slot.
+
+> **Cuidado con el proxy**: la receta mide el **servidor**. El daemon actual
+> serializa las peticiones (`manager.lock` durante toda la generación): por el
+> camino de producción la ganancia se queda en ~1,2× hasta que el lock cubra
+> solo resolve/carga con un contador de in-flight. Medido el 27-11: 2,36×
+> directo vs 1,19× a través del daemon.
+
+**Distill**: misma receta con `--profile bonsai_25_27b_distill`. El 27B ocupa
+~7,4 GB a 24k con el desk parado; `np=2` obliga a bajar el contexto total
+(12k por slot) y deja poco margen. Además, los fragmentos de distill tienen
+dependencia de continuación, así que los slots solo se explotan **entre work
+units/sesiones**, no dentro de una. Medir antes de adoptar.
+
 ## 4. Procedimiento de admisión
 
 1. **Perfil**: alta en `model_profiles.yaml` (bloque de conducta + `kv_cache` +

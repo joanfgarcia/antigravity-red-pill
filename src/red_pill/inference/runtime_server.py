@@ -121,6 +121,7 @@ class RuntimeServer:
 		kv_type: Optional[str] = None,
 		variant: Optional[str] = None,
 		port: Optional[int] = None,
+		num_parallel: Optional[int] = None,
 		extra_args: Optional[List[str]] = None,
 		host: str = "127.0.0.1",
 		startup_timeout: float = 180.0,
@@ -132,6 +133,7 @@ class RuntimeServer:
 		self.kv_type = kv_type
 		self.variant = variant
 		self.port = port
+		self.num_parallel = num_parallel
 		self.extra_args = list(extra_args or [])
 		self.host = host
 		self.startup_timeout = startup_timeout
@@ -175,9 +177,9 @@ class RuntimeServer:
 		# secuencias (`-c` es total: cada slot recibe c/N). Default 1 (AD-049,
 		# 8 GB); un perfil de títulos puede subirlo si el KV y los buffers caben.
 		num_parallel = int(
-			hw.get("num_parallel")
-			or (resolved.get("profile") or {}).get("num_parallel")
-			or 1
+			self.num_parallel
+			if self.num_parallel is not None
+			else (hw.get("num_parallel") or (resolved.get("profile") or {}).get("num_parallel") or 1)
 		)
 		cmd = [
 			resolved["server_binary"],

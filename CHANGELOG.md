@@ -67,6 +67,12 @@
   slot) y el pase de títulos lanza 4 batches concurrentes. Medido: **2,6×**
   sobre secuencial (5,0 s vs 13,2 s para 4 batches), +130 MB de VRAM; más de 4
   slots no mejora. *AD-149*.
+- **[NEW] Receta de calibración de slots (`scripts/calibrate_slots.py`).** Mide
+  `-np` en el hardware real (modelo + contexto + ancho de banda) con batches
+  sintéticos, recomienda por plateau, `--dry-run`/`--apply`/JSON. Sin números
+  fijos: se re-ejecuta al instalar/actualizar y al cambiar de modelo. Medido en
+  este equipo (Bonsai 2-9B, 32k): 4 slots → 2,36× con +2,8 GB; más no mejora.
+  Ojo: el daemon aún serializa (1,19×) hasta estrechar el lock de generación.
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.

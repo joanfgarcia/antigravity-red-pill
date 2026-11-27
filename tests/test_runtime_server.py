@@ -126,6 +126,12 @@ class TestBuildCommand:
 		cmd = srv._build_command(resolved)
 		assert cmd[cmd.index("-np") + 1] == "3"
 
+	def test_num_parallel_override_para_calibracion(self, mod):
+		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, num_parallel=5)
+		resolved = {"profile": {}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}
+		cmd = srv._build_command(resolved)
+		assert cmd[cmd.index("-np") + 1] == "5"
+
 	def test_kv_type_adds_cache_flags(self, mod):
 		srv = mod.RuntimeServer("bonsai_2_27b", port=9999, kv_type="q8_0")
 		resolved = {"profile": {}, "runtime": {}, "server_binary": "/b", "model_path": "/m.gguf"}
