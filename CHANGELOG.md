@@ -33,6 +33,13 @@
 
 ### 🧠 Memoria — las fuentes a la vista
 
+- **[FIX] El presupuesto de annotate deja de ser un fijo de 2048.** Crece con el
+  tamaño del split (p50 12,2k chars, p99 24,1k; el 86 % supera los 8k) y se
+  recorta al hueco real del contexto del modelo juez (techo
+  `MEMENTO_ANNOTATE_MAX_TOKENS_CEILING`, 4096). Si aun así el modelo se corta, se
+  reintenta una vez con un 50 % más de margen; si vuelve a cortarse, el pase
+  **aborta sin tocar disco** — también cuando el array cierra por casualidad
+  (antes se perdían ideas con un warning). *AD-144*.
 - **[FIX] Oracle entrega fuentes, no finge una síntesis.** PERF-F01 dejó el
   `EdgeEngine` lazy y Oracle comprobaba `if engine.llm` antes de cualquier carga:
   siempre `None`. Desde entonces cada `search_memory_research` devolvía la

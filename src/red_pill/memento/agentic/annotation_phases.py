@@ -28,12 +28,17 @@ def _ideas_or_raise(raw: str, prompt_id: str) -> List[Dict[str, Any]]:
 	notas previas de la sesión y la sellaba. Levantar aquí corta el pase antes de
 	tocar disco (annotate escribe poda y `_meta` al final) y el runner lo cuenta
 	como fallo, no como sesión anotada.
+
+	2026-11-27: también se levanta si el transporte marcó truncado **aunque el
+	array haya cerrado** — un corte que cierra por casualidad perdía ideas en
+	silencio (solo quedaba un warning).
 	"""
 	ideas = runtime._extract_json_array(raw)
-	if ideas is None and runtime.unclosed_json_array(raw):
+	if runtime.unclosed_json_array(raw) or runtime.last_truncated():
 		raise runtime.TruncatedResponseError(
-			f"respuesta truncada en {prompt_id}: array JSON sin cerrar (finish_reason=length) — se aborta el pase sin podar notas."
-			f" Revisar presupuesto/razonamiento de la task annotate (max_tokens y thinking: el modelo puede gastarlo pensando)."
+			f"respuesta truncada en {prompt_id}: el modelo se cortó (finish_reason=length)"
+			f" — se aborta el pase sin podar notas."
+			f" Revisar presupuesto de la task annotate para fragmentos grandes (max_tokens dinámico y thinking)."
 		)
 	return ideas or []
 
@@ -50,7 +55,7 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	if combined is not None:
 		static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
 		prompt = prompts.render(combined, static=static, fragment=content)
-		raw = transport(prompts.system(combined) or "", prompt, runtime.annotate_max_tokens())
+		raw = transport(prompts.system(combined) or "", prompt, runtime.annotate_max_tokens(chars=len(content)))
 		for idea in _ideas_or_raise(raw, combined):
 			materialized = _idea_from_row(idea)
 			if materialized is None:
@@ -67,7 +72,7 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	static = {"identity": prompts.IDENTITY_BIO, "work_scope": work_scope, "social_scope": social_scope}
 	for prompt_id in prompt_ids:
 		prompt = prompts.render(prompt_id, static=static, fragment=content)
-		raw = transport(prompts.system(prompt_id) or "", prompt, runtime.annotate_max_tokens())
+		raw = transport(prompts.system(prompt_id) or "", prompt, runtime.annotate_max_tokens(chars=len(content)))
 		for idea in _ideas_or_raise(raw, prompt_id):
 			materialized = _idea_from_row(idea)
 			if materialized is None:

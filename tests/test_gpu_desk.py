@@ -294,3 +294,19 @@ def test_resident_freeable_mb_estima_por_el_perfil_cargado(monkeypatch):
 	assert got == 4100  # el preferido (optimista), no el degradado
 	assert seen == {"profile": "k2_horizon_7b", "ctx": 10240}
 	assert DagJobDriver._resident_freeable_mb({"loaded_profile": "bonsai_25_27b_distill"}, "bonsai_25_27b_distill") == 0
+
+
+def test_last_activity_lee_tambien_stderr(state_dir, monkeypatch):
+	"""Regresión 2026-11-27: `podman logs` escribe en stderr en este runtime; si
+	solo se mira stdout, `idle_s` es None y la fase 0 no pausa nunca."""
+	ts = datetime.fromtimestamp(time.time() - 1800, tz=timezone.utc).isoformat()
+
+	def fake(args, timeout=30):
+		if args[0] == "logs":
+			return subprocess.CompletedProcess(args, 0, "", f"{ts} srv listening on http://0.0.0.0:8080\n")
+		return subprocess.CompletedProcess(args, 0, "", "")
+
+	monkeypatch.setattr(gpu_desk, "_podman", fake)
+	got = gpu_desk.last_activity_ts("dokime-llama")
+	assert got is not None
+	assert 1700 < time.time() - got < 1900

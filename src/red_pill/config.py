@@ -951,6 +951,10 @@ class RedPillConfig(BaseSettings):
 	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
 	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
 	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
+	# Techo del presupuesto de salida de annotate (2026-11-27). El tope ya no es
+	# fijo: crece con el tamaño del split (p50 12,2k chars, p99 24,1k) y se recorta
+	# al hueco real del contexto del modelo juez. Este es el máximo duro.
+	MEMENTO_ANNOTATE_MAX_TOKENS_CEILING: int = 4096
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.

@@ -200,24 +200,44 @@ def runtime_profile_name() -> str:
 		return ""
 
 
-def annotate_max_tokens(default: int = 1024) -> int:
+def annotate_max_tokens(default: int = 1024, chars: int | None = None) -> int:
 	"""Presupuesto de salida de la extracción de notas, según la task `annotate`.
 
 	2026-10-30: era un `1024` clavado en el código. Con K2 el array se cortaba a
 	medias (`finish_reason=length`) y la sesión salía con 0 notas: parecía que no
 	había nada que anotar. El presupuesto es configuración de la task, no una
 	constante del pase.
+
+	2026-11-27: el tope era **fijo** aunque la unidad que se anota no lo sea.
+	`annotate` no trocea por caracteres (solo distill, a `MEMENTO_FRAGMENT_MAX_CHARS`);
+	sus unidades son los splits de `memento/`, con p50 12,2k chars y p99 24,1k.
+	El presupuesto crece con el fragmento y se recorta al hueco REAL del contexto
+	del modelo juez (n_ctx − prompt estimado − margen), así no se pide más de lo
+	que cabe. Medido el 27-11: ~3,0 chars/token y ~800 tokens de salida para 16,6k
+	chars; el margen cubre unidades densas (muchas ideas cortas).
 	"""
 	try:
 		from red_pill.core import model_runtime as mr
 
 		resolved = mr.resolve({"task": "annotate"})
-		val = int(getattr(resolved, "max_tokens", 0) or 0)
-		if val > 0:
-			return val
+		base = int(getattr(resolved, "max_tokens", 0) or 0) or default
+		ctx = int(getattr(resolved, "n_ctx", 0) or 0)
 	except Exception:
-		pass
-	return default
+		base, ctx = default, 0
+	if not chars or chars <= 0:
+		return base
+	import red_pill.config as cfg
+
+	ceiling = int(getattr(cfg, "MEMENTO_ANNOTATE_MAX_TOKENS_CEILING", 4096) or 4096)
+	# +1 token de salida por cada ~8 chars por encima del suelo clásico (8k).
+	target = base + max(0, (int(chars) - 8000) // 8)
+	if ctx > 0:
+		prompt_tokens = int(chars / 3.0) + 64
+		room = ctx - prompt_tokens - 256
+		if room > base:
+			target = min(target, room)
+	return max(base, min(target, ceiling))
+
 
 
 def distill_max_tokens(default: int = 2048) -> int:
@@ -571,12 +591,35 @@ def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
 	return cut + "\n[... truncado por presupuesto de contexto]"
 
 
+_LAST_TRUNCATED = False
+
+
+def last_truncated() -> bool:
+	"""True si la ÚLTIMA llamada de `http_transport` se cortó por presupuesto.
+
+	Lo consulta annotate para abortar el pase en vez de aceptar un array al que
+	le falta la cola (el JSON puede cerrar por casualidad y perder ideas en
+	silencio). El flag se reinicia al empezar cada llamada.
+	"""
+	return _LAST_TRUNCATED
+
+
+def _reset_truncated() -> None:
+	global _LAST_TRUNCATED
+	_LAST_TRUNCATED = False
+
+
 def http_transport(system: str, user: str, max_tokens: int, temperature: float = 0.1) -> str:
 	"""Envío al LLM local con recorte adaptativo ante 500 por exceso de contexto.
 
 	El llama-server devuelve 500 si el prompt supera n_ctx (10240); la ratio
 	chars/token es impredecible (1-4), así que si falla se recorta el user y se
 	reintenta (hasta 4 veces) — robusto independientemente de la densidad.
+
+	2026-11-27: si el modelo se corta por presupuesto (`finish_reason=length`) se
+	reintenta UNA vez con un 50 % más de margen antes de devolver. El pase de
+	annotate consulta `last_truncated()` y aborta sin tocar disco si aun así se
+	cortó: nunca se descartan ideas en silencio.
 
 	Watchdog (2026-09-15): timeout por llamada `MEMENTO_LLM_TIMEOUT` (default
 	180s). Una generación de distill/refine no debe excederlo; si lo hace, la
@@ -588,13 +631,15 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 
 	import red_pill.config as cfg
 
+	_reset_truncated()
 	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
 	attempt_user = _fit_prompt(user)
+	budget = int(max_tokens)
 	llm = _llm_env()
 	payload: Dict[str, Any] = {
 		"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
 		"temperature": temperature,
-		"max_tokens": max_tokens,
+		"max_tokens": budget,
 	}
 	# AD-030: task/model/thinking desde el env del job (RP_LLM_*).
 	# Sin env → sin task/model → el daemon cae a su default (comportamiento actual).
@@ -642,9 +687,21 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 			# 2026-10-30: K2 con 1024 tokens truncaba el array a medias → el parser
 			# no encontraba el cierre y la sesión salía con 0 notas. Parecía "no hay
 			# nada que anotar" y era presupuesto. Nunca silencioso.
+			# 2026-11-27: antes de aceptar el corte, un reintento con más margen.
+			global _LAST_TRUNCATED
+			_LAST_TRUNCATED = True
+			if _attempt == 0:
+				bigger = int(budget * 1.5)
+				logger.warning(
+					f"LLM truncado (finish_reason=length, max_tokens={budget} → {bigger}, modelo={_body.get('model')}) "
+					"— reintentando con más margen"
+				)
+				budget = bigger
+				payload["max_tokens"] = budget
+				continue
 			logger.warning(
-				f"LLM truncado (finish_reason=length, max_tokens={max_tokens}, modelo={_body.get('model')}) "
-				"— la respuesta se cortó; si es JSON, el pase la descartará"
+				f"LLM truncado (finish_reason=length, max_tokens={budget}, modelo={_body.get('model')}) "
+				"— sin margen: el pase decidirá (annotate aborta sin tocar disco)"
 			)
 		content = str(_choice.get("message", {}).get("content") or "").strip()
 		if truncated:

@@ -73,19 +73,18 @@ def _parse_ts(raw: str) -> Optional[float]:
 
 
 def last_activity_ts(name: Optional[str] = None) -> Optional[float]:
-	"""Timestamp de la última línea del log del servidor (petición o arranque)."""
+	"""Timestamp de la última línea con marca del log del servidor (petición o arranque).
+
+	`podman logs` puede escribir en stdout **o stderr** según el runtime/la imagen
+	(medido 2026-11-27: todo el log salía por stderr), así que se miran los dos y
+	se toma la ÚLTIMA marca parseable. Sin esto, `idle_s` era siempre `None` y la
+	fase 0 no pausaba nunca (fallaba en silencio, del lado conservador).
+	"""
 	name = name or container()
-	out = _podman(["logs", "--timestamps", "--tail", "1", name])
-	if out.returncode != 0:
-		return None
-	line = (out.stdout or "").strip().splitlines()
-	if not line:
-		return None
-	# `podman logs` mezcla stderr en algunos casos; buscar la primera marca válida.
-	for candidate in (line[0], (out.stderr or "").strip().splitlines()[0] if (out.stderr or "").strip() else ""):
-		if not candidate:
-			continue
-		ts = _parse_ts(candidate.split(" ", 1)[0])
+	out = _podman(["logs", "--timestamps", "--tail", "5", name])
+	text = f"{out.stdout or ''}\n{out.stderr or ''}"
+	for line in reversed([ln for ln in text.splitlines() if ln.strip()]):
+		ts = _parse_ts(line.split(" ", 1)[0])
 		if ts is not None:
 			return ts
 	return None
