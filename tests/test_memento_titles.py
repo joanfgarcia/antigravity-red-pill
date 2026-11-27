@@ -125,10 +125,14 @@ def test_anonimiza_texto_hash(tmp_path):
 	assert titles._text_hash("hola") != titles._text_hash("hola.")
 
 
-def test_titulo_largo_se_recorta_no_se_descarta():
-	"""Bonsai devuelve títulos de 80-100 chars; se recortan, no se tiran."""
-	long = "Joan exige implementar la Fase 4 antes de cablear el nightly por coherencia del sistema completo"
-	raw = json.dumps([{"i": 0, "title": long}])
-	parsed = titles._parse_titles(raw)
-	assert 0 in parsed and len(parsed[0]) <= titles.MAX_TITLE
-	assert not parsed[0].endswith(" ")
+def test_titulo_hasta_120_se_acepta_sin_truncar():
+	"""Decisión 2026-11-27: límite 120, sin truncar. 110 chars pasan íntegros."""
+	t110 = "x" * 110
+	parsed = titles._parse_titles(json.dumps([{"i": 0, "title": t110}]))
+	assert parsed.get(0) == t110
+
+
+def test_titulo_de_mas_de_120_es_fallo_duro():
+	""">120 no se trunca ni se descarta en silencio: error explícito."""
+	with pytest.raises(titles.TitleTooLongError):
+		titles._parse_titles(json.dumps([{"i": 0, "title": "y" * 121}]))

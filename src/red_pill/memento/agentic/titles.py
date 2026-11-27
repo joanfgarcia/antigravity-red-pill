@@ -32,8 +32,22 @@ from . import prompts, runtime
 logger = logging.getLogger(__name__)
 
 CHECKPOINT = "_titles.json"
-MAX_TITLE = 80
 _FALLBACK_TITLE = ""
+
+
+class TitleTooLongError(RuntimeError):
+	"""Un título supera el límite DURO (120): no se trunca, se falla.
+
+	La instrucción pide ≤80 (blando); hasta 120 se acepta tal cual. Pasarse de
+	120 significa que el modelo no sirve para este carril tal como está: hay que
+	cambiar prompt/modelo, no recortar la memoria.
+	"""
+
+
+def max_title_chars() -> int:
+	import red_pill.config as cfg
+
+	return max(20, int(getattr(cfg, "MEMENTO_TITLES_MAX_CHARS", 120) or 120))
 
 
 def title_batch_size() -> int:
@@ -82,7 +96,7 @@ def _note_title(fm: Dict[str, Any]) -> str:
 
 def _valid_title(title: str) -> bool:
 	low = title.strip().lower()
-	if not low or len(title.strip()) > MAX_TITLE:
+	if not low:
 		return False
 	if re.match(r"^(conversación|revision|revisión|análisis|analisis|charla)\s+sobre\b", low):
 		return False
@@ -104,13 +118,11 @@ def _parse_titles(raw: str) -> Dict[int, str]:
 			continue
 		title = str(row.get("title") or "").strip()
 		title = re.sub(r"\s+", " ", title)
-		# Bonsai 2-9B se pasa del límite con frecuencia (medido 2026-11-27: 12
-		# títulos de 80-100 chars → el validador los tiraba y la nota quedaba sin
-		# título). El contenido es bueno: se recorta a 80 en frontera de palabra
-		# en vez de descartarlo. Las aperturas prohibidas sí se rechazan.
-		if len(title) > MAX_TITLE:
-			cut = title[: MAX_TITLE + 1]
-			title = cut[: cut.rfind(" ")].rstrip(" ,;:-") if " " in cut else cut[:MAX_TITLE]
+		# Sin truncamientos (decisión del Operador, 2026-11-27): ≤80 es la
+		# instrucción; hasta 120 se acepta tal cual; >120 es un fallo duro, no un
+		# recorte ni un descarte silencioso.
+		if len(title) > max_title_chars():
+			raise TitleTooLongError(f"título de {len(title)} chars (máx {max_title_chars()}): {title[:160]}")
 		if _valid_title(title):
 			out[i] = title
 	return out

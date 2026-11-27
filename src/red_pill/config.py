@@ -976,6 +976,10 @@ class RedPillConfig(BaseSettings):
 	# Pase de títulos (AD-148): notas por llamada al modelo pequeño. 12 medido
 	# con Bonsai 2-9B (5,8 s/batch, 24/24 títulos válidos).
 	MEMENTO_TITLES_BATCH: int = 12
+	# Longitud máxima del título (2026-11-27, AD-148). Era 80 en el prompt; el
+	# Operador abre a 120: Bonsai devuelve 80-100 y recortar perdía información.
+	# No se trunca: si pasa de 120 se rechaza y se reintenta.
+	MEMENTO_TITLES_MAX_CHARS: int = 120
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.
