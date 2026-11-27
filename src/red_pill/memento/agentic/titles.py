@@ -193,8 +193,6 @@ def _parse_titles(raw: str) -> Dict[int, str]:
 
 def _call_batch(transport: runtime.Transport, batch: Sequence[Dict[str, Any]]) -> Dict[int, str]:
 	"""Titula un batch; un reintento para los índices que falten o no validen."""
-	import red_pill.config as cfg
-
 	max_tokens = max(512, len(batch) * 48 + 96)
 	rows = "\n\n".join(f"[{i}] {n['text'][:600]}" for i, n in enumerate(batch))
 	prompt = prompts.render("titles_user", notes=rows)

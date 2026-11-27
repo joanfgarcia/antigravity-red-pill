@@ -4458,7 +4458,7 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - Reparación: `34` reescritas, `949` saltadas, `0` dobles restantes, `34/34` cuerpos **byte-idénticos** al original (diff del cuerpo), `983` ficheros con **los mismos nombres**, `13/13` campos obligatorios presentes en las 34 (`session_id`, `scope`, `work_score`, `social_score`, `ascended` incluidos). `md5sum` antes/después: solo cambian los 34 del backup. Segunda pasada: `0` reescritas / `949` saltadas.
 - `intensity`/`significance` normalizan su representación (`0.70` → `0.7`): mismo valor YAML, consecuencia de re-serializar.
 - Tests: `tests/test_memento_frontmatter_safety.py` (19) — títulos con backtick, `": "`, `#`, comilla inicial y `- `; fallback de parseo; `FrontmatterError`; guarda de `_write_note`; pase de títulos que sella sin perder campos y no toca una nota corrupta; segunda pasada idempotente; script con `--dry-run` y reparación.
-**Consequences**: ningún pase puede volver a perder la cabecera de una nota; una nota corrupta se queda quieta y visible en vez de degradarse. El corpus de la sesión `f839399b` queda con 983 notas válidas y 0 dobles, listo para el nocturno.
+**Consequences**: ningún pase puede volver a perder la cabecera de una nota; una nota corrupta se queda quieta, visible en el log y en el registro de la sesión (`titles_corrupt`), y el gate no se cae si una nota no parsea (se queda fuera del cómputo con aviso). El corpus de la sesión `f839399b` queda con 983 notas válidas y 0 dobles, listo para el nocturno.
 
 ## [AD-152] Dedup P1-A: señal de texto, masa mínima y un gate que mide notas, no pares
 **Date**: 2026-11-28

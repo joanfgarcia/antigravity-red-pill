@@ -96,7 +96,8 @@
   entero en una cabecera con solo `title/title_version/title_engine`. Ahora: toda
   cadena se cita con JSON, el parseo tiene fallback (cita el `title:` a mano) y
   falla visible (`FrontmatterError`), `_write_note` **rechaza** un cuerpo que
-  empieza por `---` y el pase cuenta las notas ilegibles (`corrupt`) sin tocarlas.
+  empieza por `---` y el pase cuenta las notas ilegibles (`corrupt`) sin tocarlas
+  y las deja en el registro de la sesión (`titles_corrupt`).
   Reparadas las 34 con `scripts/memento_repair_double_frontmatter.py`
   (`--dry-run`, backup, idempotente): **0 dobles, 983 ficheros, 34/34 cuerpos
   idénticos**, 21 campos recuperados por nota. *AD-151*.

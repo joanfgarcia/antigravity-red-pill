@@ -213,7 +213,7 @@ def _notes_collapsible(annotate_dir: Path, threshold: float) -> int:
 	for path in sorted(annotate_dir.glob("*.md")):
 		try:
 			_fm, body = parse_refine(path.read_text(encoding="utf-8", errors="replace"))
-		except OSError:
+		except Exception:  # nota ilegible: fuera del cómputo, no tumbar el gate
 			continue
 		if body.lstrip().startswith("---"):
 			logger.warning(f"dedup: {path.name} con doble frontmatter, fuera del cómputo (reparar antes)")

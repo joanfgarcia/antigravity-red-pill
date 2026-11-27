@@ -299,6 +299,9 @@ def run_agentic(
 				"titles_version": titles_mod.title_prompt_version(),
 				"titles_notes": int(result.get("titled") or 0),
 				"titles_pending": int(result.get("pending") or 0),
+				# AD-151: una nota ilegible se queda quieta y visible; si esto no
+				# aparece en el registro, la sesión parece titulada al día.
+				"titles_corrupt": int(result.get("corrupt") or 0),
 			}
 			stats["processed"] += 1
 			if hasattr(registry, "save"):
