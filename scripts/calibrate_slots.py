@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from red_pill.core.llm_endpoint import llm_chat_url  # noqa: E402
 from red_pill.inference.runtime_server import RuntimeServer  # noqa: E402
 from red_pill.memento.agentic.prompts import render as render_prompt  # noqa: E402
+from red_pill.memento.agentic.prompts import render as prender, system as psystem  # noqa: E402
 from red_pill.memento.agentic.prompts import system as system_prompt  # noqa: E402
 
 MIN_SLOT_CTX = 4096
@@ -90,14 +91,14 @@ def build_prompts(notes: Sequence[str], batch_size: int) -> List[str]:
 	]
 
 
-def call(base_url: str, system: str, prompt: str) -> Dict[str, Any]:
+def call(base_url: str, system: str, prompt: str, max_tokens: int = 672) -> Dict[str, Any]:
 	t0 = time.monotonic()
 	r = requests.post(
 		f"{base_url}/v1/chat/completions",
 		json={
 			"messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
 			"temperature": 0.2,
-			"max_tokens": 672,
+			"max_tokens": max_tokens,
 		},
 		timeout=300,
 	)
@@ -157,6 +158,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 	ap.add_argument("--max-slots", type=int, default=8)
 	ap.add_argument("--batches", type=int, default=4, help="peticiones en vuelo (una por batch)")
 	ap.add_argument("--batch-size", type=int, default=12)
+	ap.add_argument("--fixture", choices=("titles", "distill", "distill-real"), default="titles")
+	ap.add_argument("--session-dir", default="", help="sesión memento para --fixture distill-real")
+	ap.add_argument("--max-output", type=int, default=None, help="tokens de salida por petición")
 	ap.add_argument("--json-out", default="/tmp/calibrate_slots.json")
 	ap.add_argument("--apply", action="store_true", help="escribe num_parallel en el perfil")
 	ap.add_argument("--keep-daemon", action="store_true", help="no descarga el modelo del daemon (comparte VRAM)")
@@ -182,9 +186,51 @@ def main(argv: Sequence[str] | None = None) -> int:
 	vram_before = _vram_used_mb()
 	print(f"[calibración] VRAM en reposo: {vram_before} MB (desk pausado por el operador)")
 
-	notes = synthetic_notes(args.batches * args.batch_size, args.batch_size)
-	prompts = build_prompts(notes, args.batch_size)
-	system = system_prompt("titles_user") or ""
+	if args.fixture == "titles":
+		notes = synthetic_notes(args.batches * args.batch_size, args.batch_size)
+		prompts = build_prompts(notes, args.batch_size)
+		system = system_prompt("titles_user") or ""
+		max_out = args.max_output or 672
+	elif args.fixture == "distill-real":
+		# Fragmento REAL de una sesión larga, con el prompt real de distill.
+		from red_pill.memento.agentic.fragments import (
+			_fragment_messages,
+			_render_fragment,
+			_split_messages,
+			work_units,
+		)
+
+		session = Path(args.session_dir)
+		if not session.exists():
+			raise SystemExit(f"--session-dir inexistente: {session}")
+		units = work_units(session)
+		prompts = []
+		for unit in units[: args.batches]:
+			content = unit.content
+			if len(content) <= 8000:
+				frag = content
+			else:
+				frags = _fragment_messages(_split_messages(content), 8000, 2)
+				frag = _render_fragment(frags[0])
+			prompts.append(prender("distill_user_opening", content=frag))
+		system = psystem("distill_user_opening") or ""
+		max_out = args.max_output or 2048
+		if not prompts:
+			raise SystemExit("la sesión no tiene work units")
+	else:
+		# Fragmento tipo distill sintético: ~8.000 chars por petición.
+		base = (
+			"## 2026-09-07T16:38:34Z — Asistente\n"
+			"El backfill seguía en marcha con 34129 vivo y 396 llamadas; revisé el registry, "
+			"el árbol de memento y los ficheros distill/refine por sesión. El hallazgo fue que "
+			"el guardado se hacía al final del run y un crash tras 71 sesiones dejaba los "
+			"marcados agentic sin persistir. Propuse guardar por sesión y añadir crash-recovery "
+			"en pending_agentic. Joan pidió medir el coste y dejar el proceso intacto hasta "
+			"terminar.\n\n"
+		)
+		prompts = [(base * 40)[:8000] for _ in range(args.batches)]
+		system = "Eres un destilador. Resume el fragmento en una sección con título y cuerpo, en primera persona."
+		max_out = args.max_output or 2048
 	rows: List[Dict[str, Any]] = []
 	base_seconds = None
 
@@ -192,7 +238,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 		if args.ctx // slots < MIN_SLOT_CTX:
 			print(f"[calibración] np={slots}: {args.ctx // slots} < {MIN_SLOT_CTX} por slot — se salta")
 			continue
-		srv = RuntimeServer(args.profile, ctx=args.ctx, num_parallel=slots, unload_daemon=True)
+		srv = RuntimeServer(args.profile, ctx=args.ctx, num_parallel=slots, unload_daemon=True, vram_margin_mb=0)
 		try:
 			srv.start()
 			srv.wait_ready()
@@ -200,7 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 			vram = _vram_used_mb()
 			t0 = time.monotonic()
 			with ThreadPoolExecutor(max_workers=len(prompts)) as ex:
-				res = list(ex.map(lambda p: call(srv.base_url, system, p), prompts))
+				res = list(ex.map(lambda p: call(srv.base_url, system, p, max_out), prompts))
 			secs = time.monotonic() - t0
 			tokens = sum(r["tokens"] for r in res)
 			codes = sorted({r["status"] for r in res})

@@ -181,11 +181,20 @@ manda; más slots solo recortan el contexto por slot.
 > solo resolve/carga con un contador de in-flight. Medido el 27-11: 2,36×
 > directo vs 1,19× a través del daemon.
 
-**Distill**: misma receta con `--profile bonsai_25_27b_distill`. El 27B ocupa
-~7,4 GB a 24k con el desk parado; `np=2` obliga a bajar el contexto total
-(12k por slot) y deja poco margen. Además, los fragmentos de distill tienen
-dependencia de continuación, así que los slots solo se explotan **entre work
-units/sesiones**, no dentro de una. Medir antes de adoptar.
+**Distill (medido 2026-11-27, 27B real, 4 fragmentos reales de 8k de la sesión
+f839399b, ctx 24.576)**:
+
+| Slots | VRAM | 4 fragmentos | Speedup |
+|---:|---:|---:|---:|
+| 1 | 6.717 MB | 66,0 s | 1,0× |
+| 2 | 6.675 MB | 59,1 s | 1,12× |
+| 4 | 6.631 MB | 71,1 s | **0,93×** |
+
+El 27B **no gana** con slots: 12 % a 2 y empeora a 4 (ancho de banda/cómputo).
+Se deja `np=1`. Los fragmentos tienen dependencia de continuación, así que la
+concurrencia solo podría explotarse entre work units/sesiones y el techo real
+sería ese ~12 %. Subir a 32k cuesta +265 MB de KV y **cabe** (~7,0 GB), pero no
+ataca el cuello de botella; no se adopta por ahora.
 
 ## 4. Procedimiento de admisión
 

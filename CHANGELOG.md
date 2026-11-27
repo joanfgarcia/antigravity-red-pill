@@ -73,6 +73,11 @@
   fijos: se re-ejecuta al instalar/actualizar y al cambiar de modelo. Medido en
   este equipo (Bonsai 2-9B, 32k): 4 slots → 2,36× con +2,8 GB; más no mejora.
   Ojo: el daemon aún serializa (1,19×) hasta estrechar el lock de generación.
+- **[MEASURED] 27B en distill: los slots no compensan.** Con fragmentos reales
+  de la sesión f839399b y `ctx` 24k: `np=1` 66,0 s; `np=2` 59,1 s (1,12×);
+  `np=4` 71,1 s (0,93×). VRAM ~6,7 GB. Se deja `np=1`: el 27B está limitado por
+  ancho de banda y la continuación de fragmentos impide paralelizar dentro de
+  una unidad. Subir a 32k cabe (+265 MB) pero no cambia el cuello.
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.
