@@ -3,6 +3,7 @@
 import json
 
 import pytest
+import yaml
 
 from red_pill.memento.agentic import (
 	ANNOTATE_SOCIAL_SYSTEM,
@@ -20,6 +21,12 @@ from red_pill.memento.agentic import (
 )
 from red_pill.memento.registry import MementoRegistry
 from red_pill.memento.render import compute_hash, extract_body, render_session, write_session
+
+
+def _fm(text: str) -> dict:
+	"""Frontmatter como dict. Desde AD-151 los escalares van citados (JSON/YAML):
+	comparar el texto crudo confunde comillas con contenido."""
+	return yaml.safe_load(text.split("---")[1]) or {}
 
 
 @pytest.fixture(autouse=True)
@@ -140,12 +147,14 @@ def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 	assert len(refine_files) == 1 and refine_files[0].name == "001-idea-nica-de-prueba.md"
 
 	distill_text = distill_files[0].read_text(encoding="utf-8")
-	assert "source_lines: memento/index.md#l" in distill_text and "title: Panel adversarial de prueba" in distill_text
+	dfm = _fm(distill_text)
+	assert dfm["source_lines"].startswith("memento/index.md#l") and dfm["title"] == "Panel adversarial de prueba"
 	record = json.loads((session_dir / "_session.json").read_text(encoding="utf-8"))
 	assert record["stages"]["distill"]["sections"] == 1
 	assert record["stages"]["distill"]["prompt_version"]
 	refine_text = refine_files[0].read_text(encoding="utf-8")
-	assert "significance: 0.80" in refine_text and "distill_ref: distill/001-panel-adversarial-de-prueba.md" in refine_text
+	rfm = _fm(refine_text)
+	assert float(rfm["significance"]) == 0.8 and rfm["distill_ref"] == "distill/001-panel-adversarial-de-prueba.md"
 
 	# El sello en frontmatter NO mueve el cuerpo (contrato §4.5.1)
 	index_text = (session_dir / "memento" / "index.md").read_text(encoding="utf-8")
@@ -514,9 +523,10 @@ def test_distill_session_fragments_long_work_unit(tmp_path):
 	distill_dir = root / dir_rel / "distill"
 	for s in frags:
 		text = (distill_dir / s["file"]).read_text(encoding="utf-8")
-		assert f"fragment: {s['fragment']}" in text
-		assert f"fragments_total: {total}" in text
-		assert f"fragment_of: {s['nnn']}" in text
+		fm = _fm(text)
+		assert str(fm["fragment"]) == str(s["fragment"])
+		assert int(fm["fragments_total"]) == int(total)
+		assert str(fm["fragment_of"]) == str(s["nnn"])
 
 
 # --- Fase 4 §5.4.2: refine multi-idea (M destills → N ideas) ---
@@ -642,10 +652,10 @@ def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	sd = root / rendered.dir_rel
 	distill_text = next((sd / "distill").glob("*.md")).read_text(encoding="utf-8")
 	refine_text = next((sd / "refine").glob("*.md")).read_text(encoding="utf-8")
-	assert "engine: Granite-4.1-8B-Q4_K_M.gguf" in distill_text
-	assert "prompt_version: d123" in distill_text
-	assert "engine: Granite-4.1-8B-Q4_K_M.gguf" in refine_text
-	assert "prompt_version: r456" in refine_text
+	assert _fm(distill_text)["engine"] == "Granite-4.1-8B-Q4_K_M.gguf"
+	assert _fm(distill_text)["prompt_version"] == "d123"
+	assert _fm(refine_text)["engine"] == "Granite-4.1-8B-Q4_K_M.gguf"
+	assert _fm(refine_text)["prompt_version"] == "r456"
 
 	# el registry también lo guarda
 	run_agentic(root, _registry, [("opencode", "opencode:s1")], fake_transport())
@@ -677,8 +687,7 @@ def test_distill_sella_el_motor_de_la_respuesta_no_el_cacheado(tmp_path, monkeyp
 
 	distill_session(root, rendered.dir_rel, "opencode:s1", "opencode", transport)
 	text = next((root / rendered.dir_rel / "distill").glob("*.md")).read_text(encoding="utf-8")
-	assert "engine: bonsai_25_27b_distill" in text
-	assert "engine: granite_4_2_8b" not in text
+	assert _fm(text)["engine"] == "bonsai_25_27b_distill"
 	meta = json.loads((root / rendered.dir_rel / "distill" / "_meta.json").read_text(encoding="utf-8"))
 	assert all(u["engine"] == "bonsai_25_27b_distill" for u in meta["units"].values())
 
@@ -734,10 +743,11 @@ def test_refine_session_multi_idea(tmp_path):
 	assert files == ["001-refactor-del-endpoint-de-auth.md", "001-reflexi-n-sobre-el-descanso.md"]
 
 	text = (refine_dir / "001-reflexi-n-sobre-el-descanso.md").read_text(encoding="utf-8")
-	assert "distill_ref: distill/001-b.md" in text  # fragment_ref=2 → origen del 2º fragment
-	assert "fragment_ref: 2" in text
-	assert "significance: 0.60" in text
-	assert "category_score: 0.50" in text  # default del curador si no lo puntúa
+	fm = _fm(text)
+	assert fm["distill_ref"] == "distill/001-b.md"  # fragment_ref=2 → origen del 2º fragment
+	assert int(fm["fragment_ref"]) == 2
+	assert float(fm["significance"]) == 0.6
+	assert float(fm["category_score"]) == 0.5  # default del curador si no lo puntúa
 
 
 def test_refine_session_filters_below_min(tmp_path):
@@ -786,8 +796,8 @@ def test_refine_preserva_sello_de_ascension_en_redistill(tmp_path):
 
 	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], _alta, min_significance=0.3)
 	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
-	assert "ascended: true" in text
-	assert "ascended_to: work_memories" in text
+	assert _fm(text)["ascended"] is True
+	assert _fm(text)["ascended_to"] == "work_memories"
 
 
 def test_refine_no_preserva_sello_si_cambia_source_lines(tmp_path):
@@ -805,7 +815,7 @@ def test_refine_no_preserva_sello_si_cambia_source_lines(tmp_path):
 
 	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s2, [], _alta, min_significance=0.3)
 	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
-	assert "ascended: false" in text
+	assert _fm(text)["ascended"] is False
 
 
 def test_refine_preserva_sello_por_idea_en_mismo_source_lines(tmp_path):

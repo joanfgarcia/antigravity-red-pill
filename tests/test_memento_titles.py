@@ -60,7 +60,7 @@ def test_titula_renombra_y_sella(tmp_path):
 
 	res = titles.run_titles(tmp_path, "2026-09/opencode/s1", "opencode:s1", "opencode", transport)
 
-	assert res == {"titled": 2, "skipped": 0, "pending": 0}
+	assert res == {"titled": 2, "skipped": 0, "pending": 0, "corrupt": 0}
 	assert len(calls) == 1  # 2 notas en un batch
 	names = sorted(p.name for p in d.glob("*.md"))
 	assert names == ["001-decisi-n-sobre-el-slug-con-acentos.md", "001-p-rdida-de-vram-al-arrancar.md"]

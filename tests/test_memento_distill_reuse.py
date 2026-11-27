@@ -14,6 +14,8 @@ Contrato (PLAN-NB-001 §3 F2 / D-NB-03/08/09/11):
 import json
 import re
 
+import yaml
+
 import pytest
 
 import red_pill.config as cfg
@@ -224,9 +226,9 @@ def test_insert_split_renames_and_keeps_unit_key(tmp_path, reuse_on):
 	# cada sección conserva su unit_key (rango) y adopta el nnn nuevo.
 	by_unit_key = {}
 	for name, text in files.items():
-		uk = re.search(r"unit_key: (\S+)", text).group(1)
-		section = re.search(r"section: (\d+)", text).group(1)
-		by_unit_key[uk] = (name, section)
+		# Frontmatter como YAML: desde AD-151 los escalares van citados.
+		fm = yaml.safe_load(text.split("---")[1]) or {}
+		by_unit_key[str(fm["unit_key"])] = (name, str(fm["section"]))
 	assert by_unit_key["0201-0300"][0].startswith("003-"), "B renombrado a nnn 003"
 	assert by_unit_key["0401-0500"][0].startswith("004-"), "C renombrado a nnn 004"
 	assert by_unit_key["0101-0200"][0].startswith("002-"), "X nuevo en nnn 002"

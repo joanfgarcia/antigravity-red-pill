@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 from red_pill.memento.agentic import (
 	ANNOTATE_SOCIAL_SYSTEM,
 	ANNOTATE_WORK_SYSTEM,
@@ -162,16 +164,18 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	by_route = {}
 	for f in files:
 		txt = f.read_text(encoding="utf-8")
-		fm = dict(re.findall(r"^(\w+):\s*(.*)$", txt.split("---")[1], re.M))
+		# El frontmatter se parsea como YAML (los escalares van citados desde
+		# AD-151: un `re` sobre el texto crudo confunde comillas con contenido).
+		fm = yaml.safe_load(txt.split("---")[1]) or {}
 		body = txt.split("---", 2)[2].strip()
 		by_route[fm["dual_route"]] = (fm, body)
 	assert "work" in by_route
 	fm, body = by_route["work"]
-	assert fm["work_score"] == "0.90"
+	assert float(fm["work_score"]) == 0.9
 	assert fm["prompt_version"]
 	assert fm["source_lines"]  # obligatorio para el ascenso (regresión 2026-09-23)
 	assert "Joan me pide arreglar el endpoint" in body
-	assert by_route["none"][0]["quality_flags"] != "[]"  # Samantha → identity → sin ruta
+	assert by_route["none"][0]["quality_flags"] != []  # Samantha → identity → sin ruta
 	meta = json.loads((tmp_path / dir_rel / "annotate" / "_meta.json").read_text(encoding="utf-8"))
 	assert meta["notas"] == 3
 	assert meta["routes"] == {"work": 1, "social": 0, "none": 2}
@@ -480,8 +484,10 @@ def test_annotate_preserva_sello_ascended_yaml_bool(tmp_path, monkeypatch):
 	)
 	annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", _fake_transport())
 	text = (annotate_dir / "001-fix-del-endpoint.md").read_text(encoding="utf-8")
-	assert "ascended: true" in text
-	assert "ascended_point_id: P-123" in text
+	# El frontmatter se lee como YAML: desde AD-151 los escalares van citados.
+	fm = yaml.safe_load(text.split("---")[1])
+	assert fm["ascended"] is True
+	assert fm["ascended_point_id"] == "P-123"
 
 
 def _load_ascend_script():

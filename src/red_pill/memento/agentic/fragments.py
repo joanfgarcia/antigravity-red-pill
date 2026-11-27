@@ -300,6 +300,16 @@ def _render_fragment(fragment: List[Tuple[str, str]]) -> str:
 
 
 def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:
+	"""Cabecera YAML de una nota. Todo `str` va citado con JSON (AD-151).
+
+	La heurística vieja (citar solo si contenía ": ") dejaba escalares crudos que
+	rompen el YAML: un título que empieza por backtick, por comilla simple, por
+	`#`, por `- ` o por `: ` no parsea. Al no parsear, el lector lo toma por
+	cuerpo y el fichero acaba con doble frontmatter (34 notas, 2026-11-28).
+	JSON es subconjunto de YAML 1.2: `json.dumps` da un escalar entrecomillado
+	que `yaml.safe_load` lee idéntico al original.
+	"""
+
 	def value_of(v: Any) -> str:
 		if v is None:
 			return "null"
@@ -309,6 +319,8 @@ def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:
 			return json.dumps(v, ensure_ascii=False)
 		if isinstance(v, float):
 			return f"{v:.2f}"
-		return json.dumps(v, ensure_ascii=False) if isinstance(v, str) and ": " in v else str(v)
+		if isinstance(v, str):
+			return json.dumps(v, ensure_ascii=False)
+		return str(v)
 
 	return "\n".join(["---"] + [f"{k}: {value_of(v)}" for k, v in fields] + ["---"])

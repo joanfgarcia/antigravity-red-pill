@@ -44,6 +44,17 @@ class TitleTooLongError(RuntimeError):
 	"""
 
 
+class FrontmatterError(RuntimeError):
+	"""El frontmatter de una nota no parsea ni con el fallback (AD-151).
+
+	Antes se devolvía `({}, texto_entero)` en silencio: el pase de títulos
+	envolvía el fichero completo en una cabecera nueva y perdía `session_id`,
+	`scope`, `work_score` y `ascended` de 34 notas. Fallar en silencio
+	prefiriendo perder datos a decir «no puedo» es justo el patrón que se corta
+	aquí: el llamante decide, pero se entera.
+	"""
+
+
 def max_title_chars() -> int:
 	import red_pill.config as cfg
 
@@ -82,18 +93,64 @@ def _text_hash(text: str) -> str:
 	return hashlib.sha256(str(text or "").strip().encode("utf-8")).hexdigest()
 
 
-def _split_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
+def _split_frontmatter(text: str, path: Optional[Path] = None) -> Tuple[Dict[str, Any], str]:
+	"""Cabecera + cuerpo de una nota. Nunca devuelve el fichero entero en silencio.
+
+	Si el bloque no parsea se usa un fallback determinista: se extrae la línea
+	`title:` a mano (el único campo que el pase necesita leer sin ambigüedad) y se
+	parsea el resto. Si aun así no parsea, `FrontmatterError` con la ruta: el
+	llamante decide, pero el error es visible.
+	"""
 	if not text.startswith("---"):
 		return {}, text
 	end = text.find("\n---", 3)
 	if end < 0:
 		return {}, text
-	try:
-		fm = yaml.safe_load(text[3:end]) or {}
-	except Exception:
-		return {}, text
+	raw_fm = text[3:end]
 	body = text[end + 4 :].lstrip("\n")
-	return (fm if isinstance(fm, dict) else {}), body
+	try:
+		fm = yaml.safe_load(raw_fm)
+	except yaml.YAMLError as exc:
+		fm = _recover_frontmatter(raw_fm)
+		if fm is None:
+			where = f" en {path}" if path else ""
+			raise FrontmatterError(f"frontmatter ilegible{where}: {str(exc).splitlines()[0]}") from exc
+	if not isinstance(fm, dict):
+		where = f" en {path}" if path else ""
+		raise FrontmatterError(f"frontmatter no es un mapa{where}: {type(fm).__name__}")
+	return fm, body
+
+
+def _recover_frontmatter(raw_fm: str) -> Optional[Dict[str, Any]]:
+	"""Fallback: cita a mano la línea `title:` y parsea el bloque entero.
+
+	Se cita solo el título (el campo que rompió el YAML: backtick inicial, comilla
+	inicial…) para no tocar el orden ni el resto de campos del bloque. None si el
+	bloque sigue sin parsear.
+	"""
+	lines = raw_fm.split("\n")
+	fixed: List[str] = []
+	seen_title = False
+	for line in lines:
+		if not seen_title and re.match(r"^title\s*:", line):
+			key, _, raw_value = line.partition(":")
+			fixed.append(f"{key}: {json.dumps(_raw_scalar(raw_value), ensure_ascii=False)}")
+			seen_title = True
+			continue
+		fixed.append(line)
+	try:
+		fm = yaml.safe_load("\n".join(fixed))
+	except yaml.YAMLError:
+		return None
+	return fm if isinstance(fm, dict) else None
+
+
+def _raw_scalar(raw: str) -> str:
+	"""Valor crudo de una línea YAML → str (sin inventar comillas ni tipos)."""
+	value = raw.strip()
+	if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+		value = value[1:-1]
+	return value
 
 
 def _note_title(fm: Dict[str, Any]) -> str:
@@ -173,12 +230,20 @@ def _save_checkpoint(annotate_dir: Path, data: Dict[str, Any]) -> None:
 
 
 def _write_note(path: Path, fm: Dict[str, Any], body: str, title: str, version: str, engine: str) -> Path:
-	"""Escribe la nota con el título sellado; devuelve la ruta final (nunca pisa otra)."""
+	"""Escribe la nota con el título sellado; devuelve la ruta final (nunca pisa otra).
+
+	Guarda dura (AD-151): un cuerpo que empieza por `---` es un frontmatter que
+	no se parseó. Envolverlo escribiría una cabecera ENCIMA de la original y
+	perdería los campos del interior (34 notas, 2026-11-28). Se falla, no se
+	escribe.
+	"""
+	if body.lstrip().startswith("---"):
+		raise ValueError(f"cuerpo de {path} empieza por '---': es un frontmatter sin parsear, no se envuelve")
 	fm = dict(fm)
 	fm["title"] = title
 	fm["title_version"] = version
 	fm["title_engine"] = engine
-	head = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).rstrip()
+	head = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False, width=4096).rstrip()
 	target = path.parent / f"{path.stem.split('-', 1)[0]}-{_slug(title)}.md"
 	if target != path and target.exists():
 		k = 2
@@ -212,8 +277,20 @@ def run_titles(
 	engine = runtime.served_engine()
 	files = sorted(annotate_dir.glob("[0-9][0-9][0-9]-*.md"))
 	notes: List[Dict[str, Any]] = []
+	corrupt = 0
 	for path in files:
-		fm, body = _split_frontmatter(path.read_text(encoding="utf-8"))
+		try:
+			fm, body = _split_frontmatter(path.read_text(encoding="utf-8"), path)
+		except FrontmatterError as exc:
+			logger.error(f"títulos: nota ilegible, NO se toca ({path.name}): {exc}")
+			corrupt += 1
+			continue
+		if body.lstrip().startswith("---"):
+			# Doble frontmatter: el cuerpo empieza con el bloque que no se parseó.
+			# Reescribir aquí perdería la cabecera interior (AD-151).
+			logger.error(f"títulos: doble frontmatter, NO se toca ({path.name}): repara antes de titular")
+			corrupt += 1
+			continue
 		notes.append({"path": path, "fm": fm, "text": body.strip(), "hash": _text_hash(body)})
 
 	checkpoint = _load_checkpoint(annotate_dir)
@@ -287,5 +364,5 @@ def run_titles(
 		_meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
 
 	(annotate_dir / CHECKPOINT).unlink(missing_ok=True)
-	logger.info(f"títulos {dir_rel}: {titled} tituladas, {skipped} ya al día, {missing} pendientes")
-	return {"titled": titled, "skipped": skipped, "pending": missing}
+	logger.info(f"títulos {dir_rel}: {titled} tituladas, {skipped} ya al día, {missing} pendientes, {corrupt} ilegibles")
+	return {"titled": titled, "skipped": skipped, "pending": missing, "corrupt": corrupt}
