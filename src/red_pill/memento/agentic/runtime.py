@@ -262,6 +262,11 @@ def annotate_max_tokens(default: int = 1024, chars: int | None = None) -> int:
 		ctx = int(getattr(resolved, "n_ctx", 0) or 0)
 	except Exception:
 		base, ctx = default, 0
+	if single_call_enabled():
+		# El prompt combinado extrae work Y social en la misma respuesta: el
+		# volumen se acerca al doble. Un suelo de 3.072 evita el primer intento
+		# corto seguido de reintento (medido 2026-11-27, AD-147).
+		base = max(base, 3072)
 	if not chars or chars <= 0:
 		return base
 	import red_pill.config as cfg
@@ -558,6 +563,13 @@ def served_engine() -> str:
 	global _LAST_SERVED
 	path = _LAST_SERVED
 	if not path:
+		# Corrida con juez fijado (RP_LLM_MODEL) antes de la primera respuesta: el
+		# daemon aún no ha cargado nada y `/v1/models` devuelve el perfil por
+		# defecto (granite), que NO es el juez. Sellar granite aquí envenenaba el
+		# contrato del parcial y forzaba un reset en cada reanudación (2026-11-27).
+		pinned = os.getenv("RP_LLM_MODEL", "").strip()
+		if pinned:
+			return pinned
 		return engine_id()
 	try:
 		from red_pill.core.model_registry import ModelRegistry
@@ -776,6 +788,15 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 		payload["thinking"] = llm["thinking"]
 	if llm["device_fallback"]:
 		payload["device_fallback"] = llm["device_fallback"]
+	# AD-148: en annotate, penalización de repetición por request. K2 entra en
+	# bucle con contenido denso y agota el presupuesto repitiendo la misma idea;
+	# el sampler del perfil NO se aplica a las peticiones con task, así que viaja
+	# aquí. Solo annotate: distill/refine no lo necesitan y no se toca su conducta.
+	if llm["task"] == "annotate":
+		rp = float(getattr(cfg, "MEMENTO_ANNOTATE_REPEAT_PENALTY", 1.1) or 0)
+		if rp > 0:
+			payload["repeat_penalty"] = rp
+			payload["repeat_last_n"] = int(getattr(cfg, "MEMENTO_ANNOTATE_REPEAT_LAST_N", 256) or 256)
 	# El pase de memoria sintetiza mejor SIN razonamiento en un modelo pequeño: con
 	# thinking gasta el presupuesto pensando y devuelve extractos literales en vez de
 	# notas en su voz. Se apaga por PETICIÓN (no reiniciando el servidor, que también
@@ -823,7 +844,8 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 			# nada que anotar" y era presupuesto. Nunca silencioso.
 			# 2026-11-27: antes de aceptar el corte, un reintento con más margen.
 			if _attempt == 0:
-				bigger = int(budget * 1.5)
+				ceiling = int(getattr(cfg, "MEMENTO_ANNOTATE_MAX_TOKENS_CEILING", 4096) or 4096)
+				bigger = min(int(budget * 1.5), ceiling) if llm["task"] == "annotate" else int(budget * 1.5)
 				logger.warning(
 					f"LLM truncado (finish_reason=length, max_tokens={budget} → {bigger}, modelo={_body.get('model')}) "
 					"— reintentando con más margen"

@@ -4356,3 +4356,22 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 5. El troceo entra en `annotate_prompt_version` (`chunk=8000`): cambiar el tope invalida el reuso y obliga a re-anotar. Es intencional.
 **Alternatives**: (a) subir K2 a 16.384 — medido: no completa el p99 y cuesta +75 % en p90 sin ganar notas; (b) trocear con solape de mensajes — duplica ideas y llamadas; el corte ya cae en cabecera de turno y el dedup P1-A absorbe solapes si algún día se añaden; (c) mantener el split entero y subir el watchdog — alarga el pase y no arregla la cola de splits >20k.
 **Consequences**: el coste de annotate **se duplica** en el 86 % de splits (>8.000 chars): 2 trozos × 2 prompts = 4 llamadas por split. Con el techo de 40 min del nocturno eso aprieta; el siguiente lever es la fusión work+social en una llamada (`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`, ya implementada y probada) o subir el techo, no volver al split entero. El corpus queda stale por el cambio de firma y se re-anota en las próximas noches.
+
+
+## [AD-147] La fusión work+social era un bucle de K2, no falta de presupuesto
+**Date**: 2026-11-27
+**Status**: ACEPTADO & IMPLEMENTADO (fusión ON con repeat_penalty).
+**Context**: tras AD-146 el coste de annotate se duplica (2 trozos × 2 prompts). El Operador pidió activar la fusión work+social (`MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED`) para compensarlo. La primera corrida real falló: truncados en el primer split, también con dos llamadas. El diagnóstico inicial («el combinado pide el doble de salida») era incompleto.
+**Diagnóstico (K2, trozo real de 6.658 chars)**: con 4.096 tokens el modelo **repite la misma idea** hasta agotar el presupuesto — en la salida hay `{` ×24, `"relics": 3` ×22, `"significance": 0.85` ×21. No necesita 4.000 tokens: necesita que alguien corte el bucle. Es una patología de repetición, no volumen.
+**Medición**:
+- `repeat_penalty=1.1` → el mismo trozo termina en **1.066 tokens / 7 ideas / 35 s** (1.15 → 950 / 6 / 31,5 s).
+- Con el prompt **combinado** y rp=1.1: **8/8 llamadas** en trozos reales densos (5,8–7,3k) terminan en `stop`, 4–14 ideas, 44–153 s; dos necesitaron el reintento a 3.072 (2.561 tokens).
+- Con el prompt de **work** solo, el mismo trozo entró en bucle **dos veces** (2.048 y 3.072), incluso con rp: la fusión es más estable aquí, no menos.
+- Subiendo el suelo del combinado a **3.072** (en vez de 2.048), los dos trozos que reintentaban terminan al **primer intento**: 2.184/2.321 tokens, 11/12 ideas, 73/75 s.
+**Decision**:
+1. `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.1` y `REPEAT_LAST_N=256`, enviados **por request** solo en annotate (el daemon no aplica el `sampling` del perfil a las peticiones con task).
+2. El prompt combinado arranca con **3.072** de salida (techo 4.096); el reintento se recorta al techo.
+3. Fusión **ON** para la sesión grande: 1 llamada por trozo en vez de 2.
+**Alternatives**: (a) dos llamadas — el prompt de work es el que más se engancha al bucle en este contenido; (b) subir el watchdog — el bucle quema minutos y no garantiza parar; (c) trozos más pequeños — no ataca la repetición y multiplica llamadas.
+**Rationale / Evidence**: la salida patológica está medida (objetos repetidos); el sampler del perfil lleva `top_p/top_k/min_p` y no `repeat_penalty`, y el daemon no lo aplica a peticiones con task. El bucle también explica el fallo del combinado a 4.096/6.144 (AD-147 previo, corregido aquí).
+**Consequences**: annotate vuelve a ~1 llamada por trozo (la mitad que con 2 prompts), con llamadas de 45–75 s; el coste neto queda parecido al de 2 llamadas, pero sin abortos. La calidad de la fusión con K2 se valida con la corrida de la sesión grande (notas, rutas, voz). Si el bucle reaparece en otro contenido, el siguiente lever es subir rp a 1.15 o detectar repetición en cliente.

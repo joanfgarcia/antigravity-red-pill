@@ -73,3 +73,23 @@ propiedades del pipeline medibles en seco; `notas`/`rutas` salen del modelo real
 PYTHONPATH=src python scripts/bench_annotate.py --repetitions 5 --out /tmp/baseline
 PYTHONPATH=src python scripts/bench_annotate.py --repetitions 5 --single-call --out /tmp/fusion
 ```
+
+
+
+## Actualización 2026-11-27 — K2: viable con repeat_penalty
+
+El GO de arriba se midió con **Granite-4.1-8B** sobre un fixture sintético. Con
+K2 y trozos reales de 8.000 la fusión falló al principio por una razón que no era
+el volumen: **K2 entraba en bucle** repitiendo la misma idea hasta agotar el
+presupuesto (`{` ×24, `"relics": 3` ×22 en 4.096 tokens). Con
+`repeat_penalty=1.1` (AD-147):
+
+- El trozo denso de 6.658 chars termina en 1.066 tokens / 7 ideas / 35 s.
+- 8/8 llamadas combinadas sobre trozos reales (5,8–7,3k) terminan en `stop`,
+  4–14 ideas, 0 truncados.
+- Con suelo de 3.072 para el combinado, los trozos que reintentaban terminan al
+  primer intento (2.184/2.321 tokens, 73/75 s).
+
+El prompt de **work** solo se enganchó al bucle dos veces en el mismo trozo: la
+fusión es más estable aquí. Queda **ON** para la corrida real, con rp=1.1 y
+presupuesto base 3.072.

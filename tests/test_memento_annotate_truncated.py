@@ -175,3 +175,36 @@ def test_annotate_max_tokens_usa_el_modelo_fijado_por_el_job(monkeypatch):
 
 	assert runtime.annotate_max_tokens(chars=20000) > 2048
 	assert seen.get("model") == "k2_ctx16"
+
+
+def test_served_engine_usa_el_modelo_fijado_antes_de_la_primera_respuesta(monkeypatch):
+	"""Un juez fijado no se sella como el default del daemon en arranque frío.
+
+	2026-11-27: con el daemon descargado, `/v1/models` devuelve `granite_4_2_8b`;
+	el contrato del parcial y el `_meta` se sellaban con granite aunque el juez
+	fuera K2, y la reanudación reseteaba el parcial en cada intento.
+	"""
+	monkeypatch.setattr(runtime, "_LAST_SERVED", None, raising=False)
+	monkeypatch.setattr(runtime, "engine_id", lambda: "granite_4_2_8b")
+	monkeypatch.setenv("RP_LLM_MODEL", "k2_horizon_7b")
+
+	assert runtime.served_engine() == "k2_horizon_7b"
+
+
+def test_combined_prompt_arranca_con_presupuesto_mayor(monkeypatch):
+	"""La fusión work+social pide más salida: su suelo es 3.072 (AD-147).
+
+	Con el suelo de la task (2.048) el primer intento se cortaba y obligaba a un
+	reintento casi siempre; el combinado necesita ~1.300-2.600 tokens.
+	"""
+	from red_pill.core import model_runtime as mr
+
+	class _Resolved:
+		max_tokens = 2048
+		n_ctx = 10240
+
+	monkeypatch.setattr(mr, "resolve", lambda _selector: _Resolved())
+	monkeypatch.setattr(runtime, "single_call_enabled", lambda: True)
+	monkeypatch.setattr(runtime, "annotate_chunk_chars", lambda: 8000)
+
+	assert runtime.annotate_max_tokens(chars=6658) == 3072

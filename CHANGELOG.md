@@ -49,6 +49,16 @@
   **falla con `PromptTooLongError`** en vez de recortar a 20k; un truncado
   recuperado por el reintento ya no aborta el pase. Coste: 2 llamadas más por
   split >8k. *AD-146*.
+- **[FIX] K2 entraba en bucle al anotar: `repeat_penalty` y fusión estable.**
+  En contenido denso repetía la misma idea hasta agotar el presupuesto (`{` ×24,
+  `"relics": 3` ×22 en 4.096 tokens); no era falta de salida. Con
+  `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.1` el mismo trozo termina en ~35 s / 7 ideas.
+  El prompt combinado work+social (1 llamada) con suelo de 3.072 completa 8/8
+  trozos reales sin truncar: la mitad de llamadas que con dos prompts. *AD-147*.
+- **[FIX] El sello `engine` de arranque en frío usa el modelo fijado** por el job
+  (`RP_LLM_MODEL`), no el default del daemon. Antes un pase con K2 y el daemon
+  descargado se sellaba como `granite_4_2_8b` y reseteaba el parcial en cada
+  reanudación.
 - **[FIX] Oracle entrega fuentes, no finge una síntesis.** PERF-F01 dejó el
   `EdgeEngine` lazy y Oracle comprobaba `if engine.llm` antes de cualquier carga:
   siempre `None`. Desde entonces cada `search_memory_research` devolvía la

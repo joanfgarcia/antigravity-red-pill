@@ -961,6 +961,13 @@ class RedPillConfig(BaseSettings):
 	# tamaño SIMILAR (ceil(chars/8000)), no 8000 + residual. 0 = desactivado
 	# (split entero; solo válido con n_ctx ≥ 12.800 y calidad medida).
 	MEMENTO_ANNOTATE_CHUNK_CHARS: int = 8000
+	# Penalización de repetición para annotate (2026-11-27, AD-148). En contenido
+	# denso K2 entra en bucle repitiendo la misma idea hasta agotar el presupuesto
+	# (`finish_reason=length`); con 1.1 el mismo trozo termina en ~35 s con JSON
+	# cerrado. Se envía por request (el daemon no aplica `sampling` del perfil a
+	# las peticiones con task). 0 desactiva.
+	MEMENTO_ANNOTATE_REPEAT_PENALTY: float = 1.1
+	MEMENTO_ANNOTATE_REPEAT_LAST_N: int = 256
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.
