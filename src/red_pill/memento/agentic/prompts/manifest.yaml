@@ -58,6 +58,13 @@ prompts:
     runtime: [fragment]
     select: MEMENTO_ANNOTATE_VOICE_V2
 
+  # AD-148: pase de títulos separado (modelo pequeño, batches). Sin ejemplos
+  # concretos a propósito: K2 los copiaba como títulos de notas ajenas.
+  titles_user:
+    template: titles_user.txt
+    system: titles_system.txt
+    runtime: [notes]
+
   # F4-fusión (NB-001 P7): work+social en UNA llamada, con `scope` por idea.
   # Seleccionados por el flag MEMENTO_ANNOTATE_SINGLE_CALL_ENABLED (default OFF).
   annotate_combined_user:

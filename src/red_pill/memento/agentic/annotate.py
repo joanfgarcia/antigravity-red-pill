@@ -310,7 +310,11 @@ def annotate_session(
 			flag_count[fl] = flag_count.get(fl, 0) + 1
 		significance = round(max(work, social), 2)
 		max_significance = max(max_significance, significance)
-		slug = slugify_title(a["title"])
+		# AD-148: la extracción ya no pide título. Se usa uno provisional (tema o
+		# primeras palabras) para el nombre del fichero; la fase `titles` lo
+		# sustituye y sella `title_version`. Sin sello, la nota no asciende.
+		title = str(a.get("title") or "").strip() or str(a.get("theme") or "").strip() or a["text"][:60]
+		slug = slugify_title(title)
 		# El sello de ascensión se conserva por stem; al renombrar (nnn cambió) el
 		# stem no coincide y el sello viaja en la idea reusada (`_seal`).
 		seal = prev_seals.get(f"{a['nnn']}-{slug}", {}) or a.get("_seal") or {}
@@ -320,7 +324,8 @@ def annotate_session(
 			("source_lines", a["split_ref"]),
 			("split_ref", a["split_ref"]),
 			("distill_ref", _distill_ref(root, dir_rel, a["nnn"])),
-			("title", a["title"]),
+			("title", title),
+			("title_version", ""),
 			("significance", significance),
 			("emotion", a["emotion"]),
 			("intensity", float(a.get("intensity") or 0.0)),

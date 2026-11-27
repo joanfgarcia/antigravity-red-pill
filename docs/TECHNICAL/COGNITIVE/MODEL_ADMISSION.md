@@ -115,6 +115,31 @@ No basta con una corrida ni con un fixture corto. Protocolo mínimo:
 | **Calidad @ contexto de producción** | Medida con unidades reales (p50/p90/p99) **al `n_ctx` del carril** (A/B, N=3): notas en 1ª persona, work/social separados, sin deixis, **sin regresión** frente a A/K2 y 0 invenciones en la muestra | Protocolo §2 + `bench_annotate` + revisión manual de 5 notas |
 | Latencia | La sesión peor caso cabe en el techo del carril (40 min) | `item_seconds` del dag_job |
 
+### `titles` (título de una nota, AD-148)
+
+Carril corto y separable: recibe el **texto autocontenido de la nota** y devuelve
+un título ≤80 chars. No lee el raw ni el destilado; no extrae hechos.
+
+| Requisito | Umbral | Cómo se mide |
+|---|---|---|
+| **Cabe** | `n_ctx ≥ 8.192` para 24 notas/batch (24×600 chars ≈ 4,3k tokens + salida) | `kv_ceiling` + fórmula §2 |
+| Memoria | GPU-only; **≤ ~3 GB de pesos** para no competir con el juez de annotate | `/status` + `kv_ceiling` |
+| Contrato | 24/24 notas del batch con título; JSON cerrado; 0 inválidos | lote real de 24 |
+| Fidelidad | el título sale del texto; **0 títulos de ejemplo del prompt**, 0 inventados, 0 repetidos entre notas distintas | revisión manual + heurística |
+| Voz | español, ≤80 chars, sin “me pide/cuenta…”, sin “Conversación sobre” | heurística sobre el lote |
+| Latencia | sesión media (~100 notas) ≤ 15 min; sesión grande (935) ≤ 10 min | `item_seconds` del dag_job |
+
+**Baseline medido (2026-11-27, 24 notas reales, batch 12)**:
+
+| Modelo | Válidos | s/batch | 935 notas | Nota |
+|---|---:|---:|---:|---|
+| **Bonsai 2-9B** | 24/24 | 5,8 | 7,5 min | Elegido (`titles`) |
+| tiny-aya-water | 24/24 | 3,9 | 5,1 min | Alternativa; europeas, algo más genérica |
+| Spark 4B | 0/24 | 11 | — | Falla JSON a 512 tokens |
+
+Un título sin sellar (`title_version` vacío) **no asciende**: el gate vive en
+`ascension.py` (`no_title`).
+
 ## 4. Procedimiento de admisión
 
 1. **Perfil**: alta en `model_profiles.yaml` (bloque de conducta + `kv_cache` +

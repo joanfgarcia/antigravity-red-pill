@@ -51,6 +51,8 @@ def test_chronicle_encadena_reconcile_tras_annotate():
 	assert "memento-reconcile" in stages
 	rec = stages["memento-reconcile"]
 	assert "--reconcile-only" in rec["command"]
-	assert rec["depends_on"] == ["memento-annotate"]
+	# AD-148: los títulos van entre annotate y reconcile (los stems cambian).
+	assert stages["memento-titles"]["depends_on"] == ["memento-annotate"]
+	assert rec["depends_on"] == ["memento-titles"]
 	assert rec.get("on_fail") == "warn"
 	assert stages["memento-backlog"]["depends_on"] == ["memento-reconcile"]

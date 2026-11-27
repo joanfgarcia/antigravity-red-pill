@@ -116,9 +116,9 @@ def main() -> None:
 	)
 	parser.add_argument(
 		"--phase",
-		choices=("distill", "annotate"),
+		choices=("distill", "annotate", "titles"),
 		default=None,
-		help="Ejecutar SOLO una fase del pase (2026-10-30). Cada fase puede servirse de un modelo distinto (task distill / annotate): intercaladas por sesión cuestan DOS cambios de modelo por sesión; por fases, dos por corrida. Sin este flag, el pase hace las dos por sesión (comportamiento histórico). `annotate` exige MEMENTO_ANNOTATE_FROM_RAW=true (con OFF no hay fase de notas; se rechaza en arranque).",
+		help="Ejecutar SOLO una fase del pase (2026-10-30; `titles` desde AD-148). Cada fase puede servirse de un modelo distinto (task distill / annotate): intercaladas por sesión cuestan DOS cambios de modelo por sesión; por fases, dos por corrida. Sin este flag, el pase hace las dos por sesión (comportamiento histórico). `annotate` exige MEMENTO_ANNOTATE_FROM_RAW=true (con OFF no hay fase de notas; se rechaza en arranque).",
 	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	parser.add_argument(

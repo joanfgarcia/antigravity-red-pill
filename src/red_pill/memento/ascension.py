@@ -418,6 +418,7 @@ def ascend_by_threshold(
 		"ascendidos": 0,
 		"rechazados_por_umbral": 0,
 		"rechazados_por_ruta": 0,
+		"rechazados_por_titulo": 0,
 		"rechazados_por_validador": 0,
 		"errores": 0,
 		"duplicados_omitidos": 0,
@@ -441,6 +442,12 @@ def ascend_by_threshold(
 			# MEM-006: las anotaciones sin ruta (ruido/zona muerta) NO ascienden.
 			if str(fm.get("dual_route") or "").strip().lower() == "none":
 				stats["rechazados_por_ruta"] += 1
+				continue
+			# AD-148: sin título sellado no asciende (ver `ascender`).
+			if refine_path.parent.name == "annotate" and (
+				not str(fm.get("title") or "").strip() or not str(fm.get("title_version") or "").strip()
+			):
+				stats["rechazados_por_titulo"] += 1
 				continue
 			# Veredicto de validación negativo (gate/LLM): terminal, sin reintento.
 			if str(fm.get("validator_approved")).strip().lower() == "false":
@@ -679,6 +686,14 @@ def ascender(
 
 	if fm.get("ascended") and not force:
 		return {"ascended": False, "reason": "already_ascended", "point_id": fm.get("ascended_point_id")}
+
+	# AD-148: una nota de annotate sin título sellado no asciende. Mientras la
+	# fase `titles` no la nombre, se queda en el árbol y no ensucia Qdrant con un
+	# stem provisional. El frontmatter lleva `title_version` solo cuando el pase
+	# de títulos la ha sellado.
+	if refine_path.parent.name == "annotate":
+		if not str(fm.get("title") or "").strip() or not str(fm.get("title_version") or "").strip():
+			return {"ascended": False, "reason": "no_title"}
 
 	# MEM-006: veredicto de validación de contenido.
 	verdict = str(fm.get("validator_approved", "")).strip().lower()

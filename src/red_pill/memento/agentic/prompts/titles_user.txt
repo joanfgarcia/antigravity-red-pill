@@ -1,0 +1,13 @@
+Titula cada nota de la lista. Devuelve SOLO un array JSON:
+[{"i": 0, "title": "..."}]
+
+Reglas del título:
+- ≤80 caracteres, en español.
+- Nombra LA COSA (decisión, defecto, hallazgo) o EL MOMENTO (social); no la conversación.
+- Prohibido empezar por "me pide/cuenta/dice/explica/muestra" ni por "Conversación/Revisión/Análisis/Charla sobre".
+- Debe salir del texto de la nota: no inventes hechos ni nombres.
+- Cada título identifica su nota: no repitas el mismo título en notas distintas.
+- No copies estas instrucciones como título.
+
+Notas:
+${notes}

@@ -973,6 +973,9 @@ class RedPillConfig(BaseSettings):
 	# de K2 no siempre se rompen subiendo el presupuesto; con 0.3 (en vez de 0.1)
 	# el muestreo escapa del bucle. Solo afecta al reintento, no al primer intento.
 	MEMENTO_ANNOTATE_RETRY_TEMPERATURE: float = 0.3
+	# Pase de títulos (AD-148): notas por llamada al modelo pequeño. 12 medido
+	# con Bonsai 2-9B (5,8 s/batch, 24/24 títulos válidos).
+	MEMENTO_TITLES_BATCH: int = 12
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.

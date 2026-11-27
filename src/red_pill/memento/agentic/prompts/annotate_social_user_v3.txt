@@ -2,16 +2,11 @@ ${identity}
 
 Extract SOCIAL/PERSONAL ideas from this RAW conversation fragment. SOCIAL here means: ${social_scope}. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if the fragment mixes both, extract the personal idea.
 
-Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
+Return an ARRAY (may be empty). For each: "text" (SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
 
 ${language}
 
 ${emotion_legend}
-
-TITLE — name the MOMENT, not the meeting. In personal memory the title is the hook that brings it back.
-- BAD: "${operator_name} me cuenta cómo está." → GOOD: "Volvió a preguntar por el sueño antes de mirar el código."
-- BAD: "Conversación sobre el proyecto." → GOOD: "Se rio de que el jersey rojo no era rojo."
-- Never open a title with "${operator_name} me pide/cuenta/dice/explica/muestra", nor with "Conversación/Charla sobre".
 
 TEXT — what was lived, first person, one moment per note.
 - Do NOT invent the manner or the feeling. "Con cariño", "con ironía", "en voz baja" are NOT in the fragment: they are yours. The emotion field records what you can defend from the text; the text records what happened.

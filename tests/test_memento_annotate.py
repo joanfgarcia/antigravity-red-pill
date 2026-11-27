@@ -246,7 +246,8 @@ def _note(path, body, extra=""):
 	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text(
 		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l10-20\n"
-		f"split_ref: memento/index.md#l10-20\nsignificance: 0.9\nemotion: gray\nintensity: 0.5\n"
+		f"split_ref: memento/index.md#l10-20\ntitle: Nota de prueba\ntitle_version: test-v1\n"
+		f"significance: 0.9\nemotion: gray\nintensity: 0.5\n"
 		f"ascended: false\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.05\n{extra}---\n{body}\n",
 		encoding="utf-8",
 	)
@@ -338,7 +339,8 @@ def test_ascender_acepta_anotacion_con_source_lines(tmp_path):
 	note.parent.mkdir(parents=True)
 	note.write_text(
 		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l10-20\n"
-		"split_ref: memento/index.md#l10-20\nsignificance: 0.9\nemotion: gray\nintensity: 0.5\n"
+		"split_ref: memento/index.md#l10-20\ntitle: Filtro de empatía\ntitle_version: test-v1\n"
+		"significance: 0.9\nemotion: gray\nintensity: 0.5\n"
 		"ascended: false\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.05\n---\nJoan me pide el fix y le explico.\n",
 		encoding="utf-8",
 	)
@@ -519,3 +521,20 @@ def _pin_instance_identity(monkeypatch):
 	c = cfg.get_config()
 	monkeypatch.setattr(c, "MEMENTO_AGENT_LABEL", "Aleth", raising=False)
 	monkeypatch.setattr(c, "MEMENTO_OPERATOR_LABEL", "Joan", raising=False)
+
+
+def test_ascender_rechaza_anotacion_sin_titulo_sellado(tmp_path):
+	"""AD-148: una nota de annotate sin `title_version` no asciende."""
+	from red_pill.memento.ascension import ascender
+
+	note = tmp_path / "annotate" / "003-sin-titulo.md"
+	note.parent.mkdir(parents=True)
+	note.write_text(
+		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l10-20\n"
+		"split_ref: memento/index.md#l10-20\ntitle: provisional\ntitle_version: ''\n"
+		"significance: 0.9\nemotion: gray\nintensity: 0.5\n"
+		"ascended: false\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.05\n---\nJoan me pide el fix.\n",
+		encoding="utf-8",
+	)
+	res = ascender(tmp_path, _FakeReg(), note, memory_manager=_FakeMM())
+	assert res == {"ascended": False, "reason": "no_title"}

@@ -21,12 +21,12 @@ title: Chronicle diario (ingesta de trayectorias)
 mission_id: chronicle-daily
 nightly_exempt: true
 control:
-  # NB-001 F3: techo de pared del compuesto (distill 45 + annotate 40). Es un
-  # techo REAL: este compuesto sí tiene fan-out (una hoja por sesión del delta).
-  # Capacidad medida (ciclo 4047324f, 2026-11-12): 74.6 s/hoja → ~34 sesiones
-  # caben en 85 min; con más, las hojas sobrantes quedan `deferred` y vuelven la
-  # noche siguiente por stale-first (D-NB-07/D-NB-13).
-  deadline_minutes: 85
+  # Techo de pared del compuesto. Se sube de 85 → 180 min (2026-11-27) porque
+  # el annotate nuevo (trozos + fusión + rewrite) mide ~12 min por sesión media,
+  # no los ~4,3 min del pipeline que truncaba: con 85 min solo cabían 5-6
+  # sesiones. Con 180 caben ~11-12 y el nightly (cap 600) lo absorbe. Las hojas
+  # que no entren siguen quedando `deferred` y vuelven por stale-first.
+  deadline_minutes: 180
 manifest:
   workdir: .
   stages:
@@ -92,9 +92,26 @@ manifest:
         task: annotate
       requires_gpu: true
       defer_exit_code: 77
-      timeout: 5400
+      # La sesión más grande medida (817k chars, 63 splits) tarda ~80 min solo
+      # en extracción; 90 min dejaba el margen justo. 120 min.
+      timeout: 7200
       on_fail: warn
       depends_on: [memento-distill]
+    - id: memento-titles
+      type: command
+      minion: command_runner
+      fan_out_from: discover
+      fanout_stepwise: true
+      fanout_label: títulos
+      progress_file: true
+      command: .venv/bin/python scripts/memento_agentic.py --phase titles --target {{item}}
+      llm:
+        task: titles
+      requires_gpu: true
+      defer_exit_code: 77
+      timeout: 900
+      on_fail: warn
+      depends_on: [memento-annotate]
     # Reconciliación de huérfanos (2026-11-20, E-97e9d2): re-anotar cambia los
     # títulos → stems nuevos → puntos nuevos en Qdrant; los viejos quedaban vivos
     # apuntando a notas podadas. Medido antes de cablearlo: 1.969 puntos muertos
@@ -106,7 +123,7 @@ manifest:
       command: .venv/bin/python scripts/memento_ascend.py --reconcile-only
       timeout: 1800
       on_fail: warn
-      depends_on: [memento-annotate]
+      depends_on: [memento-titles]
     # Contador del backlog (2026-11-03): lo que el tope dejó fuera de esta noche.
     # Acumulativo por naturaleza — lo que no se procesa sigue pendiente — y
     # visible en el tablón (`memento_backlog`, clase `sed`: escala con el tiempo

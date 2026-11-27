@@ -100,7 +100,7 @@ def _idea_from_row(idea: Any) -> Optional[Dict[str, Any]]:
 	if not text:
 		return None
 	return {
-		"title": str(idea.get("title") or "Anotación")[:80],
+		"title": str(idea.get("title") or "").strip()[:80],
 		"text": text,
 		"significance": idea.get("significance"),
 		"emotion": str(idea.get("emotion") or "gray"),

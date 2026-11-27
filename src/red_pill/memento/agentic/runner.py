@@ -286,6 +286,26 @@ def run_agentic(
 		entry = registry.get(source, session_id)
 		if not entry or not entry.get("dir"):
 			continue
+		if phase == "titles":
+			# AD-148: fase propia, independiente de distill/annotate. Trabaja sobre
+			# las notas ya escritas y solo renombra/sella; si falla a medias, el
+			# checkpoint por nota permite reanudar sin volver a llamar al modelo.
+			from . import titles as titles_mod
+
+			result = titles_mod.run_titles(root, entry["dir"], session_id, source, transport)
+			prev = entry.get("agentic") or {}
+			entry["agentic"] = {
+				**prev,
+				"titles_version": titles_mod.title_prompt_version(),
+				"titles_notes": int(result.get("titled") or 0),
+				"titles_pending": int(result.get("pending") or 0),
+			}
+			stats["processed"] += 1
+			if hasattr(registry, "save"):
+				registry.save()
+			if checkpoint_path is not None:
+				_advance_checkpoint(checkpoint_path, registry, len(targets), redistill_since=redistill_since)
+			continue
 		if phase == "annotate" and not _distill_current(root, entry):
 			# Fase de notas sin polaroids al día: no anotar sobre material viejo.
 			# No es un fallo — la fase de distill lo resolverá en su corrida.

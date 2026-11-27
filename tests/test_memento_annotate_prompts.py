@@ -59,15 +59,15 @@ def test_la_variante_entra_en_la_huella(_limpia_env, monkeypatch):
 	assert len({v3, v2, v1}) == 3
 
 
-def test_v3_pide_el_acto_y_no_la_escena(_limpia_env):
-	"""El contrato de v3 frente a v2: título = el hallazgo, y prohibición explícita
-	de inventar la manera (era el defecto medido de K2)."""
+def test_v3_extrae_hechos_sin_titulo(_limpia_env):
+	"""AD-148: v3 ya no pide título (eso es el pase `titles`), pero conserva la
+	prohibición de inventar la manera — el defecto medido de K2."""
 	for v3, v2 in (
 		(prompts.ANNOTATE_WORK_USER_V3, prompts.ANNOTATE_WORK_USER_V2),
 		(prompts.ANNOTATE_SOCIAL_USER_V3, prompts.ANNOTATE_SOCIAL_USER_V2),
 	):
-		assert "TITLE — name the" in v3
-		assert "Never open a title with" in v3
+		assert "TITLE —" not in v3
+		assert '"title"' not in v3  # sin campo en el esquema
 		assert "Do NOT invent how it was said" in v3 or "Do NOT invent the manner" in v3
 		assert "TITLE — name the" not in v2
 		assert "${fragment}" in v3  # sigue siendo una plantilla rendereable

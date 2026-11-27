@@ -4388,4 +4388,21 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 3. **Rol `titles`** en `task_profiles.yaml` (temperature 0,2, thinking off) con un modelo pequeño; requisitos en `MODEL_ADMISSION.md` § `titles`: n_ctx ≥ 8.192 para batches de 24, ≤3 GB de pesos, JSON cerrado, 0 títulos de ejemplo/inventados/repetidos, español, ≤80 chars, y la sesión media (≈100 notas) en ≤15 min.
 4. **Reanudable e idempotente**: `annotate/_titles.json` como checkpoint por nota (`text_hash` + título nuevo + nombre actual); `title_version` (prompt+modelo+params) sellado en el `_meta` y en el frontmatter. Una nota se re-titula si cambió su texto (`text_hash`) o la versión. Los **renombrados se aplican en bloque al final**, nunca a medias; si el proceso muere, el árbol queda con los nombres viejos y el pase reanuda.
 5. **`--phase titles`** en la CLI (target único o árbol) para re-titular tras cambiar el prompt o el modelo sin tocar las notas.
-**Pendiente**: la matriz de modelos (tiny-aya-water, Bonsai 2-9B, Spark 4B, Bonsai 2-2B, Granite 4.2 8B) fija el ganador y los números de latencia. Hasta entonces el pase no entra en el DAG.
+**Matriz (2026-11-27, 24 notas reales, batches de 12)**:
+
+| Modelo | Válidos | s/batch | 935 notas | Veredicto |
+|---|---:|---:|---:|---|
+| **Bonsai 2-9B** | 24/24 | 5,8 | **7,5 min** | **Elegido**: títulos específicos (“Crash tras 71 sesiones: marcados agentic perdidos”) |
+| tiny-aya-water | 24/24 | 3,9 | 5,1 min | Alternativa validada (europeas); algo más genérica |
+| Spark 4B | 0/24 | 11 | 14 min | Falla el JSON a 512 tokens: descartado |
+
+**Implementado (2026-11-27)**:
+- Fase `memento-titles` en `chronicle` (entre `memento-annotate` y `memento-reconcile`), `--phase titles` en la CLI y `src/red_pill/memento/agentic/titles.py`.
+- Gate `no_title` en `ascension.py`: una nota de annotate sin `title`/`title_version` no asciende (contador `rechazados_por_titulo`).
+- Prompts v3 de annotate sin la sección TITLE ni el campo `title` (~25-30 % más cortos); la nota nace con título provisional y `title_version: ""`.
+- `MEMENTO_TITLES_BATCH=12`; tarea `titles` con `bonsai_2_9b`.
+- Checkpoint `_titles.json` por `text_hash`, renombrado con contador anti-colisión, re-titulado si cambia el texto o la versión.
+- Presupuesto: `chronicle.deadline_minutes` 85 → **180**; `nightly.max_step_minutes` 420 → **600**; `annotate.timeout` 5400 → **7200**.
+- Presupuesto medido: el pase de títulos cuesta **~5-8 min por sesión grande** (~0,8 min por sesión media), ~6-8 % del annotate.
+
+**Pendiente**: re-medir el dedup P1-A sin la señal del título (hoy usa `texto + título`; con el título vacío la contención cambia) y validar la calidad del re-titulado masivo del corpus existente.

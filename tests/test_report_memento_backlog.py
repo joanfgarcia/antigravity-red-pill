@@ -196,6 +196,6 @@ def test_el_chronicle_cierra_con_el_contador():
 	# annotate y el contador pasa a depender de ella (cierra el ciclo de las
 	# notas reescritas antes de contar lo que queda).
 	reconcile = next(s for s in stages if s["id"] == "memento-reconcile")
-	assert reconcile["depends_on"] == ["memento-annotate"]
+	assert reconcile["depends_on"] == ["memento-titles"]
 	assert backlog["depends_on"] == ["memento-reconcile"]
 	assert backlog["on_fail"] == "warn"

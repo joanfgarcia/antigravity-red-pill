@@ -53,6 +53,18 @@
   escritor usaba `NNN-<slug>.md` sin contador: la segunda sobrescribía la
   primera. Medido en la sesión f839399b: **986 anotaciones → 983 ficheros**.
   Ahora la colisión añade `-2`, `-3`… y no se pierde ninguna. *AD-148*.
+- **[NEW] Pase de títulos separado (`--phase titles`).** La extracción deja de
+  pedir título (prompt v3 ~25-30 % más corto) y un modelo pequeño (Bonsai 2-9B,
+  batches de 12) titula las notas desde su texto: 24/24 válidos, 5,8 s/batch,
+  935 notas en ~7,5 min. Reanudable por `text_hash`, renombrado en bloque y
+  `title_version` en el frontmatter. Matriz: tiny-aya-water 3,9 s/batch
+  (alternativa); Spark 4B falla el JSON. *AD-148*.
+- **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
+  en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
+  nombre; nunca asciende con el stem provisional.
+- **[NEW] Presupuesto del sueño**: `chronicle.deadline_minutes` 85 → 180,
+  `nightly.max_step_minutes` 420 → 600 y `annotate.timeout` 5400 → 7200, por el
+  coste real del annotate nuevo (~12 min/sesión).
 - **[FIX] K2 entraba en bucle al anotar: `repeat_penalty` y fusión estable.**
   En contenido denso repetía la misma idea hasta agotar el presupuesto (`{` ×24,
   `"relics": 3` ×22 en 4.096 tokens); no era falta de salida. Con
