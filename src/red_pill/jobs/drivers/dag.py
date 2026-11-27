@@ -271,7 +271,38 @@ class DagJobDriver(DagScheduleMixin, DagExecMixin, DagFanoutMixin, ResumableJobD
 	def teardown(self, payload: Dict[str, Any]) -> None:
 		"""Toda salida no-terminal (pausa/defer/timeout) apaga el hilo de latido."""
 		self._stop_mission_heartbeat()
+		self._restore_desk_gpu(payload)
 		super().teardown(payload)
+
+	def _restore_desk_gpu(self, payload: Dict[str, Any]) -> None:
+		"""Devuelve el modelo al desk si este job lo paró (§ fase 0 de VRAM).
+
+		`teardown` corre en todas las salidas, deferral incluido: el desk no debe
+		quedarse sin modelo toda la noche porque el ciclo cedió. Si el job sigue
+		vivo (PROCESSING/PAUSING) NO se devuelve: el siguiente step lo volvería a
+		parar y el modelo chocaría con el residente del daemon.
+		"""
+		if not payload.get("gpu_desk_preempt"):
+			return
+		from red_pill.core import gpu_desk
+
+		state = gpu_desk.load_state()
+		if not state:
+			return
+		job_id = str(getattr(self, "job_id", "") or "")
+		if str(state.get("job_id") or "") != job_id:
+			return
+		status = ""
+		try:
+			from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+			status = str((CognitiveQueueManager().get_task(job_id) or {}).get("status") or "")
+		except Exception as exc:  # noqa: BLE001 — sin cola legible, mejor devolverlo
+			logger.warning(f"[GPU-DESK] no se pudo leer el estado del job {job_id}: {exc}")
+		if status in ("PROCESSING", "PAUSING"):
+			logger.info(f"[GPU-DESK] job {job_id} sigue vivo: el desk permanece pausado.")
+			return
+		gpu_desk.resume(job_id=job_id)
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		from red_pill.jobs.drivers.base import JobDeferred

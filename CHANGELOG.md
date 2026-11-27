@@ -70,6 +70,19 @@
 
 - **[FIX] ETA por mediana de etapa** y **DAG fallido si no ejecuta ninguna**: un
   `job` que no corre nada ya no se corona.
+- **[FIX] El ciclo nocturno deja de mentir cuando el modelo no cabe.** Un
+  `503`/VRAM del daemon se clasifica como entorno (no como fallo de la sesión);
+  el pase sale con `defer_exit_code` 77 y la etapa se **aplaza** con el motivo en
+  el reporte y en `memento_agentic_state.json`. Antes: 30 sesiones × 2 fases en
+  13 s cada una, `dag 80/80 success`, cero memoria y `failed: 0`.
+- **[NEW] Fase 0 de VRAM: el desk se aparta y se devuelve.** Si a una etapa le
+  falta VRAM y el desk (Dokimé) lleva `gpu_desk_idle_s` sin actividad, su
+  `llama-server` se para antes de diferir; `teardown` lo arranca de nuevo en
+  **cualquier** salida (deferral incluido) y nunca lo toca si el job sigue vivo.
+  Opt-in por receta: un bench que MIDE el desk no la lleva y no lo pausa.
+- **[FIX] La VRAM de una etapa se mide por su perfil**, con el plan de KV más
+  degradado del `llm.task`, no con el umbral global de 3,5 GB que dejaba arrancar
+  un 27B con 3,2 GB libres.
 - **[FIX] `local_llm_offline` se evapora cuando la unit vuelve**, no sólo cuando el
   sueño corre.
 - **[FIX] El auditor firma el veredicto de un paso en la ronda**, no repo a repo.

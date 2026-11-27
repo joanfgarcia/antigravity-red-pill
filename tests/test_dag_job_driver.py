@@ -151,6 +151,34 @@ def test_dag_command_stage(tmp_path, monkeypatch):
 	assert o.new_checkpoint["results"]["gen"] == "ok"
 
 
+def test_dag_stage_defer_exit_code_difiere_en_vez_de_fallar(tmp_path, monkeypatch):
+	"""2026-11-27 (ciclo 8a315ef2): una etapa que no puede arrancar (503/VRAM)
+	sale con `defer_exit_code`; el DAG debe APLAZAR, no marcar fallo y seguir."""
+	from red_pill.jobs.drivers.base import JobDeferred
+
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+
+	class _DeferCommand:
+		async def execute(self, task, **kwargs):
+			return {"status": "error", "returncode": 77, "stderr": "VRAM insuficiente", "summary": ""}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda *a, **kw: _DeferCommand()))
+	monkeypatch.setattr("red_pill.jobs.drivers.dag_types.base._resolve_minion_kind", lambda mid: "command")
+
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "distill", "type": "command", "minion": "command_runner", "command": "x", "defer_exit_code": 77},
+		],
+	)
+	with pytest.raises(JobDeferred) as exc:
+		d.step(payload, {})
+	assert "77" in str(exc.value)
+	assert "VRAM" in str(exc.value)
+
+
 # ── Ejecución: compuesto con fan-out paralelo ─────────────────────────────────
 def test_dag_compound_parallel_runs_all(tmp_path, monkeypatch):
 	d = DagJobDriver()

@@ -168,9 +168,22 @@ def _is_llm_connection_error(exc: Exception) -> bool:
 		return True
 	if "timed out" in msg or "timedout" in msg.lower():
 		return True
+	low = msg.lower()
 	# GPU ocupada sin alternativa (device_fallback=[gpu]): no es fallo del trabajo,
 	# es entorno → deferral (2026-10-05, pin GPU-only de jobs de memoria).
-	if "insufficient free vram" in msg.lower():
+	if "insufficient free vram" in low:
+		return True
+	# 2026-11-27 (ciclo 8a315ef2): el daemon VIVO pero incapaz de cargar el modelo
+	# responde 503 — "VRAM insuficiente ... ningún KV cabe a ctx=..." o "No usable
+	# device". `/v1/models` contesta 200, así que `llm_available()` lo daba por
+	# bueno y los 60 pasos del nocturno se contaron como fallos de trabajo,
+	# marcados `success`. Es entorno, no la sesión: se difiere.
+	response = getattr(exc, "response", None)
+	if getattr(response, "status_code", None) == 503:
+		return True
+	if "service unavailable" in low:
+		return True
+	if "vram insuficiente" in low or "ningún kv cabe" in low or "no usable device" in low:
 		return True
 	return False
 
@@ -314,10 +327,16 @@ def run_agentic(
 			stats["failed"] += 1
 			if _is_llm_connection_error(e):
 				consecutive_failures += 1
-				if consecutive_failures >= CONSECUTIVE_CONNECTION_FAILURES:
+				# El fan-out del nocturno corre UN proceso por sesión (`--target`):
+				# ahí no hay "3 consecutivos" que esperar. Un solo 503/VRAM ya dice
+				# que el modelo no se puede cargar; si no, cada una de las 60 hojas
+				# quema su step y el ciclo acaba en `success` sin producir nada
+				# (ciclo 8a315ef2, 2026-11-27).
+				if consecutive_failures >= CONSECUTIVE_CONNECTION_FAILURES or len(targets) == 1:
 					stats["aborted_llm_down"] = True
+					stats["defer_reason"] = f"{type(e).__name__}: {e}"
 					logger.error(
-						f"LLM local caído tras {CONSECUTIVE_CONNECTION_FAILURES} fallos consecutivos de conexión "
+						f"LLM local caído tras {consecutive_failures} fallo(s) consecutivo(s) "
 						f"({session_id}) — abortando con deferral; {stats['processed']} ya procesadas quedan marcadas."
 					)
 					return stats

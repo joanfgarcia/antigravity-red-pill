@@ -1103,3 +1103,37 @@ def test_pending_agentic_fase_annotate_solo_pide_notas(tmp_path, monkeypatch):
 	# Sin `agentic` no hay nada que anotar (falta la fase de polaroids).
 	root2, registry2, _ = _tree_with_session(tmp_path / "otro")
 	assert pending_agentic(registry2, root=root2, phase="annotate") == []
+
+
+def test_is_llm_connection_error_detecta_503_y_vram():
+	"""Ciclo 8a315ef2 (2026-11-27): el daemon contestaba 200 en /v1/models pero no
+	podía cargar el modelo (503 «VRAM insuficiente / ningún KV cabe»). Eso es
+	entorno, no un fallo de la sesión: debe contar para el deferral."""
+	import requests
+
+	from red_pill.memento.agentic import _is_llm_connection_error
+
+	resp = requests.Response()
+	resp.status_code = 503
+	err = requests.HTTPError("503 Server Error: Service Unavailable for url: http://127.0.0.1:8760/v1/chat/completions", response=resp)
+	assert _is_llm_connection_error(err)
+	assert _is_llm_connection_error(Exception("503 Server Error: Service Unavailable"))
+	assert _is_llm_connection_error(
+		Exception("VRAM insuficiente para 'bonsai_25_27b_distill': ningún KV cabe a ctx=16384 con 3290 MB libres")
+	)
+	assert _is_llm_connection_error(Exception("No usable device in ['gpu']"))
+	assert not _is_llm_connection_error(Exception("JSON inválido del LLM"))
+
+
+def test_run_agentic_difiere_con_un_solo_target_si_falta_vram(tmp_path):
+	"""El fan-out del nocturno corre UN proceso por sesión (`--target`): un solo
+	503/VRAM debe abortar con deferral, no esperar tres sesiones que no existen."""
+	root, registry, _rendered = _tree_with_session(tmp_path)
+
+	def vram_down(system, user, max_tokens):
+		raise Exception("VRAM insuficiente para 'bonsai_25_27b_distill': ningún KV cabe a ctx=16384")
+
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], vram_down)
+	assert stats.get("aborted_llm_down") is True
+	assert stats["processed"] == 0
+	assert "VRAM" in str(stats.get("defer_reason") or "")

@@ -106,18 +106,116 @@ class DagExecMixin:
 		def _workdir(self, payload: Dict[str, Any]) -> Path: ...
 
 	# ── GPU probe por etapa (fleco 1) ──────────────────────────────────────────
+	@staticmethod
+	def _stage_required_profile(stage: Dict[str, Any]) -> str:
+		"""Perfil que la etapa pide cargar (`llm.task` → candidato default)."""
+		task = str((stage.get("llm") or {}).get("task") or "").strip()
+		if not task:
+			return ""
+		try:
+			from red_pill.core.model_runtime import resolve_task_conduct
+
+			return str(resolve_task_conduct(task).get("profile") or "")
+		except Exception:
+			return ""
+
+	@classmethod
+	def _stage_required_vram_mb(cls, stage: Dict[str, Any]) -> int:
+		"""VRAM mínima que exige el modelo de la etapa, según su perfil.
+
+		El plan de KV conserva el ctx y degrada la cuantización; el umbral es el
+		del plan MÁS degradado (lo mínimo que el daemon aceptaría). Sin datos del
+		perfil → 0 y manda el umbral global.
+
+		Ciclo 8a315ef2 (2026-11-27): el umbral global (3,5 GB) dejó arrancar el
+		nocturno con 3,2 GB libres para un 27B que pide ~6,5 GB; el daemon
+		devolvió 503 en los 60 pasos y el DAG lo reportó `success`.
+		"""
+		profile = cls._stage_required_profile(stage)
+		if not profile:
+			return 0
+		try:
+			from red_pill.core.model_registry import ModelRegistry
+
+			plan = ModelRegistry.plan_kv_cache(profile)
+		except Exception:
+			return 0
+		tried = [int(t.get("required_mb") or 0) for t in (plan.get("tried") or [])]
+		tried = [mb for mb in tried if mb > 0]
+		return min(tried) if tried else 0
+
+	@staticmethod
+	def _daemon_status() -> Dict[str, Any]:
+		"""Estado del daemon local (`/status`): perfil cargado, modo y VRAM libre."""
+		import json as _json
+		import urllib.request
+
+		from red_pill.core.llm_endpoint import llm_base_url
+
+		try:
+			with urllib.request.urlopen(f"{llm_base_url()}/status", timeout=3) as resp:
+				data = _json.loads(resp.read().decode("utf-8"))
+		except Exception:
+			return {}
+		return data if isinstance(data, dict) else {}
+
+	@classmethod
+	def _resident_freeable_mb(cls, status: Dict[str, Any], required_profile: str) -> int:
+		"""VRAM que el daemon liberará al hacer swap a `required_profile`.
+
+		Si tiene OTRO modelo cargado en GPU, ése es suyo y lo suelta antes de
+		cargar el nuevo: contarlo evita diferir un ciclo que sí cabría tras el
+		swap. Se estima con el plan de KV PREFERIDO del perfil cargado (si usó
+		uno degradado, la estimación es optimista a propósito: el swap fallaría
+		con 503 y el pase aplaza, que es el lado seguro).
+		"""
+		loaded = str(status.get("loaded_profile") or "")
+		if not loaded or loaded == required_profile:
+			return 0
+		try:
+			from red_pill.core.model_registry import ModelRegistry
+
+			ctx = int(status.get("n_ctx") or 0) or None
+			plan = ModelRegistry.plan_kv_cache(loaded, ctx=ctx)
+		except Exception:
+			return 0
+		required = int(plan.get("required_mb") or 0)
+		if required:
+			return required
+		tried = [int(t.get("required_mb") or 0) for t in (plan.get("tried") or [])]
+		tried = [mb for mb in tried if mb > 0]
+		return tried[0] if tried else 0
+
 	def _preflight_stage_gpu(self, stage: Dict[str, Any], stage_path: str, payload: Dict[str, Any]) -> None:
 		"""Probe de salud GPU real por etapa — espera (JobDeferred), nunca CPU disfrazada."""
 		from red_pill.jobs.drivers.base import JobDeferred
 
 		if not stage.get("requires_gpu"):
 			return
+
+		required_profile = self._stage_required_profile(stage)
+		status = self._daemon_status()
+		loaded = str(status.get("loaded_profile") or "")
+		daemon_gpu = str(status.get("mode") or "") == "gpu" and bool(loaded)
+		# Cero VRAM extra: el daemon ya sirve justo el modelo que pide la etapa.
+		if required_profile and loaded == required_profile and daemon_gpu:
+			return
+		# Etapa con `llm:`: si el daemon ya sirve OTRO modelo en GPU, esa VRAM es
+		# suya y la libera al hacer swap. Se cuenta como recuperable ANTES de
+		# diferir: sin esto, un k2 residente de 3 GB hacía creer que el 27B no
+		# cabía aunque el swap lo dejara sitio (falso aplazamiento).
+		if daemon_gpu and not required_profile:
+			# Etapa externa (contenedor propio): basta con que el LLM esté sano y
+			# sirviendo en GPU; su VRAM ya está medida por `min_vram_mb`.
+			return
+
 		from red_pill.metabolism.ephemeral_server import _check_llm_available
 
-		if _check_llm_available():
+		if not required_profile and _check_llm_available():
 			usable, _free, ngl = _gpu_health_probe()
 			if usable and (ngl == -1 or ngl > 0):
 				return
+
 		usable, free_mb, ngl = _gpu_health_probe()
 		if not usable:
 			raise JobDeferred(f"GPU no disponible para etapa '{stage_path}' (nvidia-smi no responde).")
@@ -125,9 +223,42 @@ class DagExecMixin:
 			raise JobDeferred(f"LLM sirve en CPU disfrazada (-ngl 0) para etapa '{stage_path}': esperando GPU.")
 		import red_pill.config as cfg
 
-		min_free = int(payload.get("min_vram_mb", getattr(cfg, "SLEEP_MIN_FREE_VRAM_MB", 3500)))
-		if free_mb < min_free:
-			raise JobDeferred(f"VRAM insuficiente para etapa '{stage_path}' ({free_mb}MB libres < {min_free}MB).")
+		freeable_mb = self._resident_freeable_mb(status, required_profile) if daemon_gpu else 0
+
+		# Precedencia: override del payload > exigencia del modelo de la etapa >
+		# umbral global del sueño.
+		min_free = int(payload.get("min_vram_mb") or 0)
+		source = "payload.min_vram_mb"
+		if min_free <= 0:
+			min_free = self._stage_required_vram_mb(stage)
+			source = f"perfil '{required_profile}'"
+		if min_free <= 0:
+			min_free = int(getattr(cfg, "SLEEP_MIN_FREE_VRAM_MB", 3500))
+			source = "SLEEP_MIN_FREE_VRAM_MB"
+		if free_mb + freeable_mb < min_free and payload.get("gpu_desk_preempt"):
+			# Fase 0 del arbitraje (2026-11-27): el desk mantiene su propio
+			# `llama-server` y el daemon no puede compartirlo. Si está ocioso se
+			# para aquí; `teardown` lo devuelve pase lo que pase. Opt-in por
+			# receta: un bench que MIDE el desk no debe pausarlo.
+			from red_pill.core import gpu_desk
+
+			idle_s = int(payload.get("gpu_desk_idle_s", 600) or 600)
+			job_id = str(getattr(self, "job_id", "") or "")
+			if gpu_desk.pause_if_idle(idle_s, job_id):
+				deadline = time.time() + 30
+				while time.time() < deadline:
+					usable, free_mb, ngl = _gpu_health_probe()
+					if usable and free_mb + freeable_mb >= min_free:
+						logger.info(f"[GPU-DESK] VRAM recuperada para '{stage_path}': {free_mb}MB libres.")
+						break
+					time.sleep(1)
+				source = f"{source} (tras pausar el desk)"
+		if free_mb + freeable_mb < min_free:
+			extra = f" + {freeable_mb}MB liberables del modelo residente" if freeable_mb else ""
+			raise JobDeferred(
+				f"VRAM insuficiente para etapa '{stage_path}' "
+				f"({free_mb}MB libres{extra} < {min_free}MB requeridos por {source})."
+			)
 
 	# ── Cota de tiempo (política del RUNNER, aplicada aquí) ───────────────────
 	def _budget_left(self) -> Optional[float]:
@@ -448,6 +579,19 @@ class DagExecMixin:
 			raise ValueError(f"dag stage '{stage_path}' report path escapes '.cell/reports'.")
 		report_path.parent.mkdir(parents=True, exist_ok=True)
 		report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+		# 2026-11-27: una etapa puede PEDIR aplazamiento (exit code declarado en
+		# el manifest, p. ej. `defer_exit_code: 77` de memento_agentic cuando el
+		# modelo no se puede cargar). Sin esto el rc≠0 se trataba como fallo, con
+		# `on_fail: warn` el DAG seguía y el job acababa `success` sin memoria.
+		# La evidencia (reporte) ya está escrita arriba.
+		rc = result.get("returncode")
+		defer_code = stage.get("defer_exit_code")
+		if defer_code is not None and rc is not None and int(rc) == int(defer_code):
+			from red_pill.jobs.drivers.base import JobDeferred
+
+			detail = str(result.get("error") or result.get("stderr") or "").strip().replace("\n", " ")
+			raise JobDeferred(f"etapa '{stage_path}' pidió deferral (exit {rc}): {detail[:400]}")
 
 		status = result.get("status")
 		if status in ("failed", "error") or (result.get("returncode") not in (None, 0)):

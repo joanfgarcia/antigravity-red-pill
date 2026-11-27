@@ -78,6 +78,15 @@ def _write_run_state(stats: dict) -> None:
 			"would_ingest": int(stats.get("would_ingest", 0) or 0),
 			"static_ascended": int(stats.get("static_ascended", 0) or 0),
 		}
+		# 2026-11-27: el estado era la única evidencia del pase y decía
+		# `failed: 0` tras 60 pasos fallidos por VRAM. Si el pase se difiere, el
+		# motivo viaja aquí (y al log); el finalize del sueño no oculta el porqué.
+		if stats.get("aborted_llm_down"):
+			payload["deferred"] = True
+			payload["reason"] = str(stats.get("defer_reason") or "llm_unavailable")[:500]
+		elif int(stats.get("failed", 0) or 0) > 0:
+			payload["deferred"] = False
+			payload["reason"] = f"{stats['failed']} fallo(s) no ambientales"
 		path = get_state_dir() / "memento_agentic_state.json"
 		tmp = path.with_suffix(path.suffix + ".tmp")
 		tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -178,8 +187,20 @@ def main() -> None:
 		return
 	if not llm_available():
 		logger.warning("Local LLM not available — agentic pass deferred to next cycle.")
-		_write_run_state({"processed": 0, "failed": 0, "would_ingest": 0, "static_ascended": 0})
-		return
+		_write_run_state(
+			{
+				"processed": 0,
+				"failed": 0,
+				"would_ingest": 0,
+				"static_ascended": 0,
+				"aborted_llm_down": True,
+				"defer_reason": "llm_available()=false (/v1/models no responde)",
+			}
+		)
+		# Mismo contrato que el resto del pase: aplazar, no fingir éxito.
+		import os
+
+		sys.exit(int(os.environ.get("RP_DEFER_EXIT_CODE", "77")))
 
 	# Con --target el progreso lo lleva el checkpoint del job DAG fan-out, no el
 	# global de la ronda: run_agentic no escribe checkpoint del progress.
@@ -203,17 +224,30 @@ def main() -> None:
 	)
 	_write_run_state(stats)
 	# Deferral declarativo (regla job_dag_execution, 2026-09-08): si el LLM local
-	# se cayó (3+ fallos consecutivos de conexión) o no se procesó nada por LLM
-	# caído, salir con RP_DEFER_EXIT_CODE para que el driver marque JobDeferred y
-	# el runner lo reintente cuando el recurso se libere — NO es un error del job.
-	if stats.get("aborted_llm_down") or (stats["processed"] == 0 and stats["failed"] > 0):
+	# se cayó (3+ fallos consecutivos de conexión, o UNO en el fan-out de una
+	# sola sesión) o no se procesó nada porque el modelo no se pudo cargar
+	# (503/VRAM), salimos con código de defer para que el DAG marque la etapa
+	# aplazada y el runner la reintente — NO es un error del trabajo.
+	#
+	# 2026-11-27 (ciclo 8a315ef2): sin `RP_DEFER_EXIT_CODE` el script salía 0
+	# («salida limpia») y el DAG reportaba `success` con 60 pasos sin producir
+	# memoria. El código por defecto (77) es el mismo que usan los demás pases
+	# (memento_annotate, memento_validate); las etapas de `chronicle.yaml`
+	# declaran `defer_exit_code: 77` para que el driver lo convierta en JobDeferred.
+	if stats.get("aborted_llm_down"):
 		import os
 
-		defer_code = os.environ.get("RP_DEFER_EXIT_CODE")
-		if defer_code:
-			logger.warning(f"LLM local no disponible (0 procesadas, {stats['failed']} falladas) — saliendo con defer_exit_code={defer_code}")
-			sys.exit(int(defer_code))
-		logger.warning("LLM local no disponible y sin RP_DEFER_EXIT_CODE definido — salida limpia (0 procesadas).")
+		defer_code = int(os.environ.get("RP_DEFER_EXIT_CODE", "77"))
+		logger.warning(
+			f"LLM local no disponible ({stats.get('defer_reason') or 'sin motivo'}) — "
+			f"saliendo con defer_exit_code={defer_code} para que el ciclo se aplaza."
+		)
+		sys.exit(defer_code)
+	# Fallo real (contenido, disco): no fingir éxito. La etapa queda `failed`
+	# con su motivo; con `on_fail: warn` el DAG sigue y la evidencia se guarda.
+	if stats["processed"] == 0 and stats["failed"] > 0:
+		logger.error(f"{stats['failed']} sesión(es) fallidas sin progreso y sin causa ambiental — salida 1.")
+		sys.exit(1)
 
 
 if __name__ == "__main__":

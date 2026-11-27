@@ -20,6 +20,15 @@ priority: 8
 title: Ciclo nocturno (chronicle → sleep)
 mission_id: nightly-cycle
 nightly_exempt: true   # anti-deadlock: el ciclo no se auto-difiere entre unidades
+# Fase 0 del arbitraje de VRAM (2026-11-27): el desk (Dokimé) mantiene su propio
+# `llama-server` en `dokime-llama` con el modelo cargado aunque nadie lo use. El
+# daemon no puede compartir esa VRAM (otro proceso), así que a las 03:00 el 27B
+# no cupo y los 60 pasos del ciclo devolvieron 503. Aquí: si al preflight le
+# falta VRAM y el desk lleva `gpu_desk_idle_s` sin actividad, se para; `teardown`
+# lo devuelve en cualquier salida (incluido el deferral). Opt-in explícito: un
+# bench que MIDE el desk no lleva esta clave y nunca lo pausa.
+gpu_desk_preempt: true
+gpu_desk_idle_s: 600
 control:
   max_step_minutes: 420
 manifest:

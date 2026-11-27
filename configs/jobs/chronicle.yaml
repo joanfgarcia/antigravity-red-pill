@@ -67,6 +67,13 @@ manifest:
       # AD-030 (v3): `llm:` POR ETAPA — aquí manda la task distill (bonsai_2_27b).
       llm:
         task: distill
+      # 2026-11-27 (ciclo 8a315ef2): el nocturno arrancó con 3,2 GB libres, el
+      # 27B no cupo, el daemon devolvió 503 en los 60 pasos y el DAG lo reportó
+      # `success`. `requires_gpu` activa el probe por etapa (VRAM del PERFIL,
+      # no el umbral global) y `defer_exit_code` convierte el 77 del pase en
+      # JobDeferred: el ciclo se aplaza y se reintenta, no se finge completado.
+      requires_gpu: true
+      defer_exit_code: 77
       timeout: 5400
       on_fail: warn
       depends_on: [discover]
@@ -83,6 +90,8 @@ manifest:
       # el benchset), se cambia AQUÍ y en task_profiles — sin tocar código.
       llm:
         task: annotate
+      requires_gpu: true
+      defer_exit_code: 77
       timeout: 5400
       on_fail: warn
       depends_on: [memento-distill]
