@@ -78,6 +78,13 @@
   `np=4` 71,1 s (0,93×). VRAM ~6,7 GB. Se deja `np=1`: el 27B está limitado por
   ancho de banda y la continuación de fragmentos impide paralelizar dentro de
   una unidad. Subir a 32k cabe (+265 MB) pero no cambia el cuello.
+- **[FIX] El daemon suelta el lock durante la generación (HTTP con slots).**
+  `/v1/chat/completions` retenía `manager.lock` toda la generación, así que los
+  4 slots nunca veían concurrencia (1,19×). Ahora, mismo modelo + backend HTTP +
+  `num_parallel>1`: se reserva bajo el lock y se genera fuera, con `in_flight`
+  para que reaper/unload/switch esperen. Medido con el desk parado: **2,83×** a
+  través del daemon (28,5 s → 10,1 s); en proceso y streaming siguen serial.
+  *AD-150*.
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.

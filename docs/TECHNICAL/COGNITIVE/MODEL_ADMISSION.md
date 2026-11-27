@@ -175,11 +175,12 @@ deja el detalle.
 Recomendado **4** (8k de contexto por slot). A partir de ahí el ancho de banda
 manda; más slots solo recortan el contexto por slot.
 
-> **Cuidado con el proxy**: la receta mide el **servidor**. El daemon actual
-> serializa las peticiones (`manager.lock` durante toda la generación): por el
-> camino de producción la ganancia se queda en ~1,2× hasta que el lock cubra
-> solo resolve/carga con un contador de in-flight. Medido el 27-11: 2,36×
-> directo vs 1,19× a través del daemon.
+> **El daemon ya no serializa** (AD-150): suelta el lock durante la generación
+> cuando el backend es HTTP y el perfil tiene `num_parallel > 1`, con un contador
+> de in-flight que impide descargar/cambiar el modelo a mitad. Medido el 27-11
+> con el desk parado: **2,83×** a través del daemon (antes 1,19×). Con el desk
+> arriba se queda en ~1,4× porque el servidor carga con tier menor: la fase de
+> títulos del nocturno para el desk (fase 0).
 
 **Distill (medido 2026-11-27, 27B real, 4 fragmentos reales de 8k de la sesión
 f839399b, ctx 24.576)**:

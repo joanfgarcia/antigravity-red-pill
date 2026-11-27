@@ -41,3 +41,20 @@ def test_generated_daemon_pasa_la_decision_de_dispositivo_al_backend():
 	# dispositivo y `build_local_backend(resolved)` cargaba con los del perfil.
 	source = _generated_daemon()
 	assert "build_local_backend(resolved, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, flash_attn=flash_attn)" in source
+
+
+def test_generated_daemon_paraleliza_solo_http_con_slots():
+	"""AD-150: generación fuera del lock solo para backend HTTP con np>1.
+
+	El lock se mantiene para modelos en proceso (llama_cpp.Llama) y para el
+	camino de carga/cambio; `in_flight` impide que el reaper o un switch
+	descarguen el modelo a mitad de una generación.
+	"""
+	src = _generated_daemon()
+	assert "self.in_flight = 0" in src
+	assert "def can_parallel_current" in src
+	assert "async def ensure_parallel" in src
+	assert "async def release" in src
+	assert 'getattr(self.model, "http_backend", False)' in src
+	assert "await manager.release()" in src
+	assert "if manager.in_flight > 0:" in src

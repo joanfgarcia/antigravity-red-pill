@@ -47,6 +47,10 @@ _INPROCESS_ONLY = {
 
 
 class ForkChatBackend:
+	# AD-150: el daemon puede soltar el lock durante la generación SI el backend
+	# es HTTP (servidor con slots). En proceso (llama_cpp.Llama) se mantiene serial.
+	http_backend = True
+
 	"""Objeto con la interfaz de `llama_cpp.Llama`, servido por un binario de fork.
 
 	No lleva el ciclo de vida: eso es de `RuntimeServer` (AD-049). Aquí sólo se

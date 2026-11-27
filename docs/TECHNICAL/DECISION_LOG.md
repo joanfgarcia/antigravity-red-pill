@@ -4428,3 +4428,17 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - A partir de 4 slots la ganancia se aplana (ancho de banda); 8/12 solo reducen el contexto por slot. **4 es el punto dulce** para títulos.
 - `-np` es argumento de arranque: **no se cambia en caliente**, cuesta lo mismo que un cambio de modelo (unload/load). Como la fase de títulos ya cambia de modelo, el cambio va en ese mismo arranque.
 **Consequences**: el pase de títulos baja de 5–8 min a **~2–3 min** por sesión grande; +130 MB de VRAM. El daemon actual sigue con el código viejo (`-np 1`) hasta que se reinicie; la concurrencia de peticiones se encola (sin romper nada) hasta entonces.
+
+## [AD-150] El daemon suelta el lock durante la generación (solo HTTP con slots)
+**Date**: 2026-11-27
+**Status**: IMPLEMENTADO & MEDIDO.
+**Context**: AD-149 dejó `-np 4` en Bonsai 2-9B y 2,36–2,76× medidos contra el servidor, pero por el daemon la ganancia se quedaba en **1,19×**. Causa: `/v1/chat/completions` (no-stream) hacía `async with manager.lock` durante **toda** la generación; el servidor con slots nunca veía peticiones concurrentes. El lock protege carga/cambio de modelo, no debería cubrir el decode.
+**Decision**:
+1. **Fast path** para peticiones del **mismo modelo** cuando el backend es HTTP (`ForkChatBackend.http_backend`) y el perfil declara `num_parallel > 1`: se resuelve/reserva bajo el lock (breve), se suelta y la generación corre fuera.
+2. `in_flight` + evento `_idle`: el reaper (`check_idle`), `/v1/unload` y `preheat_device` esperan a que no haya generaciones en vuelo; un cambio de modelo espera (`wait_idle`) antes de tocar el backend.
+3. **Los modelos en proceso** (`llama_cpp.Llama`) y el **streaming** mantienen el lock durante la generación: no son seguros en paralelo.
+**Medición (Bonsai 2-9B, 4 batches de 12 notas, desk parado)**:
+- Servidor directo: 26,5 s → 9,6 s (**2,76×**).
+- A través del daemon: 28,5 s → 10,1 s (**2,83×**).
+- Con el desk **arriba**: ~1,4× — el servidor se carga con tier 32k y menos buffers por la VRAM ocupada; la fase de títulos del nocturno para el desk (fase 0), así que producción ve ~2,8×.
+**Consequences**: el pase de títulos baja de 5–8 min a **~2–3 min** por sesión grande. Annotate/K2 (`num_parallel=1`) no cambia; los modelos en proceso siguen serializados. Tests estáticos del daemon generado y del marcador HTTP.

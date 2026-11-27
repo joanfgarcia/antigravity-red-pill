@@ -148,6 +148,11 @@ class ModelManager:
 		self.flash_attn = False
 		self.current: Optional[mr.ResolvedModel] = None
 		self.lock = asyncio.Lock()
+		# AD-150: generaciones en vuelo fuera del lock (backend HTTP con slots).
+		self.in_flight = 0
+		self._parallel_slots = 0
+		self._idle = asyncio.Event()
+		self._idle.set()
 		self.last_active = time.time()
 		self.last_priority = "high"
 		self._last_status_error: Optional[str] = None
@@ -188,6 +193,50 @@ class ModelManager:
 		if self.mode == "cpu" and not IS_CPU_WORKER:
 			return self.worker is not None and self.worker.poll() is None
 		return self.model is not None
+
+	def can_parallel_current(self) -> bool:
+		"""True si el backend actual es HTTP (servidor) y su perfil tiene np>1.
+
+		`_parallel_slots` se cachea al cargar: resolver la afinidad aquí dentro
+		(con probe de VRAM) serializaba las admisiones y se comía la ganancia.
+		"""
+		return (
+			self.mode == "gpu"
+			and self.model is not None
+			and self._parallel_slots > 1
+			and getattr(self.model, "http_backend", False)
+		)
+
+	def needs_switch(self, body: Dict[str, Any]) -> bool:
+		"""¿La request pide otro modelo? (para no cambiar con generaciones en vuelo)."""
+		if self.current is None or self.model is None:
+			return True
+		try:
+			return not self._same_model(self.current, mr.resolve(body))
+		except Exception:
+			return True
+
+	async def ensure_parallel(self, body: Dict[str, Any]):
+		"""Reserva un slot sin cargar/cambiar; None si toca el camino serial."""
+		async with self.lock:
+			if not self.can_parallel_current():
+				return None
+			self.in_flight += 1
+			if self.in_flight == 1:
+				self._idle.clear()
+			self.last_active = time.time()
+			return self.model, self.current
+
+	async def release(self) -> None:
+		async with self.lock:
+			self.in_flight = max(0, self.in_flight - 1)
+			self.last_active = time.time()
+			if self.in_flight == 0:
+				self._idle.set()
+
+	async def wait_idle(self) -> None:
+		if self.in_flight > 0:
+			await self._idle.wait()
 
 	@staticmethod
 	def _same_model(a: mr.ResolvedModel, b: mr.ResolvedModel) -> bool:
@@ -289,6 +338,15 @@ class ModelManager:
 		# carga fuera del lock y una petición concurrente debe seguir viendo el viejo.
 		self.n_ctx = n_ctx
 		self.current = resolved
+		# AD-150: cachear los slots del perfil para que la admisión concurrente
+		# no haga resolve/probe de VRAM bajo el lock.
+		try:
+			from red_pill.core.model_registry import ModelRegistry
+
+			hw = ModelRegistry.get_resolved_hardware_affinity(resolved.profile_name)
+			self._parallel_slots = int(hw.get("num_parallel") or 1)
+		except Exception:
+			self._parallel_slots = 0
 		self.model = model
 		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
 		mr.mark_load_verified(resolved.model_path)
@@ -389,6 +447,8 @@ class ModelManager:
 		nuevo la siguiente petición va allí. Si el destino no cabe/falla, se
 		descarta el staging y se queda el modo actual.
 		"""
+		if self.in_flight > 0:
+			await self.wait_idle()
 		if IS_CPU_WORKER:
 			raise BackendUnavailable("el worker CPU no puede cambiar de carril")
 		if target not in ("gpu", "cpu"):
@@ -431,6 +491,8 @@ class ModelManager:
 
 	async def check_idle(self):
 		async with self.lock:
+			if self.in_flight > 0:
+				return
 			if self.mode is not None:
 				elapsed = time.time() - self.last_active
 				timeout = DEFAULT_LOW_TIMEOUT if self.last_priority == "low" else DEFAULT_HIGH_TIMEOUT
@@ -621,6 +683,8 @@ async def status():
 @app.post("/unload")
 @app.post("/v1/unload")
 async def unload_endpoint():
+	# AD-150: no descargar con generaciones en vuelo.
+	await manager.wait_idle()
 	async with manager.lock:
 		manager.unload_under_lock()
 	return {"status": "unloaded"}
@@ -764,6 +828,27 @@ async def chat_completions(request: Request):
 					manager.last_active = time.time()
 		return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
+	# AD-150: fast path — mismo modelo y backend HTTP con slots. La generación
+	# corre FUERA del lock; `in_flight` impide que el reaper o un cambio de
+	# modelo la descargue a mitad.
+	if manager.can_parallel_current() and not manager.needs_switch(body):
+		reserved = await manager.ensure_parallel(body)
+		if reserved is not None:
+			model, current = reserved
+			_apply_chat_handler(model, current, body)
+			kwargs = {k: v for k, v in body.items() if k not in strip}
+
+			def run_parallel():
+				return model.create_chat_completion(messages=messages, stream=False, **kwargs)
+
+			try:
+				response = await loop.run_in_executor(None, run_parallel)
+			finally:
+				await manager.release()
+			return JSONResponse(content=response)
+
+	if manager.in_flight > 0:
+		await manager.wait_idle()
 	async with manager.lock:
 		manager.last_priority = "low" if is_low_priority else "high"
 		try:

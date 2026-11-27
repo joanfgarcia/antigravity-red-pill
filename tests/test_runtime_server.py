@@ -419,3 +419,10 @@ class TestChat:
 		assert captured["body"]["max_tokens"] == 128
 		assert captured["body"]["chat_template_kwargs"] == {"reasoning_effort": "medium"}
 		assert resp["choices"][0]["message"]["content"] == "hola"
+
+
+def test_fork_backend_se_marca_como_http():
+	"""AD-150: el daemon puede soltar el lock solo si el backend es HTTP."""
+	from red_pill.inference.local_backend import ForkChatBackend
+
+	assert ForkChatBackend.http_backend is True
