@@ -4442,3 +4442,50 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - A través del daemon: 28,5 s → 10,1 s (**2,83×**).
 - Con el desk **arriba**: ~1,4× — el servidor se carga con tier 32k y menos buffers por la VRAM ocupada; la fase de títulos del nocturno para el desk (fase 0), así que producción ve ~2,8×.
 **Consequences**: el pase de títulos baja de 5–8 min a **~2–3 min** por sesión grande. Annotate/K2 (`num_parallel=1`) no cambia; los modelos en proceso siguen serializados. Tests estáticos del daemon generado y del marcador HTTP.
+
+## [AD-151] Una nota no se envuelve: frontmatter citado, parseo visible y guarda dura
+**Date**: 2026-11-28
+**Status**: IMPLEMENTADO & MEDIDO (reparadas las 34 notas de la sesión `f839399b`).
+**Context**: el pase de títulos (AD-148) dejó **34 de 983 notas** con **doble frontmatter** en `~/.local/share/red-pill/memento/2026-09/opencode/opencode-ses_f839399b…/annotate/`. El cuerpo empezaba por `---` y la cabecera exterior solo tenía `title/title_version/title_engine`: las 34 habían perdido `session_id`, `source`, `scope`, `work_score`, `social_score` y `ascended` (21 campos). Cadena causal medida: (1) `fragments._frontmatter_block` citaba un `str` **solo si contenía `": "`**, así que un título que empieza por backtick (`` `_llm_available()` deriva… ``) o por comilla (`'Cenicienta' fue…`) se escribía crudo; (2) `yaml.safe_load` de ese bloque falla (**30 `ScannerError`** por backtick inicial —YAML 1.1 reserva `` ` `` y `@`— y **4 `ParserError`** por comilla inicial); (3) `titles._split_frontmatter` se tragaba la excepción y devolvía `({}, texto_completo)`; (4) `_write_note` envolvía ese texto entero en una cabecera nueva. Mismo patrón que los tres bugs de la víspera: **fallar en silencio prefiriendo perder datos a decir «no puedo»**.
+**Decision**:
+1. **`_frontmatter_block` cita todos los `str` con `json.dumps`** (JSON ⊂ YAML 1.2; `yaml.safe_load` lo lee idéntico). Se acaba la heurística del `": "`.
+2. **`_split_frontmatter(text, path)` no devuelve el fichero entero**: si el bloque no parsea, fallback determinista que cita a mano la línea `title:` (el único campo que el pase necesita leer) y parsea el bloque completo —así se conserva el orden—; si aun así falla, **`FrontmatterError` con la ruta**.
+3. **Guarda dura en `_write_note`**: `body.lstrip().startswith("---")` → `ValueError`. Nunca se envuelve un fichero entero. El pase de títulos **no toca** esas notas: las cuenta como `corrupt` (nuevo contador en `run_titles`) y sigue con el resto, con `logger.error`.
+4. **Reparación idempotente** (`scripts/memento_repair_double_frontmatter.py`, `--dry-run`, backup en `/tmp/opencode/mem009-backup/`): detecta doble bloque, parsea el interior con el fallback, **fusiona interior + título sellado** (`title`/`title_version`/`title_engine` del exterior mandan), reescribe con `yaml.safe_dump` **mismo nombre y mismo cuerpo**. Las otras 949 no se tocan.
+**Alternatives**: (a) citar solo cuando el escalar «parece raro» — otra heurística que volverá a fallar; (b) seguir devolviendo `({}, texto)` y confiar en que el llamante mire — es lo que produjo el daño; (c) arreglar las 34 a mano — no es reproducible ni verificable.
+**Rationale / Evidence**:
+- Diagnóstico propio: `983` notas, `34` dobles, `34` cabeceras sin los 21 campos del interior, `0` de 34 ascendidas → **Qdrant intacto** (no se tocó).
+- Reparación: `34` reescritas, `949` saltadas, `0` dobles restantes, `34/34` cuerpos **byte-idénticos** al original (diff del cuerpo), `983` ficheros con **los mismos nombres**, `13/13` campos obligatorios presentes en las 34 (`session_id`, `scope`, `work_score`, `social_score`, `ascended` incluidos). `md5sum` antes/después: solo cambian los 34 del backup. Segunda pasada: `0` reescritas / `949` saltadas.
+- `intensity`/`significance` normalizan su representación (`0.70` → `0.7`): mismo valor YAML, consecuencia de re-serializar.
+- Tests: `tests/test_memento_frontmatter_safety.py` (19) — títulos con backtick, `": "`, `#`, comilla inicial y `- `; fallback de parseo; `FrontmatterError`; guarda de `_write_note`; pase de títulos que sella sin perder campos y no toca una nota corrupta; segunda pasada idempotente; script con `--dry-run` y reparación.
+**Consequences**: ningún pase puede volver a perder la cabecera de una nota; una nota corrupta se queda quieta y visible en vez de degradarse. El corpus de la sesión `f839399b` queda con 983 notas válidas y 0 dobles, listo para el nocturno.
+
+## [AD-152] Dedup P1-A: señal de texto, masa mínima y un gate que mide notas, no pares
+**Date**: 2026-11-28
+**Status**: IMPLEMENTADO & MEDIDO.
+**Context**: el gate `dedup_policy` exigía `near_dups == 0` y no se podía satisfacer. Dos causas, medidas por separado:
+1. **El 392 era un artefacto de la corrupción de AD-151**: `gating._notes_near_dups` separaba cabecera y cuerpo con un `split("\n---\n")` ingenuo, así que en las 34 notas corruptas el YAML interior contaba como texto. Con las 34 corruptas: **393 pares** a `t=0,60`; reparadas: **4** (y `compute_note_metrics` daba los mismos pares, sobre todo el corpus).
+2. **La métrica contaba pares y el dedup colapsa notas**: el dedup es un colapso codicioso (cada nota se compara con las ya conservadas) y una nota puede estar en varios pares. Pedir «0 pares» como condición de trabajo hecho no es el punto fijo del algoritmo. Además el título entraba en la señal (`texto + título`) y en annotate llega vacío: sobre 949 notas limpias, a `t=0,60` colapsaba 4 con título y 5 sin él — el título no aporta y sí puede fundir notas distintas que comparten título.
+**Decision**:
+1. **La señal es solo el texto** (fuera el título), en el dedup, en la métrica y en el gate: una única función `_near_dup` para los tres.
+2. **Masa mínima de 12 tokens compartidos** (`_NEAR_DUP_MIN_SHARED`): la contención sobre notas cortas dispara con vocabulario común.
+3. **El umbral se queda en 0,60** (no se toca `MEMENTO_ANNOTATE_DEDUP_THRESHOLD`): el ruido no venía del umbral.
+4. **El gate mide notas colapsables** (`collapsible_notes` = `len(annotations) - len(dedup_annotations(...))`), que es exactamente lo que un pase de dedup eliminaría; `0` es alcanzable. `near_dups` (pares) queda como diagnóstico en `compute_note_metrics`, junto al nuevo `dedup_collapsible`.
+5. El lector de notas del gate y de la migración **salta las notas con doble frontmatter** (con warning): un YAML tomado por texto no puede falsear el cómputo.
+**Alternatives**: (a) subir el umbral a 0,75 — medido: 0 colapsos, pero **también pierde el único duplicado real** del corpus; (b) tolerar pares con una ratio (`near_dups / notas`) — calibrable pero arbitraria: 5 falsos seguirían bajo tolerancia a 0,01; (c) dejar `near_dups == 0` y aceptar que el gate nunca diga `skip` — el statu quo.
+**Rationale / Evidence** (983 notas reales, reparadas, determinista, sin GPU):
+
+| umbral | señal | masa mín. | pares | notas que colapsa |
+|---|---|---:|---:|---:|
+| 0,55 | texto | 12 | 9 | 9 |
+| **0,60** | texto | 0 | 5 | 5 (4 falsos) |
+| **0,60** | **texto** | **12** | **1** | **1 (duplicado real)** |
+| 0,60 | texto+título | 0 | 4 | 4 |
+| 0,65 | texto | 12 | 1 | 1 |
+| 0,70 | texto | 12 | 0 | 0 |
+
+- El único par a 0,60 con masa 12 es `021-mecanismo-type-dag…` × `022-validaci-n-del-mecanismo-dag…`: el **mismo hecho contado dos veces** (contención 0,652). Los 4 falsos previos eran notas distintas de 14–23 tokens sobre el mismo tema (0,61–0,71).
+- Control positivo (mismo hecho reescrito, 17/16 tokens): contención **0,938** → colapsa a 0,60, 0,75 y 0,90.
+- Gate sobre el corpus: `1` nota colapsable → `process` (correcto: queda trabajo); copia sin ese duplicado → `0` → **`skip`** (punto fijo alcanzado).
+- `near_dups` del corpus: 393 (con las 34 corruptas) → **0** (reparado).
+**Consequences**: el gate `dedup_policy` puede decir `skip` y lo dice cuando el corpus no tiene duplicados reales; una sesión con un duplicado residual se re-procesa una vez y no entra en bucle. `compute_note_metrics` gana `dedup_collapsible` (los consumidores leen por clave; el test del gate CLI usa `near_dups` como dato). Tests: dedup texto-solo, masa mínima, métrica y gate coherentes, corpus limpio → `skip`.

@@ -243,7 +243,9 @@ tampoco (el prompt completo + 4.061 de salida no termina en 180 s y el servidor
 de un solo slot encola el resto); C es la única que completa las tres. En
 p50/p90 el conteo de A está inflado por duplicación work→social (el dedup P1-A
 la colapsa en producción); el contenido es el mismo. Detalle y decisión en
-**AD-146**.
+**AD-146**. El dedup P1-A (AD-152) usa solo el **texto** —sin título— con
+contención sobre el conjunto menor y una masa mínima de 12 tokens compartidos;
+su umbral efectivo es `MEMENTO_ANNOTATE_DEDUP_THRESHOLD` (0,60).
 
 ## 6. Si no cumple
 

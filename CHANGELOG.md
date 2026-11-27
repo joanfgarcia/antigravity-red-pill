@@ -88,6 +88,29 @@
 - **[NEW] Sin título sellado no hay ascensión.** El gate `no_title` deja la nota
   en el árbol (contador `rechazados_por_titulo`) hasta que el pase de títulos la
   nombre; nunca asciende con el stem provisional.
+- **[FIX] Una nota ya no puede acabar con doble frontmatter.** El pase de títulos
+  perdió la cabecera de **34 de 983** notas de la sesión f839399b: `_frontmatter_block`
+  citaba los `str` solo si contenían `": "`, un título que empieza por backtick (o
+  comilla) dejaba el YAML inválido (30 `ScannerError` + 4 `ParserError`),
+  `_split_frontmatter` se tragaba el error y `_write_note` envolvía el fichero
+  entero en una cabecera con solo `title/title_version/title_engine`. Ahora: toda
+  cadena se cita con JSON, el parseo tiene fallback (cita el `title:` a mano) y
+  falla visible (`FrontmatterError`), `_write_note` **rechaza** un cuerpo que
+  empieza por `---` y el pase cuenta las notas ilegibles (`corrupt`) sin tocarlas.
+  Reparadas las 34 con `scripts/memento_repair_double_frontmatter.py`
+  (`--dry-run`, backup, idempotente): **0 dobles, 983 ficheros, 34/34 cuerpos
+  idénticos**, 21 campos recuperados por nota. *AD-151*.
+- **[FIX] El gate `dedup_policy` ya se puede satisfacer.** Medía pares near-dup
+  (392, y eran un artefacto: el YAML de las 34 notas corruptas contaba como
+  texto) mientras el dedup colapsa **notas**; con la señal `texto + título` en el
+  dedup y el título vacío en annotate, el umbral 0,6 fundía notas distintas de
+  14–23 tokens. Ahora la señal es solo el texto en dedup, métrica y gate (misma
+  función), con **masa mínima de 12 tokens compartidos**, y el gate exige **0
+  notas colapsables** (el punto fijo real del pase). Medido sobre las 983 notas
+  reparadas: 0,60 sin masa → 5 colapsos (4 falsos); 0,60 con masa → **1 colapso,
+  y es un duplicado real**; mismo hecho reescrito → contención 0,94 (se sigue
+  cazando). El umbral **no cambia** (0,60). `compute_note_metrics` gana
+  `dedup_collapsible`. *AD-152*.
 - **[NEW] Presupuesto del sueño**: `chronicle.deadline_minutes` 85 → 180,
   `nightly.max_step_minutes` 420 → 600 y `annotate.timeout` 5400 → 7200, por el
   coste real del annotate nuevo (~12 min/sesión).

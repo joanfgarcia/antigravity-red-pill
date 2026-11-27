@@ -59,6 +59,9 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 ### `distiller_bakeoff.py`
 **Purpose:** Aptitude harness for the sleep-cycle distiller. Runs a battery of probes (technical, philosophical, noise-culling, emotional) against each candidate GGUF and scores outputs with deterministic heuristics (JSON, ES/EN, `<think>` tags, prompt-echo, valid emotion/intensity, latency). Writes `docs/BENCHMARKS/DISTILLER_BAKEOFF.md`. Defaults to CPU to spare the live daemon's VRAM.
 
+### `memento_repair_double_frontmatter.py`
+**Purpose:** Repara notas de `annotate/` con **doble frontmatter** (AD-151): detecta el cuerpo que empieza por `---`, parsea el bloque interior con el fallback de `titles._split_frontmatter`, fusiona título sellado (`title`/`title_version`/`title_engine` del exterior mandan) y reescribe con `yaml.safe_dump` conservando nombre y cuerpo. Backup de las notas tocadas, `--dry-run` y idempotente (segunda pasada: 0 reescritas). No toca ninguna otra nota.
+
 ### `memento_recalibrate.py`
 **Purpose:** Recurring curation recalibration for Memento (run whenever the distill/refine models change): `stats`/`bands`/`report` (deterministic) plus LLM audits — `audit-category` (classifier agreement), `audit-dual` (two-axis work/social routing vs the legacy ratio) and `audit-stability` (route flips across 3 batch protocols → contextual anchoring). `--engine` compares models, `--temp` pins temperature. Documented in the single-writer runbook §5.
 
