@@ -4367,9 +4367,11 @@ Lo que **no** queda medido: cuánto del 80,6 % publicado era el tope. Para saber
 - `repeat_penalty=1.1` → el mismo trozo termina en **1.066 tokens / 7 ideas / 35 s** (1.15 → 950 / 6 / 31,5 s).
 - Con el prompt **combinado** y rp=1.1: **8/8 llamadas** en trozos reales densos (5,8–7,3k) terminan en `stop`, 4–14 ideas, 44–153 s; dos necesitaron el reintento a 3.072 (2.561 tokens).
 - Con el prompt de **work** solo, el mismo trozo entró en bucle **dos veces** (2.048 y 3.072), incluso con rp: la fusión es más estable aquí, no menos.
+- **1.15** (no 1.1): el split 025 (trozo de 6,6k) volvió a engancharse con 1.1; con 1.15 pasó una vez, pero el bucle es estocástico y volvió a aparecer en la corrida.
+- **Reintento con temperatura 0,3**: el corte no siempre se rompe con más presupuesto (4.096 seguía en bucle); con 0,3 en el reintento los dos trozos del split 025 completan (9 y 11 ideas, 1.278 y 1.722 tokens, 0 truncados). El primer intento sigue a 0,1.
 - Subiendo el suelo del combinado a **3.072** (en vez de 2.048), los dos trozos que reintentaban terminan al **primer intento**: 2.184/2.321 tokens, 11/12 ideas, 73/75 s.
 **Decision**:
-1. `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.1` y `REPEAT_LAST_N=256`, enviados **por request** solo en annotate (el daemon no aplica el `sampling` del perfil a las peticiones con task).
+1. `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.15` y `REPEAT_LAST_N=256`, enviados **por request** solo en annotate (el daemon no aplica el `sampling` del perfil a las peticiones con task).
 2. El prompt combinado arranca con **3.072** de salida (techo 4.096); el reintento se recorta al techo.
 3. Fusión **ON** para la sesión grande: 1 llamada por trozo en vez de 2.
 **Alternatives**: (a) dos llamadas — el prompt de work es el que más se engancha al bucle en este contenido; (b) subir el watchdog — el bucle quema minutos y no garantiza parar; (c) trozos más pequeños — no ataca la repetición y multiplica llamadas.

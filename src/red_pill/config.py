@@ -961,13 +961,18 @@ class RedPillConfig(BaseSettings):
 	# tamaño SIMILAR (ceil(chars/8000)), no 8000 + residual. 0 = desactivado
 	# (split entero; solo válido con n_ctx ≥ 12.800 y calidad medida).
 	MEMENTO_ANNOTATE_CHUNK_CHARS: int = 8000
-	# Penalización de repetición para annotate (2026-11-27, AD-148). En contenido
+	# Penalización de repetición para annotate (2026-11-27, AD-147). En contenido
 	# denso K2 entra en bucle repitiendo la misma idea hasta agotar el presupuesto
-	# (`finish_reason=length`); con 1.1 el mismo trozo termina en ~35 s con JSON
-	# cerrado. Se envía por request (el daemon no aplica `sampling` del perfil a
-	# las peticiones con task). 0 desactiva.
-	MEMENTO_ANNOTATE_REPEAT_PENALTY: float = 1.1
+	# (`finish_reason=length`). Con 1.1 casi todo se cierra, pero un trozo de 6,6k
+	# volvió a engancharse también a 4.096; con 1.15 completa (726/2.439 tokens).
+	# Se envía por request (el daemon no aplica `sampling` del perfil a las
+	# peticiones con task). 0 desactiva.
+	MEMENTO_ANNOTATE_REPEAT_PENALTY: float = 1.15
 	MEMENTO_ANNOTATE_REPEAT_LAST_N: int = 256
+	# Temperatura del reintento tras un corte en annotate (2026-11-27). Los bucles
+	# de K2 no siempre se rompen subiendo el presupuesto; con 0.3 (en vez de 0.1)
+	# el muestreo escapa del bucle. Solo afecta al reintento, no al primer intento.
+	MEMENTO_ANNOTATE_RETRY_TEMPERATURE: float = 0.3
 	# Etiquetas que usan los prompts de anotación Memento. Vacías → se rellenan
 	# desde `OPERATOR_DISPLAY_NAME`/`AGENT_NAME` (ver `_fill_instance_identity`).
 	# NO hardcodear nombres de instancia aquí.

@@ -852,6 +852,14 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 				)
 				budget = bigger
 				payload["max_tokens"] = budget
+				if llm["task"] == "annotate":
+					# Un bucle de repetición no siempre se rompe con más margen: a
+					# 4.096 puede seguir. Subir la temperatura solo en el reintento
+					# lo saca (medido: 2/2 trozos densos, 9/11 ideas, 0 truncados).
+					payload["temperature"] = float(getattr(cfg, "MEMENTO_ANNOTATE_RETRY_TEMPERATURE", 0.3) or 0.3)
+					logger.warning(
+						f"LLM truncado — reintento con temperatura {payload['temperature']} para romper el bucle"
+					)
 				continue
 			logger.warning(
 				f"LLM truncado (finish_reason=length, max_tokens={budget}, modelo={_body.get('model')}) "

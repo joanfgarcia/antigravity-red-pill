@@ -52,7 +52,10 @@
 - **[FIX] K2 entraba en bucle al anotar: `repeat_penalty` y fusión estable.**
   En contenido denso repetía la misma idea hasta agotar el presupuesto (`{` ×24,
   `"relics": 3` ×22 en 4.096 tokens); no era falta de salida. Con
-  `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.1` el mismo trozo termina en ~35 s / 7 ideas.
+  `MEMENTO_ANNOTATE_REPEAT_PENALTY=1.15` el mismo trozo termina en ~35 s / 7 ideas;
+  si aun así se corta, el **reintento sube la temperatura a 0.3** (solo el
+  reintento) y sale del bucle: los dos trozos que fallaban completan con 9 y 11
+  ideas.
   El prompt combinado work+social (1 llamada) con suelo de 3.072 completa 8/8
   trozos reales sin truncar: la mitad de llamadas que con dos prompts. *AD-147*.
 - **[FIX] El sello `engine` de arranque en frío usa el modelo fijado** por el job
