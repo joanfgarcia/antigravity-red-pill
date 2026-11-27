@@ -128,7 +128,9 @@ def recommend(rows: Sequence[Dict[str, Any]], min_gain: float = MIN_GAIN) -> int
 
 
 def _write_num_parallel(profile: str, slots: int) -> Path:
-	p = Path.home() / ".config" / "red-pill" / "model_profiles.yaml"
+	from red_pill.core.paths import get_model_profiles_path
+
+	p = get_model_profiles_path()
 	backup = p.with_suffix(f".yaml.bak-calibration-{datetime.now():%Y%m%d-%H%M%S}")
 	backup.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
 	lines = p.read_text(encoding="utf-8").splitlines()
